@@ -81,10 +81,16 @@ pub fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
     out
 }
 
+/// The source id Scripture-surveyed geometry carries into scenes: the
+/// authority ladder (covenant rule 11) made visible in attribution and
+/// selectable by consumers (a "Bible mode" is a semantic filter on it).
+pub const SCRIPTURE_SOURCE: &str = "scripture";
+
 fn boundary_sources(b: &Boundary) -> BTreeSet<SourceId> {
     match &b.source {
         BoundarySource::Imported { source } => BTreeSet::from([source.clone()]),
-        BoundarySource::Survey(_) | BoundarySource::Authored { .. } => BTreeSet::new(),
+        BoundarySource::Survey(_) => BTreeSet::from([SourceId::new(SCRIPTURE_SOURCE)]),
+        BoundarySource::Authored { .. } => BTreeSet::new(),
     }
 }
 

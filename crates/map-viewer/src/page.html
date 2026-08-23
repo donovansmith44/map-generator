@@ -59,6 +59,7 @@
   input[type="checkbox"] { accent-color: var(--stop); }
   .radio-row { display: flex; gap: 10px; }
   .radio-row label { display: flex; gap: 4px; align-items: center; margin: 0; color: var(--ink); }
+  #frameinfo { color: var(--dim); font-size: 11px; margin-top: 4px; }
 
   /* --------------------------------------------------- the scrubber */
   #readout { font-size: 22px; margin-bottom: 6px; }
@@ -86,6 +87,7 @@
   #stepper .spacer { flex: 1; color: var(--dim); align-self: center; text-align: center; }
 
   /* --------------------------------------------- subject time chips */
+  #selected { color: var(--dim); font-size: 11px; margin-top: 4px; }
   #mapped { margin-top: 8px; }
   #mapped .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .chip {
@@ -139,6 +141,12 @@
 <nav id="rail">
   <div id="wordmark"><b>MAP-GENERATOR</b> <span>/ workbench</span></div>
 
+  <section class="group" aria-label="frame">
+    <h2>Frame</h2>
+    <label class="inline"><input type="checkbox" id="bible"> bible mode</label>
+    <div id="frameinfo"></div>
+  </section>
+
   <section class="group" aria-label="time">
     <h2>Time</h2>
     <div id="readout">—<small>scrub stops are change events — the piecewise timeline itself</small></div>
@@ -157,6 +165,7 @@
   <section class="group" aria-label="subject">
     <h2>Subject</h2>
     <select id="subject"></select>
+    <div id="selected"></div>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="context" checked> whole globe as context</label>
     <div id="mapped" hidden>
       <label>mapped at</label>
@@ -201,7 +210,7 @@
 
 <main id="bench">
   <div id="plate" aria-live="polite"></div>
-  <div id="hint">drag to rotate · scroll to zoom · click a region to focus it · esc to deselect · double-click to reset the view</div>
+  <div id="hint">drag to rotate · scroll to zoom · click a region to toggle focus · shift-click to add regions · esc to deselect · double-click to reset the view</div>
   <div id="status"></div>
 </main>
 
@@ -210,18 +219,32 @@
 const $ = id => document.getElementById(id);
 const state = {
   stops: [], idx: 0, styles: [], style: null,
-  encoder: "svg", projection: "globe", subject: "world", held: null,
-  view: { lat: null, lon: null, zoom: null },   // null = server decides
+  encoder: "svg", projection: "globe", held: null,
+  selection: [],                                 // region keys; empty = the world
+  bible: false, anchor: null,                    // { frame, year }
+  view: { lat: null, lon: null, zoom: null },    // null = server decides
   resolved: null,                                // what the last svg reported
-  subjectStops: null,                            // stops the subject is mapped at
+  subjectStops: null,                            // stops ALL selected are mapped at
 };
 
-const fmtYear = y => y < 0 ? `${-y} BC` : `AD ${y}`;
+const subjectKey = () => state.selection.length ? state.selection.join(",") : "world";
+
+// Anno Mundi is DERIVED from the declared anchor, never hardcoded.
+function fmtYear(y) {
+  const plain = y < 0 ? `${-y} BC` : `AD ${y}`;
+  if (!state.bible || !state.anchor) return plain;
+  const a = state.anchor.year;
+  const am = y < 0 ? y - a + 1 : y - a;
+  return `AM ${am}`;
+}
+const fmtBoth = y => state.bible && state.anchor
+  ? `${fmtYear(y)} · ${y < 0 ? -y + " BC" : "AD " + y}`
+  : fmtYear(y);
 
 function currentParams(quality) {
   const year = state.stops[state.idx];
   const p = new URLSearchParams();
-  p.set("subject", state.subject);
+  p.set("subject", subjectKey());
   if ($("expose").checked && $("from").value !== "") {
     p.set("year", $("from").value);
     p.set("to", year);
@@ -232,6 +255,7 @@ function currentParams(quality) {
   p.set("encoder", state.encoder);
   p.set("projection", state.projection);
   p.set("context", $("context").checked ? "1" : "0");
+  p.set("bible", state.bible ? "1" : "0");
   if (state.view.lat !== null) p.set("center", state.view.lat.toFixed(3) + "," + state.view.lon.toFixed(3));
   if (state.view.zoom !== null) p.set("zoom", state.view.zoom.toFixed(3));
   if (quality === "drag") {
@@ -303,8 +327,7 @@ function resetView() {
   state.view = { lat: null, lon: null, zoom: null };
 }
 
-function beginNav() {
-  // Seed explicit navigation from wherever the last artifact stood.
+function pinView() {
   if (state.view.lat === null && state.resolved) {
     state.view = { ...state.resolved };
   }
@@ -316,7 +339,7 @@ function setupPlateNav() {
   let drag = null;
   plate.addEventListener("pointerdown", e => {
     if (state.projection !== "globe" || state.encoder !== "svg") return;
-    if (!beginNav()) return;
+    if (!pinView()) return;
     // No pointer capture yet: capturing here would retarget the
     // eventual click away from the region path under the cursor.
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false };
@@ -353,7 +376,7 @@ function setupPlateNav() {
   plate.addEventListener("wheel", e => {
     if (state.projection !== "globe" || state.encoder !== "svg") return;
     e.preventDefault();
-    if (!beginNav()) return;
+    if (!pinView()) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
     state.view.zoom = Math.max(2, Math.min(90, state.view.zoom * factor));
     render("drag");
@@ -363,23 +386,30 @@ function setupPlateNav() {
 
   plate.addEventListener("dblclick", () => { resetView(); render(); });
 
-  // Click a region on the map to focus it (a drag is not a click).
+  // Click toggles a region's focus; shift-click grows the selection.
   plate.addEventListener("click", e => {
     if (suppressClick) { suppressClick = false; return; }
     const path = e.target.closest && e.target.closest("path[data-region]");
     if (!path) return;
     const key = "region:" + path.dataset.region;
-    focusSubject(key, { keepView: true });
+    pinView(); // map clicks never move the camera
+    const has = state.selection.includes(key);
+    let next;
+    if (e.shiftKey) {
+      next = has ? state.selection.filter(k => k !== key) : [...state.selection, key];
+    } else {
+      next = has && state.selection.length === 1 ? [] : [key];
+    }
+    setSelection(next, { keepView: true });
   });
 }
 
 // ------------------------------------------------------- subject focus
 
-async function focusSubject(key, opts) {
-  state.subject = key;
-  const sel = $("subject");
-  if ([...sel.options].some(o => o.value === key)) sel.value = key;
+async function setSelection(keys, opts) {
+  state.selection = keys;
   if (!(opts && opts.keepView)) resetView();
+  await loadSubjects();
   await loadMappedTimes();
   drawScrubber();
   render();
@@ -387,24 +417,31 @@ async function focusSubject(key, opts) {
 
 async function loadMappedTimes() {
   const box = $("mapped");
-  if (state.subject === "world") {
+  if (state.selection.length === 0) {
     state.subjectStops = null;
     box.hidden = true;
     return;
   }
-  const res = await fetch("/api/region_times?subject=" + encodeURIComponent(state.subject));
-  const data = await res.json();
-  state.subjectStops = new Set(data.stops);
+  // The stops that carry a mapping for EVERY selected region.
+  const sets = await Promise.all(state.selection.map(async key => {
+    const res = await fetch("/api/region_times?subject=" + encodeURIComponent(key));
+    return new Set((await res.json()).stops);
+  }));
+  const common = [...sets[0]].filter(y => sets.every(s => s.has(y)));
+  state.subjectStops = new Set(common);
   const chips = box.querySelector(".chips");
   chips.innerHTML = "";
-  data.stops.forEach(y => {
+  common.sort((a, b) => a - b).forEach(y => {
     const c = document.createElement("button");
     c.className = "chip" + (y === state.stops[state.idx] ? " now" : "");
     c.textContent = fmtYear(y);
+    c.title = fmtBoth(y);
     c.addEventListener("click", () => setStop(state.stops.indexOf(y)));
     chips.appendChild(c);
   });
-  box.hidden = data.stops.length === 0;
+  box.hidden = false;
+  box.querySelector("label").textContent =
+    state.selection.length > 1 ? "mapped at (all selected)" : "mapped at";
 }
 
 // ----------------------------------------------------------- scrubber
@@ -418,14 +455,18 @@ function drawScrubber() {
     const off = state.subjectStops && !state.subjectStops.has(y);
     b.className = "tick" + (i === 0 ? " dawn" : "") + (i === state.idx ? " active" : "") + (off ? " off" : "");
     b.style.left = (2 + 96 * (y - min) / (max - min)) + "%";
-    b.title = fmtYear(y)
+    b.title = fmtBoth(y)
       + (i === 0 ? " — before the first recorded change" : "")
       + (off ? " — no mapping for the focused subject" : "");
     b.addEventListener("click", () => setStop(i));
     scrub.appendChild(b);
   });
   $("stopcount").textContent = `${state.idx + 1} / ${state.stops.length}`;
-  $("readout").firstChild.textContent = fmtYear(state.stops[state.idx]);
+  const y = state.stops[state.idx];
+  $("readout").firstChild.textContent = fmtYear(y);
+  $("readout").querySelector("small").textContent = state.bible && state.anchor
+    ? `${y < 0 ? -y + " BC" : "AD " + y} · anchored at creation — ${state.anchor.frame}`
+    : "scrub stops are change events — the piecewise timeline itself";
 }
 
 async function setStop(i) {
@@ -439,26 +480,30 @@ async function loadSubjects() {
   const res = await fetch("/api/subjects?year=" + state.stops[state.idx]);
   const rows = await res.json();
   const sel = $("subject");
-  const keep = state.subject;
   sel.innerHTML = "";
   for (const r of rows) {
     const o = document.createElement("option");
     o.value = r.key; o.textContent = r.label;
     sel.appendChild(o);
   }
-  if (rows.some(r => r.key === keep)) {
-    sel.value = keep;
-  } else if (keep !== "world" && state.subjectStops) {
-    // Focused subject absent here: keep the focus, the chips and the
-    // dimmed ticks say where it lives; the plate will say NothingAtTime.
-    const o = document.createElement("option");
-    o.value = keep; o.textContent = "(not mapped at this stop)";
-    sel.appendChild(o);
-    sel.value = keep;
-  } else {
+  if (state.selection.length === 0) {
     sel.value = "world";
-    state.subject = "world";
+  } else if (state.selection.length === 1 && rows.some(r => r.key === state.selection[0])) {
+    sel.value = state.selection[0];
+  } else {
+    const o = document.createElement("option");
+    o.value = "__multi__";
+    o.textContent = state.selection.length === 1
+      ? "(not mapped at this stop)"
+      : `(${state.selection.length} regions selected)`;
+    sel.appendChild(o);
+    sel.value = "__multi__";
   }
+  const names = state.selection.map(k => {
+    const row = rows.find(r => r.key === k);
+    return row ? row.label : k.slice(0, 14) + "…";
+  });
+  $("selected").textContent = names.length ? "focused: " + names.join(" + ") : "";
 }
 
 async function loadChanges() {
@@ -507,11 +552,24 @@ function radioRow(el, items, current, onpick) {
   }
 }
 
+function setBible(on) {
+  state.bible = on;
+  $("frameinfo").textContent = on && state.anchor
+    ? `${state.anchor.frame} — Scripture-derived borders realized, all else ghosted; time in Anno Mundi from the anchor`
+    : "all sources shown in their own dress";
+  loadFromOptions();
+  loadMappedTimes().then(() => {
+    drawScrubber();
+    render();
+  });
+}
+
 async function init() {
   const meta = await (await fetch("/api/meta")).json();
   state.stops = meta.stops;
   state.styles = meta.styles;
   state.style = meta.styles[0].id;
+  state.anchor = meta.anchor || null;
   state.idx = Math.max(0, meta.stops.length - 4);
   radioRow($("styles"), meta.styles.map(s => ({ name: s.name, value: s.id })), state.style,
     v => { state.style = v; render(); });
@@ -519,9 +577,14 @@ async function init() {
     v => { state.encoder = v; render(); });
   radioRow($("projections"), (meta.projections || ["globe", "flat"]).map(e => ({ name: e, value: e })), state.projection,
     v => { state.projection = v; resetView(); render(); });
+  $("bible").addEventListener("change", e => setBible(e.target.checked));
   $("prev").addEventListener("click", () => setStop(state.idx - 1));
   $("next").addEventListener("click", () => setStop(state.idx + 1));
-  $("subject").addEventListener("change", e => focusSubject(e.target.value));
+  $("subject").addEventListener("change", e => {
+    const v = e.target.value;
+    if (v === "__multi__") return;
+    setSelection(v === "world" ? [] : [v]);
+  });
   $("context").addEventListener("change", () => render());
   $("lod").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
@@ -531,7 +594,7 @@ async function init() {
     state.held = currentParams();
     $("held").innerHTML = "held: <b></b>";
     $("held").querySelector("b").textContent =
-      `${state.subject} @ ${fmtYear(state.stops[state.idx])}`;
+      `${subjectKey()} @ ${fmtYear(state.stops[state.idx])}`;
     $("compose").disabled = $("drop").disabled = false;
   });
   $("drop").addEventListener("click", () => {
@@ -551,16 +614,14 @@ async function init() {
     const res = await fetch("/api/overlay?" + p.toString());
     showPlate(res, await res.text(), now.get("encoder"));
   });
-  // Esc: drop the focus IN PLACE — the camera stays exactly where it
-  // is; only the subject changes back to the whole world.
+  // Esc: drop the focus IN PLACE — the camera stays exactly where it is.
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && state.subject !== "world") {
-      if (state.view.lat === null && state.resolved) {
-        state.view = { ...state.resolved }; // pin the current view
-      }
-      focusSubject("world", { keepView: true });
+    if (e.key === "Escape" && state.selection.length) {
+      pinView();
+      setSelection([], { keepView: true });
     }
   });
+  setBible(false);
   setupPlateNav();
   await setStop(state.idx);
 }

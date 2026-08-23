@@ -244,6 +244,49 @@ fn ring_cleaning_normalizes() {
     assert_eq!(clean_ring(&[(0.0, 0.0), (1.0, 0.0), (0.0, 0.0)]), None);
 }
 
+// ------------------------------------- the Scripture survey source
+
+/// The first Bible-driven borders: the NUM 34 circuit is a lawful
+/// timeline on its own AND merged into the imported world — and law 12
+/// holds: survey waypoints resolve against the (stand-in) gazetteer,
+/// and no import overrides the survey.
+#[test]
+fn promised_land_survey_is_lawful_alone_and_merged() {
+    use crate::surveys::*;
+    use map_types::BoundarySource;
+
+    let survey_tl = promised_land_timeline();
+    let gaz = stand_in_gazetteer();
+    let (chron, _) = empty_exports();
+    assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![]);
+
+    // The boundary really is Survey-sourced, closed, and justified by
+    // the verses themselves.
+    let (_, hist) = survey_tl.boundaries.iter().next().unwrap();
+    let b = &hist.versions[0].1;
+    assert!(matches!(b.source, BoundarySource::Survey(_)));
+    assert_eq!(b.pts.first(), b.pts.last(), "the circuit closes");
+    assert!(!b.justification.grounds.is_empty(), "the text is the ground");
+
+    // Merged with the imported world, everything stays lawful.
+    let e1 = EpochSource {
+        year: -2000,
+        label: "fixture_bc2000".to_string(),
+        text: fc(&[(Some("Elsewhere"), vec![square(50.0, 40.0, 51.0, 41.0)])]),
+    };
+    let world = ingest(&config(), &[e1]).unwrap().timeline;
+    let merged = merge_timelines(world, survey_tl.clone()).unwrap();
+    assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![]);
+    assert_eq!(merged.regions.len(), 2);
+
+    // Merging the same source twice is a loud duplicate, never a
+    // silent preference.
+    assert!(matches!(
+        merge_timelines(merged, survey_tl),
+        Err(MergeError::DuplicateBoundary(_))
+    ));
+}
+
 // --------------------------------------------- the real source, whole
 
 /// The milestone proof: ingest every vendored epoch of the real source

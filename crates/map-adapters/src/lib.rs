@@ -11,11 +11,13 @@ pub mod arcs;
 pub mod basemaps;
 pub mod geojson;
 pub mod quantize;
+pub mod surveys;
 
 pub use basemaps::{
     epoch_year_from_label, fidelity_violations, ingest, EpochSource, Exemption, HistoricalBasemaps,
     Ingest, IngestConfig, IngestError, TimelineSource,
 };
+pub use surveys::{merge_timelines, promised_land_timeline, stand_in_gazetteer, MergeError};
 
 #[cfg(test)]
 mod tests;

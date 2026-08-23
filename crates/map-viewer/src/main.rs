@@ -14,7 +14,11 @@ use atlas_graph_types::edge::{Ground, Justification};
 use atlas_graph_types::id::SourceId;
 use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
 
-use map_adapters::{epoch_year_from_label, ingest, EpochSource, IngestConfig};
+use map_adapters::{
+    epoch_year_from_label, ingest, merge_timelines, promised_land_timeline, stand_in_gazetteer,
+    EpochSource, IngestConfig,
+};
+use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, SvgEncoder};
 use map_provider::TimelineProvider;
 use map_types::style::*;
@@ -42,6 +46,9 @@ struct App {
     /// Per region key ("region:HEX"): its label and the stops that
     /// carry a mapping for it — probed through the contract at startup.
     presence: BTreeMap<String, (String, Vec<i32>)>,
+    /// The declared frame this world stands under (read at the
+    /// composition root; exposed so the bench can show biblical time).
+    anchor: Option<(String, i32)>,
 }
 
 // ------------------------------------------------------------- styles
@@ -157,6 +164,22 @@ fn load() -> App {
         }),
     };
     let out = ingest(&config, &epochs).expect("real source ingests");
+    // The first Bible-driven borders join the imported world, and the
+    // merged whole must be lawful — fail loud at the door, not in a
+    // render (validated against the stand-in gazetteer until C3 lands).
+    let timeline = merge_timelines(out.timeline, promised_land_timeline())
+        .expect("scripture survey merges cleanly");
+    let violations = map_types::validate_all(
+        &timeline,
+        &map_types::ChronologyExport {
+            atlas_root: atlas_graph_types::id::ContentHash(0),
+            placements: BTreeMap::new(),
+        },
+        &stand_in_gazetteer(),
+    );
+    assert!(violations.is_empty(), "merged world unlawful: {:?}", violations.first());
+    let anchor = timeline.anchor.as_ref().map(|a| (a.frame.clone(), a.at.year.get()));
+    let out = map_adapters::Ingest { timeline, exemptions: out.exemptions };
     let (p_style, s_style) = (parchment(), slate());
     let (p_ghost, s_ghost) = (ghosted(&p_style), ghosted(&s_style));
     let styles = vec![("parchment", p_style.id()), ("slate", s_style.id())];
@@ -196,7 +219,36 @@ fn load() -> App {
             }
         }
     }
-    App { provider, styles, ghosts, stops, presence }
+    App { provider, styles, ghosts, stops, presence, anchor }
+}
+
+/// Keep only Scripture-derived elements: regions and boundaries whose
+/// sources carry the scripture id, plus their labels. Semantic
+/// selection on the scene — never on encoded bytes.
+fn scripture_only(scene: &Snapshot) -> Snapshot {
+    let scripture = SourceId::new(SCRIPTURE_SOURCE);
+    let regions: Vec<_> =
+        scene.regions.iter().filter(|r| r.sources.contains(&scripture)).cloned().collect();
+    let boundaries: Vec<_> =
+        scene.boundaries.iter().filter(|b| b.sources.contains(&scripture)).cloned().collect();
+    let kept_regions: std::collections::BTreeSet<_> = regions.iter().map(|r| r.region).collect();
+    let kept_bounds: std::collections::BTreeSet<_> = boundaries.iter().map(|b| b.boundary).collect();
+    let labels = scene
+        .labels
+        .iter()
+        .filter(|l| match &l.subject {
+            map_types::scene::LabelSubject::Region(r) => kept_regions.contains(r),
+            map_types::scene::LabelSubject::Boundary(b) => kept_bounds.contains(b),
+            map_types::scene::LabelSubject::Free => false,
+        })
+        .cloned()
+        .collect();
+    let attribution = regions
+        .iter()
+        .flat_map(|r| r.sources.iter().cloned())
+        .chain(boundaries.iter().flat_map(|b| b.sources.iter().cloned()))
+        .collect();
+    Snapshot { regions, boundaries, markers: Vec::new(), labels, attribution }
 }
 
 /// The mean position of a scene's content — where a globe should face
@@ -299,8 +351,15 @@ fn parse_style(app: &App, s: Option<&str>) -> Option<StyleId> {
     app.styles.iter().any(|(_, sid)| *sid == id).then_some(id)
 }
 
-fn build_query(app: &App, p: &Params, prefix: &str) -> Option<RenderQuery> {
-    let subject = parse_subject(p.get(&format!("{prefix}subject")).unwrap_or("world"))?;
+fn build_query(
+    app: &App,
+    p: &Params,
+    prefix: &str,
+    subject_override: Option<&str>,
+) -> Option<RenderQuery> {
+    let subject_key =
+        subject_override.unwrap_or_else(|| p.get(&format!("{prefix}subject")).unwrap_or("world"));
+    let subject = parse_subject(subject_key)?;
     let at = p.year(&format!("{prefix}year"))?;
     let time = match p.year(&format!("{prefix}to")) {
         Some(to) if to != at => {
@@ -372,11 +431,15 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
                 .iter()
                 .map(|(name, id)| serde_json::json!({ "name": name, "id": format!("{:016x}", id.0 .0) }))
                 .collect();
+            let anchor = app.anchor.as_ref().map(|(frame, year)| {
+                serde_json::json!({ "frame": frame, "year": year })
+            });
             let body = serde_json::json!({
                 "stops": app.stops,
                 "styles": styles,
                 "encoders": ["svg", "geojson"],
                 "projections": ["globe", "flat"],
+                "anchor": anchor,
             });
             (200, "application/json", body.to_string(), Vec::new())
         }
@@ -428,17 +491,57 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
         }
 
         "/api/render" => {
-            let Some(q) = build_query(app, &p, "") else { return bad("bad query") };
-            let subject_scene = match app.provider.render(&q) {
-                Err(e) => return bad(&format!("{e:?}")),
-                Ok(s) => s,
-            };
+            // The subject may be a comma-list: a multi-region map is
+            // the overlay of each region's own query (the monoid).
+            let keys: Vec<&str> = p
+                .get("subject")
+                .unwrap_or("world")
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .collect();
+            if keys.is_empty() {
+                return bad("no subject");
+            }
+            let mut queries = Vec::new();
+            for k in &keys {
+                let Some(q) = build_query(app, &p, "", Some(k)) else { return bad("bad query") };
+                queries.push(q);
+            }
+            let mut scenes = Vec::new();
+            let mut first_err = None;
+            for q in &queries {
+                match app.provider.render(q) {
+                    Ok(s) => scenes.push(s),
+                    Err(e) => {
+                        if first_err.is_none() {
+                            first_err = Some(e);
+                        }
+                    }
+                }
+            }
+            if scenes.is_empty() {
+                return bad(&format!("{:?}", first_err.expect("some error")));
+            }
+            let mut subject_scene = Snapshot::empty();
+            for s in scenes {
+                subject_scene = subject_scene.combine(s);
+            }
+            // BIBLE MODE: only what is derived from Scripture is
+            // realized — a semantic selection by the scripture source.
+            let bible = p.get("bible") == Some("1");
+            if bible {
+                subject_scene = scripture_only(&subject_scene);
+            }
             // The whole globe as context, the subject the realized
             // thing: overlay(world in ghost dress, subject in full) —
-            // the monoid again, two contract calls and a combine.
+            // the monoid again, two contract calls and a combine. In
+            // bible mode the backdrop is always on: the ghost is the
+            // disclosure that the rest is NOT Scripture-derived.
+            let q = queries[0].clone();
             let face = scene_centroid(&subject_scene);
+            let is_world_only = keys == ["world"];
             let want_context =
-                p.get("context") != Some("0") && !matches!(q.subject, RenderSubject::World);
+                bible || (p.get("context") != Some("0") && !is_world_only);
             let scene = if want_context {
                 let ghost_style = app.ghosts.get(&q.style).copied();
                 let backdrop_at = match q.time {
@@ -470,11 +573,16 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
                         scene.attribution.iter().map(|s| s.0.clone()).collect();
-                    let headers = vec![
+                    let mut headers = vec![
                         ("X-Attribution".to_string(), attribution.join(", ")),
                         ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
-                        ("X-Query-Pid".to_string(), format!("{:016x}", q.map_pid().hash.0)),
                     ];
+                    if queries.len() == 1 {
+                        headers.push((
+                            "X-Query-Pid".to_string(),
+                            format!("{:016x}", q.map_pid().hash.0),
+                        ));
+                    }
                     (200, ctype, body, headers)
                 }
             }
@@ -497,14 +605,27 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
 
         // The overlay scratchpad: TWO scenes composed at the SEMANTIC
         // level (the monoid), then encoded once — never on bytes.
+        // Either side may itself be a multi-region list.
         "/api/overlay" => {
-            let (Some(qa), Some(qb)) = (build_query(app, &p, "a_"), build_query(app, &p, "b_"))
-            else {
-                return bad("bad overlay query");
+            let side = |prefix: &str| -> Result<Snapshot, String> {
+                let keys = p.get(&format!("{prefix}subject")).unwrap_or("world").to_string();
+                let mut combined = Snapshot::empty();
+                let mut any = false;
+                for k in keys.split(',').filter(|s| !s.is_empty()) {
+                    let q = build_query(app, &p, prefix, Some(k)).ok_or("bad overlay query")?;
+                    match app.provider.render(&q) {
+                        Ok(s) => {
+                            combined = combined.combine(s);
+                            any = true;
+                        }
+                        Err(e) => return Err(format!("{e:?}")),
+                    }
+                }
+                if any { Ok(combined) } else { Err("no subject".to_string()) }
             };
-            let scene = match (app.provider.render(&qa), app.provider.render(&qb)) {
+            let scene = match (side("a_"), side("b_")) {
                 (Ok(a), Ok(b)) => a.combine(b),
-                (Err(e), _) | (_, Err(e)) => return bad(&format!("{e:?}")),
+                (Err(e), _) | (_, Err(e)) => return bad(&e),
             };
             match encode(&p, &scene, None) {
                 Err(e) => bad(&e),
