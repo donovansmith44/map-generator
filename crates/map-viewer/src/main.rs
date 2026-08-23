@@ -25,7 +25,10 @@ use map_types::{
 use map_types::SceneEncoder as _;
 
 const PAGE: &str = include_str!("page.html");
-const PORT: u16 = 8080;
+/// Default port. 8080/8081/8000/5000 belong to the Bible Atlas
+/// pipeline on this machine — the workbench stays clear of them.
+/// Override with MAP_VIEWER_PORT.
+const DEFAULT_PORT: u16 = 8090;
 
 struct App {
     provider: Arc<dyn MapProvider + Send + Sync>,
@@ -370,11 +373,16 @@ fn handle(app: &App, mut stream: TcpStream) {
 }
 
 fn main() {
+    let port: u16 = std::env::var("MAP_VIEWER_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_PORT);
     eprintln!("loading historical-basemaps…");
     let app = Arc::new(load());
     eprintln!("{} scrub stops, {} styles", app.stops.len(), app.styles.len());
-    let listener = TcpListener::bind(("127.0.0.1", PORT)).expect("port 8080 free");
-    eprintln!("workbench on http://127.0.0.1:{PORT}/");
+    let listener =
+        TcpListener::bind(("127.0.0.1", port)).unwrap_or_else(|e| panic!("port {port}: {e}"));
+    eprintln!("workbench on http://127.0.0.1:{port}/");
     for stream in listener.incoming().flatten() {
         let app = Arc::clone(&app);
         std::thread::spawn(move || handle(&app, stream));

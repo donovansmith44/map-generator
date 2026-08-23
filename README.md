@@ -31,7 +31,7 @@ disagree, the crate wins.
 - `crates/map-viewer` — phase 4: the workbench. One page over the
   public contract only (`dyn MapProvider` + `SceneEncoder`, zero
   privileged access). `cargo run -p map-viewer --release`, then
-  http://127.0.0.1:8080/ — scrubber stops at change events, subject
+  http://127.0.0.1:8090/ — scrubber stops at change events, subject
   picker, style/encoder switchers, long-exposure toggle, overlay
   scratchpad.
 - `data/historical-basemaps` — the vendored first source (12 world
