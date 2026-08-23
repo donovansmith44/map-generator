@@ -201,7 +201,7 @@
 
 <main id="bench">
   <div id="plate" aria-live="polite"></div>
-  <div id="hint">drag to rotate · scroll to zoom · click a region to focus it · double-click to reset the view</div>
+  <div id="hint">drag to rotate · scroll to zoom · click a region to focus it · esc to deselect · double-click to reset the view</div>
   <div id="status"></div>
 </main>
 
@@ -550,6 +550,12 @@ async function init() {
     }
     const res = await fetch("/api/overlay?" + p.toString());
     showPlate(res, await res.text(), now.get("encoder"));
+  });
+  // Esc: drop the focus, back to the whole world in its own dress.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && state.subject !== "world") {
+      focusSubject("world");
+    }
   });
   setupPlateNav();
   await setStop(state.idx);
