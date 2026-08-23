@@ -33,9 +33,15 @@ const DEFAULT_PORT: u16 = 8090;
 struct App {
     provider: Arc<dyn MapProvider + Send + Sync>,
     styles: Vec<(&'static str, StyleId)>,
+    /// Each visible style's ghost twin — the faded dress the rest of
+    /// the world wears when one subject is the realized thing.
+    ghosts: BTreeMap<StyleId, StyleId>,
     /// Scrub stops: the change-event years, preceded by one dawn stop
     /// showing the state before the first recorded change.
     stops: Vec<i32>,
+    /// Per region key ("region:HEX"): its label and the stops that
+    /// carry a mapping for it — probed through the contract at startup.
+    presence: BTreeMap<String, (String, Vec<i32>)>,
 }
 
 // ------------------------------------------------------------- styles
@@ -90,6 +96,35 @@ fn slate() -> Style {
     .expect("slate style is honest")
 }
 
+/// Derive a style's ghost: same bones, faded flesh. Patterns survive
+/// (honesty renders even in the background), colors thin out.
+fn ghosted(base: &Style) -> Style {
+    let fade = |s: &Stroke| Stroke {
+        color: Rgba(s.color.0, s.color.1, s.color.2, (f64::from(s.color.3) * 0.35) as u8),
+        width: s.width * 0.7,
+        pattern: s.pattern,
+    };
+    let fade_paint = |p: Paint| Paint {
+        fill: Rgba(p.fill.0, p.fill.1, p.fill.2, (f64::from(p.fill.3) * 0.16) as u8),
+    };
+    use map_types::EdgeCharacter as E;
+    let d = base.delta_emphasis();
+    Style::new(
+        BoundaryStrokes {
+            line: fade(base.stroke_for(&E::Line)),
+            frontier: fade(base.stroke_for(&E::Frontier { width_km: 0.0 })),
+            disputed: fade(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
+            unknown: fade(base.stroke_for(&E::Unknown)),
+        },
+        fade_paint(base.region_paint()),
+        base.age_ramp(),
+        base.label_style(),
+        base.marker_style(),
+        DeltaEmphasis { before: fade(&d.before), after: fade(&d.after), seam: fade(&d.seam) },
+    )
+    .expect("a faded honest style is still honest")
+}
+
 // ---------------------------------------------------------- wiring
 
 fn tp(year: i32) -> Option<TimePoint> {
@@ -123,10 +158,17 @@ fn load() -> App {
     };
     let out = ingest(&config, &epochs).expect("real source ingests");
     let (p_style, s_style) = (parchment(), slate());
+    let (p_ghost, s_ghost) = (ghosted(&p_style), ghosted(&s_style));
     let styles = vec![("parchment", p_style.id()), ("slate", s_style.id())];
+    let ghosts = BTreeMap::from([(p_style.id(), p_ghost.id()), (s_style.id(), s_ghost.id())]);
     let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(TimelineProvider {
         timeline: out.timeline,
-        styles: BTreeMap::from([(p_style.id(), p_style), (s_style.id(), s_style)]),
+        styles: BTreeMap::from([
+            (p_style.id(), p_style),
+            (s_style.id(), s_style),
+            (p_ghost.id(), p_ghost),
+            (s_ghost.id(), s_ghost),
+        ]),
         gazetteer: None,
     });
 
@@ -141,7 +183,48 @@ fn load() -> App {
     if let Some(&first) = stops.first() {
         stops.insert(0, first - 100); // dawn: the state before the first change
     }
-    App { provider, styles, stops }
+    let mut presence: BTreeMap<String, (String, Vec<i32>)> = BTreeMap::new();
+    for &year in &stops {
+        if let Some(at) = tp(year) {
+            for s in provider.subjects(at) {
+                if let RenderSubject::Region(id) = s.subject {
+                    let key = format!("region:{:016x}", id.0 .0);
+                    let entry = presence.entry(key).or_insert_with(|| (s.label.clone(), Vec::new()));
+                    entry.0 = s.label;
+                    entry.1.push(year);
+                }
+            }
+        }
+    }
+    App { provider, styles, ghosts, stops, presence }
+}
+
+/// The mean position of a scene's content — where a globe should face
+/// to look the subject in the eye.
+fn scene_centroid(scene: &Snapshot) -> Option<(f64, f64)> {
+    let (mut x, mut y, mut z) = (0.0f64, 0.0f64, 0.0f64);
+    let mut feed = |p: &map_types::UnitVec| {
+        x += p.x();
+        y += p.y();
+        z += p.z();
+    };
+    for r in &scene.regions {
+        for ring in r.outer.iter().chain(&r.holes) {
+            ring.points().iter().for_each(&mut feed);
+        }
+    }
+    for b in &scene.boundaries {
+        b.pts.iter().for_each(&mut feed);
+    }
+    for m in &scene.markers {
+        feed(&m.at);
+    }
+    let n = (x * x + y * y + z * z).sqrt();
+    if n < 1e-9 {
+        return None;
+    }
+    let (x, y, z) = (x / n, y / n, z / n);
+    Some((z.asin().to_degrees(), y.atan2(x).to_degrees()))
 }
 
 // ------------------------------------------------------------ queries
@@ -235,7 +318,11 @@ fn build_query(app: &App, p: &Params, prefix: &str) -> Option<RenderQuery> {
     Some(RenderQuery { subject, time, viewport: None, lod, layers, style: parse_style(app, p.get("style"))? })
 }
 
-fn encode(p: &Params, scene: &Snapshot) -> Result<(String, &'static str), String> {
+fn encode(
+    p: &Params,
+    scene: &Snapshot,
+    face: Option<(f64, f64)>,
+) -> Result<(String, &'static str), String> {
     match p.get("encoder").unwrap_or("svg") {
         "geojson" => GeoJsonEncoder
             .encode(scene)
@@ -244,7 +331,23 @@ fn encode(p: &Params, scene: &Snapshot) -> Result<(String, &'static str), String
         _ => {
             let projection = match p.get("projection") {
                 Some("flat") => map_encoders::Projection::Flat,
-                _ => map_encoders::Projection::Globe { center: None },
+                _ => {
+                    // Explicit navigation: center=lat,lon and zoom=deg
+                    // (angular radius). Absent, face the subject if we
+                    // know where it lives; the encoder auto-frames last.
+                    let center = p
+                        .get("center")
+                        .and_then(|v| {
+                            let (lat, lon) = v.split_once(',')?;
+                            Some((
+                                lat.parse::<f64>().ok()?.clamp(-89.9, 89.9),
+                                lon.parse::<f64>().ok()?,
+                            ))
+                        })
+                        .or(face);
+                    let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+                    map_encoders::Projection::Globe { center, zoom }
+                }
             };
             SvgEncoder { projection, ..SvgEncoder::default() }
                 .encode(scene)
@@ -326,21 +429,69 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
 
         "/api/render" => {
             let Some(q) = build_query(app, &p, "") else { return bad("bad query") };
-            match app.provider.render(&q) {
-                Err(e) => bad(&format!("{e:?}")),
-                Ok(scene) => match encode(&p, &scene) {
-                    Err(e) => bad(&e),
-                    Ok((body, ctype)) => {
-                        let attribution: Vec<String> =
-                            scene.attribution.iter().map(|s| s.0.clone()).collect();
-                        let headers = vec![
-                            ("X-Attribution".to_string(), attribution.join(", ")),
-                            ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
-                            ("X-Query-Pid".to_string(), format!("{:016x}", q.map_pid().hash.0)),
-                        ];
-                        (200, ctype, body, headers)
+            let subject_scene = match app.provider.render(&q) {
+                Err(e) => return bad(&format!("{e:?}")),
+                Ok(s) => s,
+            };
+            // The whole globe as context, the subject the realized
+            // thing: overlay(world in ghost dress, subject in full) —
+            // the monoid again, two contract calls and a combine.
+            let face = scene_centroid(&subject_scene);
+            let want_context =
+                p.get("context") != Some("0") && !matches!(q.subject, RenderSubject::World);
+            let scene = if want_context {
+                let ghost_style = app.ghosts.get(&q.style).copied();
+                let backdrop_at = match q.time {
+                    TimeSelector::At(t) => t,
+                    TimeSelector::Over(i) => i.to.unwrap_or(i.from),
+                };
+                match ghost_style {
+                    None => subject_scene,
+                    Some(style) => {
+                        let ghost_q = RenderQuery {
+                            subject: RenderSubject::World,
+                            time: TimeSelector::At(backdrop_at),
+                            viewport: None,
+                            lod: q.lod,
+                            layers: LayerSet::GEOMETRY,
+                            style,
+                        };
+                        match app.provider.render(&ghost_q) {
+                            Err(e) => return bad(&format!("{e:?}")),
+                            Ok(backdrop) => backdrop.combine(subject_scene),
+                        }
                     }
-                },
+                }
+            } else {
+                subject_scene
+            };
+            match encode(&p, &scene, face) {
+                Err(e) => bad(&e),
+                Ok((body, ctype)) => {
+                    let attribution: Vec<String> =
+                        scene.attribution.iter().map(|s| s.0.clone()).collect();
+                    let headers = vec![
+                        ("X-Attribution".to_string(), attribution.join(", ")),
+                        ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
+                        ("X-Query-Pid".to_string(), format!("{:016x}", q.map_pid().hash.0)),
+                    ];
+                    (200, ctype, body, headers)
+                }
+            }
+        }
+
+        // The focused subject's own timeline: which scrub stops carry a
+        // mapping for it. Derived at startup through the contract's
+        // subjects() probe — a first-class per-subject timeline query
+        // is noted for the C5 freeze.
+        "/api/region_times" => {
+            let Some(key) = p.get("subject") else { return bad("subject required") };
+            match app.presence.get(key) {
+                None => (200, "application/json", "{\"label\":null,\"stops\":[]}".to_string(), Vec::new()),
+                Some((label, stops)) => {
+                    let body = serde_json::json!({ "label": label, "stops": stops });
+                    (200, "application/json", body.to_string(), Vec::new())
+                }
             }
         }
 
@@ -355,7 +506,7 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
                 (Ok(a), Ok(b)) => a.combine(b),
                 (Err(e), _) | (_, Err(e)) => return bad(&format!("{e:?}")),
             };
-            match encode(&p, &scene) {
+            match encode(&p, &scene, None) {
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =

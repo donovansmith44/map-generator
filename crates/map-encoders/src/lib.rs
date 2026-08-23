@@ -51,9 +51,12 @@ fn scene_points<'a>(scene: &'a Snapshot) -> impl Iterator<Item = &'a UnitVec> {
 pub enum Projection {
     /// Orthographic globe: the view a sphere actually offers. Centered
     /// on the given (lat, lon) or, with None, on the content itself;
-    /// zooms to the content's angular extent, so one region is a
-    /// surface slice and the world is the lit hemisphere.
-    Globe { center: Option<(f64, f64)> },
+    /// `zoom` is the view's angular radius in degrees (90 = the whole
+    /// hemisphere) or, with None, fit to the content's extent — so one
+    /// region is a surface slice and the world is the lit hemisphere.
+    /// The resolved view rides the svg root as data attributes, so an
+    /// interactive consumer can seed its navigation from the artifact.
+    Globe { center: Option<(f64, f64)>, zoom: Option<f64> },
     /// Equirectangular plate for diagnostics.
     Flat,
 }
@@ -68,7 +71,11 @@ pub struct SvgEncoder {
 
 impl Default for SvgEncoder {
     fn default() -> Self {
-        SvgEncoder { width: 1200.0, padding: 16.0, projection: Projection::Globe { center: None } }
+        SvgEncoder {
+            width: 1200.0,
+            padding: 16.0,
+            projection: Projection::Globe { center: None, zoom: None },
+        }
     }
 }
 
@@ -117,7 +124,8 @@ fn emit_scene(
         }
         let _ = write!(
             s,
-            "<path d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
+            "<path data-region=\"{:016x}\" d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
+            r.region.0 .0,
             path_from(&chunks, true),
             rgb(r.paint.fill),
             alpha(r.paint.fill)
@@ -292,7 +300,7 @@ fn graticule() -> Vec<Vec<UnitVec>> {
     lines
 }
 
-fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec) -> String {
+fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Option<f64>) -> String {
     // Basis on the sphere at the view center.
     let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
         .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0)); // pole-on view
@@ -302,22 +310,42 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec) -> String {
     // Zoom to the visible content's angular extent; the whole
     // hemisphere when content reaches (or wraps) the limb.
     let mut globe = Globe { center, east, north, scale: 1.0, cx: 0.0, cy: 0.0 };
-    let mut r_max: f64 = 0.0;
-    let mut any_behind = false;
-    for p in scene_points(scene) {
-        if p.dot(&center) >= 0.0 {
-            r_max = r_max.max(globe.radial(p));
-        } else {
-            any_behind = true;
+    let r_view = match zoom {
+        Some(deg) => deg.clamp(1.0, 90.0).to_radians().sin(),
+        None => {
+            let mut r_max: f64 = 0.0;
+            let mut any_behind = false;
+            for p in scene_points(scene) {
+                if p.dot(&center) >= 0.0 {
+                    r_max = r_max.max(globe.radial(p));
+                } else {
+                    any_behind = true;
+                }
+            }
+            if any_behind || r_max <= 0.0 {
+                1.0
+            } else {
+                (r_max * 1.08).min(1.0)
+            }
         }
-    }
-    let r_view = if any_behind || r_max <= 0.0 { 1.0 } else { (r_max * 1.08).min(1.0) };
+    };
     let inner = enc.width - 2.0 * enc.padding;
     globe.scale = inner / 2.0 / r_view;
     globe.cx = enc.width / 2.0;
     globe.cy = enc.width / 2.0;
 
-    let mut s = svg_head(enc.width, enc.width, scene);
+    // Report the resolved view on the root, so interactive consumers
+    // can pick up navigation exactly where this artifact stands.
+    let (clat, clon) = lat_lon(&center);
+    let mut s = svg_head(enc.width, enc.width, scene).replace(
+        "<svg ",
+        &format!(
+            "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
+            clat,
+            clon,
+            r_view.clamp(-1.0, 1.0).asin().to_degrees()
+        ),
+    );
 
     // The sphere itself: limb circle when the full hemisphere is in
     // view, and the graticule always — the curve is the point.
@@ -410,12 +438,12 @@ impl SceneEncoder for SvgEncoder {
         }
         match self.projection {
             Projection::Flat => encode_flat(self, scene),
-            Projection::Globe { center } => {
+            Projection::Globe { center, zoom } => {
                 let c = match center {
                     Some((lat, lon)) => UnitVec::from_lat_lon_deg(lat, lon),
                     None => content_center(scene),
                 };
-                Ok(encode_globe(self, scene, c))
+                Ok(encode_globe(self, scene, c, zoom))
             }
         }
     }

@@ -78,27 +78,45 @@
     width: 1px; background: var(--stop-soft); transition: background 120ms;
   }
   .tick.dawn::after { background: var(--dim); }
+  .tick.off::after { opacity: 0.25; }
   .tick:hover::after { background: var(--ink); }
-  .tick.active::after { background: var(--stop); width: 3px; left: 3px; top: 0; }
+  .tick.active::after { background: var(--stop); width: 3px; left: 3px; top: 0; opacity: 1; }
   #stepper { display: flex; gap: 6px; }
   #stepper button { width: 34px; }
   #stepper .spacer { flex: 1; color: var(--dim); align-self: center; text-align: center; }
 
+  /* --------------------------------------------- subject time chips */
+  #mapped { margin-top: 8px; }
+  #mapped .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .chip {
+    width: auto; padding: 1px 7px; font-size: 11px;
+    border: 1px solid var(--edge); border-radius: 9px; background: var(--room);
+    color: var(--ink); cursor: pointer;
+  }
+  .chip.now { border-color: var(--stop); color: var(--stop); }
+
   /* ------------------------------------------------------ the plate */
   #bench { display: flex; flex-direction: column; min-width: 0; }
   #plate {
-    flex: 1; overflow: auto; display: grid; place-items: center; padding: 14px;
+    flex: 1; overflow: hidden; display: grid; place-items: center; padding: 14px;
+    cursor: grab; touch-action: none;
   }
+  #plate.dragging { cursor: grabbing; }
   #plate svg {
-    max-width: 100%; height: auto;
+    max-width: 100%; max-height: 100%; height: auto;
     background: #10120f;
     border: 1px solid var(--edge);
     box-shadow: 0 0 60px rgba(0,0,0,.5);
   }
+  #plate svg path[data-region] { cursor: pointer; }
+  #plate svg path[data-region]:hover { stroke: var(--stop); stroke-width: 1.2; }
   #plate pre {
     max-width: 100%; max-height: 100%; overflow: auto;
     color: var(--dim); font-size: 11px; padding: 12px;
     border: 1px solid var(--edge); background: var(--panel);
+  }
+  #hint {
+    text-align: center; color: var(--dim); font-size: 11px; padding: 2px 0 4px;
   }
   #status {
     border-top: 1px solid var(--edge); padding: 6px 14px;
@@ -108,7 +126,7 @@
   #status b { color: var(--ink); font-weight: 400; }
 
   /* -------------------------------------------------- log & overlay */
-  #log { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  #log { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   #log div { color: var(--dim); }
   #log .k { color: var(--stop); }
   #held { color: var(--dim); margin: 6px 0; min-height: 18px; }
@@ -139,6 +157,11 @@
   <section class="group" aria-label="subject">
     <h2>Subject</h2>
     <select id="subject"></select>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="context" checked> whole globe as context</label>
+    <div id="mapped" hidden>
+      <label>mapped at</label>
+      <div class="chips"></div>
+    </div>
   </section>
 
   <section class="group" aria-label="appearance">
@@ -178,17 +201,24 @@
 
 <main id="bench">
   <div id="plate" aria-live="polite"></div>
+  <div id="hint">drag to rotate · scroll to zoom · click a region to focus it · double-click to reset the view</div>
   <div id="status"></div>
 </main>
 
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { stops: [], idx: 0, styles: [], style: null, encoder: "svg", projection: "globe", subject: "world", held: null };
+const state = {
+  stops: [], idx: 0, styles: [], style: null,
+  encoder: "svg", projection: "globe", subject: "world", held: null,
+  view: { lat: null, lon: null, zoom: null },   // null = server decides
+  resolved: null,                                // what the last svg reported
+  subjectStops: null,                            // stops the subject is mapped at
+};
 
 const fmtYear = y => y < 0 ? `${-y} BC` : `AD ${y}`;
 
-function currentParams() {
+function currentParams(quality) {
   const year = state.stops[state.idx];
   const p = new URLSearchParams();
   p.set("subject", state.subject);
@@ -201,23 +231,53 @@ function currentParams() {
   p.set("style", state.style);
   p.set("encoder", state.encoder);
   p.set("projection", state.projection);
-  p.set("lod", $("lod").value);
-  p.set("labels", $("labels").checked ? "1" : "0");
+  p.set("context", $("context").checked ? "1" : "0");
+  if (state.view.lat !== null) p.set("center", state.view.lat.toFixed(3) + "," + state.view.lon.toFixed(3));
+  if (state.view.zoom !== null) p.set("zoom", state.view.zoom.toFixed(3));
+  if (quality === "drag") {
+    p.set("lod", "0.008");
+    p.set("labels", "0");
+  } else {
+    p.set("lod", $("lod").value);
+    p.set("labels", $("labels").checked ? "1" : "0");
+  }
   return p;
 }
 
-async function render() {
-  const p = currentParams();
-  const res = await fetch("/api/render?" + p.toString());
-  const body = await res.text();
-  showPlate(res, body, p.get("encoder"));
+let inFlight = false, queued = null;
+async function render(quality) {
+  if (inFlight) { queued = quality || "full"; return; }
+  inFlight = true;
+  try {
+    const p = currentParams(quality);
+    const res = await fetch("/api/render?" + p.toString());
+    const body = await res.text();
+    showPlate(res, body, p.get("encoder"));
+  } finally {
+    inFlight = false;
+    if (queued) { const q = queued === "full" ? undefined : queued; queued = null; render(q); }
+  }
 }
 
 function showPlate(res, body, encoder) {
   const plate = $("plate");
   if (!res.ok) { plate.innerHTML = ""; plate.textContent = body; setStatus({error: body}); return; }
-  if (encoder === "svg") { plate.innerHTML = body; }
-  else { plate.innerHTML = ""; const pre = document.createElement("pre"); pre.textContent = body; plate.appendChild(pre); }
+  if (encoder === "svg") {
+    plate.innerHTML = body;
+    const svg = plate.querySelector("svg");
+    if (svg && svg.dataset.clat !== undefined) {
+      state.resolved = {
+        lat: parseFloat(svg.dataset.clat),
+        lon: parseFloat(svg.dataset.clon),
+        zoom: parseFloat(svg.dataset.zoom),
+      };
+    }
+  } else {
+    plate.innerHTML = "";
+    const pre = document.createElement("pre");
+    pre.textContent = body;
+    plate.appendChild(pre);
+  }
   setStatus({
     attribution: res.headers.get("X-Attribution") || "—",
     scene: res.headers.get("X-Scene-Pid"),
@@ -237,15 +297,130 @@ function setStatus(s) {
   add("bytes", s.bytes);
 }
 
+// ----------------------------------------------------- globe navigation
+
+function resetView() {
+  state.view = { lat: null, lon: null, zoom: null };
+}
+
+function beginNav() {
+  // Seed explicit navigation from wherever the last artifact stood.
+  if (state.view.lat === null && state.resolved) {
+    state.view = { ...state.resolved };
+  }
+  return state.view.lat !== null;
+}
+
+function setupPlateNav() {
+  const plate = $("plate");
+  let drag = null;
+  plate.addEventListener("pointerdown", e => {
+    if (state.projection !== "globe" || state.encoder !== "svg") return;
+    if (!beginNav()) return;
+    // No pointer capture yet: capturing here would retarget the
+    // eventual click away from the region path under the cursor.
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false };
+  });
+  plate.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const rect = plate.querySelector("svg")?.getBoundingClientRect();
+    if (!rect) return;
+    const degPerPx = (2 * state.view.zoom) / rect.width;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+      drag.moved = true;
+      plate.classList.add("dragging");
+      plate.setPointerCapture(drag.id);
+    }
+    if (!drag.moved) return;
+    state.view.lon = drag.lon - dx * degPerPx;
+    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * degPerPx));
+    render("drag");
+  });
+  let suppressClick = false;
+  const finish = () => {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    plate.classList.remove("dragging");
+    suppressClick = moved;
+    if (moved) render(); // settle at full quality
+  };
+  plate.addEventListener("pointerup", finish);
+  plate.addEventListener("pointercancel", finish);
+
+  let settle = null;
+  plate.addEventListener("wheel", e => {
+    if (state.projection !== "globe" || state.encoder !== "svg") return;
+    e.preventDefault();
+    if (!beginNav()) return;
+    const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+    state.view.zoom = Math.max(2, Math.min(90, state.view.zoom * factor));
+    render("drag");
+    clearTimeout(settle);
+    settle = setTimeout(() => render(), 220);
+  }, { passive: false });
+
+  plate.addEventListener("dblclick", () => { resetView(); render(); });
+
+  // Click a region on the map to focus it (a drag is not a click).
+  plate.addEventListener("click", e => {
+    if (suppressClick) { suppressClick = false; return; }
+    const path = e.target.closest && e.target.closest("path[data-region]");
+    if (!path) return;
+    const key = "region:" + path.dataset.region;
+    focusSubject(key, { keepView: true });
+  });
+}
+
+// ------------------------------------------------------- subject focus
+
+async function focusSubject(key, opts) {
+  state.subject = key;
+  const sel = $("subject");
+  if ([...sel.options].some(o => o.value === key)) sel.value = key;
+  if (!(opts && opts.keepView)) resetView();
+  await loadMappedTimes();
+  drawScrubber();
+  render();
+}
+
+async function loadMappedTimes() {
+  const box = $("mapped");
+  if (state.subject === "world") {
+    state.subjectStops = null;
+    box.hidden = true;
+    return;
+  }
+  const res = await fetch("/api/region_times?subject=" + encodeURIComponent(state.subject));
+  const data = await res.json();
+  state.subjectStops = new Set(data.stops);
+  const chips = box.querySelector(".chips");
+  chips.innerHTML = "";
+  data.stops.forEach(y => {
+    const c = document.createElement("button");
+    c.className = "chip" + (y === state.stops[state.idx] ? " now" : "");
+    c.textContent = fmtYear(y);
+    c.addEventListener("click", () => setStop(state.stops.indexOf(y)));
+    chips.appendChild(c);
+  });
+  box.hidden = data.stops.length === 0;
+}
+
+// ----------------------------------------------------------- scrubber
+
 function drawScrubber() {
   const scrub = $("scrub");
   scrub.innerHTML = "";
   const min = state.stops[0], max = state.stops[state.stops.length - 1];
   state.stops.forEach((y, i) => {
     const b = document.createElement("button");
-    b.className = "tick" + (i === 0 ? " dawn" : "") + (i === state.idx ? " active" : "");
+    const off = state.subjectStops && !state.subjectStops.has(y);
+    b.className = "tick" + (i === 0 ? " dawn" : "") + (i === state.idx ? " active" : "") + (off ? " off" : "");
     b.style.left = (2 + 96 * (y - min) / (max - min)) + "%";
-    b.title = fmtYear(y) + (i === 0 ? " — before the first recorded change" : "");
+    b.title = fmtYear(y)
+      + (i === 0 ? " — before the first recorded change" : "")
+      + (off ? " — no mapping for the focused subject" : "");
     b.addEventListener("click", () => setStop(i));
     scrub.appendChild(b);
   });
@@ -255,8 +430,8 @@ function drawScrubber() {
 
 async function setStop(i) {
   state.idx = Math.max(0, Math.min(state.stops.length - 1, i));
+  await Promise.all([loadSubjects(), loadChanges(), loadFromOptions(), loadMappedTimes()]);
   drawScrubber();
-  await Promise.all([loadSubjects(), loadChanges(), loadFromOptions()]);
   render();
 }
 
@@ -271,8 +446,19 @@ async function loadSubjects() {
     o.value = r.key; o.textContent = r.label;
     sel.appendChild(o);
   }
-  sel.value = rows.some(r => r.key === keep) ? keep : "world";
-  state.subject = sel.value;
+  if (rows.some(r => r.key === keep)) {
+    sel.value = keep;
+  } else if (keep !== "world" && state.subjectStops) {
+    // Focused subject absent here: keep the focus, the chips and the
+    // dimmed ticks say where it lives; the plate will say NothingAtTime.
+    const o = document.createElement("option");
+    o.value = keep; o.textContent = "(not mapped at this stop)";
+    sel.appendChild(o);
+    sel.value = keep;
+  } else {
+    sel.value = "world";
+    state.subject = "world";
+  }
 }
 
 async function loadChanges() {
@@ -332,14 +518,15 @@ async function init() {
   radioRow($("encoders"), meta.encoders.map(e => ({ name: e, value: e })), state.encoder,
     v => { state.encoder = v; render(); });
   radioRow($("projections"), (meta.projections || ["globe", "flat"]).map(e => ({ name: e, value: e })), state.projection,
-    v => { state.projection = v; render(); });
+    v => { state.projection = v; resetView(); render(); });
   $("prev").addEventListener("click", () => setStop(state.idx - 1));
   $("next").addEventListener("click", () => setStop(state.idx + 1));
-  $("subject").addEventListener("change", e => { state.subject = e.target.value; render(); });
-  $("lod").addEventListener("change", render);
-  $("labels").addEventListener("change", render);
+  $("subject").addEventListener("change", e => focusSubject(e.target.value));
+  $("context").addEventListener("change", () => render());
+  $("lod").addEventListener("change", () => render());
+  $("labels").addEventListener("change", () => render());
   $("expose").addEventListener("change", () => { loadFromOptions(); render(); });
-  $("from").addEventListener("change", render);
+  $("from").addEventListener("change", () => render());
   $("hold").addEventListener("click", () => {
     state.held = currentParams();
     $("held").innerHTML = "held: <b></b>";
@@ -358,12 +545,13 @@ async function init() {
     const p = new URLSearchParams();
     for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
     for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
-    p.set("style", now.get("style")); p.set("encoder", now.get("encoder"));
-    p.set("projection", now.get("projection"));
-    p.set("lod", now.get("lod")); p.set("labels", now.get("labels"));
+    for (const k of ["style","encoder","projection","lod","labels","center","zoom"]) {
+      if (now.get(k) !== null) p.set(k, now.get(k));
+    }
     const res = await fetch("/api/overlay?" + p.toString());
     showPlate(res, await res.text(), now.get("encoder"));
   });
+  setupPlateNav();
   await setStop(state.idx);
 }
 init();

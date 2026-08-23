@@ -75,7 +75,7 @@ fn globe_clips_the_far_hemisphere() {
         style: LabelStyle { color: Rgba(10, 10, 10, 255), size: 12.0 },
     });
     let enc = SvgEncoder {
-        projection: Projection::Globe { center: Some((3.0, 5.0)) },
+        projection: Projection::Globe { center: Some((3.0, 5.0)), zoom: None },
         ..SvgEncoder::default()
     };
     let out = enc.encode(&scene).unwrap();
@@ -83,6 +83,28 @@ fn globe_clips_the_far_hemisphere() {
     assert!(!out.contains("ANTIPODEAN"), "far-side content must be clipped");
     // With content wrapping the limb, the full disc (limb circle) shows.
     assert!(out.contains("<circle"));
+    // The resolved view rides the artifact for interactive consumers.
+    assert!(out.contains("data-clat=\"3.000\"") && out.contains("data-zoom=\"90.000\""));
+}
+
+#[test]
+fn explicit_view_overrides_autofit_deterministically() {
+    let scene = sample_scene();
+    let enc = SvgEncoder {
+        projection: Projection::Globe { center: Some((4.0, 5.0)), zoom: Some(20.0) },
+        ..SvgEncoder::default()
+    };
+    let a = enc.encode(&scene).unwrap();
+    assert_eq!(a, enc.encode(&scene).unwrap());
+    assert!(a.contains("data-zoom=\"20.000\""));
+    // A different view is a different artifact.
+    let closer = SvgEncoder {
+        projection: Projection::Globe { center: Some((4.0, 5.0)), zoom: Some(10.0) },
+        ..SvgEncoder::default()
+    };
+    assert_ne!(a, closer.encode(&scene).unwrap());
+    // Regions carry their id for click-to-select consumers.
+    assert!(a.contains("data-region=\"0000000000000001\""));
 }
 
 #[test]
