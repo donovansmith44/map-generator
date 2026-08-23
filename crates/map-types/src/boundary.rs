@@ -76,17 +76,28 @@ pub struct Boundary {
 }
 
 /// Which way a region walks a shared arc.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Orientation {
     Forward,
     Reverse,
 }
 
-/// A region's geometry: a cycle of oriented boundary references (outer),
-/// plus hole cycles. Consecutive arcs must connect end-to-start — the
-/// cycle-continuity validator proves it (law 2, structural half).
+/// One connected piece of a region: an outer cycle of oriented boundary
+/// references, plus hole cycles. Consecutive arcs must connect
+/// end-to-start — the cycle-continuity validator proves it (law 2,
+/// structural half).
 #[derive(Clone, Debug, PartialEq)]
-pub struct RegionGeom {
+pub struct RegionPart {
     pub cycle: Vec<(BoundaryId, Orientation)>,
     pub holes: Vec<Vec<(BoundaryId, Orientation)>>,
+}
+
+/// A region's geometry. AMENDMENT to the §B sketch (phase-2 finding,
+/// recorded for owner review): real polities are routinely several
+/// separate pieces of land — a mainland and its islands — so a region
+/// is a LIST of parts, not one cycle. The sketch's single-cycle shape
+/// is the one-part case.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegionGeom {
+    pub parts: Vec<RegionPart>,
 }

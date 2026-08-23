@@ -87,7 +87,10 @@ fn two_region_world() -> WorldTimeline {
 
     let region = |name: &str, cycle: Vec<(BoundaryId, Orientation)>| RegionHistory {
         label_history: vec![(Interval::open_from(tp(-2000)), name.to_string())],
-        geom_history: vec![(Interval::open_from(tp(-2000)), RegionGeom { cycle, holes: vec![] })],
+        geom_history: vec![(
+            Interval::open_from(tp(-2000)),
+            RegionGeom { parts: vec![RegionPart { cycle, holes: vec![] }] },
+        )],
     };
     let mut regions = BTreeMap::new();
     regions.insert(A, region("Westland", vec![(W, Orientation::Forward), (S, Orientation::Forward)]));
@@ -255,7 +258,7 @@ fn law02_partition_structure() {
     // Reference an arc the timeline doesn't hold.
     let mut dangling = world.clone();
     let ghost = BoundaryId(ContentHash(99));
-    dangling.regions.get_mut(&A).unwrap().geom_history[0].1.cycle[0].0 = ghost;
+    dangling.regions.get_mut(&A).unwrap().geom_history[0].1.parts[0].cycle[0].0 = ghost;
     let violations = validate_partition_structure(&dangling);
     assert!(violations
         .iter()

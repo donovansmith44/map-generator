@@ -52,7 +52,7 @@ pub mod atlas {
 pub use algebra::{mconcat, Monoid};
 pub use boundary::{
     AtlasPlaceRef, BorderSurvey, Boundary, BoundarySource, EdgeCharacter, InterpolationMethod,
-    Orientation, RegionGeom,
+    Orientation, RegionGeom, RegionPart,
 };
 pub use contracts::{ChronologyExport, GazetteerEntry, GazetteerExport};
 pub use encode::{EncodeError, SceneEncoder};

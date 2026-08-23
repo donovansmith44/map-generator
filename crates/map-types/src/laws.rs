@@ -6,7 +6,7 @@
 //!
 //! Every violation is typed, reasoned, enumerable — never a silent skip.
 
-use crate::boundary::{BoundarySource, Orientation, RegionGeom};
+use crate::boundary::{BoundarySource, Orientation};
 use crate::contracts::{ChronologyExport, GazetteerExport};
 use crate::geom::UnitVec;
 use crate::ident::{BoundaryId, RegionId};
@@ -232,10 +232,11 @@ pub fn validate_partition_structure(tl: &WorldTimeline) -> Vec<Violation> {
     let mut v = Vec::new();
     for (rid, hist) in &tl.regions {
         for (iv, geom) in &hist.geom_history {
-            let RegionGeom { cycle, holes } = geom;
-            validate_cycle(tl, *rid, iv, cycle, &mut v);
-            for hole in holes {
-                validate_cycle(tl, *rid, iv, hole, &mut v);
+            for part in &geom.parts {
+                validate_cycle(tl, *rid, iv, &part.cycle, &mut v);
+                for hole in &part.holes {
+                    validate_cycle(tl, *rid, iv, hole, &mut v);
+                }
             }
         }
     }

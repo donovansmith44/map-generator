@@ -18,6 +18,13 @@ disagree, the crate wins.
 - `crates/map-types` — phase 1: the domain types and the design laws as
   tests. Depends only on `atlas-graph-types` (path dep on the sibling
   Bible Atlas checkout, read-only; contract C1).
+- `crates/map-adapters` — phase 2: source adapters behind the
+  `TimelineSource` seam. First source: historical-basemaps, with
+  shared-arc extraction, narrated epoch deltas, typed exemptions, and
+  the ring-for-ring fidelity law.
+- `data/historical-basemaps` — the vendored first source (12 world
+  border files, 4000 BC to AD 100, license included), for the offline
+  story.
 - `docs/map-system-handoff.md` — the founding spec.
 
 ## Working covenant (short form)

@@ -1,0 +1,12 @@
+[package]
+name = "map-adapters"
+version = "0.1.0"
+edition = "2021"
+description = "Source adapters for map-generator — phase 2. Turns one source's bytes into a lawful WorldTimeline behind an interface we can back out of (covenant rule 7)."
+
+# The types crate stays zero-dep; adapters may carry parsing deps.
+# serde_json is vendorable for the offline story.
+[dependencies]
+map-types = { path = "../map-types" }
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+serde_json = "1"
