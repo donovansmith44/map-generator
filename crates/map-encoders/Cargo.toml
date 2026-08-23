@@ -1,0 +1,10 @@
+[package]
+name = "map-encoders"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal scene encoders for map-generator (law 11): each concrete output format lives here and only here, behind SceneEncoder, deterministic byte for byte."
+
+[dependencies]
+map-types = { path = "../map-types" }
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+serde_json = "1"

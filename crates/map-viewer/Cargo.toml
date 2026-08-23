@@ -1,0 +1,13 @@
+[package]
+name = "map-viewer"
+version = "0.1.0"
+edition = "2021"
+description = "The workbench (phase 4): a one-page viewer over the public contract only — MapProvider in, SceneEncoder out. A lab bench, not a product; its existence continuously proves the seam."
+
+[dependencies]
+map-types = { path = "../map-types" }
+map-adapters = { path = "../map-adapters" }
+map-provider = { path = "../map-provider" }
+map-encoders = { path = "../map-encoders" }
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+serde_json = "1"

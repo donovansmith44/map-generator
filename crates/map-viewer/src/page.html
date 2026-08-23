@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>map-generator — workbench</title>
+<style>
+  :root {
+    --room: #191c22;
+    --panel: #22262e;
+    --edge: #343943;
+    --ink: #d6d3c8;
+    --dim: #8a8f98;
+    --stop: #c43b2f;
+    --stop-soft: #7a3a34;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--room);
+    color: var(--ink);
+    font: 13px/1.5 var(--mono);
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: 100vh;
+  }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+  /* ------------------------------------------------ instrument rail */
+  #rail {
+    background: var(--panel);
+    border-right: 1px solid var(--edge);
+    padding: 18px 16px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  #wordmark { letter-spacing: .08em; }
+  #wordmark b { color: var(--ink); font-weight: 600; }
+  #wordmark span { color: var(--dim); }
+  .group { border-top: 1px solid var(--edge); padding-top: 12px; }
+  .group h2 {
+    font-size: 10px; font-weight: 400; letter-spacing: .22em;
+    color: var(--dim); text-transform: uppercase; margin-bottom: 8px;
+  }
+  label { color: var(--dim); display: block; margin: 6px 0 2px; }
+  select, button {
+    font: inherit; color: var(--ink); background: var(--room);
+    border: 1px solid var(--edge); border-radius: 3px; padding: 4px 8px;
+    width: 100%;
+  }
+  button { cursor: pointer; transition: border-color 120ms; }
+  button:hover { border-color: var(--dim); }
+  button:focus-visible, select:focus-visible, .tick:focus-visible {
+    outline: 2px solid var(--stop); outline-offset: 1px;
+  }
+  .inline { display: flex; gap: 6px; align-items: center; }
+  .inline > * { width: auto; }
+  input[type="checkbox"] { accent-color: var(--stop); }
+  .radio-row { display: flex; gap: 10px; }
+  .radio-row label { display: flex; gap: 4px; align-items: center; margin: 0; color: var(--ink); }
+
+  /* --------------------------------------------------- the scrubber */
+  #readout { font-size: 22px; margin-bottom: 6px; }
+  #readout small { color: var(--dim); font-size: 11px; display: block; }
+  #scrub { position: relative; height: 34px; margin: 4px 0 6px; }
+  #scrub::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 24px;
+    height: 1px; background: var(--edge);
+  }
+  .tick {
+    position: absolute; top: 10px; width: 9px; height: 22px;
+    transform: translateX(-50%);
+    background: none; border: none; padding: 0; cursor: pointer;
+  }
+  .tick::after {
+    content: ""; position: absolute; left: 4px; top: 4px; bottom: 0;
+    width: 1px; background: var(--stop-soft); transition: background 120ms;
+  }
+  .tick.dawn::after { background: var(--dim); }
+  .tick:hover::after { background: var(--ink); }
+  .tick.active::after { background: var(--stop); width: 3px; left: 3px; top: 0; }
+  #stepper { display: flex; gap: 6px; }
+  #stepper button { width: 34px; }
+  #stepper .spacer { flex: 1; color: var(--dim); align-self: center; text-align: center; }
+
+  /* ------------------------------------------------------ the plate */
+  #bench { display: flex; flex-direction: column; min-width: 0; }
+  #plate {
+    flex: 1; overflow: auto; display: grid; place-items: center; padding: 14px;
+  }
+  #plate svg {
+    max-width: 100%; height: auto;
+    background: #10120f;
+    border: 1px solid var(--edge);
+    box-shadow: 0 0 60px rgba(0,0,0,.5);
+  }
+  #plate pre {
+    max-width: 100%; max-height: 100%; overflow: auto;
+    color: var(--dim); font-size: 11px; padding: 12px;
+    border: 1px solid var(--edge); background: var(--panel);
+  }
+  #status {
+    border-top: 1px solid var(--edge); padding: 6px 14px;
+    color: var(--dim); font-size: 11px;
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  #status b { color: var(--ink); font-weight: 400; }
+
+  /* -------------------------------------------------- log & overlay */
+  #log { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  #log div { color: var(--dim); }
+  #log .k { color: var(--stop); }
+  #held { color: var(--dim); margin: 6px 0; min-height: 18px; }
+  #held b { color: var(--ink); font-weight: 400; }
+  .btnrow { display: flex; gap: 6px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<nav id="rail">
+  <div id="wordmark"><b>MAP-GENERATOR</b> <span>/ workbench</span></div>
+
+  <section class="group" aria-label="time">
+    <h2>Time</h2>
+    <div id="readout">—<small>scrub stops are change events — the piecewise timeline itself</small></div>
+    <div id="scrub"></div>
+    <div id="stepper">
+      <button id="prev" aria-label="previous change">‹</button>
+      <div class="spacer" id="stopcount"></div>
+      <button id="next" aria-label="next change">›</button>
+    </div>
+    <label class="inline" style="margin-top:8px">
+      <input type="checkbox" id="expose"> long exposure from
+      <select id="from" disabled style="flex:1"></select>
+    </label>
+  </section>
+
+  <section class="group" aria-label="subject">
+    <h2>Subject</h2>
+    <select id="subject"></select>
+  </section>
+
+  <section class="group" aria-label="appearance">
+    <h2>Style</h2>
+    <div class="radio-row" id="styles"></div>
+    <label for="lod">detail</label>
+    <select id="lod">
+      <option value="0">exact</option>
+      <option value="0.0015" selected>medium</option>
+      <option value="0.008">coarse</option>
+    </select>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="labels" checked> labels</label>
+  </section>
+
+  <section class="group" aria-label="encoder">
+    <h2>Encoder</h2>
+    <div class="radio-row" id="encoders"></div>
+  </section>
+
+  <section class="group" aria-label="overlay">
+    <h2>Overlay scratchpad</h2>
+    <div id="held">nothing held</div>
+    <div class="btnrow">
+      <button id="hold">hold this</button>
+      <button id="compose" disabled>compose</button>
+      <button id="drop" disabled>drop</button>
+    </div>
+  </section>
+
+  <section class="group" aria-label="changes">
+    <h2>Changes at this stop</h2>
+    <div id="log"></div>
+  </section>
+</nav>
+
+<main id="bench">
+  <div id="plate" aria-live="polite"></div>
+  <div id="status"></div>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const state = { stops: [], idx: 0, styles: [], style: null, encoder: "svg", subject: "world", held: null };
+
+const fmtYear = y => y < 0 ? `${-y} BC` : `AD ${y}`;
+
+function currentParams() {
+  const year = state.stops[state.idx];
+  const p = new URLSearchParams();
+  p.set("subject", state.subject);
+  if ($("expose").checked && $("from").value !== "") {
+    p.set("year", $("from").value);
+    p.set("to", year);
+  } else {
+    p.set("year", year);
+  }
+  p.set("style", state.style);
+  p.set("encoder", state.encoder);
+  p.set("lod", $("lod").value);
+  p.set("labels", $("labels").checked ? "1" : "0");
+  return p;
+}
+
+async function render() {
+  const p = currentParams();
+  const res = await fetch("/api/render?" + p.toString());
+  const body = await res.text();
+  showPlate(res, body, p.get("encoder"));
+}
+
+function showPlate(res, body, encoder) {
+  const plate = $("plate");
+  if (!res.ok) { plate.innerHTML = ""; plate.textContent = body; setStatus({error: body}); return; }
+  if (encoder === "svg") { plate.innerHTML = body; }
+  else { plate.innerHTML = ""; const pre = document.createElement("pre"); pre.textContent = body; plate.appendChild(pre); }
+  setStatus({
+    attribution: res.headers.get("X-Attribution") || "—",
+    scene: res.headers.get("X-Scene-Pid"),
+    query: res.headers.get("X-Query-Pid"),
+    bytes: body.length,
+  });
+}
+
+function setStatus(s) {
+  const el = $("status");
+  el.innerHTML = "";
+  const add = (k, v) => { if (!v) return; const d = document.createElement("span"); d.innerHTML = `${k} <b></b>`; d.querySelector("b").textContent = v; el.appendChild(d); };
+  if (s.error) { add("error", s.error); return; }
+  add("sources", s.attribution);
+  add("scene", s.scene);
+  add("query", s.query);
+  add("bytes", s.bytes);
+}
+
+function drawScrubber() {
+  const scrub = $("scrub");
+  scrub.innerHTML = "";
+  const min = state.stops[0], max = state.stops[state.stops.length - 1];
+  state.stops.forEach((y, i) => {
+    const b = document.createElement("button");
+    b.className = "tick" + (i === 0 ? " dawn" : "") + (i === state.idx ? " active" : "");
+    b.style.left = (2 + 96 * (y - min) / (max - min)) + "%";
+    b.title = fmtYear(y) + (i === 0 ? " — before the first recorded change" : "");
+    b.addEventListener("click", () => setStop(i));
+    scrub.appendChild(b);
+  });
+  $("stopcount").textContent = `${state.idx + 1} / ${state.stops.length}`;
+  $("readout").firstChild.textContent = fmtYear(state.stops[state.idx]);
+}
+
+async function setStop(i) {
+  state.idx = Math.max(0, Math.min(state.stops.length - 1, i));
+  drawScrubber();
+  await Promise.all([loadSubjects(), loadChanges(), loadFromOptions()]);
+  render();
+}
+
+async function loadSubjects() {
+  const res = await fetch("/api/subjects?year=" + state.stops[state.idx]);
+  const rows = await res.json();
+  const sel = $("subject");
+  const keep = state.subject;
+  sel.innerHTML = "";
+  for (const r of rows) {
+    const o = document.createElement("option");
+    o.value = r.key; o.textContent = r.label;
+    sel.appendChild(o);
+  }
+  sel.value = rows.some(r => r.key === keep) ? keep : "world";
+  state.subject = sel.value;
+}
+
+async function loadChanges() {
+  const log = $("log");
+  log.innerHTML = "";
+  if (state.idx === 0) { log.textContent = "the state before the first recorded change"; return; }
+  const from = state.stops[state.idx - 1], to = state.stops[state.idx];
+  const res = await fetch(`/api/changes?from=${from}&to=${to}`);
+  const rows = await res.json();
+  const counts = {};
+  rows.forEach(r => counts[r.kind] = (counts[r.kind] || 0) + 1);
+  const summary = document.createElement("div");
+  summary.innerHTML = Object.entries(counts).map(([k, n]) => `<span class="k">${n}</span> ${k}`).join(" · ");
+  log.appendChild(summary);
+  rows.slice(0, 40).forEach(r => {
+    const d = document.createElement("div");
+    d.textContent = `${r.kind} ${r.subject.slice(0, 24)}`;
+    log.appendChild(d);
+  });
+  if (rows.length > 40) { const d = document.createElement("div"); d.textContent = `… and ${rows.length - 40} more`; log.appendChild(d); }
+}
+
+function loadFromOptions() {
+  const sel = $("from");
+  sel.innerHTML = "";
+  state.stops.slice(0, state.idx).forEach(y => {
+    const o = document.createElement("option");
+    o.value = y; o.textContent = fmtYear(y);
+    sel.appendChild(o);
+  });
+  sel.disabled = !$("expose").checked || sel.options.length === 0;
+  if (sel.options.length) sel.value = sel.options[0].value;
+}
+
+function radioRow(el, items, current, onpick) {
+  el.innerHTML = "";
+  for (const it of items) {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "radio"; input.name = el.id; input.value = it.value;
+    input.checked = it.value === current;
+    input.addEventListener("change", () => onpick(it.value));
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(it.name));
+    el.appendChild(label);
+  }
+}
+
+async function init() {
+  const meta = await (await fetch("/api/meta")).json();
+  state.stops = meta.stops;
+  state.styles = meta.styles;
+  state.style = meta.styles[0].id;
+  state.idx = Math.max(0, meta.stops.length - 4);
+  radioRow($("styles"), meta.styles.map(s => ({ name: s.name, value: s.id })), state.style,
+    v => { state.style = v; render(); });
+  radioRow($("encoders"), meta.encoders.map(e => ({ name: e, value: e })), state.encoder,
+    v => { state.encoder = v; render(); });
+  $("prev").addEventListener("click", () => setStop(state.idx - 1));
+  $("next").addEventListener("click", () => setStop(state.idx + 1));
+  $("subject").addEventListener("change", e => { state.subject = e.target.value; render(); });
+  $("lod").addEventListener("change", render);
+  $("labels").addEventListener("change", render);
+  $("expose").addEventListener("change", () => { loadFromOptions(); render(); });
+  $("from").addEventListener("change", render);
+  $("hold").addEventListener("click", () => {
+    state.held = currentParams();
+    $("held").innerHTML = "held: <b></b>";
+    $("held").querySelector("b").textContent =
+      `${state.subject} @ ${fmtYear(state.stops[state.idx])}`;
+    $("compose").disabled = $("drop").disabled = false;
+  });
+  $("drop").addEventListener("click", () => {
+    state.held = null;
+    $("held").textContent = "nothing held";
+    $("compose").disabled = $("drop").disabled = true;
+  });
+  $("compose").addEventListener("click", async () => {
+    if (!state.held) return;
+    const now = currentParams();
+    const p = new URLSearchParams();
+    for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
+    for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
+    p.set("style", now.get("style")); p.set("encoder", now.get("encoder"));
+    p.set("lod", now.get("lod")); p.set("labels", now.get("labels"));
+    const res = await fetch("/api/overlay?" + p.toString());
+    showPlate(res, await res.text(), now.get("encoder"));
+  });
+  await setStop(state.idx);
+}
+init();
+</script>
+</body>
+</html>

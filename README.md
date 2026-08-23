@@ -22,6 +22,18 @@ disagree, the crate wins.
   `TimelineSource` seam. First source: historical-basemaps, with
   shared-arc extraction, narrated epoch deltas, typed exemptions, and
   the ring-for-ring fidelity law.
+- `crates/map-provider` — phase 3: the reference `MapProvider`.
+  Materialization = select ∘ simplify ∘ style, a pure function of the
+  timeline; determinism, composition, accumulation, and selection laws
+  run against it.
+- `crates/map-encoders` — terminal encoders (law 11): SVG and GeoJSON
+  backends behind `SceneEncoder`, deterministic byte for byte.
+- `crates/map-viewer` — phase 4: the workbench. One page over the
+  public contract only (`dyn MapProvider` + `SceneEncoder`, zero
+  privileged access). `cargo run -p map-viewer --release`, then
+  http://127.0.0.1:8080/ — scrubber stops at change events, subject
+  picker, style/encoder switchers, long-exposure toggle, overlay
+  scratchpad.
 - `data/historical-basemaps` — the vendored first source (12 world
   border files, 4000 BC to AD 100, license included), for the offline
   story.
