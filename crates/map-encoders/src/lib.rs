@@ -5,9 +5,12 @@
 //! boundary. Composition never happens here: overlay and accumulation
 //! are semantic operations; encoded artifacts are leaves.
 //!
-//! Known M1 limit, disclosed: the flat projection draws rings that
-//! cross the antimeridian naively (a horizontal streak); a cut-aware
-//! projection is future encoder work and touches nothing upstream.
+//! Geometry lives on the sphere; PROJECTION IS ENCODER CONFIG, never
+//! architecture. The globe projection is the default: an orthographic
+//! view centered on the content, back hemisphere clipped, graticule
+//! for the curve of the earth — a region renders as a surface slice of
+//! the sphere. The flat (equirectangular) plate remains for whole-world
+//! diagnostics; it draws antimeridian-crossing rings naively (disclosed).
 
 use std::fmt::Write as _;
 
@@ -19,66 +22,8 @@ fn lat_lon(v: &UnitVec) -> (f64, f64) {
     (v.z().asin().to_degrees(), v.y().atan2(v.x()).to_degrees())
 }
 
-fn bounds(scene: &Snapshot) -> (f64, f64, f64, f64) {
-    // (min_lon, min_lat, max_lon, max_lat), defaulting to the world.
-    let mut b: Option<(f64, f64, f64, f64)> = None;
-    let mut feed = |v: &UnitVec| {
-        let (lat, lon) = lat_lon(v);
-        b = Some(match b {
-            None => (lon, lat, lon, lat),
-            Some((x0, y0, x1, y1)) => (x0.min(lon), y0.min(lat), x1.max(lon), y1.max(lat)),
-        });
-    };
-    for r in &scene.regions {
-        for ring in r.outer.iter().chain(&r.holes) {
-            ring.points().iter().for_each(&mut feed);
-        }
-    }
-    for bd in &scene.boundaries {
-        bd.pts.iter().for_each(&mut feed);
-    }
-    for m in &scene.markers {
-        feed(&m.at);
-    }
-    for l in &scene.labels {
-        feed(&l.at);
-    }
-    b.unwrap_or((-180.0, -90.0, 180.0, 90.0))
-}
-
 fn esc(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
-}
-
-// ---------------------------------------------------------------- SVG
-
-/// Flat (equirectangular) SVG plates. Good enough eyes for the bench;
-/// projection choice is config, not architecture.
-pub struct SvgEncoder {
-    /// Rendered width in px; height follows the content's aspect.
-    pub width: f64,
-    /// Padding around the content, in px.
-    pub padding: f64,
-}
-
-impl Default for SvgEncoder {
-    fn default() -> Self {
-        SvgEncoder { width: 1200.0, padding: 16.0 }
-    }
-}
-
-struct Frame {
-    scale: f64,
-    x0: f64,
-    y1: f64,
-    pad: f64,
-}
-
-impl Frame {
-    fn place(&self, v: &UnitVec) -> (f64, f64) {
-        let (lat, lon) = lat_lon(v);
-        (self.pad + (lon - self.x0) * self.scale, self.pad + (self.y1 - lat) * self.scale)
-    }
 }
 
 fn rgb(c: Rgba) -> String {
@@ -88,78 +33,114 @@ fn alpha(c: Rgba) -> f64 {
     f64::from(c.3) / 255.0
 }
 
-fn path_of(frame: &Frame, rings: &[&Ring]) -> String {
+fn scene_points<'a>(scene: &'a Snapshot) -> impl Iterator<Item = &'a UnitVec> {
+    scene
+        .regions
+        .iter()
+        .flat_map(|r| r.outer.iter().chain(&r.holes).flat_map(|ring| ring.points()))
+        .chain(scene.boundaries.iter().flat_map(|b| b.pts.iter()))
+        .chain(scene.markers.iter().map(|m| &m.at))
+        .chain(scene.labels.iter().map(|l| &l.at))
+}
+
+// ---------------------------------------------------------- projection
+
+/// How the sphere meets the page. Config, not architecture: adding a
+/// projection touches nothing upstream of the encoder.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Projection {
+    /// Orthographic globe: the view a sphere actually offers. Centered
+    /// on the given (lat, lon) or, with None, on the content itself;
+    /// zooms to the content's angular extent, so one region is a
+    /// surface slice and the world is the lit hemisphere.
+    Globe { center: Option<(f64, f64)> },
+    /// Equirectangular plate for diagnostics.
+    Flat,
+}
+
+pub struct SvgEncoder {
+    /// Rendered width in px; height follows (square for the globe).
+    pub width: f64,
+    /// Padding around the content, in px.
+    pub padding: f64,
+    pub projection: Projection,
+}
+
+impl Default for SvgEncoder {
+    fn default() -> Self {
+        SvgEncoder { width: 1200.0, padding: 16.0, projection: Projection::Globe { center: None } }
+    }
+}
+
+// -------------------------------------------------- shared svg pieces
+
+fn stroke_attrs(st: map_types::style::Stroke) -> (f64, &'static str, f64) {
+    match st.pattern {
+        StrokePattern::Solid => (st.width, "", alpha(st.color)),
+        StrokePattern::Dashed => (st.width, " stroke-dasharray=\"6 4\"", alpha(st.color)),
+        StrokePattern::Hatched => (st.width, " stroke-dasharray=\"2 3\"", alpha(st.color)),
+        // A frontier is a zone, not a line: broad and soft.
+        StrokePattern::Zonal => (st.width * 6.0, "", alpha(st.color) * 0.35),
+    }
+}
+
+fn path_from(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
     let mut d = String::new();
-    for ring in rings {
-        for (i, p) in ring.points().iter().enumerate() {
-            let (x, y) = frame.place(p);
+    for pts in chunks {
+        for (i, (x, y)) in pts.iter().enumerate() {
             let _ = write!(d, "{}{:.3} {:.3}", if i == 0 { "M" } else { "L" }, x, y);
         }
-        d.push('Z');
+        if close {
+            d.push('Z');
+        }
     }
     d
 }
 
-impl SceneEncoder for SvgEncoder {
-    type Output = String;
-
-    fn encode(&self, scene: &Snapshot) -> Result<String, EncodeError> {
-        let (x0, y0, x1, y1) = bounds(scene);
-        let (span_x, span_y) = ((x1 - x0).max(1e-6), (y1 - y0).max(1e-6));
-        let inner = self.width - 2.0 * self.padding;
-        if inner <= 0.0 {
-            return Err(EncodeError("width smaller than padding".to_string()));
+/// Emit every scene element through a projector. `ring_of` returns the
+/// page-space rings of a Ring (empty when fully out of view);
+/// `line_of` the visible runs of a polyline; `point_of` a visible point.
+fn emit_scene(
+    s: &mut String,
+    scene: &Snapshot,
+    ring_of: &dyn Fn(&Ring) -> Vec<Vec<(f64, f64)>>,
+    line_of: &dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>>,
+    point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
+) {
+    for r in &scene.regions {
+        let mut chunks: Vec<Vec<(f64, f64)>> = Vec::new();
+        for ring in r.outer.iter().chain(&r.holes) {
+            chunks.extend(ring_of(ring));
         }
-        let scale = inner / span_x;
-        let height = span_y * scale + 2.0 * self.padding;
-        let frame = Frame { scale, x0, y1, pad: self.padding };
-
-        let mut s = String::new();
+        if chunks.is_empty() {
+            continue;
+        }
         let _ = write!(
             s,
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.3} {:.3}\">",
-            self.width, height
+            "<path d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
+            path_from(&chunks, true),
+            rgb(r.paint.fill),
+            alpha(r.paint.fill)
         );
-        // Licensing rides the artifact itself.
-        let sources: Vec<String> = scene.attribution.iter().map(|src| src.0.clone()).collect();
-        let _ = write!(s, "<desc>sources: {}</desc>", esc(&sources.join(", ")));
-
-        for r in &scene.regions {
-            let rings: Vec<&Ring> = r.outer.iter().chain(&r.holes).collect();
-            let _ = write!(
-                s,
-                "<path d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
-                path_of(&frame, &rings),
-                rgb(r.paint.fill),
-                alpha(r.paint.fill)
-            );
+    }
+    for b in &scene.boundaries {
+        let chunks = line_of(&b.pts);
+        if chunks.is_empty() {
+            continue;
         }
-        for b in &scene.boundaries {
-            let mut d = String::new();
-            for (i, p) in b.pts.iter().enumerate() {
-                let (x, y) = frame.place(p);
-                let _ = write!(d, "{}{:.3} {:.3}", if i == 0 { "M" } else { "L" }, x, y);
-            }
-            let st = b.stroke;
-            let (width, dash, opacity) = match st.pattern {
-                StrokePattern::Solid => (st.width, String::new(), alpha(st.color)),
-                StrokePattern::Dashed => (st.width, " stroke-dasharray=\"6 4\"".into(), alpha(st.color)),
-                StrokePattern::Hatched => (st.width, " stroke-dasharray=\"2 3\"".into(), alpha(st.color)),
-                // A frontier is a zone, not a line: broad and soft.
-                StrokePattern::Zonal => (st.width * 6.0, String::new(), alpha(st.color) * 0.35),
-            };
-            let _ = write!(
-                s,
-                "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.3}\" stroke-opacity=\"{:.3}\" stroke-linejoin=\"round\" stroke-linecap=\"round\"{}/>",
-                d,
-                rgb(st.color),
-                width,
-                opacity,
-                dash
-            );
-        }
-        for m in &scene.markers {
-            let (x, y) = frame.place(&m.at);
+        let (width, dash, opacity) = stroke_attrs(b.stroke);
+        let _ = write!(
+            s,
+            "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.3}\" stroke-opacity=\"{:.3}\" stroke-linejoin=\"round\" stroke-linecap=\"round\"{}/>",
+            path_from(&chunks, false),
+            rgb(b.stroke.color),
+            width,
+            opacity,
+            dash
+        );
+    }
+    for m in &scene.markers {
+        if let Some((x, y)) = point_of(&m.at) {
             let _ = write!(
                 s,
                 "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\"/>",
@@ -170,8 +151,9 @@ impl SceneEncoder for SvgEncoder {
                 alpha(m.style.color)
             );
         }
-        for l in &scene.labels {
-            let (x, y) = frame.place(&l.at);
+    }
+    for l in &scene.labels {
+        if let Some((x, y)) = point_of(&l.at) {
             let _ = write!(
                 s,
                 "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
@@ -183,8 +165,259 @@ impl SceneEncoder for SvgEncoder {
                 esc(&l.text)
             );
         }
-        s.push_str("</svg>");
-        Ok(s)
+    }
+}
+
+fn svg_head(width: f64, height: f64, scene: &Snapshot) -> String {
+    let sources: Vec<String> = scene.attribution.iter().map(|src| src.0.clone()).collect();
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.3} {:.3}\"><desc>sources: {}</desc>",
+        width,
+        height,
+        esc(&sources.join(", "))
+    )
+}
+
+// ------------------------------------------------------- globe plumbing
+
+struct Globe {
+    center: UnitVec,
+    east: UnitVec,
+    north: UnitVec,
+    /// px per projected sin-unit.
+    scale: f64,
+    cx: f64,
+    cy: f64,
+}
+
+impl Globe {
+    /// Orthographic page coordinates; None when behind the limb.
+    fn place(&self, p: &UnitVec) -> Option<(f64, f64)> {
+        if p.dot(&self.center) < 0.0 {
+            return None;
+        }
+        Some(self.place_unclipped(p))
+    }
+    fn place_unclipped(&self, p: &UnitVec) -> (f64, f64) {
+        (self.cx + p.dot(&self.east) * self.scale, self.cy - p.dot(&self.north) * self.scale)
+    }
+    fn radial(&self, p: &UnitVec) -> f64 {
+        let (x, y) = (p.dot(&self.east), p.dot(&self.north));
+        (x * x + y * y).sqrt()
+    }
+}
+
+fn front_crossing(a: &UnitVec, b: &UnitVec, c: &UnitVec) -> UnitVec {
+    // Where the segment a->b pierces the limb plane dot(p, c) = 0.
+    let (da, db) = (a.dot(c), b.dot(c));
+    let t = if (da - db).abs() < 1e-12 { 0.5 } else { da / (da - db) };
+    UnitVec::normalize(
+        a.x() + t * (b.x() - a.x()),
+        a.y() + t * (b.y() - a.y()),
+        a.z() + t * (b.z() - a.z()),
+    )
+    .unwrap_or(*a)
+}
+
+/// Sutherland–Hodgman against the limb plane: the front-hemisphere
+/// part of a closed ring (empty when fully behind). The cut edge runs
+/// straight between limb points — a chord of the disc, close enough
+/// for plates.
+fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<UnitVec> {
+    let mut out: Vec<UnitVec> = Vec::new();
+    let n = pts.len();
+    for i in 0..n {
+        let (a, b) = (&pts[i], &pts[(i + 1) % n]);
+        let (fa, fb) = (a.dot(c) >= 0.0, b.dot(c) >= 0.0);
+        if fa {
+            out.push(*a);
+        }
+        if fa != fb {
+            out.push(front_crossing(a, b, c));
+        }
+    }
+    out
+}
+
+/// The visible runs of an open polyline, split at the limb.
+fn clip_line_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
+    let mut runs = Vec::new();
+    let mut run: Vec<UnitVec> = Vec::new();
+    for i in 0..pts.len() {
+        let front = pts[i].dot(c) >= 0.0;
+        if front {
+            if run.is_empty() && i > 0 {
+                run.push(front_crossing(&pts[i - 1], &pts[i], c));
+            }
+            run.push(pts[i]);
+        } else if !run.is_empty() {
+            run.push(front_crossing(&pts[i - 1], &pts[i], c));
+            runs.push(std::mem::take(&mut run));
+        }
+    }
+    if !run.is_empty() {
+        runs.push(run);
+    }
+    runs
+}
+
+fn content_center(scene: &Snapshot) -> UnitVec {
+    let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+    for p in scene_points(scene) {
+        x += p.x();
+        y += p.y();
+        z += p.z();
+    }
+    UnitVec::normalize(x, y, z).unwrap_or_else(|_| UnitVec::from_lat_lon_deg(20.0, 20.0))
+}
+
+fn graticule() -> Vec<Vec<UnitVec>> {
+    let mut lines = Vec::new();
+    for lon in (-180..180).step_by(15) {
+        lines.push(
+            (-90..=90)
+                .step_by(3)
+                .map(|lat| UnitVec::from_lat_lon_deg(f64::from(lat), f64::from(lon)))
+                .collect(),
+        );
+    }
+    for lat in (-75..=75).step_by(15) {
+        lines.push(
+            (-180..=180)
+                .step_by(3)
+                .map(|lon| UnitVec::from_lat_lon_deg(f64::from(lat), f64::from(lon)))
+                .collect(),
+        );
+    }
+    lines
+}
+
+fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec) -> String {
+    // Basis on the sphere at the view center.
+    let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0)); // pole-on view
+    let (nx, ny, nz) = center.cross_raw(&east);
+    let north = UnitVec::normalize(nx, ny, nz).unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
+
+    // Zoom to the visible content's angular extent; the whole
+    // hemisphere when content reaches (or wraps) the limb.
+    let mut globe = Globe { center, east, north, scale: 1.0, cx: 0.0, cy: 0.0 };
+    let mut r_max: f64 = 0.0;
+    let mut any_behind = false;
+    for p in scene_points(scene) {
+        if p.dot(&center) >= 0.0 {
+            r_max = r_max.max(globe.radial(p));
+        } else {
+            any_behind = true;
+        }
+    }
+    let r_view = if any_behind || r_max <= 0.0 { 1.0 } else { (r_max * 1.08).min(1.0) };
+    let inner = enc.width - 2.0 * enc.padding;
+    globe.scale = inner / 2.0 / r_view;
+    globe.cx = enc.width / 2.0;
+    globe.cy = enc.width / 2.0;
+
+    let mut s = svg_head(enc.width, enc.width, scene);
+
+    // The sphere itself: limb circle when the full hemisphere is in
+    // view, and the graticule always — the curve is the point.
+    if r_view >= 1.0 {
+        let _ = write!(
+            s,
+            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"rgb(128,128,128)\" fill-opacity=\"0.06\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.5\" stroke-width=\"1\"/>",
+            globe.cx, globe.cy, globe.scale
+        );
+    }
+    let mut grat = String::new();
+    for line in graticule() {
+        for run in clip_line_front(&line, &center) {
+            let pts: Vec<(f64, f64)> = run.iter().map(|p| globe.place_unclipped(p)).collect();
+            let _ = write!(grat, "{}", path_from(&[pts], false));
+        }
+    }
+    let _ = write!(
+        s,
+        "<path d=\"{}\" fill=\"none\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.22\" stroke-width=\"0.6\"/>",
+        grat
+    );
+
+    let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
+        let clipped = clip_ring_front(ring.points(), &center);
+        if clipped.len() < 3 {
+            return Vec::new();
+        }
+        vec![clipped.iter().map(|p| globe.place_unclipped(p)).collect()]
+    };
+    let line_of = |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> {
+        clip_line_front(pts, &center)
+            .into_iter()
+            .map(|run| run.iter().map(|p| globe.place_unclipped(p)).collect())
+            .collect()
+    };
+    let point_of = |p: &UnitVec| globe.place(p);
+    emit_scene(&mut s, scene, &ring_of, &line_of, &point_of);
+    s.push_str("</svg>");
+    s
+}
+
+// ------------------------------------------------------------ flat plate
+
+fn flat_bounds(scene: &Snapshot) -> (f64, f64, f64, f64) {
+    let mut b: Option<(f64, f64, f64, f64)> = None;
+    for v in scene_points(scene) {
+        let (lat, lon) = lat_lon(v);
+        b = Some(match b {
+            None => (lon, lat, lon, lat),
+            Some((x0, y0, x1, y1)) => (x0.min(lon), y0.min(lat), x1.max(lon), y1.max(lat)),
+        });
+    }
+    b.unwrap_or((-180.0, -90.0, 180.0, 90.0))
+}
+
+fn encode_flat(enc: &SvgEncoder, scene: &Snapshot) -> Result<String, EncodeError> {
+    let (x0, _y0, x1, y1) = flat_bounds(scene);
+    let span_x = (x1 - x0).max(1e-6);
+    let span_y = (y1 - _y0).max(1e-6);
+    let inner = enc.width - 2.0 * enc.padding;
+    if inner <= 0.0 {
+        return Err(EncodeError("width smaller than padding".to_string()));
+    }
+    let scale = inner / span_x;
+    let height = span_y * scale + 2.0 * enc.padding;
+    let place = move |p: &UnitVec| -> (f64, f64) {
+        let (lat, lon) = lat_lon(p);
+        (enc.padding + (lon - x0) * scale, enc.padding + (y1 - lat) * scale)
+    };
+
+    let mut s = svg_head(enc.width, height, scene);
+    let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
+        vec![ring.points().iter().map(place).collect()]
+    };
+    let line_of =
+        |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };
+    let point_of = |p: &UnitVec| Some(place(p));
+    emit_scene(&mut s, scene, &ring_of, &line_of, &point_of);
+    s.push_str("</svg>");
+    Ok(s)
+}
+
+impl SceneEncoder for SvgEncoder {
+    type Output = String;
+
+    fn encode(&self, scene: &Snapshot) -> Result<String, EncodeError> {
+        if self.width <= 2.0 * self.padding {
+            return Err(EncodeError("width smaller than padding".to_string()));
+        }
+        match self.projection {
+            Projection::Flat => encode_flat(self, scene),
+            Projection::Globe { center } => {
+                let c = match center {
+                    Some((lat, lon)) => UnitVec::from_lat_lon_deg(lat, lon),
+                    None => content_center(scene),
+                };
+                Ok(encode_globe(self, scene, c))
+            }
+        }
     }
 }
 

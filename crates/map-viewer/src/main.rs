@@ -148,13 +148,47 @@ fn load() -> App {
 
 struct Params(BTreeMap<String, String>);
 
+/// Minimal application/x-www-form-urlencoded decoding: %XX and '+'.
+/// (Its absence was a live bug — the page encodes "region:HEX" as
+/// "region%3AHEX" and every region query bounced as bad.)
+fn url_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                match u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                    Ok(b) => {
+                        out.push(b);
+                        i += 3;
+                    }
+                    Err(_) => {
+                        out.push(b'%');
+                        i += 1;
+                    }
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 impl Params {
     fn parse(query: &str) -> Params {
         Params(
             query
                 .split('&')
                 .filter_map(|kv| kv.split_once('='))
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .map(|(k, v)| (url_decode(k), url_decode(v)))
                 .collect(),
         )
     }
@@ -207,10 +241,16 @@ fn encode(p: &Params, scene: &Snapshot) -> Result<(String, &'static str), String
             .encode(scene)
             .map(|s| (s, "application/geo+json"))
             .map_err(|e| e.0),
-        _ => SvgEncoder::default()
-            .encode(scene)
-            .map(|s| (s, "image/svg+xml"))
-            .map_err(|e| e.0),
+        _ => {
+            let projection = match p.get("projection") {
+                Some("flat") => map_encoders::Projection::Flat,
+                _ => map_encoders::Projection::Globe { center: None },
+            };
+            SvgEncoder { projection, ..SvgEncoder::default() }
+                .encode(scene)
+                .map(|s| (s, "image/svg+xml"))
+                .map_err(|e| e.0)
+        }
     }
 }
 
@@ -233,6 +273,7 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
                 "stops": app.stops,
                 "styles": styles,
                 "encoders": ["svg", "geojson"],
+                "projections": ["globe", "flat"],
             });
             (200, "application/json", body.to_string(), Vec::new())
         }
@@ -370,6 +411,26 @@ fn handle(app: &App, mut stream: TcpStream) {
     head.push_str("\r\n");
     let _ = stream.write_all(head.as_bytes());
     let _ = stream.write_all(body.as_bytes());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression that shipped: URLSearchParams encodes ':' as
+    /// %3A, and an undecoded server rejected every region query.
+    #[test]
+    fn encoded_region_keys_decode_and_parse() {
+        let p = Params::parse("subject=region%3A00ff00ff00ff00ff&year=-500");
+        assert_eq!(p.get("subject"), Some("region:00ff00ff00ff00ff"));
+        assert!(matches!(
+            parse_subject(p.get("subject").unwrap()),
+            Some(RenderSubject::Region(_))
+        ));
+        assert_eq!(url_decode("a+b%20c"), "a b c");
+        assert_eq!(url_decode("plain"), "plain");
+        assert_eq!(url_decode("bad%zz"), "bad%zz");
+    }
 }
 
 fn main() {

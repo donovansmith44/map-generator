@@ -144,10 +144,12 @@
   <section class="group" aria-label="appearance">
     <h2>Style</h2>
     <div class="radio-row" id="styles"></div>
+    <label>projection</label>
+    <div class="radio-row" id="projections"></div>
     <label for="lod">detail</label>
     <select id="lod">
-      <option value="0">exact</option>
-      <option value="0.0015" selected>medium</option>
+      <option value="0" selected>exact</option>
+      <option value="0.0015">medium</option>
       <option value="0.008">coarse</option>
     </select>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="labels" checked> labels</label>
@@ -182,7 +184,7 @@
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { stops: [], idx: 0, styles: [], style: null, encoder: "svg", subject: "world", held: null };
+const state = { stops: [], idx: 0, styles: [], style: null, encoder: "svg", projection: "globe", subject: "world", held: null };
 
 const fmtYear = y => y < 0 ? `${-y} BC` : `AD ${y}`;
 
@@ -198,6 +200,7 @@ function currentParams() {
   }
   p.set("style", state.style);
   p.set("encoder", state.encoder);
+  p.set("projection", state.projection);
   p.set("lod", $("lod").value);
   p.set("labels", $("labels").checked ? "1" : "0");
   return p;
@@ -328,6 +331,8 @@ async function init() {
     v => { state.style = v; render(); });
   radioRow($("encoders"), meta.encoders.map(e => ({ name: e, value: e })), state.encoder,
     v => { state.encoder = v; render(); });
+  radioRow($("projections"), (meta.projections || ["globe", "flat"]).map(e => ({ name: e, value: e })), state.projection,
+    v => { state.projection = v; render(); });
   $("prev").addEventListener("click", () => setStop(state.idx - 1));
   $("next").addEventListener("click", () => setStop(state.idx + 1));
   $("subject").addEventListener("change", e => { state.subject = e.target.value; render(); });
@@ -354,6 +359,7 @@ async function init() {
     for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
     for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
     p.set("style", now.get("style")); p.set("encoder", now.get("encoder"));
+    p.set("projection", now.get("projection"));
     p.set("lod", now.get("lod")); p.set("labels", now.get("labels"));
     const res = await fetch("/api/overlay?" + p.toString());
     showPlate(res, await res.text(), now.get("encoder"));

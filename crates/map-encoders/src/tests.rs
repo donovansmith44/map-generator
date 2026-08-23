@@ -11,7 +11,7 @@ use map_types::{
     Monoid, PlacedLabel, Ring, SceneEncoder, Snapshot, StyledBoundary, StyledRegion, UnitVec,
 };
 
-use crate::{GeoJsonEncoder, SvgEncoder};
+use crate::{GeoJsonEncoder, Projection, SvgEncoder};
 
 fn uv(lat: f64, lon: f64) -> UnitVec {
     UnitVec::from_lat_lon_deg(lat, lon)
@@ -59,8 +59,52 @@ fn svg_is_deterministic_and_wellformed() {
     // Licensing rides the artifact.
     assert!(a.contains("historical-basemaps"));
     // Config participates in the bytes.
-    let wider = SvgEncoder { width: 2000.0, padding: 16.0 }.encode(&scene).unwrap();
+    let wider = SvgEncoder { width: 2000.0, ..SvgEncoder::default() }.encode(&scene).unwrap();
     assert_ne!(a, wider);
+}
+
+#[test]
+fn globe_clips_the_far_hemisphere() {
+    // Content on both sides of the planet, viewed from over the near
+    // side: the far label must not appear; the near one must.
+    let mut scene = sample_scene();
+    scene.labels.push(PlacedLabel {
+        text: "ANTIPODEAN".to_string(),
+        at: uv(-3.0, -175.0),
+        subject: LabelSubject::Free,
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), size: 12.0 },
+    });
+    let enc = SvgEncoder {
+        projection: Projection::Globe { center: Some((3.0, 5.0)) },
+        ..SvgEncoder::default()
+    };
+    let out = enc.encode(&scene).unwrap();
+    assert!(out.contains("Judah"));
+    assert!(!out.contains("ANTIPODEAN"), "far-side content must be clipped");
+    // With content wrapping the limb, the full disc (limb circle) shows.
+    assert!(out.contains("<circle"));
+}
+
+#[test]
+fn globe_zooms_to_a_regional_slice() {
+    // Compact content: the view zooms in, so the limb circle is
+    // offscreen (no full-disc), but the graticule still curves through.
+    let scene = sample_scene();
+    let out = SvgEncoder::default().encode(&scene).unwrap();
+    let disc = out.matches("<circle").count();
+    // The only circle is the marker — no limb disc at slice zoom.
+    assert_eq!(disc, 1);
+    assert!(out.contains("stroke-opacity=\"0.22\""), "graticule present");
+}
+
+#[test]
+fn flat_projection_still_available() {
+    let scene = sample_scene();
+    let flat = SvgEncoder { projection: Projection::Flat, ..SvgEncoder::default() };
+    let a = flat.encode(&scene).unwrap();
+    assert_eq!(a, flat.encode(&scene).unwrap());
+    assert!(a.starts_with("<svg"));
+    assert_ne!(a, SvgEncoder::default().encode(&scene).unwrap());
 }
 
 #[test]
