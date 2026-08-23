@@ -120,6 +120,30 @@ pub struct ChangeEvent {
     pub provenance: ProvenanceId,
 }
 
+/// THE ANCHOR (owner rulings, 2026-08-23): "the world starts with God's
+/// creation - that is the first event" — and, generalized: "biblical is
+/// a parameter... the point is that we can define an anchor."
+///
+/// A timeline declares the anchor it is built under: the frame's first
+/// event, before which it admits nothing (law 0). The type is
+/// frame-GENERIC so rival chronologies can each carry their own anchor
+/// and be compared — the biblical timeline (anchored at creation, its
+/// date from the atlas's traditional chronology via C2, never a
+/// map-side literal) against false ones. Which frame is TRUE is
+/// doctrine, not type structure; it shows in the justification and in
+/// what the owner's tools choose to trust. The seven days and the
+/// unknown span between creation and the fall are atlas chronology
+/// facts (its placement vocabulary carries unknown gaps); the map
+/// never invents durations.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Anchor {
+    /// Human-readable frame name, e.g. "biblical (Ussher tradition)".
+    pub frame: String,
+    pub at: TimePoint,
+    pub justification: Justification,
+    pub provenance: ProvenanceId,
+}
+
 /// The atlas version root a timeline compiled against (contract C6):
 /// an atlas chronology/gazetteer change flips a fail-loud stale flag
 /// instead of silently serving outdated borders.
@@ -138,6 +162,7 @@ impl AtlasPin {
 /// narrative of the map — its change events.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct WorldTimeline {
+    pub anchor: Option<Anchor>,
     pub boundaries: BTreeMap<BoundaryId, BoundaryHistory>,
     pub regions: BTreeMap<RegionId, RegionHistory>,
     pub events: Vec<ChangeEvent>,

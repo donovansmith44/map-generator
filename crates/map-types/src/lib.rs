@@ -64,8 +64,8 @@ pub use query::{RenderQuery, RenderSubject, TimeSelector};
 pub use scene::{accumulate, sample_times, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
 pub use style::{LayerSet, Style, StyleError};
 pub use timeline::{
-    AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval, RegionHistory,
-    WorldTimeline,
+    Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,
+    RegionHistory, WorldTimeline,
 };
 pub use transition::{TransitionScript, TransitionStep};
 

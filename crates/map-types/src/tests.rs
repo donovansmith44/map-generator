@@ -93,7 +93,16 @@ fn two_region_world() -> WorldTimeline {
     regions.insert(A, region("Westland", vec![(W, Orientation::Forward), (S, Orientation::Forward)]));
     regions.insert(B, region("Eastland", vec![(S, Orientation::Reverse), (E, Orientation::Forward)]));
 
-    WorldTimeline { boundaries, regions, events: Vec::new(), atlas_pin: None }
+    WorldTimeline { anchor: None, boundaries, regions, events: Vec::new(), atlas_pin: None }
+}
+
+fn biblical_anchor(at: i32) -> Anchor {
+    Anchor {
+        frame: "biblical (Ussher tradition)".to_string(),
+        at: tp(at),
+        justification: Justification::default(),
+        provenance: prov(),
+    }
 }
 
 fn honest_style() -> Style {
@@ -147,6 +156,48 @@ fn check_monoid<M: Monoid + Clone + PartialEq + std::fmt::Debug>(samples: &[M]) 
             }
         }
     }
+}
+
+// --------------------------------------------------- law 0: the anchor
+
+/// Owner rulings: history starts at the frame's first event (for the
+/// biblical frame, creation) — and the anchor is a PARAMETER, so rival
+/// frames each declare their own and comparisons never corner us.
+#[test]
+fn law00_anchor() {
+    // An anchored timeline whose facts all follow the anchor is lawful.
+    let mut world = two_region_world();
+    world.anchor = Some(biblical_anchor(-4004));
+    assert_eq!(validate_anchor(&world), vec![]);
+
+    // A fact BEFORE the anchor is a violation, not a mystery.
+    let mut deep_time = two_region_world();
+    deep_time.anchor = Some(biblical_anchor(-1000));
+    let violations = validate_anchor(&deep_time);
+    assert!(
+        violations.iter().any(|v| matches!(v, Violation::BeforeAnchor { .. })),
+        "pre-anchor history must be flagged: {violations:?}"
+    );
+
+    // A different frame anchors the SAME data differently — the anchor
+    // is a parameter, and each timeline stands under its own.
+    let mut other_frame = two_region_world();
+    other_frame.anchor = Some(Anchor {
+        frame: "conventional archaeological".to_string(),
+        at: tp(-10000),
+        justification: Justification::default(),
+        provenance: prov(),
+    });
+    assert_eq!(validate_anchor(&other_frame), vec![]);
+
+    // Anchorless timelines pass vacuously; an anchor with empty
+    // provenance is as unlawful as any other unattributed claim.
+    assert_eq!(validate_anchor(&two_region_world()), vec![]);
+    let mut anonymous = two_region_world();
+    anonymous.anchor = Some(Anchor { provenance: String::new(), ..biblical_anchor(-4004) });
+    assert!(validate_anchor(&anonymous)
+        .iter()
+        .any(|v| matches!(v, Violation::EmptyProvenance { .. })));
 }
 
 // ------------------------------------------------- law 1: determinism

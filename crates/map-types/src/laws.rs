@@ -16,6 +16,11 @@ use atlas_graph_types::id::{EventId, PlaceId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Violation {
+    // ---- law 0: the anchor ----
+    /// A fact precedes the timeline's declared anchor — under a frame
+    /// whose history starts at its first event, there is no "before".
+    BeforeAnchor { what: String, at: TimePoint },
+
     // ---- law 5: history coherence ----
     /// A history interval is empty or overlaps its neighbor.
     IncoherentIntervals { what: String },
@@ -63,6 +68,49 @@ fn intervals_coherent(intervals: &[&Interval]) -> bool {
         }
     }
     intervals.iter().all(|i| i.to.map_or(true, |end| end > i.from))
+}
+
+/// Law 0 (owner ruling, generalized): a timeline that declares its
+/// anchor admits nothing before it — no event, no history interval.
+/// An anchorless timeline passes vacuously; declaring the anchor is
+/// what buys the guarantee.
+pub fn validate_anchor(tl: &WorldTimeline) -> Vec<Violation> {
+    let mut v = Vec::new();
+    let Some(anchor) = &tl.anchor else { return v };
+    if anchor.provenance.is_empty() {
+        v.push(Violation::EmptyProvenance { what: "anchor".to_string() });
+    }
+    for (i, e) in tl.events.iter().enumerate() {
+        if e.at < anchor.at {
+            v.push(Violation::BeforeAnchor { what: format!("event #{}", i), at: e.at });
+        }
+    }
+    for (id, hist) in &tl.boundaries {
+        for (iv, _) in &hist.versions {
+            if iv.from < anchor.at {
+                v.push(Violation::BeforeAnchor {
+                    what: format!("boundary {:?}", id),
+                    at: iv.from,
+                });
+            }
+        }
+    }
+    for (id, hist) in &tl.regions {
+        for iv in hist
+            .label_history
+            .iter()
+            .map(|(i, _)| i)
+            .chain(hist.geom_history.iter().map(|(i, _)| i))
+        {
+            if iv.from < anchor.at {
+                v.push(Violation::BeforeAnchor {
+                    what: format!("region {:?}", id),
+                    at: iv.from,
+                });
+            }
+        }
+    }
+    v
 }
 
 /// Law 5: each history's intervals are disjoint, ordered, non-empty;
@@ -296,7 +344,8 @@ pub fn validate_all(
     chronology: &ChronologyExport,
     gazetteer: &GazetteerExport,
 ) -> Vec<Violation> {
-    let mut v = validate_history_coherence(tl);
+    let mut v = validate_anchor(tl);
+    v.extend(validate_history_coherence(tl));
     v.extend(validate_provenance_totality(tl));
     v.extend(validate_partition_structure(tl));
     v.extend(validate_bible_preference(tl, chronology, gazetteer));
