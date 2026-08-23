@@ -100,10 +100,24 @@
   /* ------------------------------------------------------ the plate */
   #bench { display: flex; flex-direction: column; min-width: 0; }
   #plate {
-    flex: 1; overflow: hidden; display: grid; place-items: center; padding: 14px;
+    flex: 1; overflow: hidden; display: grid; padding: 14px;
     cursor: grab; touch-action: none;
   }
   #plate.dragging { cursor: grabbing; }
+  /* Layers STRETCH to the plate (a definite box for the svg's
+     max-width/max-height) and center their own content. */
+  #plate .layer {
+    grid-area: 1 / 1;
+    width: 100%; height: 100%;
+    display: grid; place-items: center;
+    min-width: 0; min-height: 0;
+  }
+  #plate > pre { place-self: center; }
+  /* The fade runs on insert and ENDS at full opacity — no class
+     choreography that a skipped animation frame could strand. */
+  #plate .layer.entering { animation: framein 450ms linear; }
+  @keyframes framein { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #plate .layer.entering { animation: none; } }
   #plate svg {
     max-width: 100%; max-height: 100%; height: auto;
     background: #10120f;
@@ -155,6 +169,14 @@
       <button id="prev" aria-label="previous change">‹</button>
       <div class="spacer" id="stopcount"></div>
       <button id="next" aria-label="next change">›</button>
+    </div>
+    <div class="inline" style="margin-top:8px">
+      <button id="play" style="flex:1">▷ play the timeline</button>
+      <select id="speed" style="width:auto">
+        <option value="800">fast</option>
+        <option value="1500" selected>steady</option>
+        <option value="2800">slow</option>
+      </select>
     </div>
     <label class="inline" style="margin-top:8px">
       <input type="checkbox" id="expose"> long exposure from
@@ -283,31 +305,58 @@ async function render(quality) {
   }
 }
 
-function showPlate(res, body, encoder) {
-  const plate = $("plate");
-  if (!res.ok) { plate.innerHTML = ""; plate.textContent = body; setStatus({error: body}); return; }
-  if (encoder === "svg") {
-    plate.innerHTML = body;
-    const svg = plate.querySelector("svg");
-    if (svg && svg.dataset.clat !== undefined) {
-      state.resolved = {
-        lat: parseFloat(svg.dataset.clat),
-        lon: parseFloat(svg.dataset.clon),
-        zoom: parseFloat(svg.dataset.zoom),
-      };
-    }
-  } else {
-    plate.innerHTML = "";
-    const pre = document.createElement("pre");
-    pre.textContent = body;
-    plate.appendChild(pre);
+function absorbSvg(layer, body) {
+  layer.innerHTML = body;
+  const svg = layer.querySelector("svg");
+  if (svg && svg.dataset.clat !== undefined) {
+    state.resolved = {
+      lat: parseFloat(svg.dataset.clat),
+      lon: parseFloat(svg.dataset.clon),
+      zoom: parseFloat(svg.dataset.zoom),
+    };
   }
+}
+
+function frameStatus(res, body) {
   setStatus({
     attribution: res.headers.get("X-Attribution") || "—",
     scene: res.headers.get("X-Scene-Pid"),
     query: res.headers.get("X-Query-Pid"),
     bytes: body.length,
   });
+}
+
+function showPlate(res, body, encoder) {
+  const plate = $("plate");
+  if (!res.ok) { plate.innerHTML = ""; plate.textContent = body; setStatus({error: body}); return; }
+  if (encoder === "svg") {
+    plate.innerHTML = "";
+    const layer = document.createElement("div");
+    layer.className = "layer";
+    absorbSvg(layer, body);
+    plate.appendChild(layer);
+  } else {
+    plate.innerHTML = "";
+    const pre = document.createElement("pre");
+    pre.textContent = body;
+    plate.appendChild(pre);
+  }
+  frameStatus(res, body);
+}
+
+/// The time-lapse frame swap: the new state fades in over the old.
+function crossfadeTo(res, body) {
+  const plate = $("plate");
+  const layer = document.createElement("div");
+  layer.className = "layer entering";
+  absorbSvg(layer, body);
+  plate.appendChild(layer);
+  setTimeout(() => {
+    while (plate.children.length > 1 && plate.lastChild !== plate.firstChild) {
+      plate.firstChild.remove();
+    }
+  }, 520);
+  frameStatus(res, body);
 }
 
 function setStatus(s) {
@@ -338,6 +387,7 @@ function setupPlateNav() {
   const plate = $("plate");
   let drag = null;
   plate.addEventListener("pointerdown", e => {
+    stopPlayback();
     if (state.projection !== "globe" || state.encoder !== "svg") return;
     if (!pinView()) return;
     // No pointer capture yet: capturing here would retarget the
@@ -469,7 +519,55 @@ function drawScrubber() {
     : "scrub stops are change events — the piecewise timeline itself";
 }
 
+// ----------------------------------------------------- the time-lapse
+
+const player = { on: false, timer: null };
+
+function stopPlayback() {
+  if (!player.on) return;
+  player.on = false;
+  clearTimeout(player.timer);
+  $("play").textContent = "▷ play the timeline";
+}
+
+async function playFrame() {
+  if (!player.on) return;
+  if (state.idx >= state.stops.length - 1) {
+    stopPlayback();
+    return;
+  }
+  state.idx += 1;
+  drawScrubber();
+  loadChanges(); // the narrative keeps pace, no await
+  const p = currentParams();
+  const res = await fetch("/api/render?" + p.toString());
+  const body = await res.text();
+  if (!player.on) return;
+  // A stop the subject isn't mapped at just passes by during playback.
+  if (res.ok && p.get("encoder") === "svg") {
+    crossfadeTo(res, body);
+  } else if (res.ok) {
+    showPlate(res, body, p.get("encoder"));
+  }
+  player.timer = setTimeout(playFrame, parseInt($("speed").value, 10));
+}
+
+async function startPlayback() {
+  if (player.on) return;
+  pinView(); // the camera must hold still while history moves
+  if (state.idx >= state.stops.length - 1) state.idx = 0;
+  player.on = true;
+  $("play").textContent = "⏸ pause";
+  drawScrubber();
+  loadChanges();
+  await render();
+  if (player.on) {
+    player.timer = setTimeout(playFrame, parseInt($("speed").value, 10));
+  }
+}
+
 async function setStop(i) {
+  stopPlayback();
   state.idx = Math.max(0, Math.min(state.stops.length - 1, i));
   await Promise.all([loadSubjects(), loadChanges(), loadFromOptions(), loadMappedTimes()]);
   drawScrubber();
@@ -578,6 +676,7 @@ async function init() {
   radioRow($("projections"), (meta.projections || ["globe", "flat"]).map(e => ({ name: e, value: e })), state.projection,
     v => { state.projection = v; resetView(); render(); });
   $("bible").addEventListener("change", e => setBible(e.target.checked));
+  $("play").addEventListener("click", () => (player.on ? stopPlayback() : startPlayback()));
   $("prev").addEventListener("click", () => setStop(state.idx - 1));
   $("next").addEventListener("click", () => setStop(state.idx + 1));
   $("subject").addEventListener("change", e => {
