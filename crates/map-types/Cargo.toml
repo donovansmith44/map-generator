@@ -1,0 +1,12 @@
+[package]
+name = "map-types"
+version = "0.1.0"
+edition = "2021"
+description = "map-generator domain types — phase 1 of docs/map-system-handoff.md. The compiled crate is the authority; the design laws are its tests."
+
+# Contract C1: the one permitted dependency — the Bible Atlas's
+# zero-dependency types crate, taken read-only as a path dep on the
+# sibling checkout (branch worktree-bible-atlas-m1). No other deps:
+# the compiler is the reviewer.
+[dependencies]
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
