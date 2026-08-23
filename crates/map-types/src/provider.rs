@@ -22,12 +22,28 @@ pub enum MapError {
     UnknownPlace(String),
     /// The subject exists but has no fact at the queried time.
     NothingAtTime(TimePoint),
+    /// Relief rendering is phase-5 work; asking for it fails loud, it
+    /// does not silently degrade to a flat region.
+    TerrainUnavailable,
     /// Contract C6: the timeline was compiled against a different atlas
     /// version root — fail loud, never silently serve stale borders.
     StaleAgainstAtlas { pinned: ContentHash, current: ContentHash },
 }
 
+/// One row of the queryable universe — what a picker shows.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubjectListing {
+    pub subject: crate::query::RenderSubject,
+    pub label: String,
+}
+
 pub trait MapProvider {
+    /// Enumerate the subjects that have facts at `at` — the picker's
+    /// feed. CONTRACT NOTE (recorded for the C5 freeze): this method
+    /// joined the seam in phase 4 because any UI, ours or the atlas's,
+    /// needs to enumerate before it can ask.
+    fn subjects(&self, at: TimePoint) -> Vec<SubjectListing>;
+
     /// One front door for every granularity: snapshot, accumulation,
     /// lone boundary, delta, world — all RenderQuery, all Scene out.
     fn render(&self, q: &RenderQuery) -> Result<Snapshot, MapError>;

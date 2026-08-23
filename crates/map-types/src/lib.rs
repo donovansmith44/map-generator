@@ -59,7 +59,7 @@ pub use encode::{EncodeError, SceneEncoder};
 pub use geom::{morph_rings, simplify_polyline, slerp, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
 pub use ident::{BoundaryId, ChangeEventId, MapAddressed, MapKind, MapPid, RegionId, StyleId};
 pub use laws::{validate_all, Violation};
-pub use provider::{MapError, MapProvider};
+pub use provider::{MapError, MapProvider, SubjectListing};
 pub use query::{RenderQuery, RenderSubject, TimeSelector};
 pub use scene::{accumulate, sample_times, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
 pub use style::{LayerSet, Style, StyleError};

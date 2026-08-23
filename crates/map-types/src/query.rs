@@ -13,7 +13,7 @@ use crate::boundary::AtlasPlaceRef;
 use crate::geom::{Bbox, Lod, UnitVec};
 use crate::ident::{BoundaryId, Canon, ChangeEventId, MapAddressed, MapKind, RegionId, StyleId};
 use crate::style::LayerSet;
-use crate::timeline::Interval;
+use crate::timeline::{canon_time_point, Interval};
 
 /// Anything the system can be asked to draw — from a point in space, to
 /// one border, to a delta, to the whole world.
@@ -52,16 +52,6 @@ pub struct RenderQuery {
     pub lod: Lod,
     pub layers: LayerSet,
     pub style: StyleId,
-}
-
-fn canon_time_point(c: &mut Canon, t: &TimePoint) {
-    c.i32_(t.year.get());
-    c.opt(&t.month, |c, m| {
-        c.u8_(*m);
-    });
-    c.opt(&t.day, |c, d| {
-        c.u8_(*d);
-    });
 }
 
 impl MapAddressed for RenderQuery {

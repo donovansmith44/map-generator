@@ -565,6 +565,7 @@ fn law10_selection_coherence() {
             outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
             holes: vec![],
             paint: style.region_paint(),
+            sources: [SourceId::new("historical-source")].into(),
         });
         sc.labels.push(PlacedLabel {
             text: name.to_string(),
@@ -572,6 +573,7 @@ fn law10_selection_coherence() {
             subject: LabelSubject::Region(id),
             style: style.label_style(),
         });
+        sc.attribution.insert(SourceId::new("historical-source"));
         sc
     };
     let a = region_scene(A, "Westland", 0.0);

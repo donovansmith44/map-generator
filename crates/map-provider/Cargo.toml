@@ -1,0 +1,13 @@
+[package]
+name = "map-provider"
+version = "0.1.0"
+edition = "2021"
+description = "The reference MapProvider for map-generator — phase 3. Materialization is a pure function of the timeline: select, simplify, style; laws 1, 3, 9, 10 run against it."
+
+[dependencies]
+map-types = { path = "../map-types" }
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+
+[dev-dependencies]
+map-adapters = { path = "../map-adapters" }
+serde_json = "1"

@@ -8,13 +8,13 @@
 use std::collections::BTreeMap;
 
 use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::edge::Justification;
+use atlas_graph_types::edge::{Ground, Justification};
 use atlas_graph_types::id::{ContentHash, EventId};
 use atlas_graph_types::ingest::ProvenanceId;
 
 use crate::boundary::{Boundary, RegionGeom};
 use crate::geom::UnitVec;
-use crate::ident::{BoundaryId, RegionId};
+use crate::ident::{BoundaryId, Canon, ChangeEventId, MapAddressed, MapKind, RegionId};
 
 /// Validity of a fact. `to: None` = open — the current edge of
 /// knowledge. Containment is half-open ([from, to)): a version ends the
@@ -142,6 +142,95 @@ pub struct Anchor {
     pub at: TimePoint,
     pub justification: Justification,
     pub provenance: ProvenanceId,
+}
+
+pub fn canon_time_point(c: &mut Canon, t: &TimePoint) {
+    c.i32_(t.year.get());
+    c.opt(&t.month, |c, m| {
+        c.u8_(*m);
+    });
+    c.opt(&t.day, |c, d| {
+        c.u8_(*d);
+    });
+}
+
+fn canon_justification(c: &mut Canon, j: &Justification) {
+    c.opt(&j.text, |c, t| {
+        c.str_(t);
+    });
+    let grounds: Vec<_> = j.grounds.iter().collect();
+    c.seq(&grounds, |c, g| match g {
+        Ground::Scripture(range) => {
+            c.u8_(0);
+            for locus in [&range.from, &range.to] {
+                c.u8_(locus.unit.book)
+                    .u64_(u64::from(locus.unit.chapter))
+                    .u64_(u64::from(locus.unit.verse));
+                c.opt(&locus.span, |c, s| {
+                    c.str_(&s.layer.0).u64_(u64::from(s.start)).u64_(u64::from(s.end));
+                });
+            }
+        }
+        Ground::Anchor(a) => {
+            c.u8_(1).str_(&a.0);
+        }
+        Ground::Source(s) => {
+            c.u8_(2).str_(&s.0);
+        }
+    });
+}
+
+/// Change events are content-addressed like everything else, so a
+/// DELTA is a render subject with a stable id (RenderSubject::Change).
+impl MapAddressed for ChangeEvent {
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut c = Canon::new();
+        c.tag("change-event");
+        canon_time_point(&mut c, &self.at);
+        match &self.kind {
+            ChangeKind::Rise { region } => {
+                c.u8_(0).u64_(region.0 .0);
+            }
+            ChangeKind::Fall { region } => {
+                c.u8_(1).u64_(region.0 .0);
+            }
+            ChangeKind::Shift { boundary } => {
+                c.u8_(2).u64_(boundary.0 .0);
+            }
+            ChangeKind::Split { parent, children, seam } => {
+                c.u8_(3).u64_(parent.0 .0);
+                c.seq(children, |c, r| {
+                    c.u64_(r.0 .0);
+                });
+                c.seq(seam, |c, p| p.canon(c));
+            }
+            ChangeKind::Merge { parents, child } => {
+                c.u8_(4);
+                c.seq(parents, |c, r| {
+                    c.u64_(r.0 .0);
+                });
+                c.u64_(child.0 .0);
+            }
+            ChangeKind::Rename { region } => {
+                c.u8_(5).u64_(region.0 .0);
+            }
+        }
+        c.opt(&self.driver, |c, d| {
+            c.str_(&d.event.0).u64_(d.atlas_root.0);
+        });
+        canon_justification(&mut c, &self.justification);
+        c.str_(&self.provenance);
+        c.done()
+    }
+    fn map_kind(&self) -> MapKind {
+        MapKind::ChangeEvent
+    }
+}
+
+impl ChangeEvent {
+    pub fn id(&self) -> ChangeEventId {
+        ChangeEventId(self.map_pid().hash)
+    }
 }
 
 /// The atlas version root a timeline compiled against (contract C6):

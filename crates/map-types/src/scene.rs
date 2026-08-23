@@ -23,12 +23,18 @@ use crate::timeline::{ChangeEvent, Interval};
 
 /// A region with its geometry resolved to rings and its paint resolved
 /// from the style. Simplification (lod) already applied.
+///
+/// AMENDMENT (phase 3, recorded for review): every styled element
+/// carries the sources it came from, so scene attribution is always
+/// derivable from content — which is what lets selection agree with
+/// lone rendering down to the attribution set (law 10).
 #[derive(Clone, Debug, PartialEq)]
 pub struct StyledRegion {
     pub region: RegionId,
     pub outer: Vec<Ring>,
     pub holes: Vec<Ring>,
     pub paint: Paint,
+    pub sources: BTreeSet<SourceId>,
 }
 
 /// One border arc, styled — JOS 15 as a drawn line, alone if asked.
@@ -37,6 +43,7 @@ pub struct StyledBoundary {
     pub boundary: BoundaryId,
     pub pts: Vec<UnitVec>,
     pub stroke: Stroke,
+    pub sources: BTreeSet<SourceId>,
 }
 
 /// A styled point — a place in period dress, or a raw point.
@@ -101,11 +108,19 @@ impl MapAddressed for Snapshot {
             c.seq(&r.outer, |c, ring| ring.canon(c));
             c.seq(&r.holes, |c, ring| ring.canon(c));
             r.paint.canon(c);
+            let srcs: Vec<_> = r.sources.iter().collect();
+            c.seq(&srcs, |c, s| {
+                c.str_(&s.0);
+            });
         });
         c.seq(&self.boundaries, |c, b| {
             c.u64_(b.boundary.0 .0);
             c.seq(&b.pts, |c, p| p.canon(c));
             b.stroke.canon(c);
+            let srcs: Vec<_> = b.sources.iter().collect();
+            c.seq(&srcs, |c, s| {
+                c.str_(&s.0);
+            });
         });
         c.seq(&self.markers, |c, m| {
             m.at.canon(c);
@@ -140,8 +155,11 @@ impl Snapshot {
     /// alone agree with selecting it out of the world — this is the
     /// selection side of that equation.
     pub fn select_region(&self, id: RegionId) -> Snapshot {
+        let regions: Vec<StyledRegion> =
+            self.regions.iter().filter(|r| r.region == id).cloned().collect();
+        let attribution = regions.iter().flat_map(|r| r.sources.iter().cloned()).collect();
         Snapshot {
-            regions: self.regions.iter().filter(|r| r.region == id).cloned().collect(),
+            regions,
             boundaries: Vec::new(),
             markers: Vec::new(),
             labels: self
@@ -150,14 +168,17 @@ impl Snapshot {
                 .filter(|l| matches!(&l.subject, LabelSubject::Region(r) if *r == id))
                 .cloned()
                 .collect(),
-            attribution: self.attribution.clone(),
+            attribution,
         }
     }
 
     pub fn select_boundary(&self, id: BoundaryId) -> Snapshot {
+        let boundaries: Vec<StyledBoundary> =
+            self.boundaries.iter().filter(|b| b.boundary == id).cloned().collect();
+        let attribution = boundaries.iter().flat_map(|b| b.sources.iter().cloned()).collect();
         Snapshot {
             regions: Vec::new(),
-            boundaries: self.boundaries.iter().filter(|b| b.boundary == id).cloned().collect(),
+            boundaries,
             markers: Vec::new(),
             labels: self
                 .labels
@@ -165,7 +186,7 @@ impl Snapshot {
                 .filter(|l| matches!(&l.subject, LabelSubject::Boundary(b) if *b == id))
                 .cloned()
                 .collect(),
-            attribution: self.attribution.clone(),
+            attribution,
         }
     }
 }

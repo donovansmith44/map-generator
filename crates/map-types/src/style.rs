@@ -9,7 +9,7 @@
 //! stroke, cannot be constructed.
 
 use crate::boundary::EdgeCharacter;
-use crate::ident::Canon;
+use crate::ident::{Canon, MapAddressed, MapKind, StyleId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Rgba(pub u8, pub u8, pub u8, pub u8);
@@ -171,6 +171,25 @@ impl Style {
         self.delta.before.canon(c);
         self.delta.after.canon(c);
         self.delta.seam.canon(c);
+    }
+}
+
+/// Styles are content-addressed data: restyling changes the id, so
+/// caches never serve a stale look.
+impl MapAddressed for Style {
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut c = Canon::new();
+        self.canon(&mut c);
+        c.done()
+    }
+    fn map_kind(&self) -> MapKind {
+        MapKind::Style
+    }
+}
+
+impl Style {
+    pub fn id(&self) -> StyleId {
+        StyleId(self.map_pid().hash)
     }
 }
 
