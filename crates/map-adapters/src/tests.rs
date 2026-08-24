@@ -354,12 +354,23 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         Err(MergeError::DuplicateBoundary(_))
     ));
 
-    // The full Scripture set — the promise plus all twelve tribal
-    // allotments (Levi has none, JOS 13:33) — is lawful as a whole:
-    // every waypoint of every survey resolves, every rise narrated.
+    // The full Scripture set — the promise, all twelve tribal
+    // allotments (Levi has none, JOS 13:33), and the kingdom eras —
+    // is lawful as a whole: every waypoint resolves, every rise,
+    // border change, and fall narrated.
     let all = scripture_timeline();
-    assert_eq!(all.regions.len(), 14, "promise + 13 allotment territories");
+    assert_eq!(all.regions.len(), 18, "promise + 13 allotments + 4 kingdom eras");
     assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![]);
+
+    // The kingdom arc has real BORDER CHANGES: Shifts grounded in
+    // Scripture (2KI 14:25's restoration, 1KI 4's dominion), plus
+    // Falls (Samaria, Jerusalem) and the return.
+    use map_types::ChangeKind as K;
+    let shifts = all.events.iter().filter(|e| matches!(e.kind, K::Shift { .. })).count();
+    let falls = all.events.iter().filter(|e| matches!(e.kind, K::Fall { .. })).count();
+    assert_eq!(shifts, 2, "the Solomonic dominion and Jeroboam II's restoration");
+    assert_eq!(falls, 3, "the division ends the united kingdom; Samaria; Jerusalem");
+    assert!(all.events.iter().all(|e| !e.justification.grounds.is_empty()));
 
     // The honesty grades render differently by construction: walked
     // borders are Lines, city-derived hulls are Unknown.

@@ -45,3 +45,10 @@ Types first; laws as tests; justification everywhere; honesty renders;
 deltas, not states; reversibility by interface; algebraic composition
 over inheritance; Bible-driven authority. See the spec for the binding
 form.
+
+## Make targets
+
+`make build` · `make test` · `make demo` (detached workbench on 8090) ·
+`make stop` · `make maps` (renders the canonical Bible map set into
+`out/maps/`) · `make clean`. Without make: `bash scripts/demo.sh` and
+`bash scripts/make-maps.sh`.

@@ -228,6 +228,181 @@ const JOS_13_MANASSEH_EAST: &[Waypoint] = &[
     Waypoint { name: "Edrei", lat: 32.60, lon: 36.10 },
 ];
 
+// ------------------------------------------------- the kingdom arc
+//
+// Eras: regions whose borders CHANGE at Scripture-attested moments.
+// Each phase's circuit is an authored hull through named places
+// (rendered Unknown — extents, not walked borders); the DATES and the
+// fact-of-change are the text's, under the traditional (Ussher)
+// chronology, disclosed as approximate where the text gives a reign,
+// not a year.
+
+const UNITED_CORE: &[Waypoint] = &[
+    Waypoint { name: "Dan", lat: 33.25, lon: 35.65 },
+    Waypoint { name: "coast at Acco", lat: 32.92, lon: 35.07 },
+    Waypoint { name: "coast before Joppa", lat: 32.05, lon: 34.75 },
+    Waypoint { name: "Gaza border", lat: 31.50, lon: 34.45 },
+    Waypoint { name: "Beersheba", lat: 31.24, lon: 34.79 },
+    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
+    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "Gilead", lat: 32.50, lon: 35.90 },
+    Waypoint { name: "Bashan toward Dan", lat: 32.90, lon: 36.00 },
+];
+
+const UNITED_SOLOMONIC: &[Waypoint] = &[
+    Waypoint { name: "Tiphsah on the Euphrates", lat: 35.86, lon: 38.55 },
+    Waypoint { name: "toward Hamath the great", lat: 35.10, lon: 36.75 },
+    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
+    Waypoint { name: "great Zidon", lat: 33.56, lon: 35.37 },
+    Waypoint { name: "coast before Joppa", lat: 32.05, lon: 34.75 },
+    Waypoint { name: "Gaza border", lat: 31.50, lon: 34.45 },
+    Waypoint { name: "brook of Egypt at the Great Sea", lat: 31.16, lon: 33.80 },
+    Waypoint { name: "Kadesh-barnea", lat: 30.69, lon: 34.49 },
+    Waypoint { name: "Ezion-geber on the Red sea", lat: 29.55, lon: 34.95 },
+    Waypoint { name: "Edom eastward", lat: 30.40, lon: 35.80 },
+    Waypoint { name: "desert east of Ammon", lat: 31.90, lon: 36.50 },
+    Waypoint { name: "Damascus", lat: 33.51, lon: 36.31 },
+    Waypoint { name: "desert toward Tadmor", lat: 34.80, lon: 37.80 },
+];
+
+const JUDAH_KINGDOM: &[Waypoint] = &[
+    Waypoint { name: "Mizpah of Benjamin", lat: 31.90, lon: 35.20 },
+    Waypoint { name: "Bethel border", lat: 31.93, lon: 35.24 },
+    Waypoint { name: "Jericho southward", lat: 31.85, lon: 35.46 },
+    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
+    Waypoint { name: "Beersheba", lat: 31.24, lon: 34.79 },
+    Waypoint { name: "toward Gerar", lat: 31.38, lon: 34.62 },
+    Waypoint { name: "the shephelah edge", lat: 31.70, lon: 34.88 },
+    Waypoint { name: "Aijalon", lat: 31.84, lon: 35.02 },
+];
+
+const ISRAEL_DIVIDED: &[Waypoint] = &[
+    Waypoint { name: "Bethel northward", lat: 31.95, lon: 35.22 },
+    Waypoint { name: "Aijalon northward", lat: 31.87, lon: 35.00 },
+    Waypoint { name: "coast before Joppa", lat: 32.08, lon: 34.78 },
+    Waypoint { name: "coast at Acco", lat: 32.92, lon: 35.07 },
+    Waypoint { name: "Dan", lat: 33.25, lon: 35.65 },
+    Waypoint { name: "Bashan eastward", lat: 32.90, lon: 36.10 },
+    Waypoint { name: "Gilead", lat: 32.30, lon: 35.90 },
+    Waypoint { name: "Jordan by Jericho", lat: 31.87, lon: 35.50 },
+];
+
+const ISRAEL_RESTORED: &[Waypoint] = &[
+    Waypoint { name: "Bethel northward", lat: 31.95, lon: 35.22 },
+    Waypoint { name: "Aijalon northward", lat: 31.87, lon: 35.00 },
+    Waypoint { name: "coast before Joppa", lat: 32.08, lon: 34.78 },
+    Waypoint { name: "Great Sea off Tyre", lat: 33.27, lon: 35.18 },
+    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
+    Waypoint { name: "Damascus recovered", lat: 33.60, lon: 36.40 },
+    Waypoint { name: "Bashan eastward", lat: 32.90, lon: 36.20 },
+    Waypoint { name: "sea of the plain", lat: 31.80, lon: 35.60 },
+    Waypoint { name: "Jordan by Jericho", lat: 31.87, lon: 35.50 },
+];
+
+const YEHUD: &[Waypoint] = &[
+    Waypoint { name: "Bethel", lat: 31.93, lon: 35.22 },
+    Waypoint { name: "Jericho", lat: 31.87, lon: 35.44 },
+    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "En-gedi", lat: 31.45, lon: 35.38 },
+    Waypoint { name: "Beth-zur", lat: 31.60, lon: 35.10 },
+    Waypoint { name: "Keilah westward", lat: 31.61, lon: 34.97 },
+    Waypoint { name: "Emmaus", lat: 31.84, lon: 34.99 },
+];
+
+struct PhaseSpec {
+    /// Traditional (Ussher) year the phase begins.
+    year: i32,
+    book: u8,
+    chapter: u16,
+    verse_from: u16,
+    verse_to: u16,
+    note: &'static str,
+    circuit: &'static [Waypoint],
+}
+
+struct EraSpec {
+    tag: &'static str,
+    label: &'static str,
+    phases: &'static [PhaseSpec],
+    /// The end, when Scripture narrates one: (year, verses, note).
+    fall: Option<(i32, u8, u16, u16, u16, &'static str)>,
+}
+
+const ERA_NOTE: &str = "An extent authored from the text's named places (rendered \
+    Unknown — the places are Scripture's, the hull is not); coordinates are \
+    approximate traditional identifications (stand-in, see provenance); dates \
+    follow the traditional (Ussher) chronology.";
+
+const KINGDOMS: &[EraSpec] = &[
+    EraSpec {
+        tag: "ISRAEL-UNITED",
+        label: "the kingdom of Israel, united",
+        phases: &[
+            PhaseSpec {
+                year: -1095, // Saul made king at Gilgal (Ussher)
+                book: 9, chapter: 11, verse_from: 14, verse_to: 15,
+                note: ERA_NOTE,
+                circuit: UNITED_CORE,
+            },
+            PhaseSpec {
+                year: -1015, // Solomon reigns over all kingdoms (Ussher)
+                book: 11, chapter: 4, verse_from: 21, verse_to: 25,
+                note: "\"From Tiphsah even to Azzah\", \"from Dan even to Beersheba\" — \
+                       the dominion realized. An extent authored from the text's named \
+                       places; approximate stand-in coordinates; Ussher dates.",
+                circuit: UNITED_SOLOMONIC,
+            },
+        ],
+        fall: Some((-975, 11, 12, 16, 20, "The kingdom rent from Rehoboam at Shechem.")),
+    },
+    EraSpec {
+        tag: "JUDAH-KINGDOM",
+        label: "the kingdom of Judah",
+        phases: &[PhaseSpec {
+            year: -975,
+            book: 11, chapter: 12, verse_from: 20, verse_to: 24,
+            note: ERA_NOTE,
+            circuit: JUDAH_KINGDOM,
+        }],
+        fall: Some((-588, 12, 25, 8, 11, "Jerusalem burned, Judah carried away (Ussher year).")),
+    },
+    EraSpec {
+        tag: "ISRAEL-NORTH",
+        label: "the kingdom of Israel",
+        phases: &[
+            PhaseSpec {
+                year: -975,
+                book: 11, chapter: 12, verse_from: 16, verse_to: 20,
+                note: ERA_NOTE,
+                circuit: ISRAEL_DIVIDED,
+            },
+            PhaseSpec {
+                year: -810, // within Jeroboam II's reign (Ussher 825-784), approximate
+                book: 12, chapter: 14, verse_from: 25, verse_to: 27,
+                note: "\"He restored the coast of Israel from the entering of Hamath \
+                       unto the sea of the plain\" — Scripture's own attested border \
+                       CHANGE. Year approximate within Jeroboam II's reign (Ussher); \
+                       extent authored from the text's named places, stand-in \
+                       coordinates.",
+                circuit: ISRAEL_RESTORED,
+            },
+        ],
+        fall: Some((-721, 12, 17, 5, 6, "Samaria taken, Israel carried into Assyria (Ussher year).")),
+    },
+    EraSpec {
+        tag: "YEHUD",
+        label: "Judah returned (Yehud)",
+        phases: &[PhaseSpec {
+            year: -536, // the decree of Cyrus (Ussher)
+            book: 15, chapter: 1, verse_from: 1, verse_to: 3,
+            note: ERA_NOTE,
+            circuit: YEHUD,
+        }],
+        fall: None,
+    },
+];
+
 fn place_id(name: &str) -> PlaceId {
     PlaceId::new(format!("standin:{}", name.replace(' ', "-")))
 }
@@ -418,15 +593,25 @@ fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::text::BibleTag> {
 /// real one arrives. Law 12c validates survey waypoints against this.
 pub fn stand_in_gazetteer() -> GazetteerExport {
     let mut places = BTreeMap::new();
+    let mut add = |w: &Waypoint| {
+        places.insert(
+            place_id(w.name),
+            GazetteerEntry {
+                canonical_name: w.name.to_string(),
+                position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
+            },
+        );
+    };
     for s in SURVEYS {
         for w in s.circuit {
-            places.insert(
-                place_id(w.name),
-                GazetteerEntry {
-                    canonical_name: w.name.to_string(),
-                    position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
-                },
-            );
+            add(w);
+        }
+    }
+    for e in KINGDOMS {
+        for p in e.phases {
+            for w in p.circuit {
+                add(w);
+            }
         }
     }
     GazetteerExport { atlas_root: ContentHash(0), places }
@@ -500,11 +685,110 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
     });
 }
 
-/// Every ingested Scripture survey as one timeline.
+/// Add one kingdom era: a region whose geometry CHANGES at
+/// Scripture-attested moments. Phase 1 rises; each later phase is a
+/// Shift narrated by its own verses (2KI 14:25 made machinery); the
+/// fall, when the text gives one, closes the era.
+fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
+    let region_id = RegionId(hash_id(&format!("scripture-era/{}", e.tag)));
+    let end = e.fall.map(|(y, ..)| tp(y));
+    let mut geom_history = Vec::new();
+
+    for (i, ph) in e.phases.iter().enumerate() {
+        let verses = {
+            let v = |verse| BibleLocus::whole(VerseRef { book: ph.book, chapter: ph.chapter, verse });
+            LocusRange::new(v(ph.verse_from), v(ph.verse_to)).expect("era verses are ordered")
+        };
+        let justification = Justification {
+            text: Some(ph.note.to_string()),
+            grounds: [Ground::Scripture(verses.clone())].into(),
+        };
+        let mut pts: Vec<UnitVec> =
+            ph.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
+        pts.push(pts[0]);
+        let bid = BoundaryId(hash_id(&format!("scripture-era/{}/phase{}", e.tag, i)));
+        let until = e.phases.get(i + 1).map(|n| tp(n.year)).or(end);
+        let interval = Interval { from: tp(ph.year), to: until };
+        tl.boundaries.insert(
+            bid,
+            BoundaryHistory {
+                versions: vec![(
+                    interval,
+                    Boundary {
+                        pts,
+                        character: EdgeCharacter::Unknown, // extents, not walked lines
+                        source: BoundarySource::Survey(BorderSurvey {
+                            verses,
+                            waypoints: ph
+                                .circuit
+                                .iter()
+                                .map(|w| AtlasPlaceRef(place_id(w.name)))
+                                .collect(),
+                            interpolation: InterpolationMethod::Geodesic,
+                            provenance: STAND_IN_PROVENANCE.to_string(),
+                        }),
+                        justification: justification.clone(),
+                        provenance: STAND_IN_PROVENANCE.to_string(),
+                    },
+                )],
+            },
+        );
+        geom_history.push((
+            interval,
+            RegionGeom {
+                parts: vec![RegionPart {
+                    cycle: vec![(bid, Orientation::Forward)],
+                    holes: vec![],
+                }],
+            },
+        ));
+        tl.events.push(ChangeEvent {
+            at: tp(ph.year),
+            kind: if i == 0 {
+                ChangeKind::Rise { region: region_id }
+            } else {
+                ChangeKind::Shift { boundary: bid }
+            },
+            driver: None, // atlas C2 export will drive these (law 12a)
+            justification,
+            provenance: USSHER_PROVENANCE.to_string(),
+        });
+    }
+
+    if let Some((year, book, chapter, v0, v1, note)) = e.fall {
+        let v = |verse| BibleLocus::whole(VerseRef { book, chapter, verse });
+        let verses = LocusRange::new(v(v0), v(v1)).expect("fall verses are ordered");
+        tl.events.push(ChangeEvent {
+            at: tp(year),
+            kind: ChangeKind::Fall { region: region_id },
+            driver: None,
+            justification: Justification {
+                text: Some(note.to_string()),
+                grounds: [Ground::Scripture(verses)].into(),
+            },
+            provenance: USSHER_PROVENANCE.to_string(),
+        });
+    }
+
+    let whole = Interval { from: tp(e.phases[0].year), to: end };
+    tl.regions.insert(
+        region_id,
+        RegionHistory {
+            class: Default::default(),
+            label_history: vec![(whole, e.label.to_string())],
+            geom_history,
+        },
+    );
+}
+
+/// Every ingested Scripture survey and era as one timeline.
 pub fn scripture_timeline() -> WorldTimeline {
     let mut tl = WorldTimeline::default();
     for s in SURVEYS {
         add_survey(&mut tl, s);
+    }
+    for e in KINGDOMS {
+        add_era(&mut tl, e);
     }
     tl.events.sort_by_key(|e| e.at);
     tl
