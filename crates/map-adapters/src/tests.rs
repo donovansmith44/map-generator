@@ -445,6 +445,32 @@ fn atlas_exports_bind_the_scripture_set() {
     );
 }
 
+/// The audit table itself: printed for the atlas session, asserted
+/// non-trivial (we KNOW at least Samaria disagrees today).
+#[test]
+fn chronology_audit_reports_disagreements() {
+    use crate::exports::load_exports;
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
+    let atlas = load_exports(
+        &std::fs::read_to_string(dir.join("gazetteer.json")).unwrap(),
+        &std::fs::read_to_string(dir.join("chronology.json")).unwrap(),
+    )
+    .unwrap();
+    let rows = crate::surveys::binding_report(&atlas);
+    for r in &rows {
+        eprintln!(
+            "AUDIT {} | ours {} vs atlas {} (delta {:+}) | {} \"{}\"",
+            r.ours,
+            r.our_year,
+            r.their_year,
+            r.their_year - r.our_year,
+            r.atlas_event.0,
+            r.atlas_event.1
+        );
+    }
+    assert!(!rows.is_empty(), "the Samaria disagreement at minimum");
+}
+
 // --------------------------------------------- the real source, whole
 
 /// The milestone proof: ingest every vendored epoch of the real source

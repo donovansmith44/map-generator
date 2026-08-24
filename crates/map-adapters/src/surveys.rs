@@ -1204,6 +1204,71 @@ pub fn merged_gazetteer(atlas: &AtlasExports) -> GazetteerExport {
     g
 }
 
+/// One row of the cross-repo chronology audit: where an independent
+/// stand-in year and the atlas's placement disagree.
+#[derive(Clone, Debug)]
+pub struct BindingRow {
+    /// Our spec tag (e.g. "ISRAEL-NORTH/phase1", "JOS15", "R-EXODUS").
+    pub ours: String,
+    /// The atlas event we bound to: (id, label).
+    pub atlas_event: (String, String),
+    pub our_year: i32,
+    pub their_year: i32,
+}
+
+/// The covenant dividend: every consumer with independent stand-ins is
+/// a free auditor of the authority data. This reports every binding
+/// where the two derivations DISAGREE — input for the atlas's
+/// chronology audits, recomputed free at every re-vendor.
+pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
+    let mut rows = Vec::new();
+    let mut push = |ours: String, res: Option<(atlas_graph_types::covenant::EventId, i32, i32)>, our_year: i32| {
+        if let Some((eid, fy, _)) = res {
+            if fy != our_year {
+                let label = atlas
+                    .events
+                    .iter()
+                    .find(|e| e.id == eid.0)
+                    .map(|e| e.label.clone())
+                    .unwrap_or_default();
+                rows.push(BindingRow {
+                    ours,
+                    atlas_event: (eid.0.clone(), label),
+                    our_year,
+                    their_year: fy,
+                });
+            }
+        }
+    };
+    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+        push(
+            s.tag.to_string(),
+            atlas.resolve_event(s.book, (s.chapter, s.verse_from), (s.chapter, s.verse_to)),
+            s.year,
+        );
+    }
+    for e in KINGDOMS {
+        for (i, ph) in e.phases.iter().enumerate() {
+            push(
+                format!("{}/phase{}", e.tag, i),
+                atlas.resolve_event(ph.book, (ph.chapter, ph.verse_from), (ph.chapter, ph.verse_to)),
+                ph.year,
+            );
+        }
+        if let Some((y, book, ch, v0, v1, _)) = e.fall {
+            push(format!("{}/fall", e.tag), atlas.resolve_event(book, (ch, v0), (ch, v1)), y);
+        }
+    }
+    for r in ROUTES {
+        push(
+            r.tag.to_string(),
+            atlas.resolve_event(r.book, (r.chapter_from, r.verse_from), (r.chapter_to, r.verse_to)),
+            r.from_year,
+        );
+    }
+    rows
+}
+
 /// The Scripture set bound against the atlas authority (C2/C3): the
 /// atlas dates and locates everything it can; the rest keeps its
 /// disclosed stand-ins. None = fully stand-in (fixtures, tests).

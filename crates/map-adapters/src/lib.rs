@@ -22,8 +22,8 @@ pub use basemaps::{
 pub use exports::{load_exports, AtlasExports, ExportError};
 pub use hydro::{ingest_ocean, ingest_water, WaterSource};
 pub use surveys::{
-    merge_timelines, merged_gazetteer, promised_land_timeline, scripture_timeline,
-    scripture_timeline_with, stand_in_gazetteer, MergeError,
+    binding_report, merge_timelines, merged_gazetteer, promised_land_timeline,
+    scripture_timeline, scripture_timeline_with, stand_in_gazetteer, BindingRow, MergeError,
 };
 
 #[cfg(test)]
