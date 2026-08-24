@@ -23,8 +23,9 @@ use atlas_graph_types::covenant::{Ground, Justification};
 use atlas_graph_types::covenant::{ContentHash, PlaceId};
 use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
+use crate::exports::AtlasExports;
 use map_types::{
-    AtlasPlaceRef, BorderSurvey, Boundary, BoundaryHistory, BoundaryId, BoundarySource,
+    AtlasEventRef, AtlasPlaceRef, BorderSurvey, Boundary, BoundaryHistory, BoundaryId, BoundarySource,
     ChangeEvent, ChangeKind, EdgeCharacter, GazetteerEntry, GazetteerExport, Interval,
     InterpolationMethod, Orientation, RegionGeom, RegionHistory, RegionId, RegionPart, UnitVec,
     WorldTimeline,
@@ -497,6 +498,46 @@ fn place_id(name: &str) -> PlaceId {
     PlaceId::new(format!("standin:{}", name.replace(' ', "-")))
 }
 
+/// Resolve a circuit against the atlas gazetteer: bound waypoints take
+/// the ATLAS's coordinates and PlaceIds (C3: one fact, one home);
+/// unbound ones keep their disclosed stand-ins. Returns (points,
+/// place refs, bound count).
+fn resolve_circuit(
+    circuit: &[Waypoint],
+    atlas: Option<&AtlasExports>,
+) -> (Vec<UnitVec>, Vec<AtlasPlaceRef>, usize) {
+    let mut pts = Vec::with_capacity(circuit.len());
+    let mut refs = Vec::with_capacity(circuit.len());
+    let mut bound = 0usize;
+    for w in circuit {
+        match atlas.and_then(|a| a.resolve_place(w.name)) {
+            Some((pid, lat, lon)) => {
+                pts.push(UnitVec::from_lat_lon_deg(lat, lon));
+                refs.push(AtlasPlaceRef(pid));
+                bound += 1;
+            }
+            None => {
+                pts.push(UnitVec::from_lat_lon_deg(w.lat, w.lon));
+                refs.push(AtlasPlaceRef(place_id(w.name)));
+            }
+        }
+    }
+    (pts, refs, bound)
+}
+
+/// The provenance a resolved circuit carries: full-atlas, mixed, or
+/// stand-in — disclosed either way.
+fn circuit_provenance(atlas: Option<&AtlasExports>, bound: usize, total: usize) -> String {
+    match (atlas, bound) {
+        (Some(a), b) if b == total => format!("bible-atlas@{:016x}", a.root.0),
+        (Some(a), b) if b > 0 => format!(
+            "mixed: bible-atlas@{:016x} ({b}/{total} waypoints) + {STAND_IN_PROVENANCE}",
+            a.root.0
+        ),
+        _ => STAND_IN_PROVENANCE.to_string(),
+    }
+}
+
 fn hash_id(tag: &str) -> ContentHash {
     let mut h = DefaultHasher::new();
     tag.hash(&mut h);
@@ -841,7 +882,7 @@ const ROUTES: &[RouteSpec] = &[
 
 /// Add one journey: an OPEN Survey boundary through the stations —
 /// no region, no closure, a way through the land.
-fn add_route(tl: &mut WorldTimeline, r: &RouteSpec) {
+fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>) {
     let verses = LocusRange::new(
         BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_from, verse: r.verse_from }),
         BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_to, verse: r.verse_to }),
@@ -851,29 +892,32 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec) {
         text: Some(r.note.to_string()),
         grounds: [Ground::Scripture(verses.clone())].into(),
     };
-    let pts: Vec<UnitVec> =
-        r.stations.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
+    let resolved = atlas.and_then(|a| {
+        a.resolve_event(r.book, (r.chapter_from, r.verse_from), (r.chapter_to, r.verse_to))
+    });
+    let (from_year, to_year) = match &resolved {
+        Some((_, fy, ty)) => (*fy, if ty > fy { Some(*ty) } else { r.to_year }),
+        None => (r.from_year, r.to_year),
+    };
+    let (pts, waypoints, bound) = resolve_circuit(r.stations, atlas);
+    let provenance = circuit_provenance(atlas, bound, r.stations.len());
     let bid = BoundaryId(hash_id(&format!("scripture-route/{}", r.tag)));
     tl.boundaries.insert(
         bid,
         BoundaryHistory {
             versions: vec![(
-                Interval { from: tp(r.from_year), to: r.to_year.map(tp) },
+                Interval { from: tp(from_year), to: to_year.map(tp) },
                 Boundary {
                     pts,
                     character: EdgeCharacter::Unknown,
                     source: BoundarySource::Survey(BorderSurvey {
                         verses,
-                        waypoints: r
-                            .stations
-                            .iter()
-                            .map(|w| AtlasPlaceRef(place_id(w.name)))
-                            .collect(),
+                        waypoints,
                         interpolation: InterpolationMethod::Geodesic,
-                        provenance: STAND_IN_PROVENANCE.to_string(),
+                        provenance: provenance.clone(),
                     }),
                     justification,
-                    provenance: STAND_IN_PROVENANCE.to_string(),
+                    provenance,
                 },
             )],
         },
@@ -894,9 +938,12 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
         places.insert(
             place_id(w.name),
             GazetteerEntry {
-                canonical_name: w.name.to_string(),
-                position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
-            },
+                    canonical_name: w.name.to_string(),
+                    position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
+                    aliases: Vec::new(),
+                    provenance: None,
+                    attestations: Vec::new(),
+                },
         );
     };
     for s in SURVEYS.iter().chain(SURVEYS_MORE) {
@@ -923,24 +970,32 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
 /// closed circuit), the region it bounds, valid from the survey's
 /// traditional date to the open edge of knowledge, and a narrated Rise
 /// grounded in the verses.
-fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
+fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExports>) {
     let justification = Justification {
         text: Some(s.note.to_string()),
         grounds: [Ground::Scripture(verses_of(s))].into(),
     };
 
-    // The circuit closes: repeat the first point, our closed-arc form.
-    let mut pts: Vec<UnitVec> =
-        s.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
-    pts.push(pts[0]);
+    // C2/C3 binding: the atlas dates and locates what it can; the
+    // rest stays disclosed stand-in.
+    let resolved =
+        atlas.and_then(|a| a.resolve_event(s.book, (s.chapter, s.verse_from), (s.chapter, s.verse_to)));
+    let year = resolved.as_ref().map(|(_, y, _)| *y).unwrap_or(s.year);
+    let driver = resolved.as_ref().zip(atlas).map(|((eid, ..), a)| AtlasEventRef {
+        event: eid.clone(),
+        atlas_root: a.root,
+    });
+    let (mut pts, waypoints, bound) = resolve_circuit(s.circuit, atlas);
+    pts.push(pts[0]); // the circuit closes: our closed-arc form
+    let provenance = circuit_provenance(atlas, bound, s.circuit.len());
 
     let survey = BorderSurvey {
         verses: verses_of(s),
-        waypoints: s.circuit.iter().map(|w| AtlasPlaceRef(place_id(w.name))).collect(),
+        waypoints,
         // Geodesic between waypoints — the disclosed (and only)
         // authored geometry. Coast-following is future authoring work.
         interpolation: InterpolationMethod::Geodesic,
-        provenance: STAND_IN_PROVENANCE.to_string(),
+        provenance: provenance.clone(),
     };
     let boundary = Boundary {
         pts,
@@ -952,12 +1007,12 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
         },
         source: BoundarySource::Survey(survey),
         justification: justification.clone(),
-        provenance: STAND_IN_PROVENANCE.to_string(),
+        provenance: provenance.clone(),
     };
 
     let boundary_id = BoundaryId(hash_id(&format!("scripture-survey:{}", s.tag)));
     let region_id = RegionId(hash_id(&format!("scripture-region:{}", s.tag)));
-    let valid = Interval::open_from(tp(s.year));
+    let valid = Interval::open_from(tp(year));
 
     tl.boundaries.insert(boundary_id, BoundaryHistory { versions: vec![(valid, boundary)] });
     tl.regions.insert(
@@ -977,13 +1032,16 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
         },
     );
     tl.events.push(ChangeEvent {
-        at: tp(s.year),
+        at: tp(year),
         kind: ChangeKind::Rise { region: region_id },
-        // driver stays None until the atlas C2 export names this event;
-        // law 12a will then hold the date to the atlas's placement.
-        driver: None,
+        // Bound events carry the atlas driver; law 12a holds the date
+        // to the atlas's placement byte-for-byte.
+        driver,
         justification,
-        provenance: USSHER_PROVENANCE.to_string(),
+        provenance: match atlas {
+            Some(a) if resolved.is_some() => format!("bible-atlas@{:016x}", a.root.0),
+            _ => USSHER_PROVENANCE.to_string(),
+        },
     });
 }
 
@@ -991,9 +1049,49 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
 /// Scripture-attested moments. Phase 1 rises; each later phase is a
 /// Shift narrated by its own verses (2KI 14:25 made machinery); the
 /// fall, when the text gives one, closes the era.
-fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
+fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
     let region_id = RegionId(hash_id(&format!("scripture-era/{}", e.tag)));
-    let end = e.fall.map(|(y, ..)| tp(y));
+
+    // Resolve every phase and the fall FIRST; a binding that would
+    // break the era's ordering is dropped (year and driver together —
+    // law 12a forbids keeping one without the other).
+    let mut years: Vec<(i32, Option<AtlasEventRef>)> = e
+        .phases
+        .iter()
+        .map(|ph| {
+            match atlas.and_then(|a| {
+                a.resolve_event(ph.book, (ph.chapter, ph.verse_from), (ph.chapter, ph.verse_to))
+            }) {
+                Some((eid, y, _)) => (
+                    y,
+                    atlas.map(|a| AtlasEventRef { event: eid, atlas_root: a.root }),
+                ),
+                None => (ph.year, None),
+            }
+        })
+        .collect();
+    let mut fall_res: Option<(i32, Option<AtlasEventRef>)> = e.fall.map(|(y, book, ch, v0, v1, _)| {
+        match atlas.and_then(|a| a.resolve_event(book, (ch, v0), (ch, v1))) {
+            Some((eid, ry, _)) => {
+                (ry, atlas.map(|a| AtlasEventRef { event: eid, atlas_root: a.root }))
+            }
+            None => (y, None),
+        }
+    });
+    for i in 1..years.len() {
+        if years[i].0 <= years[i - 1].0 {
+            years[i] = (e.phases[i].year, None); // unbind rather than invert
+        }
+    }
+    if let (Some((fy, _)), Some(last)) = (fall_res.as_ref(), years.last()) {
+        if *fy <= last.0 {
+            if let (Some((orig, ..)), Some(f)) = (e.fall, fall_res.as_mut()) {
+                *f = (orig, None) // keep spec year, drop driver
+            }
+        }
+    }
+
+    let end = fall_res.as_ref().map(|(y, _)| tp(*y));
     let mut geom_history = Vec::new();
 
     for (i, ph) in e.phases.iter().enumerate() {
@@ -1009,8 +1107,8 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
             ph.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
         pts.push(pts[0]);
         let bid = BoundaryId(hash_id(&format!("scripture-era/{}/phase{}", e.tag, i)));
-        let until = e.phases.get(i + 1).map(|n| tp(n.year)).or(end);
-        let interval = Interval { from: tp(ph.year), to: until };
+        let until = years.get(i + 1).map(|(y, _)| tp(*y)).or(end);
+        let interval = Interval { from: tp(years[i].0), to: until };
         tl.boundaries.insert(
             bid,
             BoundaryHistory {
@@ -1045,34 +1143,41 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
             },
         ));
         tl.events.push(ChangeEvent {
-            at: tp(ph.year),
+            at: tp(years[i].0),
             kind: if i == 0 {
                 ChangeKind::Rise { region: region_id }
             } else {
                 ChangeKind::Shift { boundary: bid }
             },
-            driver: None, // atlas C2 export will drive these (law 12a)
+            driver: years[i].1.clone(),
             justification,
-            provenance: USSHER_PROVENANCE.to_string(),
+            provenance: match (&years[i].1, atlas) {
+                (Some(_), Some(a)) => format!("bible-atlas@{:016x}", a.root.0),
+                _ => USSHER_PROVENANCE.to_string(),
+            },
         });
     }
 
-    if let Some((year, book, chapter, v0, v1, note)) = e.fall {
+    if let (Some((_, book, chapter, v0, v1, note)), Some((fy, fdriver))) = (e.fall, fall_res) {
         let v = |verse| BibleLocus::whole(VerseRef { book, chapter, verse });
         let verses = LocusRange::new(v(v0), v(v1)).expect("fall verses are ordered");
+        let prov = match (&fdriver, atlas) {
+            (Some(_), Some(a)) => format!("bible-atlas@{:016x}", a.root.0),
+            _ => USSHER_PROVENANCE.to_string(),
+        };
         tl.events.push(ChangeEvent {
-            at: tp(year),
+            at: tp(fy),
             kind: ChangeKind::Fall { region: region_id },
-            driver: None,
+            driver: fdriver,
             justification: Justification {
                 text: Some(note.to_string()),
                 grounds: [Ground::Scripture(verses)].into(),
             },
-            provenance: USSHER_PROVENANCE.to_string(),
+            provenance: prov,
         });
     }
 
-    let whole = Interval { from: tp(e.phases[0].year), to: end };
+    let whole = Interval { from: tp(years[0].0), to: end };
     tl.regions.insert(
         region_id,
         RegionHistory {
@@ -1085,15 +1190,33 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
 
 /// Every ingested Scripture survey and era as one timeline.
 pub fn scripture_timeline() -> WorldTimeline {
+    scripture_timeline_with(None)
+}
+
+/// The validation gazetteer for a bound timeline: the atlas's places
+/// plus the residual stand-ins (waypoints the atlas could not name) —
+/// law 12c then holds over the whole mixed set.
+pub fn merged_gazetteer(atlas: &AtlasExports) -> GazetteerExport {
+    let mut g = atlas.gazetteer.clone();
+    for (id, entry) in stand_in_gazetteer().places {
+        g.places.entry(id).or_insert(entry);
+    }
+    g
+}
+
+/// The Scripture set bound against the atlas authority (C2/C3): the
+/// atlas dates and locates everything it can; the rest keeps its
+/// disclosed stand-ins. None = fully stand-in (fixtures, tests).
+pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     let mut tl = WorldTimeline::default();
     for s in SURVEYS.iter().chain(SURVEYS_MORE) {
-        add_survey(&mut tl, s);
+        add_survey(&mut tl, s, atlas);
     }
     for e in KINGDOMS {
-        add_era(&mut tl, e);
+        add_era(&mut tl, e, atlas);
     }
     for r in ROUTES {
-        add_route(&mut tl, r);
+        add_route(&mut tl, r, atlas);
     }
     tl.events.sort_by_key(|e| e.at);
     tl
@@ -1102,7 +1225,7 @@ pub fn scripture_timeline() -> WorldTimeline {
 /// The NUM 34 survey alone (the founding fixture; tests lean on it).
 pub fn promised_land_timeline() -> WorldTimeline {
     let mut tl = WorldTimeline::default();
-    add_survey(&mut tl, &SURVEYS[0]);
+    add_survey(&mut tl, &SURVEYS[0], None);
     tl
 }
 

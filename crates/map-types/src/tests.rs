@@ -650,12 +650,13 @@ fn exports(known_event: &str, at: i32, known_place: &str) -> (ChronologyExport, 
     let chronology = ChronologyExport {
         atlas_root: ContentHash(555),
         placements: BTreeMap::from([(EventId::new(known_event), placement)]),
+        spans: Vec::new(),
     };
     let gazetteer = GazetteerExport {
         atlas_root: ContentHash(555),
         places: BTreeMap::from([(
             PlaceId::new(known_place),
-            GazetteerEntry { canonical_name: known_place.to_string(), position: uv(33.0, 36.0) },
+            GazetteerEntry { canonical_name: known_place.to_string(), position: uv(33.0, 36.0), aliases: Vec::new(), provenance: None, attestations: Vec::new() },
         )]),
     };
     (chronology, gazetteer)

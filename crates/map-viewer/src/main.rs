@@ -15,8 +15,8 @@ use atlas_graph_types::covenant::SourceId;
 use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use map_adapters::{
-    epoch_year_from_label, ingest, merge_timelines, scripture_timeline, stand_in_gazetteer,
-    EpochSource, IngestConfig,
+    epoch_year_from_label, ingest, load_exports, merge_timelines, merged_gazetteer,
+    scripture_timeline_with, EpochSource, IngestConfig,
 };
 use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, SvgEncoder};
@@ -212,6 +212,18 @@ fn load() -> App {
         let year = epoch_year_from_label(&label).expect("epoch label");
         epochs.push(EpochSource { year, label, text: std::fs::read_to_string(&path).unwrap() });
     }
+    // C2/C3: the atlas authority artifacts (vendored at the pinned
+    // root; the C6 stale-pin lives on the timeline).
+    let exp_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
+    let atlas = load_exports(
+        &std::fs::read_to_string(exp_dir.join("gazetteer.json")).expect("vendored gazetteer"),
+        &std::fs::read_to_string(exp_dir.join("chronology.json")).expect("vendored chronology"),
+    )
+    .expect("atlas exports parse");
+    let (creation_year, creation_citation) =
+        atlas.creation_anchor().expect("atlas chronology carries creation");
+
     let gen11 = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 1 });
     let config = IngestConfig {
         // Topology closure at 0.02 degrees (~2 km) — two orders below
@@ -220,12 +232,12 @@ fn load() -> App {
         source: SourceId::new("historical-basemaps"),
         anchor: Some(Anchor {
             frame: "biblical (Ussher tradition)".to_string(),
-            at: tp(-4004).unwrap(),
+            at: tp(creation_year).expect("creation year from the atlas"),
             justification: Justification {
-                text: Some("In the beginning God created the heaven and the earth.".to_string()),
+                text: Some(creation_citation),
                 grounds: [Ground::Scripture(LocusRange::new(gen11.clone(), gen11).unwrap())].into(),
             },
-            provenance: "owner-config:ussher-tradition (pending atlas C2 export)".to_string(),
+            provenance: format!("bible-atlas@{:016x}", atlas.root.0),
         }),
     };
     let out = ingest(&config, &epochs).expect("real source ingests");
@@ -264,17 +276,19 @@ fn load() -> App {
     // The first Bible-driven borders join the imported world, and the
     // merged whole must be lawful — fail loud at the door, not in a
     // render (validated against the stand-in gazetteer until C3 lands).
-    let timeline = merge_timelines(out.timeline, scripture_timeline())
+    let mut timeline = merge_timelines(out.timeline, scripture_timeline_with(Some(&atlas)))
         .and_then(|tl| merge_timelines(tl, water_tl))
         .expect("scripture surveys and waters merge cleanly");
-    let violations = map_types::validate_all(
-        &timeline,
-        &map_types::ChronologyExport {
-            atlas_root: atlas_graph_types::covenant::ContentHash(0),
-            placements: BTreeMap::new(),
-        },
-        &stand_in_gazetteer(),
+    // C6: the pin is live — a re-vendored export with a new root
+    // makes staleness detectable, never silent.
+    timeline.atlas_pin = Some(map_types::AtlasPin { version_root: atlas.root });
+    let driven = timeline.events.iter().filter(|e| e.driver.is_some()).count();
+    eprintln!(
+        "atlas authority bound: {driven} driven events, root {:016x}",
+        atlas.root.0
     );
+    let violations =
+        map_types::validate_all(&timeline, &atlas.chronology, &merged_gazetteer(&atlas));
     assert!(violations.is_empty(), "merged world unlawful: {:?}", violations.first());
     let anchor = timeline.anchor.as_ref().map(|a| (a.frame.clone(), a.at.year.get()));
     let out = map_adapters::Ingest { timeline, exemptions: out.exemptions, snap: out.snap };
@@ -299,9 +313,9 @@ fn load() -> App {
     let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(TimelineProvider {
         timeline: out.timeline,
         styles: style_table,
-        // Landmarks: the stand-in gazetteer serves Point subjects until
-        // the atlas C3 export replaces it.
-        gazetteer: Some(stand_in_gazetteer()),
+        // Landmarks: the atlas gazetteer (1,373 places) plus residual
+        // stand-ins serves Point subjects.
+        gazetteer: Some(merged_gazetteer(&atlas)),
     });
 
     // Scrub stops through the contract: probe the widest sensible span.

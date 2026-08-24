@@ -42,7 +42,7 @@ fn config() -> IngestConfig {
 
 fn empty_exports() -> (ChronologyExport, GazetteerExport) {
     (
-        ChronologyExport { atlas_root: ContentHash(0), placements: BTreeMap::new() },
+        ChronologyExport { atlas_root: ContentHash(0), placements: BTreeMap::new(), spans: Vec::new() },
         GazetteerExport { atlas_root: ContentHash(0), places: BTreeMap::new() },
     )
 }
@@ -393,6 +393,56 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         .collect();
     assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Line)));
     assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Unknown)));
+}
+
+// --------------------------- C2/C3: the great stand-in replacement
+
+/// Against the REAL atlas export artifacts: the exports parse, the
+/// roots agree, creation resolves, places bind canonical-first, events
+/// bind by attestation, dates are ADOPTED from the atlas (authority
+/// order), and the whole bound timeline is lawful — law 12a's byte
+/// equality enforced by the same validators as everything else.
+#[test]
+fn atlas_exports_bind_the_scripture_set() {
+    use crate::exports::load_exports;
+    use crate::surveys::{merged_gazetteer, scripture_timeline_with};
+
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
+    let atlas = load_exports(
+        &std::fs::read_to_string(dir.join("gazetteer.json")).expect("vendored gazetteer"),
+        &std::fs::read_to_string(dir.join("chronology.json")).expect("vendored chronology"),
+    )
+    .expect("exports parse");
+
+    assert_eq!(format!("{:016x}", atlas.root.0), "b483b302b8464e30", "the pinned root");
+    assert_eq!(atlas.creation_anchor().map(|(y, _)| y), Some(-4004));
+    assert!(atlas.resolve_place("Kadesh-barnea").is_some(), "canonical binding works");
+    assert!(atlas.resolve_place("En-rogel").is_some());
+    assert!(atlas.resolve_place("oblation southwest corner").is_none(), "descriptive points stay stand-in");
+
+    let bound = scripture_timeline_with(Some(&atlas));
+    let driven = bound.events.iter().filter(|e| e.driver.is_some()).count();
+    assert!(driven > 0, "some events now carry atlas drivers");
+    let atlas_prov = bound
+        .boundaries
+        .values()
+        .filter(|h| h.versions[0].1.provenance.contains("bible-atlas@"))
+        .count();
+    assert!(atlas_prov > 0, "some circuits now carry atlas-resolved waypoints");
+
+    // The bound set is lawful under the REAL authority: 12a byte
+    // equality for every driver, 12c resolution over the merged
+    // gazetteer, coherence and narration intact despite adopted dates.
+    let violations =
+        map_types::validate_all(&bound, &atlas.chronology, &merged_gazetteer(&atlas));
+    assert_eq!(violations, vec![], "the bound Scripture set is lawful");
+
+    // Authority is visible: creation-anchored events that bound now sit
+    // at ATLAS dates; unbound ones kept their disclosed stand-ins.
+    eprintln!(
+        "bound: {driven}/{} events driven, {atlas_prov} circuits atlas-resolved",
+        bound.events.len()
+    );
 }
 
 // --------------------------------------------- the real source, whole

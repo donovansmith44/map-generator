@@ -54,7 +54,7 @@ pub use boundary::{
     AtlasPlaceRef, BorderSurvey, Boundary, BoundarySource, EdgeCharacter, InterpolationMethod,
     Orientation, RegionGeom, RegionPart,
 };
-pub use contracts::{ChronologyExport, GazetteerEntry, GazetteerExport};
+pub use contracts::{ChronoSpan, ChronologyExport, GazetteerEntry, GazetteerExport};
 pub use encode::{EncodeError, SceneEncoder};
 pub use geom::{morph_rings, simplify_polyline, slerp, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
 pub use ident::{BoundaryId, ChangeEventId, MapAddressed, MapKind, MapPid, RegionId, StyleId};
