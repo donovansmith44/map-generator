@@ -120,6 +120,7 @@ fn honest_style() -> Style {
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
+        None,
         AgeRamp {
             newest: Paint { fill: Rgba(255, 0, 0, 255) },
             oldest: Paint { fill: Rgba(255, 0, 0, 40) },
@@ -444,17 +445,18 @@ fn law06_provenance_totality_and_honesty() {
     let rest = (
         Paint { fill: Rgba(0, 0, 0, 0) },
         Paint { fill: Rgba(0, 0, 60, 200) },
+        None,
         AgeRamp { newest: Paint { fill: Rgba(0, 0, 0, 0) }, oldest: Paint { fill: Rgba(0, 0, 0, 0) } },
         LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 },
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
         DeltaEmphasis { before: line, after: line, seam: line },
     );
     assert_eq!(
-        Style::new(strokes(line, zonal), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5).unwrap_err(),
+        Style::new(strokes(line, zonal), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5, rest.6).unwrap_err(),
         StyleError::UnknownIndistinctFromLine
     );
     assert_eq!(
-        Style::new(strokes(zonal, line), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5).unwrap_err(),
+        Style::new(strokes(zonal, line), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5, rest.6).unwrap_err(),
         StyleError::FrontierNotZonal
     );
 }

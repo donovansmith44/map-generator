@@ -228,6 +228,96 @@ const JOS_13_MANASSEH_EAST: &[Waypoint] = &[
     Waypoint { name: "Edrei", lat: 32.60, lon: 36.10 },
 ];
 
+// --------------------------------- the table of nations (GEN 10)
+//
+// The ancestral homelands after the scattering (GEN 11:8-9), placed by
+// traditional identifications — broad hulls, rendered Unknown. Rise at
+// the division of the earth in Peleg's days (Ussher 2247 BC).
+
+macro_rules! circuit {
+    ($name:ident : $(($la:expr, $lo:expr, $n:expr)),+ $(,)?) => {
+        const $name: &[Waypoint] = &[
+            $(Waypoint { name: $n, lat: $la, lon: $lo }),+
+        ];
+    };
+}
+
+circuit!(N_GOMER: (41.5,33.0,"Gomer northward"),(41.5,37.0,"Gomer eastward"),(40.0,38.5,"Togarmah"),(39.5,35.0,"Gomer southward"),(40.2,32.5,"Ashkenaz westward"));
+circuit!(N_MAGOG: (45.0,38.0,"Magog westward"),(45.0,44.0,"Magog northward"),(43.0,46.0,"Magog eastward"),(42.0,41.0,"Magog southward"),(43.3,38.5,"Magog by the sea"));
+circuit!(N_MADAI: (37.0,45.0,"Madai northwest"),(37.0,50.0,"Madai northeast"),(34.0,50.5,"Madai southeast"),(33.5,47.0,"Madai southwest"));
+circuit!(N_JAVAN: (39.5,20.5,"Javan westward"),(39.5,26.5,"Javan eastward"),(37.0,27.5,"the isles of Elishah"),(36.5,22.5,"Javan southward"),(38.0,20.0,"Javan by the sea"));
+circuit!(N_TUBAL: (40.5,34.0,"Tubal westward"),(40.5,37.5,"Tubal eastward"),(38.8,37.8,"Tubal southeast"),(38.5,34.5,"Tubal southwest"));
+circuit!(N_MESHECH: (41.5,38.0,"Meshech westward"),(41.5,42.0,"Meshech eastward"),(39.8,42.0,"Meshech southeast"),(39.8,38.5,"Meshech southwest"));
+circuit!(N_TIRAS: (42.5,23.0,"Tiras westward"),(42.5,28.0,"Tiras eastward"),(40.8,28.5,"Tiras by the strait"),(40.8,24.0,"Tiras southward"));
+circuit!(N_CUSH: (18.0,30.0,"Cush westward"),(18.0,37.0,"Cush eastward"),(12.0,37.5,"Cush southeast"),(11.5,32.0,"Cush southwest"),(15.0,30.0,"Cush by the river"));
+circuit!(N_MIZRAIM: (31.2,29.8,"Mizraim by the sea"),(31.2,32.3,"Mizraim eastward"),(29.5,32.5,"Mizraim by the Red sea"),(24.0,33.0,"Pathros southward"),(24.0,31.5,"Pathros westward"),(29.8,29.5,"Mizraim of the west"));
+circuit!(N_PHUT: (32.8,20.0,"Phut westward"),(32.8,25.0,"Phut eastward"),(30.0,25.5,"Phut southeast"),(29.5,20.5,"Phut southwest"));
+circuit!(N_CANAAN: (33.56,35.37,"Sidon"),(33.20,36.00,"Canaan eastward"),(31.76,35.72,"toward Sodom and Gomorrah"),(31.00,35.40,"unto Lasha-ward"),(31.24,34.79,"toward Gerar"),(31.38,34.62,"Gerar"),(31.50,34.42,"unto Gaza"),(32.90,35.05,"Canaan by the sea"));
+circuit!(N_SHINAR: (33.5,43.5,"Shinar northward"),(33.5,46.0,"Shinar eastward"),(30.8,47.5,"Erech southward"),(30.5,44.5,"Shinar southwest"),(32.5,43.0,"Accad westward"));
+circuit!(N_ELAM: (33.0,46.0,"Elam northwest"),(33.0,50.0,"Elam northeast"),(30.0,50.5,"Elam southeast"),(29.8,47.0,"Elam southwest"));
+circuit!(N_ASSHUR: (37.0,42.0,"Asshur northwest"),(37.0,44.5,"Nineveh-ward"),(34.5,44.5,"Calah southward"),(34.8,42.0,"Asshur southwest"));
+circuit!(N_ARAM: (36.5,37.5,"Aram northward"),(36.5,40.5,"Aram eastward"),(34.0,38.5,"Aram southeast"),(33.30,36.20,"Aram of Damascus"),(34.5,36.8,"Aram westward"));
+circuit!(N_LUD: (39.3,26.8,"Lud westward"),(39.3,29.5,"Lud eastward"),(38.0,29.7,"Lud southeast"),(37.8,27.0,"Lud southwest"));
+circuit!(N_JOKTAN: (20.0,44.0,"from Mesha"),(20.0,50.0,"Joktan eastward"),(15.5,50.5,"toward Sephar"),(14.5,44.5,"Joktan southwest"));
+
+// --------------------------------------- the land in vision (EZK 47-48)
+
+const EZK_47_OUTER: &[Waypoint] = &[
+    Waypoint { name: "the great sea toward Hethlon", lat: 34.55, lon: 35.90 },
+    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
+    Waypoint { name: "Zedad", lat: 34.31, lon: 36.60 },
+    Waypoint { name: "Hazar-enan by Hauran", lat: 34.23, lon: 37.24 },
+    Waypoint { name: "Hauran eastward", lat: 32.80, lon: 36.30 },
+    Waypoint { name: "east of the sea of Chinnereth", lat: 32.75, lon: 35.65 },
+    Waypoint { name: "the east sea's north bay", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "Tamar", lat: 31.00, lon: 35.40 },
+    Waypoint { name: "waters of strife in Kadesh", lat: 30.69, lon: 34.49 },
+    Waypoint { name: "the river toward the great sea", lat: 31.16, lon: 33.80 },
+    Waypoint { name: "Great Sea coast off Gaza", lat: 31.50, lon: 34.42 },
+    Waypoint { name: "coast before Joppa", lat: 32.05, lon: 34.75 },
+    Waypoint { name: "Great Sea off Tyre", lat: 33.27, lon: 35.18 },
+];
+
+const EZK_48_OBLATION: &[Waypoint] = &[
+    Waypoint { name: "oblation southwest corner", lat: 31.40, lon: 34.90 },
+    Waypoint { name: "oblation southeast corner", lat: 31.40, lon: 35.70 },
+    Waypoint { name: "oblation northeast corner", lat: 32.10, lon: 35.70 },
+    Waypoint { name: "oblation northwest corner", lat: 32.10, lon: 34.90 },
+];
+
+// ---------------------------------- the tetrarchies of LUK 3:1 (AD 26)
+
+const NT_JUDAEA: &[Waypoint] = &[
+    Waypoint { name: "coast at Caesarea", lat: 32.50, lon: 34.89 },
+    Waypoint { name: "Samaria border north", lat: 32.30, lon: 35.55 },
+    Waypoint { name: "Jordan at Jericho", lat: 31.85, lon: 35.50 },
+    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "Masada southward", lat: 31.00, lon: 35.35 },
+    Waypoint { name: "Idumea south", lat: 31.10, lon: 34.80 },
+    Waypoint { name: "Gaza border", lat: 31.50, lon: 34.42 },
+    Waypoint { name: "coast at Joppa", lat: 32.05, lon: 34.75 },
+];
+const NT_GALILEE: &[Waypoint] = &[
+    Waypoint { name: "Ptolemais border", lat: 33.00, lon: 35.10 },
+    Waypoint { name: "north of Capernaum", lat: 33.05, lon: 35.60 },
+    Waypoint { name: "sea of Galilee east shore", lat: 32.75, lon: 35.62 },
+    Waypoint { name: "Nazareth southward", lat: 32.62, lon: 35.30 },
+    Waypoint { name: "Jezreel edge", lat: 32.60, lon: 35.10 },
+];
+const NT_PEREA: &[Waypoint] = &[
+    Waypoint { name: "Pella northward", lat: 32.40, lon: 35.60 },
+    Waypoint { name: "Gerasa border", lat: 32.28, lon: 35.90 },
+    Waypoint { name: "Machaerus south", lat: 31.55, lon: 35.65 },
+    Waypoint { name: "Jordan by the Salt Sea", lat: 31.76, lon: 35.56 },
+    Waypoint { name: "Jordan at Pella", lat: 32.38, lon: 35.56 },
+];
+const NT_ITUREA: &[Waypoint] = &[
+    Waypoint { name: "Caesarea Philippi", lat: 33.25, lon: 35.69 },
+    Waypoint { name: "Damascus-ward north", lat: 33.50, lon: 36.30 },
+    Waypoint { name: "Trachonitis east", lat: 32.90, lon: 36.70 },
+    Waypoint { name: "Gaulanitis south", lat: 32.78, lon: 35.75 },
+];
+
 // ------------------------------------------------- the kingdom arc
 //
 // Eras: regions whose borders CHANGE at Scripture-attested moments.
@@ -583,6 +673,213 @@ const SURVEYS: &[SurveySpec] = &[
     },
 ];
 
+const NATIONS_NOTE: &str = "An ancestral homeland of the table of nations, placed by \
+    traditional identifications as a broad hull (rendered Unknown); rise at the \
+    division of the earth in Peleg's days (GEN 10:25, Ussher 2247 BC).";
+const NATIONS_YEAR: i32 = -2247;
+
+/// GEN 10 + the vision + the tetrarchies: more SurveySpec rows, same
+/// machinery, same stand-in review flag.
+const SURVEYS_MORE: &[SurveySpec] = &[
+    // ---- Japheth (GEN 10:2-5) ----
+    SurveySpec { tag: "N-GOMER", label: "Gomer (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 3, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_GOMER },
+    SurveySpec { tag: "N-MAGOG", label: "Magog (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_MAGOG },
+    SurveySpec { tag: "N-MADAI", label: "Madai (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_MADAI },
+    SurveySpec { tag: "N-JAVAN", label: "Javan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 5, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_JAVAN },
+    SurveySpec { tag: "N-TUBAL", label: "Tubal (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_TUBAL },
+    SurveySpec { tag: "N-MESHECH", label: "Meshech (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_MESHECH },
+    SurveySpec { tag: "N-TIRAS", label: "Tiras (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_TIRAS },
+    // ---- Ham (GEN 10:6-20) ----
+    SurveySpec { tag: "N-CUSH", label: "Cush (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 7, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_CUSH },
+    SurveySpec { tag: "N-MIZRAIM", label: "Mizraim (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_MIZRAIM },
+    SurveySpec { tag: "N-PHUT", label: "Phut (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_PHUT },
+    SurveySpec {
+        tag: "N-CANAAN",
+        label: "Canaan (GEN 10)",
+        note: "\"The border of the Canaanites was from Sidon, as thou comest to Gerar, \
+               unto Gaza; as thou goest, unto Sodom\" — the text walks it (GEN 10:19). \
+               Stand-in coordinates; Ussher dates.",
+        book: 1, chapter: 10, verse_from: 15, verse_to: 19,
+        year: NATIONS_YEAR,
+        grade: Grade::BorderText,
+        circuit: N_CANAAN,
+    },
+    SurveySpec { tag: "N-SHINAR", label: "the land of Shinar, Nimrod's (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 8, verse_to: 10, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_SHINAR },
+    // ---- Shem (GEN 10:21-31) ----
+    SurveySpec { tag: "N-ELAM", label: "Elam (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_ELAM },
+    SurveySpec { tag: "N-ASSHUR", label: "Asshur (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 11, verse_to: 12, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_ASSHUR },
+    SurveySpec { tag: "N-ARAM", label: "Aram (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 23, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_ARAM },
+    SurveySpec { tag: "N-LUD", label: "Lud (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_LUD },
+    SurveySpec { tag: "N-JOKTAN", label: "the sons of Joktan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 25, verse_to: 30, year: NATIONS_YEAR, grade: Grade::CityDerived, circuit: N_JOKTAN },
+    // ---- the land in vision (EZK 47-48, Ussher 574 BC) ----
+    SurveySpec {
+        tag: "EZK47",
+        label: "the land in vision (EZK 47)",
+        note: "The border of Ezekiel's vision, walked by the text (EZK 47:13-20) — \
+               a VISION, never a realized historical border; stand-in coordinates; \
+               dated to the vision's own year (Ussher 574 BC).",
+        book: 26, chapter: 47, verse_from: 13, verse_to: 20,
+        year: -574,
+        grade: Grade::BorderText,
+        circuit: EZK_47_OUTER,
+    },
+    SurveySpec {
+        tag: "EZK48",
+        label: "the holy oblation in vision (EZK 48)",
+        note: "The oblation of the vision, five and twenty thousand reeds square \
+               (EZK 48:8-20) — schematic, a VISION; stand-in placement.",
+        book: 26, chapter: 48, verse_from: 8, verse_to: 20,
+        year: -574,
+        grade: Grade::BorderText,
+        circuit: EZK_48_OBLATION,
+    },
+    // ---- the tetrarchies of LUK 3:1 (the 15th year of Tiberius) ----
+    SurveySpec { tag: "NT-JUDAEA", label: "Judaea under Pilate (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, grade: Grade::CityDerived, circuit: NT_JUDAEA },
+    SurveySpec { tag: "NT-GALILEE", label: "Galilee of Herod the tetrarch (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, grade: Grade::CityDerived, circuit: NT_GALILEE },
+    SurveySpec { tag: "NT-PEREA", label: "Perea of Herod the tetrarch (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, grade: Grade::CityDerived, circuit: NT_PEREA },
+    SurveySpec { tag: "NT-ITUREA", label: "Iturea and Trachonitis of Philip (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, grade: Grade::CityDerived, circuit: NT_ITUREA },
+];
+
+// ------------------------------------------ journeys (open routes)
+//
+// Scripture's own itineraries: OPEN polylines through named stations,
+// rendered as dashed Unknown ways (the stations are the text's, the
+// road between them is not). NUM 33 is the Word's own station list.
+
+circuit!(R_EXODUS:
+    (30.80,31.83,"Rameses"),(30.55,32.10,"Succoth"),(30.35,32.25,"Etham"),
+    (30.05,32.45,"Pi-hahiroth"),(29.65,32.65,"Marah"),(29.35,32.90,"Elim"),
+    (29.15,32.95,"encamp by the Red sea"),(29.00,33.20,"wilderness of Sin"),
+    (28.90,33.45,"Dophkah"),(28.70,33.75,"Rephidim"),
+    (28.54,33.97,"the wilderness of Sinai"),(28.75,34.20,"Kibroth-hattaavah"),
+    (28.95,34.40,"Hazeroth"),(30.10,34.50,"Rithmah toward Kadesh"),
+    (30.69,34.49,"Kadesh-barnea"),(29.55,34.95,"Ezion-geber on the Red sea"),
+    (30.32,35.07,"mount Hor by Edom's border"),(30.45,35.35,"Zalmonah"),
+    (30.65,35.45,"Punon"),(30.85,35.55,"Oboth"),(31.05,35.70,"Ije-abarim"),
+    (31.50,35.78,"Dibon-gad"),(31.62,35.75,"Almon-diblathaim"),
+    (31.76,35.72,"mountains of Abarim before Nebo"),
+    (31.85,35.62,"plains of Moab by Jordan"));
+
+circuit!(R_PAUL1:
+    (36.20,36.16,"Antioch of Syria"),(36.12,35.93,"Seleucia"),(35.18,33.90,"Salamis"),
+    (34.77,32.42,"Paphos"),(36.96,30.85,"Perga in Pamphylia"),
+    (38.31,31.19,"Antioch in Pisidia"),(37.87,32.49,"Iconium"),(37.58,32.45,"Lystra"),
+    (37.35,33.25,"Derbe"),(36.88,30.70,"Attalia"));
+
+circuit!(R_PAUL2:
+    (36.20,36.16,"Antioch of Syria"),(36.92,34.90,"Tarsus"),(37.35,33.25,"Derbe"),
+    (37.58,32.45,"Lystra"),(37.87,32.49,"Iconium"),(39.75,26.15,"Troas"),
+    (40.94,24.41,"Neapolis"),(41.01,24.28,"Philippi"),(40.64,22.94,"Thessalonica"),
+    (40.52,22.20,"Berea"),(37.98,23.73,"Athens"),(37.91,22.88,"Corinth"),
+    (37.94,27.34,"Ephesus"),(32.50,34.89,"Caesarea"),(31.78,35.22,"Jerusalem"));
+
+circuit!(R_PAUL3:
+    (36.20,36.16,"Antioch of Syria"),(36.92,34.90,"Tarsus"),(37.87,32.49,"Iconium"),
+    (37.94,27.34,"Ephesus"),(39.75,26.15,"Troas"),(41.01,24.28,"Philippi"),
+    (40.64,22.94,"Thessalonica"),(37.91,22.88,"Corinth"),(37.53,27.28,"Miletus"),
+    (36.26,29.31,"Patara"),(33.27,35.19,"Tyre"),(32.50,34.89,"Caesarea"),
+    (31.78,35.22,"Jerusalem"));
+
+circuit!(R_ROME:
+    (32.50,34.89,"Caesarea"),(33.56,35.37,"Sidon"),(36.26,29.98,"Myra of Lycia"),
+    (34.92,24.73,"the Fair Havens of Crete"),(35.90,14.45,"Melita"),
+    (37.06,15.29,"Syracuse"),(38.11,15.65,"Rhegium"),(40.83,14.12,"Puteoli"),
+    (41.89,12.49,"Rome"));
+
+struct RouteSpec {
+    tag: &'static str,
+    note: &'static str,
+    book: u8,
+    chapter_from: u16,
+    verse_from: u16,
+    chapter_to: u16,
+    verse_to: u16,
+    from_year: i32,
+    to_year: Option<i32>,
+    stations: &'static [Waypoint],
+}
+
+const ROUTE_NOTE: &str = "A journey: the stations are the text's, the way between \
+    them is interpolation (rendered Unknown, dashed); station coordinates are \
+    approximate traditional identifications (stand-in); Ussher dates.";
+
+const ROUTES: &[RouteSpec] = &[
+    RouteSpec {
+        tag: "R-EXODUS",
+        note: "\"These are the journeys of the children of Israel\" — the Word's own \
+               itinerary, NUM 33; forty years from Rameses to the plains of Moab. \
+               Station identifications approximate (stand-in); Ussher dates.",
+        book: 4, chapter_from: 33, verse_from: 5, chapter_to: 33, verse_to: 49,
+        from_year: -1491, to_year: Some(-1451),
+        stations: R_EXODUS,
+    },
+    RouteSpec {
+        tag: "R-PAUL1", note: ROUTE_NOTE,
+        book: 44, chapter_from: 13, verse_from: 1, chapter_to: 14, verse_to: 28,
+        from_year: 45, to_year: None,
+        stations: R_PAUL1,
+    },
+    RouteSpec {
+        tag: "R-PAUL2", note: ROUTE_NOTE,
+        book: 44, chapter_from: 15, verse_from: 36, chapter_to: 18, verse_to: 22,
+        from_year: 49, to_year: None,
+        stations: R_PAUL2,
+    },
+    RouteSpec {
+        tag: "R-PAUL3", note: ROUTE_NOTE,
+        book: 44, chapter_from: 18, verse_from: 23, chapter_to: 21, verse_to: 17,
+        from_year: 53, to_year: None,
+        stations: R_PAUL3,
+    },
+    RouteSpec {
+        tag: "R-ROME", note: ROUTE_NOTE,
+        book: 44, chapter_from: 27, verse_from: 1, chapter_to: 28, verse_to: 16,
+        from_year: 60, to_year: None,
+        stations: R_ROME,
+    },
+];
+
+/// Add one journey: an OPEN Survey boundary through the stations —
+/// no region, no closure, a way through the land.
+fn add_route(tl: &mut WorldTimeline, r: &RouteSpec) {
+    let verses = LocusRange::new(
+        BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_from, verse: r.verse_from }),
+        BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_to, verse: r.verse_to }),
+    )
+    .expect("route verses are ordered");
+    let justification = Justification {
+        text: Some(r.note.to_string()),
+        grounds: [Ground::Scripture(verses.clone())].into(),
+    };
+    let pts: Vec<UnitVec> =
+        r.stations.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
+    let bid = BoundaryId(hash_id(&format!("scripture-route/{}", r.tag)));
+    tl.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                Interval { from: tp(r.from_year), to: r.to_year.map(tp) },
+                Boundary {
+                    pts,
+                    character: EdgeCharacter::Unknown,
+                    source: BoundarySource::Survey(BorderSurvey {
+                        verses,
+                        waypoints: r
+                            .stations
+                            .iter()
+                            .map(|w| AtlasPlaceRef(place_id(w.name)))
+                            .collect(),
+                        interpolation: InterpolationMethod::Geodesic,
+                        provenance: STAND_IN_PROVENANCE.to_string(),
+                    }),
+                    justification,
+                    provenance: STAND_IN_PROVENANCE.to_string(),
+                },
+            )],
+        },
+    );
+}
+
 fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::text::BibleTag> {
     let v = |verse| BibleLocus::whole(VerseRef { book: s.book, chapter: s.chapter, verse });
     LocusRange::new(v(s.verse_from), v(s.verse_to)).expect("survey verses are ordered")
@@ -602,8 +899,13 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
             },
         );
     };
-    for s in SURVEYS {
+    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
         for w in s.circuit {
+            add(w);
+        }
+    }
+    for r in ROUTES {
+        for w in r.stations {
             add(w);
         }
     }
@@ -784,11 +1086,14 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec) {
 /// Every ingested Scripture survey and era as one timeline.
 pub fn scripture_timeline() -> WorldTimeline {
     let mut tl = WorldTimeline::default();
-    for s in SURVEYS {
+    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
         add_survey(&mut tl, s);
     }
     for e in KINGDOMS {
         add_era(&mut tl, e);
+    }
+    for r in ROUTES {
+        add_route(&mut tl, r);
     }
     tl.events.sort_by_key(|e| e.at);
     tl

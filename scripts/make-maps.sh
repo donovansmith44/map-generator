@@ -35,6 +35,14 @@ render 08-yehud-the-return-ezr1    "subject=world&year=-500&$LEVANT"
 render 09-promise-to-kingdom-exposure "subject=world&year=-1452&to=-1000&$WIDE"
 render 10-rise-and-fall-exposure      "subject=world&year=-1095&to=-536&$WIDE"
 
+# The wider Word: nations, vision, journeys, the NT.
+render 14-table-of-nations-gen10   "subject=world&year=-2200&center=33,36&zoom=22&bible=1"
+render 15-exodus-journeys-num33    "subject=world&year=-1470&center=30.2,34.3&zoom=5&bible=1"
+render 16-canaan-before-conquest   "subject=world&year=-1460&$LEVANT"
+render 17-land-in-vision-ezk47     "subject=world&year=-570&$LEVANT"
+render 18-tetrarchies-luk3         "subject=world&year=30&center=32.3,35.4&zoom=2.5&bible=1"
+render 19-pauls-journeys-acts      "subject=world&year=64&center=37.5,28&zoom=12&bible=1"
+
 # The world's context at key moments (all sources, not bible-only).
 render 11-world-at-abraham         "subject=world&year=-1900&center=33,38&zoom=18"
 render 12-world-at-the-exile       "subject=world&year=-586&center=33,38&zoom=18"

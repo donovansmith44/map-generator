@@ -35,6 +35,7 @@ fn honest_style() -> Style {
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
+        None,
         AgeRamp {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
             oldest: Paint { fill: Rgba(220, 40, 40, 40) },
@@ -369,6 +370,83 @@ fn law10_lone_rendering_agrees_with_world_selection() {
         })
         .unwrap();
     assert_eq!(world.select_boundary(bid).canonical_bytes(), lone.canonical_bytes());
+}
+
+// -------------------------------- the atlas palette (what's what)
+
+/// With a palette, touching territories never share a slot, the
+/// assignment is deterministic, and lone rendering still equals
+/// world-selection byte for byte (law 10 survives coloring because
+/// colors derive from the TIMELINE, not the scene).
+#[test]
+fn palette_colors_touching_regions_distinctly() {
+    let palette = [
+        Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
+        Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
+        Paint { fill: Rgba(0x19, 0x9e, 0x70, 205) },
+        Paint { fill: Rgba(0xc9, 0x85, 0x00, 205) },
+        Paint { fill: Rgba(0xd5, 0x51, 0x81, 205) },
+        Paint { fill: Rgba(0x00, 0x83, 0x00, 205) },
+        Paint { fill: Rgba(0x90, 0x85, 0xe9, 205) },
+        Paint { fill: Rgba(0xe6, 0x67, 0x67, 205) },
+    ];
+    let stroke = |r, pattern| Stroke { color: Rgba(r, 0, 0, 255), width: 1.0, pattern };
+    let style = Style::new(
+        BoundaryStrokes {
+            line: stroke(0, StrokePattern::Solid),
+            frontier: stroke(60, StrokePattern::Zonal),
+            disputed: stroke(120, StrokePattern::Hatched),
+            unknown: stroke(180, StrokePattern::Dashed),
+        },
+        Paint { fill: Rgba(200, 200, 180, 255) },
+        Paint { fill: Rgba(120, 160, 200, 235) },
+        Some(palette),
+        AgeRamp {
+            newest: Paint { fill: Rgba(220, 40, 40, 255) },
+            oldest: Paint { fill: Rgba(220, 40, 40, 40) },
+        },
+        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
+        DeltaEmphasis {
+            before: stroke(90, StrokePattern::Dashed),
+            after: stroke(30, StrokePattern::Solid),
+            seam: stroke(250, StrokePattern::Solid),
+        },
+    )
+    .unwrap();
+    let sid = style.id();
+    let config = IngestConfig { source: SourceId::new("historical-basemaps"), anchor: None, snap: None };
+    let out = ingest(&config, &fixture_epochs()).unwrap();
+    let p = TimelineProvider {
+        timeline: out.timeline,
+        styles: BTreeMap::from([(sid, style)]),
+        gazetteer: None,
+    };
+
+    let at = TimeSelector::At(tp(-1800));
+    let world = p.render(&world_query(sid, at)).unwrap();
+    // Westia and Estia share an arc: their fills must differ.
+    let paints: BTreeMap<_, _> = world.regions.iter().map(|r| (r.region, r.paint)).collect();
+    let ids: Vec<_> = p
+        .subjects(tp(-1800))
+        .into_iter()
+        .filter_map(|s| match (s.subject, s.label.as_str()) {
+            (RenderSubject::Region(id), "Westia") => Some(("w", id)),
+            (RenderSubject::Region(id), "Estia") => Some(("e", id)),
+            _ => None,
+        })
+        .collect();
+    let w = ids.iter().find(|(t, _)| *t == "w").unwrap().1;
+    let e = ids.iter().find(|(t, _)| *t == "e").unwrap().1;
+    assert_ne!(paints[&w], paints[&e], "touching territories never match");
+
+    // Deterministic across renders, and law 10 holds under color.
+    let again = p.render(&world_query(sid, at)).unwrap();
+    assert_eq!(world.canonical_bytes(), again.canonical_bytes());
+    let lone = p
+        .render(&RenderQuery { subject: RenderSubject::Region(w), ..world_query(sid, at) })
+        .unwrap();
+    assert_eq!(world.select_region(w).canonical_bytes(), lone.canonical_bytes());
 }
 
 // ------------------------------------------------ contract edges

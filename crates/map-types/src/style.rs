@@ -111,6 +111,11 @@ pub struct Style {
     region: Paint,
     /// The sea's dress — water regions are as first-class as polities.
     water: Paint,
+    /// The atlas convention: distinct fills so it is obvious what's
+    /// what. None = every land region wears the uniform region paint;
+    /// Some = territories are assigned from these slots such that
+    /// touching territories never match (the provider's coloring).
+    palette: Option<[Paint; 8]>,
     age: AgeRamp,
     label: LabelStyle,
     marker: MarkerStyle,
@@ -118,10 +123,12 @@ pub struct Style {
 }
 
 impl Style {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         boundaries: BoundaryStrokes,
         region: Paint,
         water: Paint,
+        palette: Option<[Paint; 8]>,
         age: AgeRamp,
         label: LabelStyle,
         marker: MarkerStyle,
@@ -133,7 +140,7 @@ impl Style {
         if boundaries.frontier.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
-        Ok(Style { boundaries, region, water, age, label, marker, delta })
+        Ok(Style { boundaries, region, water, palette, age, label, marker, delta })
     }
 
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
@@ -149,6 +156,9 @@ impl Style {
     }
     pub fn water_paint(&self) -> Paint {
         self.water
+    }
+    pub fn palette(&self) -> Option<&[Paint; 8]> {
+        self.palette.as_ref()
     }
     pub fn age_ramp(&self) -> AgeRamp {
         self.age
@@ -171,6 +181,11 @@ impl Style {
         self.boundaries.unknown.canon(c);
         self.region.canon(c);
         self.water.canon(c);
+        c.opt(&self.palette, |c, pal| {
+            for p in pal.iter() {
+                p.canon(c);
+            }
+        });
         self.age.newest.canon(c);
         self.age.oldest.canon(c);
         let Rgba(r, g, b, a) = self.label.color;

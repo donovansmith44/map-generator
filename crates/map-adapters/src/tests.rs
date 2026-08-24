@@ -359,7 +359,18 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     // is lawful as a whole: every waypoint resolves, every rise,
     // border change, and fall narrated.
     let all = scripture_timeline();
-    assert_eq!(all.regions.len(), 18, "promise + 13 allotments + 4 kingdom eras");
+    // promise + 13 allotments + 17 nations + 2 vision + 4 tetrarchies
+    // + 4 kingdom eras = 41 regions; plus 5 journeys as open ways.
+    assert_eq!(all.regions.len(), 41, "the Scripture set");
+    let journeys = all
+        .boundaries
+        .values()
+        .filter(|h| {
+            let b = &h.versions[0].1;
+            b.pts.first() != b.pts.last() // open: a way, not a border
+        })
+        .count();
+    assert_eq!(journeys, 5, "the exodus and Paul's four voyages");
     assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![]);
 
     // The kingdom arc has real BORDER CHANGES: Shifts grounded in

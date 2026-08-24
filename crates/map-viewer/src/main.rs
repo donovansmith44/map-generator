@@ -68,6 +68,19 @@ fn parchment() -> Style {
         },
         Paint { fill: Rgba(221, 204, 161, 235) },
         Paint { fill: Rgba(148, 175, 178, 235) },
+        // The atlas look: the dataviz-validated categorical eight,
+        // softened by fill alpha over the plate. Touching territories
+        // never share a slot (provider graph coloring).
+        Some([
+            Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
+            Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
+            Paint { fill: Rgba(0x19, 0x9e, 0x70, 205) },
+            Paint { fill: Rgba(0xc9, 0x85, 0x00, 205) },
+            Paint { fill: Rgba(0xd5, 0x51, 0x81, 205) },
+            Paint { fill: Rgba(0x00, 0x83, 0x00, 205) },
+            Paint { fill: Rgba(0x90, 0x85, 0xe9, 205) },
+            Paint { fill: Rgba(0xe6, 0x67, 0x67, 205) },
+        ]),
         AgeRamp {
             newest: Paint { fill: Rgba(174, 60, 40, 220) },
             oldest: Paint { fill: Rgba(174, 60, 40, 40) },
@@ -94,6 +107,16 @@ fn slate() -> Style {
         },
         Paint { fill: Rgba(58, 66, 80, 235) },
         Paint { fill: Rgba(33, 42, 56, 245) },
+        Some([
+            Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
+            Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
+            Paint { fill: Rgba(0x19, 0x9e, 0x70, 205) },
+            Paint { fill: Rgba(0xc9, 0x85, 0x00, 205) },
+            Paint { fill: Rgba(0xd5, 0x51, 0x81, 205) },
+            Paint { fill: Rgba(0x00, 0x83, 0x00, 205) },
+            Paint { fill: Rgba(0x90, 0x85, 0xe9, 205) },
+            Paint { fill: Rgba(0xe6, 0x67, 0x67, 205) },
+        ]),
         AgeRamp {
             newest: Paint { fill: Rgba(196, 90, 70, 220) },
             oldest: Paint { fill: Rgba(196, 90, 70, 40) },
@@ -131,6 +154,7 @@ fn ghosted(base: &Style) -> Style {
         },
         fade_paint(base.region_paint()),
         fade_paint(base.water_paint()),
+        None, // the ghost is a uniform disclosure, never colorful
         base.age_ramp(),
         base.label_style(),
         base.marker_style(),
@@ -161,6 +185,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
         },
         paint,
         base.water_paint(),
+        None, // a comparison layer is ONE tint, that is its meaning
         base.age_ramp(),
         label,
         base.marker_style(),
@@ -225,7 +250,7 @@ fn load() -> App {
     let ocean_tl = map_adapters::ingest_ocean(
         &SourceId::new("natural-earth"),
         tp(-4004).unwrap(),
-        &std::fs::read_to_string(ne_dir.join("ne_110m_land.geojson"))
+        &std::fs::read_to_string(ne_dir.join("ne_50m_land.geojson"))
             .expect("vendored land data"),
     )
     .expect("ocean ingests");

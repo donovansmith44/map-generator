@@ -274,6 +274,67 @@ impl TimelineProvider {
         Ok(())
     }
 
+    /// Assign each land region alive at `at` a palette slot such that
+    /// regions whose extents touch never share one — the atlas
+    /// convention ("obvious what's what"), computed from the TIMELINE,
+    /// not the scene, so a lone rendering and the world agree (law 10).
+    /// Deterministic: id-ordered greedy, seeded by each region's hash.
+    fn palette_assignment(
+        &self,
+        at: &TimePoint,
+        style: &Style,
+    ) -> Option<BTreeMap<RegionId, Paint>> {
+        let palette = style.palette()?;
+        type Bb = (f64, f64, f64, f64);
+        let mut boxes: Vec<(RegionId, Bb)> = Vec::new();
+        for (id, hist) in &self.timeline.regions {
+            if hist.class != map_types::RegionClass::Land {
+                continue;
+            }
+            let Some(geom) = hist.geom_at(at) else { continue };
+            let mut b: Option<Bb> = None;
+            for part in &geom.parts {
+                for (bid, _) in part.cycle.iter().chain(part.holes.iter().flatten()) {
+                    if let Some(bd) = self.timeline.boundaries.get(bid).and_then(|h| h.at(at)) {
+                        for p in &bd.pts {
+                            let lat = p.z().asin().to_degrees();
+                            let lon = p.y().atan2(p.x()).to_degrees();
+                            b = Some(match b {
+                                None => (lon, lat, lon, lat),
+                                Some((x0, y0, x1, y1)) => {
+                                    (x0.min(lon), y0.min(lat), x1.max(lon), y1.max(lat))
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+            if let Some(b) = b {
+                boxes.push((*id, b));
+            }
+        }
+        let touches = |a: &Bb, b: &Bb| -> bool {
+            const M: f64 = 0.2; // neighbors within a fifth of a degree
+            a.0 - M < b.2 && b.0 - M < a.2 && a.1 - M < b.3 && b.1 - M < a.3
+        };
+        let mut chosen: BTreeMap<RegionId, usize> = BTreeMap::new();
+        for i in 0..boxes.len() {
+            let (id, bb) = &boxes[i];
+            let mut used = [false; 8];
+            for (jid, jb) in &boxes {
+                if jid != id && touches(bb, jb) {
+                    if let Some(&slot) = chosen.get(jid) {
+                        used[slot] = true;
+                    }
+                }
+            }
+            let seed = (id.0 .0 % 8) as usize;
+            let slot = (0..8).map(|k| (seed + k) % 8).find(|&s| !used[s]).unwrap_or(seed);
+            chosen.insert(*id, slot);
+        }
+        Some(chosen.into_iter().map(|(id, s)| (id, palette[s])).collect())
+    }
+
     /// One instant, one subject — the pure heart of the system.
     fn snapshot_at(&self, at: &TimePoint, q: &RenderQuery) -> Result<Snapshot, MapError> {
         let style = self.style(q.style)?;
@@ -281,11 +342,19 @@ impl TimelineProvider {
         if !q.layers.contains(LayerSet::GEOMETRY) {
             return Ok(scene);
         }
+        let colors = self.palette_assignment(at, style);
+        let paint_for = |id: &RegionId| -> Paint {
+            colors
+                .as_ref()
+                .and_then(|m| m.get(id))
+                .copied()
+                .unwrap_or_else(|| style.region_paint())
+        };
         match &q.subject {
             RenderSubject::World => {
                 let region_ids: Vec<RegionId> = self.timeline.regions.keys().copied().collect();
                 for id in region_ids {
-                    self.push_region(&mut scene, q, id, at, style, style.region_paint(), true)?;
+                    self.push_region(&mut scene, q, id, at, style, paint_for(&id), true)?;
                 }
                 sort_largest_first(&mut scene.regions);
                 let boundary_ids: Vec<BoundaryId> =
@@ -309,7 +378,7 @@ impl TimelineProvider {
                         .ok_or(MapError::UnknownRegion(*id))?;
                     return Err(MapError::NothingAtTime(*at));
                 }
-                self.push_region(&mut scene, q, *id, at, style, style.region_paint(), true)?;
+                self.push_region(&mut scene, q, *id, at, style, paint_for(id), true)?;
             }
             RenderSubject::Boundary(id) => {
                 let sb = self.styled_boundary(*id, at, q.lod, style)?;
@@ -537,9 +606,15 @@ impl TimelineProvider {
                 // world wears only its NEWEST state as fills and lets
                 // the tinted lines below carry every older border.
                 RenderSubject::World if newest => {
+                    let colors = self.palette_assignment(t, style);
                     let ids: Vec<RegionId> = self.timeline.regions.keys().copied().collect();
                     for id in ids {
-                        self.push_region(&mut scene, &sub, id, t, style, style.region_paint(), true)?;
+                        let p = colors
+                            .as_ref()
+                            .and_then(|m| m.get(&id))
+                            .copied()
+                            .unwrap_or_else(|| style.region_paint());
+                        self.push_region(&mut scene, &sub, id, t, style, p, true)?;
                     }
                     sort_largest_first(&mut scene.regions);
                 }
