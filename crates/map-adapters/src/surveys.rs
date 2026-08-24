@@ -18,10 +18,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
-use atlas_graph_types::chrono::{TimePoint, Year};
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::{ContentHash, PlaceId};
-use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+use atlas_graph_types::covenant::{TimePoint, Year};
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::{ContentHash, PlaceId};
+use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use map_types::{
     AtlasPlaceRef, BorderSurvey, Boundary, BoundaryHistory, BoundaryId, BoundarySource,
@@ -880,7 +880,7 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec) {
     );
 }
 
-fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::text::BibleTag> {
+fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::covenant::BibleTag> {
     let v = |verse| BibleLocus::whole(VerseRef { book: s.book, chapter: s.chapter, verse });
     LocusRange::new(v(s.verse_from), v(s.verse_to)).expect("survey verses are ordered")
 }

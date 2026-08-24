@@ -3,8 +3,8 @@
 //! response, content-addressed caching. Frozen with the owner before
 //! serving code exists on either side (spec §E).
 
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::id::ContentHash;
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::ContentHash;
 
 use crate::geom::{Bbox, Lod};
 use crate::ident::{BoundaryId, ChangeEventId, RegionId, StyleId};

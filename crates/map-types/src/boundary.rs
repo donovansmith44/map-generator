@@ -3,10 +3,10 @@
 //! unrepresentable, scholarship edits one place, and a morphing arc
 //! moves both neighbors together (spec §B).
 
-use atlas_graph_types::edge::Justification;
-use atlas_graph_types::id::{PlaceId, SourceId};
-use atlas_graph_types::ingest::ProvenanceId;
-use atlas_graph_types::text::BibleLocusRange;
+use atlas_graph_types::covenant::Justification;
+use atlas_graph_types::covenant::{PlaceId, SourceId};
+use atlas_graph_types::covenant::ProvenanceId;
+use atlas_graph_types::covenant::BibleLocusRange;
 
 use crate::geom::UnitVec;
 use crate::ident::{BoundaryId, RegionId};

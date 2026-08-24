@@ -7,12 +7,12 @@
 
 use std::collections::BTreeMap;
 
-use atlas_graph_types::chrono::{
+use atlas_graph_types::covenant::{
     PlacementBasis, ResolvedDate, ResolvedPlacement, SeqKey, TimePoint, Year,
 };
-use atlas_graph_types::edge::Justification;
-use atlas_graph_types::id::{ContentHash, EventId, PlaceId, SourceId};
-use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+use atlas_graph_types::covenant::Justification;
+use atlas_graph_types::covenant::{ContentHash, EventId, PlaceId, SourceId};
+use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use crate::algebra::Monoid;
 use crate::boundary::*;

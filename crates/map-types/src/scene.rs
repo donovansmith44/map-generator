@@ -12,8 +12,8 @@
 
 use std::collections::BTreeSet;
 
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::id::SourceId;
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::SourceId;
 
 use crate::algebra::{mconcat, Monoid};
 use crate::geom::{Ring, UnitVec};

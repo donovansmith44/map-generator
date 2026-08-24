@@ -17,9 +17,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
-use atlas_graph_types::chrono::{TimePoint, Year};
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::{ContentHash, SourceId};
+use atlas_graph_types::covenant::{TimePoint, Year};
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::{ContentHash, SourceId};
 
 use map_types::{
     Anchor, Boundary, BoundaryHistory, BoundaryId, BoundarySource, ChangeEvent, ChangeKind,

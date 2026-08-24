@@ -15,7 +15,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-pub use atlas_graph_types::id::ContentHash;
+pub use atlas_graph_types::covenant::ContentHash;
 
 /// Closed map-side kind vocabulary. Extending it is a deliberate act
 /// every exhaustive match must acknowledge.

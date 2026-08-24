@@ -11,8 +11,8 @@ use crate::contracts::{ChronologyExport, GazetteerExport};
 use crate::geom::UnitVec;
 use crate::ident::{BoundaryId, RegionId};
 use crate::timeline::{ChangeKind, Interval, WorldTimeline};
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::id::{EventId, PlaceId};
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::{EventId, PlaceId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Violation {

@@ -9,10 +9,10 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
-use atlas_graph_types::chrono::{TimePoint, Year};
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::SourceId;
-use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+use atlas_graph_types::covenant::{TimePoint, Year};
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::SourceId;
+use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use map_adapters::{
     epoch_year_from_label, ingest, merge_timelines, scripture_timeline, stand_in_gazetteer,
@@ -270,7 +270,7 @@ fn load() -> App {
     let violations = map_types::validate_all(
         &timeline,
         &map_types::ChronologyExport {
-            atlas_root: atlas_graph_types::id::ContentHash(0),
+            atlas_root: atlas_graph_types::covenant::ContentHash(0),
             placements: BTreeMap::new(),
         },
         &stand_in_gazetteer(),
@@ -450,13 +450,13 @@ fn parse_subject(s: &str) -> Option<RenderSubject> {
     }
     let hex = s.strip_prefix("region:")?;
     let id = u64::from_str_radix(hex, 16).ok()?;
-    Some(RenderSubject::Region(RegionId(atlas_graph_types::id::ContentHash(id))))
+    Some(RenderSubject::Region(RegionId(atlas_graph_types::covenant::ContentHash(id))))
 }
 
 fn parse_style(app: &App, s: Option<&str>) -> Option<StyleId> {
     let hex = s?;
     let id = u64::from_str_radix(hex, 16).ok()?;
-    let id = StyleId(atlas_graph_types::id::ContentHash(id));
+    let id = StyleId(atlas_graph_types::covenant::ContentHash(id));
     app.styles.iter().any(|(_, sid)| *sid == id).then_some(id)
 }
 

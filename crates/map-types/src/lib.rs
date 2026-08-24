@@ -42,11 +42,11 @@ pub mod transition;
 /// The atlas covenant surface (contract C1), re-exported so consumers
 /// of map-types never import the atlas crate directly.
 pub mod atlas {
-    pub use atlas_graph_types::chrono::{ResolvedPlacement, TimePoint, Year};
-    pub use atlas_graph_types::edge::{Ground, Justification};
-    pub use atlas_graph_types::id::{ContentAddressed, ContentHash, EventId, Pid, PlaceId, SourceId};
-    pub use atlas_graph_types::ingest::{Confidence, Provenance, ProvenanceId};
-    pub use atlas_graph_types::text::{BibleLocus, BibleLocusRange, VerseRef};
+    pub use atlas_graph_types::covenant::{ResolvedPlacement, TimePoint, Year};
+    pub use atlas_graph_types::covenant::{Ground, Justification};
+    pub use atlas_graph_types::covenant::{ContentAddressed, ContentHash, EventId, Pid, PlaceId, SourceId};
+    pub use atlas_graph_types::covenant::{Confidence, Provenance, ProvenanceId};
+    pub use atlas_graph_types::covenant::{BibleLocus, BibleLocusRange, VerseRef};
 }
 
 pub use algebra::{mconcat, Monoid};

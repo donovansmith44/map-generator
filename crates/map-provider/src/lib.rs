@@ -9,8 +9,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::id::SourceId;
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::SourceId;
 
 use map_types::scene::{LabelSubject, StyledMarker};
 use map_types::style::{Paint, Rgba};

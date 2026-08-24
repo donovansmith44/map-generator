@@ -7,10 +7,10 @@
 
 use std::collections::BTreeMap;
 
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::{ContentHash, EventId};
-use atlas_graph_types::ingest::ProvenanceId;
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::{ContentHash, EventId};
+use atlas_graph_types::covenant::ProvenanceId;
 
 use crate::boundary::{Boundary, RegionGeom};
 use crate::geom::UnitVec;

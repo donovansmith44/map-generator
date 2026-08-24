@@ -7,7 +7,7 @@
 //! Queries are content-addressed: query hash = cache key = artifact
 //! filename. That is the whole offline story (law 1).
 
-use atlas_graph_types::chrono::TimePoint;
+use atlas_graph_types::covenant::TimePoint;
 
 use crate::boundary::AtlasPlaceRef;
 use crate::geom::{Bbox, Lod, UnitVec};

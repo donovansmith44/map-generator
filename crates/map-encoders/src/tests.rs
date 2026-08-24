@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use atlas_graph_types::id::SourceId;
+use atlas_graph_types::covenant::SourceId;
 use map_types::scene::{LabelSubject, StyledMarker};
 use map_types::style::*;
 use map_types::{
@@ -21,14 +21,14 @@ fn sample_scene() -> Snapshot {
     let mut s = Snapshot::empty();
     let sources: BTreeSet<SourceId> = [SourceId::new("historical-basemaps")].into();
     s.regions.push(StyledRegion {
-        region: map_types::RegionId(atlas_graph_types::id::ContentHash(1)),
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(1)),
         outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
         sources: sources.clone(),
     });
     s.boundaries.push(StyledBoundary {
-        boundary: map_types::BoundaryId(atlas_graph_types::id::ContentHash(2)),
+        boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(2)),
         pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
         stroke: Stroke { color: Rgba(90, 60, 40, 255), width: 1.5, pattern: StrokePattern::Dashed },
         sources: sources.clone(),
@@ -147,7 +147,7 @@ fn geodesics_curve_not_chord() {
     // one straight chord across the globe.
     let mut scene = Snapshot::empty();
     scene.boundaries.push(StyledBoundary {
-        boundary: map_types::BoundaryId(atlas_graph_types::id::ContentHash(9)),
+        boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(9)),
         pts: vec![uv(10.0, 0.0), uv(10.0, 60.0)],
         stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
         sources: BTreeSet::new(),
@@ -172,7 +172,7 @@ fn labels_fit_their_territory_and_never_collide() {
     // A label longer than its tiny territory is DROPPED, not smeared
     // across the map.
     let mut scene = sample_scene();
-    let tiny = map_types::RegionId(atlas_graph_types::id::ContentHash(7));
+    let tiny = map_types::RegionId(atlas_graph_types::covenant::ContentHash(7));
     scene.regions.push(StyledRegion {
         region: tiny,
         outer: vec![Ring::new(vec![uv(20.0, 20.0), uv(20.0, 20.1), uv(20.1, 20.05)]).unwrap()],

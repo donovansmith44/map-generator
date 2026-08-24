@@ -10,10 +10,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
-use atlas_graph_types::chrono::TimePoint;
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::{ContentHash, SourceId};
-use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+use atlas_graph_types::covenant::TimePoint;
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::{ContentHash, SourceId};
+use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use map_types::{
     Boundary, BoundaryHistory, BoundaryId, BoundarySource, EdgeCharacter, Interval, Orientation,

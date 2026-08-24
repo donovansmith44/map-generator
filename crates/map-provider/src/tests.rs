@@ -5,9 +5,9 @@
 
 use std::collections::BTreeMap;
 
-use atlas_graph_types::chrono::{TimePoint, Year};
-use atlas_graph_types::edge::Justification;
-use atlas_graph_types::id::SourceId;
+use atlas_graph_types::covenant::{TimePoint, Year};
+use atlas_graph_types::covenant::Justification;
+use atlas_graph_types::covenant::SourceId;
 
 use map_adapters::{ingest, EpochSource, IngestConfig};
 use map_types::style::*;
@@ -195,7 +195,7 @@ fn law03_transitions_compose_and_invert() {
 fn same_arc_shift_morphs() {
     let (mut p, style_id) = provider_from(fixture_epochs());
     let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
-    let bid = BoundaryId(atlas_graph_types::id::ContentHash(777));
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(777));
     let mk = |pts: Vec<UnitVec>| Boundary {
         pts,
         character: EdgeCharacter::Line,
@@ -471,7 +471,7 @@ fn contract_errors_fail_loud() {
 
     // Unknown style is unknown, not defaulted.
     let q = RenderQuery {
-        style: StyleId(atlas_graph_types::id::ContentHash(0xdead)),
+        style: StyleId(atlas_graph_types::covenant::ContentHash(0xdead)),
         ..world_query(style, TimeSelector::At(tp(-1800)))
     };
     assert!(matches!(p.render(&q), Err(MapError::UnknownStyle(_))));

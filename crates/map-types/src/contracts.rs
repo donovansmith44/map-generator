@@ -5,8 +5,8 @@
 
 use std::collections::BTreeMap;
 
-use atlas_graph_types::chrono::ResolvedPlacement;
-use atlas_graph_types::id::{ContentHash, EventId, PlaceId};
+use atlas_graph_types::covenant::ResolvedPlacement;
+use atlas_graph_types::covenant::{ContentHash, EventId, PlaceId};
 
 use crate::geom::UnitVec;
 

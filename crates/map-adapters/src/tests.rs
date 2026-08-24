@@ -6,10 +6,10 @@
 
 use std::collections::BTreeMap;
 
-use atlas_graph_types::chrono::{TimePoint, Year};
-use atlas_graph_types::edge::{Ground, Justification};
-use atlas_graph_types::id::{ContentHash, SourceId};
-use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+use atlas_graph_types::covenant::{TimePoint, Year};
+use atlas_graph_types::covenant::{Ground, Justification};
+use atlas_graph_types::covenant::{ContentHash, SourceId};
+use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use map_types::{
     validate_all, Anchor, ChangeKind, ChronologyExport, GazetteerExport, TimeSelector,
