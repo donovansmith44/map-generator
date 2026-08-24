@@ -86,6 +86,10 @@ pub enum Orientation {
 /// references, plus hole cycles. Consecutive arcs must connect
 /// end-to-start — the cycle-continuity validator proves it (law 2,
 /// structural half).
+///
+/// CONVENTION: an EMPTY outer cycle means THE WHOLE SPHERE — the part
+/// is everything, minus its holes. This is how the world ocean exists:
+/// the sphere minus the land, with no fictitious envelope boundary.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RegionPart {
     pub cycle: Vec<(BoundaryId, Orientation)>,

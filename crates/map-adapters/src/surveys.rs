@@ -476,6 +476,7 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
     tl.regions.insert(
         region_id,
         RegionHistory {
+            class: Default::default(),
             label_history: vec![(valid, s.label.to_string())],
             geom_history: vec![(
                 valid,

@@ -62,7 +62,11 @@ pub fn parse_features(text: &str) -> Result<Vec<SourceFeature>, ParseError> {
     let mut out = Vec::with_capacity(features.len());
     for f in features {
         let props = f.get("properties").unwrap_or(&Value::Null);
-        let name = props.get("NAME").and_then(Value::as_str).map(str::to_string);
+        let name = props
+            .get("NAME")
+            .or_else(|| props.get("name"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let precision = props.get("BORDERPRECISION").and_then(Value::as_i64);
         let geom = f.get("geometry").ok_or(ParseError::BadShape("feature has no geometry"))?;
         let coords = geom.get("coordinates").ok_or(ParseError::BadShape("no coordinates"))?;

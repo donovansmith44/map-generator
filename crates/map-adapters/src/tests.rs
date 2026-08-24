@@ -223,6 +223,46 @@ fn unnamed_features_are_counted_not_silently_dropped() {
     assert_eq!(out.timeline.regions.len(), 1);
 }
 
+// --------------------------------------------------- the waters
+
+/// Water bodies ingest as first-class Water regions — lawful, labeled,
+/// and mergeable with the rest of the world.
+#[test]
+fn waters_are_explorable_regions()  {
+    use crate::surveys::{merge_timelines, scripture_timeline, stand_in_gazetteer};
+    let text = fc(&[
+        (Some("Test Sea"), vec![square(10.0, 10.0, 12.0, 12.0)]),
+        (None, vec![square(20.0, 10.0, 25.0, 15.0)]),
+    ]);
+    let water = crate::hydro::ingest_water(
+        &SourceId::new("natural-earth"),
+        tp(-4004),
+        &[crate::hydro::WaterSource { label_for_unnamed: "the sea", text, skip_largest_feature: false }],
+    )
+    .unwrap();
+    assert_eq!(water.regions.len(), 2);
+    assert!(water
+        .regions
+        .values()
+        .all(|r| r.class == map_types::RegionClass::Water));
+    let labels: Vec<&str> =
+        water.regions.values().map(|r| r.label_at(&tp(-1000)).unwrap()).collect();
+    assert!(labels.contains(&"Test Sea") && labels.contains(&"the sea"));
+    let (chron, gaz) = empty_exports();
+    assert_eq!(validate_all(&water, &chron, &gaz), vec![]);
+
+    // And the whole world composes: land + Scripture + water, lawful.
+    let land = ingest(&config(), &[EpochSource {
+        year: -2000,
+        label: "fx".to_string(),
+        text: fc(&[(Some("Terra"), vec![square(0.0, 0.0, 5.0, 5.0)])]),
+    }])
+    .unwrap();
+    let merged = merge_timelines(land.timeline, water).unwrap();
+    let merged = merge_timelines(merged, scripture_timeline()).unwrap();
+    assert_eq!(validate_all(&merged, &chron, &stand_in_gazetteer()), vec![]);
+}
+
 // ------------------------------------------- topology closure (snap)
 
 /// Two neighbors whose shared border misses by 0.004 degrees: exact

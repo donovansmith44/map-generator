@@ -67,6 +67,7 @@ fn parchment() -> Style {
             unknown: s(Rgba(120, 116, 105, 255), 1.1, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(221, 204, 161, 235) },
+        Paint { fill: Rgba(148, 175, 178, 235) },
         AgeRamp {
             newest: Paint { fill: Rgba(174, 60, 40, 220) },
             oldest: Paint { fill: Rgba(174, 60, 40, 40) },
@@ -92,6 +93,7 @@ fn slate() -> Style {
             unknown: s(Rgba(120, 125, 135, 255), 1.0, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(58, 66, 80, 235) },
+        Paint { fill: Rgba(33, 42, 56, 245) },
         AgeRamp {
             newest: Paint { fill: Rgba(196, 90, 70, 220) },
             oldest: Paint { fill: Rgba(196, 90, 70, 40) },
@@ -128,6 +130,7 @@ fn ghosted(base: &Style) -> Style {
             unknown: fade(base.stroke_for(&E::Unknown)),
         },
         fade_paint(base.region_paint()),
+        fade_paint(base.water_paint()),
         base.age_ramp(),
         base.label_style(),
         base.marker_style(),
@@ -157,6 +160,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
             unknown: tint(base.stroke_for(&E::Unknown)),
         },
         paint,
+        base.water_paint(),
         base.age_ramp(),
         label,
         base.marker_style(),
@@ -200,11 +204,44 @@ fn load() -> App {
         }),
     };
     let out = ingest(&config, &epochs).expect("real source ingests");
+    // The WHOLE world is the map: the seas join it as explorable water
+    // regions (Natural Earth shapes; the date the waters gathered is
+    // Scripture's, GEN 1:9-10 — creation, the anchor).
+    let ne_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/natural-earth");
+    let waters = vec![
+        map_adapters::WaterSource {
+            label_for_unnamed: "inland sea",
+            text: std::fs::read_to_string(ne_dir.join("ne_110m_ocean.geojson"))
+                .expect("vendored ocean data"),
+            skip_largest_feature: true, // interior seas only; see ingest_ocean
+        },
+        map_adapters::WaterSource {
+            label_for_unnamed: "lake",
+            text: std::fs::read_to_string(ne_dir.join("ne_50m_lakes.geojson"))
+                .expect("vendored lakes data"),
+            skip_largest_feature: false,
+        },
+    ];
+    let ocean_tl = map_adapters::ingest_ocean(
+        &SourceId::new("natural-earth"),
+        tp(-4004).unwrap(),
+        &std::fs::read_to_string(ne_dir.join("ne_110m_land.geojson"))
+            .expect("vendored land data"),
+    )
+    .expect("ocean ingests");
+    let water_tl = map_adapters::ingest_water(
+        &SourceId::new("natural-earth"),
+        tp(-4004).unwrap(),
+        &waters,
+    )
+    .and_then(|w| Ok(map_adapters::merge_timelines(w, ocean_tl).expect("waters merge")))
+    .expect("water ingests");
     // The first Bible-driven borders join the imported world, and the
     // merged whole must be lawful — fail loud at the door, not in a
     // render (validated against the stand-in gazetteer until C3 lands).
     let timeline = merge_timelines(out.timeline, scripture_timeline())
-        .expect("scripture surveys merge cleanly");
+        .and_then(|tl| merge_timelines(tl, water_tl))
+        .expect("scripture surveys and waters merge cleanly");
     let violations = map_types::validate_all(
         &timeline,
         &map_types::ChronologyExport {
@@ -237,7 +274,9 @@ fn load() -> App {
     let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(TimelineProvider {
         timeline: out.timeline,
         styles: style_table,
-        gazetteer: None,
+        // Landmarks: the stand-in gazetteer serves Point subjects until
+        // the atlas C3 export replaces it.
+        gazetteer: Some(stand_in_gazetteer()),
     });
 
     // Scrub stops through the contract: probe the widest sensible span.
@@ -414,11 +453,14 @@ fn build_query(
         _ => TimeSelector::At(at),
     };
     let lod = Lod(p.get("lod").and_then(|v| v.parse().ok()).unwrap_or(0.0015));
-    let layers = if p.get("labels") == Some("0") {
+    let mut layers = if p.get("labels") == Some("0") {
         LayerSet::GEOMETRY
     } else {
         LayerSet::GEOMETRY.with(LayerSet::LABELS)
     };
+    if p.get("topo") != Some("0") {
+        layers = layers.with(LayerSet::TOPOGRAPHY); // the seas, on by default
+    }
     Some(RenderQuery { subject, time, viewport: None, lod, layers, style: parse_style(app, p.get("style"))? })
 }
 

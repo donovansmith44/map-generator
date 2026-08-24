@@ -109,6 +109,8 @@ pub enum StyleError {
 pub struct Style {
     boundaries: BoundaryStrokes,
     region: Paint,
+    /// The sea's dress — water regions are as first-class as polities.
+    water: Paint,
     age: AgeRamp,
     label: LabelStyle,
     marker: MarkerStyle,
@@ -119,6 +121,7 @@ impl Style {
     pub fn new(
         boundaries: BoundaryStrokes,
         region: Paint,
+        water: Paint,
         age: AgeRamp,
         label: LabelStyle,
         marker: MarkerStyle,
@@ -130,7 +133,7 @@ impl Style {
         if boundaries.frontier.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
-        Ok(Style { boundaries, region, age, label, marker, delta })
+        Ok(Style { boundaries, region, water, age, label, marker, delta })
     }
 
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
@@ -143,6 +146,9 @@ impl Style {
     }
     pub fn region_paint(&self) -> Paint {
         self.region
+    }
+    pub fn water_paint(&self) -> Paint {
+        self.water
     }
     pub fn age_ramp(&self) -> AgeRamp {
         self.age
@@ -164,6 +170,7 @@ impl Style {
         self.boundaries.disputed.canon(c);
         self.boundaries.unknown.canon(c);
         self.region.canon(c);
+        self.water.canon(c);
         self.age.newest.canon(c);
         self.age.oldest.canon(c);
         let Rgba(r, g, b, a) = self.label.color;

@@ -139,12 +139,24 @@ impl TimelineProvider {
     /// each dropping its trailing junction. If simplification would
     /// collapse the ring below three points, the unsimplified geometry
     /// stands — lod never changes topology (law 7's second clause).
+    /// An EMPTY cycle is the whole sphere (see RegionPart): it resolves
+    /// to a sentinel ring spanning near-antipodal points, which
+    /// projections render as everything in view.
     fn resolve_ring(
         &self,
         cycle: &[(BoundaryId, Orientation)],
         at: &TimePoint,
         lod: Lod,
     ) -> Result<(Ring, BTreeSet<SourceId>), MapError> {
+        if cycle.is_empty() {
+            let sphere = Ring::new(vec![
+                UnitVec::from_lat_lon_deg(0.0, 0.0),
+                UnitVec::from_lat_lon_deg(0.1, 179.95),
+                UnitVec::from_lat_lon_deg(5.0, 90.0),
+            ])
+            .expect("sentinel ring is well-formed");
+            return Ok((sphere, BTreeSet::new()));
+        }
         let mut sources = BTreeSet::new();
         let build = |lod: Lod, sources: &mut BTreeSet<SourceId>| -> Result<Vec<UnitVec>, MapError> {
             let mut ring: Vec<UnitVec> = Vec::new();
@@ -237,6 +249,17 @@ impl TimelineProvider {
         paint: Paint,
         with_label: bool,
     ) -> Result<(), MapError> {
+        // Water is first-class but rides the TOPOGRAPHY layer, and
+        // always wears the water paint — the sea does not age-ramp.
+        let paint = match self.timeline.regions.get(&id).map(|h| h.class).unwrap_or_default() {
+            map_types::RegionClass::Land => paint,
+            map_types::RegionClass::Water => {
+                if !q.layers.contains(LayerSet::TOPOGRAPHY) {
+                    return Ok(());
+                }
+                style.water_paint()
+            }
+        };
         if let Some((region, label)) = self.styled_region(id, at, q.lod, style, paint)? {
             if in_viewport(&q.viewport, region.outer.first().map(Ring::points).unwrap_or(&[])) {
                 scene.attribution.extend(region.sources.iter().cloned());

@@ -217,6 +217,7 @@
     </select>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="labels" checked> labels</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="smooth" checked> smooth edges</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -300,6 +301,7 @@ function currentParams(quality) {
     p.set("width", $("res").value);
   }
   p.set("smooth", $("smooth").checked ? "1" : "0");
+  p.set("topo", $("topo").checked ? "1" : "0");
   return p;
 }
 
@@ -701,6 +703,7 @@ async function init() {
   $("lod").addEventListener("change", () => render());
   $("res").addEventListener("change", () => render());
   $("smooth").addEventListener("change", () => render());
+  $("topo").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
   $("expose").addEventListener("change", () => {
     $("rangehint").hidden = !$("expose").checked;
@@ -726,7 +729,7 @@ async function init() {
     const p = new URLSearchParams();
     for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
     for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
-    for (const k of ["style","encoder","projection","lod","labels","center","zoom","width","smooth"]) {
+    for (const k of ["style","encoder","projection","lod","labels","center","zoom","width","smooth","topo"]) {
       if (now.get(k) !== null) p.set(k, now.get(k));
     }
     const res = await fetch("/api/overlay?" + p.toString());

@@ -66,8 +66,19 @@ impl BoundaryHistory {
     }
 }
 
+/// What kind of area a region is. The WHOLE world is the map: seas,
+/// lakes, and deserts are as explorable as polities — class picks the
+/// dress (water paint vs region paint), nothing else differs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum RegionClass {
+    #[default]
+    Land,
+    Water,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RegionHistory {
+    pub class: RegionClass,
     pub label_history: Vec<(Interval, String)>,
     pub geom_history: Vec<(Interval, RegionGeom)>,
 }

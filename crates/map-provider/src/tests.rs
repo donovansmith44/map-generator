@@ -34,6 +34,7 @@ fn honest_style() -> Style {
             unknown: stroke(180, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
+        Paint { fill: Rgba(120, 160, 200, 235) },
         AgeRamp {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
             oldest: Paint { fill: Rgba(220, 40, 40, 40) },

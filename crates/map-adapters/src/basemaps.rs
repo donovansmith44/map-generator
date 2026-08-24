@@ -354,7 +354,7 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
         }
         label_history.push((interval(run_start, prev), name.clone()));
         geom_history.push((interval(geom_start, prev), prev_geom.clone()));
-        regions.insert(region_id(name), RegionHistory { label_history, geom_history });
+        regions.insert(region_id(name), RegionHistory { class: Default::default(), label_history, geom_history });
     }
 
     // ---- events: the narrative of epoch-to-epoch difference ----

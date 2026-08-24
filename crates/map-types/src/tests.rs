@@ -86,6 +86,7 @@ fn two_region_world() -> WorldTimeline {
     boundaries.insert(E, open_hist(-2000, east));
 
     let region = |name: &str, cycle: Vec<(BoundaryId, Orientation)>| RegionHistory {
+        class: RegionClass::default(),
         label_history: vec![(Interval::open_from(tp(-2000)), name.to_string())],
         geom_history: vec![(
             Interval::open_from(tp(-2000)),
@@ -118,6 +119,7 @@ fn honest_style() -> Style {
             unknown: stroke(180, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
+        Paint { fill: Rgba(120, 160, 200, 235) },
         AgeRamp {
             newest: Paint { fill: Rgba(255, 0, 0, 255) },
             oldest: Paint { fill: Rgba(255, 0, 0, 40) },
@@ -441,17 +443,18 @@ fn law06_provenance_totality_and_honesty() {
     let strokes = |unknown, frontier| BoundaryStrokes { line, frontier, disputed: line, unknown };
     let rest = (
         Paint { fill: Rgba(0, 0, 0, 0) },
+        Paint { fill: Rgba(0, 0, 60, 200) },
         AgeRamp { newest: Paint { fill: Rgba(0, 0, 0, 0) }, oldest: Paint { fill: Rgba(0, 0, 0, 0) } },
         LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 },
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
         DeltaEmphasis { before: line, after: line, seam: line },
     );
     assert_eq!(
-        Style::new(strokes(line, zonal), rest.0, rest.1, rest.2, rest.3, rest.4).unwrap_err(),
+        Style::new(strokes(line, zonal), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5).unwrap_err(),
         StyleError::UnknownIndistinctFromLine
     );
     assert_eq!(
-        Style::new(strokes(zonal, line), rest.0, rest.1, rest.2, rest.3, rest.4).unwrap_err(),
+        Style::new(strokes(zonal, line), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5).unwrap_err(),
         StyleError::FrontierNotZonal
     );
 }

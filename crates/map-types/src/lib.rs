@@ -65,7 +65,7 @@ pub use scene::{accumulate, sample_times, PlacedLabel, Snapshot, StyledBoundary,
 pub use style::{LayerSet, Style, StyleError};
 pub use timeline::{
     Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,
-    RegionHistory, WorldTimeline,
+    RegionClass, RegionHistory, WorldTimeline,
 };
 pub use transition::{TransitionScript, TransitionStep};
 

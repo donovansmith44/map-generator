@@ -381,22 +381,82 @@ fn front_crossing(a: &UnitVec, b: &UnitVec, c: &UnitVec) -> UnitVec {
     .unwrap_or(*a)
 }
 
-/// Sutherland–Hodgman against the limb plane: the front-hemisphere
-/// part of a closed ring (empty when fully behind). The cut edge runs
-/// straight between limb points — a chord of the disc, close enough
-/// for plates.
+/// Clip a closed ring to the front hemisphere. Where the ring passes
+/// behind, the cut edge follows the LIMB, sweeping the same way around
+/// the view axis as the hidden stretch actually travels (accumulated
+/// azimuth) — exact for any simple ring, including the world ocean's
+/// sphere-wrapping envelope, with no special cases.
 fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<UnitVec> {
-    let mut out: Vec<UnitVec> = Vec::new();
     let n = pts.len();
-    for i in 0..n {
-        let (a, b) = (&pts[i], &pts[(i + 1) % n]);
-        let (fa, fb) = (a.dot(c) >= 0.0, b.dot(c) >= 0.0);
-        if fa {
-            out.push(*a);
+    if n < 3 {
+        return Vec::new();
+    }
+    // Azimuth basis around the view axis (pole-safe fallback).
+    let east = UnitVec::normalize(-c.y(), c.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let ncr = c.cross_raw(&east);
+    let north = UnitVec::normalize(ncr.0, ncr.1, ncr.2)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
+    let azimuth = |p: &UnitVec| -> f64 { p.dot(&north).atan2(p.dot(&east)) };
+    let wrap = |d: f64| -> f64 {
+        let mut d = d % std::f64::consts::TAU;
+        if d > std::f64::consts::PI {
+            d -= std::f64::consts::TAU;
         }
-        if fa != fb {
-            out.push(front_crossing(a, b, c));
+        if d < -std::f64::consts::PI {
+            d += std::f64::consts::TAU;
         }
+        d
+    };
+    let limb_point = |theta: f64| -> UnitVec {
+        UnitVec::normalize(
+            east.x() * theta.cos() + north.x() * theta.sin(),
+            east.y() * theta.cos() + north.y() * theta.sin(),
+            east.z() * theta.cos() + north.z() * theta.sin(),
+        )
+        .expect("limb basis is orthonormal")
+    };
+
+    let front = |p: &UnitVec| p.dot(c) >= 0.0;
+    if pts.iter().all(front) {
+        return pts.to_vec();
+    }
+    let Some(start) = (0..n).position(|i| front(&pts[i])) else {
+        return Vec::new(); // wholly behind
+    };
+
+    let mut out: Vec<UnitVec> = Vec::with_capacity(n);
+    let mut i = start;
+    let mut walked = 0usize;
+    while walked < n {
+        let p = pts[i % n];
+        if front(&p) {
+            out.push(p);
+            i += 1;
+            walked += 1;
+            continue;
+        }
+        // A hidden stretch begins: exit crossing, azimuth sweep of the
+        // hidden path, entry crossing, limb arc between them.
+        let exit = front_crossing(&pts[(i + n - 1) % n], &pts[i % n], c);
+        let mut sweep = 0.0;
+        let mut prev = azimuth(&exit);
+        while walked < n && !front(&pts[i % n]) {
+            let a = azimuth(&pts[i % n]);
+            sweep += wrap(a - prev);
+            prev = a;
+            i += 1;
+            walked += 1;
+        }
+        let entry = front_crossing(&pts[(i + n - 1) % n], &pts[i % n], c);
+        sweep += wrap(azimuth(&entry) - prev);
+        out.push(exit);
+        let start_az = azimuth(&exit);
+        let steps = (sweep.abs() / 0.06).ceil().max(1.0) as usize;
+        for k in 1..steps {
+            out.push(limb_point(start_az + sweep * k as f64 / steps as f64));
+        }
+        out.push(entry);
     }
     out
 }
@@ -527,7 +587,22 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
         grat
     );
 
+    // The whole-sphere sentinel (a ring with near-antipodal points —
+    // see RegionPart's empty-cycle convention) projects as the LIMB
+    // DISC: everything in view; its holes cut the land out (evenodd).
+    let covers_sphere = |pts: &[UnitVec]| -> bool {
+        pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
+    };
+    let disc: Vec<(f64, f64)> = (0..=127)
+        .map(|i| {
+            let a = std::f64::consts::TAU * f64::from(i) / 128.0;
+            (globe.cx + globe.scale * a.cos(), globe.cy + globe.scale * a.sin())
+        })
+        .collect();
     let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
+        if covers_sphere(ring.points()) {
+            return vec![disc.clone()];
+        }
         let clipped = clip_ring_front(&densify(ring.points(), max_step, true), &center);
         if clipped.len() < 3 {
             return Vec::new();
