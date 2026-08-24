@@ -285,6 +285,12 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         merge_timelines(merged, survey_tl),
         Err(MergeError::DuplicateBoundary(_))
     ));
+
+    // The full Scripture set (NUM 34 + JOS 15) is lawful as a whole:
+    // every waypoint of every survey resolves, every rise narrated.
+    let all = scripture_timeline();
+    assert_eq!(all.regions.len(), 2);
+    assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![]);
 }
 
 // --------------------------------------------- the real source, whole

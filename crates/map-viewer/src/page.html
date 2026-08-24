@@ -254,16 +254,17 @@ const state = {
 
 const subjectKey = () => state.selection.length ? state.selection.join(",") : "world";
 
-// Anno Mundi is DERIVED from the declared anchor, never hardcoded.
-function fmtYear(y) {
-  const plain = y < 0 ? `${-y} BC` : `AD ${y}`;
-  if (!state.bible || !state.anchor) return plain;
+// Familiar dates stay primary everywhere; the biblical count is a
+// companion, DERIVED from the declared anchor, never hardcoded:
+// "year N since creation" = years elapsed from the anchor's year.
+const fmtYear = y => y < 0 ? `${-y} BC` : `AD ${y}`;
+function sinceCreation(y) {
+  if (!state.anchor) return null;
   const a = state.anchor.year;
-  const am = y < 0 ? y - a + 1 : y - a;
-  return `AM ${am}`;
+  return y < 0 ? y - a + 1 : y - a;
 }
 const fmtBoth = y => state.bible && state.anchor
-  ? `${fmtYear(y)} · ${y < 0 ? -y + " BC" : "AD " + y}`
+  ? `${fmtYear(y)} — year ${sinceCreation(y)} since creation`
   : fmtYear(y);
 
 function currentParams(quality) {
@@ -518,7 +519,7 @@ function drawScrubber() {
   const y = state.stops[state.idx];
   $("readout").firstChild.textContent = fmtYear(y);
   $("readout").querySelector("small").textContent = state.bible && state.anchor
-    ? `${y < 0 ? -y + " BC" : "AD " + y} · anchored at creation — ${state.anchor.frame}`
+    ? `year ${sinceCreation(y)} since creation — ${state.anchor.frame}`
     : "scrub stops are change events — the piecewise timeline itself";
 }
 
@@ -656,7 +657,7 @@ function radioRow(el, items, current, onpick) {
 function setBible(on) {
   state.bible = on;
   $("frameinfo").textContent = on && state.anchor
-    ? `${state.anchor.frame} — Scripture-derived borders realized, all else ghosted; time in Anno Mundi from the anchor`
+    ? `${state.anchor.frame} — only Scripture-derived borders are realized (the ghosted world is the disclosure); dates also count years since creation`
     : "all sources shown in their own dress";
   loadFromOptions();
   loadMappedTimes().then(() => {

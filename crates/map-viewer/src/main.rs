@@ -15,7 +15,7 @@ use atlas_graph_types::id::SourceId;
 use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
 
 use map_adapters::{
-    epoch_year_from_label, ingest, merge_timelines, promised_land_timeline, stand_in_gazetteer,
+    epoch_year_from_label, ingest, merge_timelines, scripture_timeline, stand_in_gazetteer,
     EpochSource, IngestConfig,
 };
 use map_provider::SCRIPTURE_SOURCE;
@@ -167,8 +167,8 @@ fn load() -> App {
     // The first Bible-driven borders join the imported world, and the
     // merged whole must be lawful — fail loud at the door, not in a
     // render (validated against the stand-in gazetteer until C3 lands).
-    let timeline = merge_timelines(out.timeline, promised_land_timeline())
-        .expect("scripture survey merges cleanly");
+    let timeline = merge_timelines(out.timeline, scripture_timeline())
+        .expect("scripture surveys merge cleanly");
     let violations = map_types::validate_all(
         &timeline,
         &map_types::ChronologyExport {

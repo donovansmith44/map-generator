@@ -68,6 +68,38 @@ const NUM_34_CIRCUIT: &[Waypoint] = &[
     Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
 ];
 
+/// JOS 15:1-12 — Judah's allotment, drawn lot by lot and border by
+/// border: north from the Jordan's mouth past En-rogel and the valley
+/// of Hinnom to the sea at Jabneel, the Great Sea west, the NUM 34
+/// south line, the Salt Sea east. Waypoints in circuit order.
+const JOS_15_CIRCUIT: &[Waypoint] = &[
+    Waypoint { name: "bay of the Salt Sea at the Jordan's mouth", lat: 31.76, lon: 35.55 },
+    Waypoint { name: "Beth-hoglah", lat: 31.80, lon: 35.50 },
+    Waypoint { name: "stone of Bohan by the valley of Achor", lat: 31.82, lon: 35.40 },
+    Waypoint { name: "ascent of Adummim", lat: 31.82, lon: 35.36 },
+    Waypoint { name: "En-shemesh", lat: 31.78, lon: 35.26 },
+    Waypoint { name: "En-rogel", lat: 31.77, lon: 35.24 },
+    Waypoint { name: "valley of Hinnom south of Jebus", lat: 31.77, lon: 35.22 },
+    Waypoint { name: "mountain west of Hinnom", lat: 31.78, lon: 35.19 },
+    Waypoint { name: "waters of Nephtoah", lat: 31.80, lon: 35.13 },
+    Waypoint { name: "Kiriath-jearim (Baalah)", lat: 31.81, lon: 35.09 },
+    Waypoint { name: "mount Seir toward Chesalon", lat: 31.79, lon: 35.05 },
+    Waypoint { name: "Beth-shemesh", lat: 31.75, lon: 34.98 },
+    Waypoint { name: "Timnah", lat: 31.78, lon: 34.91 },
+    Waypoint { name: "north side of Ekron", lat: 31.78, lon: 34.85 },
+    Waypoint { name: "Jabneel toward the sea", lat: 31.87, lon: 34.73 },
+    Waypoint { name: "the Great Sea at Jabneel", lat: 31.88, lon: 34.68 },
+    Waypoint { name: "Great Sea coast off Gaza", lat: 31.50, lon: 34.42 },
+    Waypoint { name: "brook of Egypt at the Great Sea", lat: 31.16, lon: 33.80 },
+    Waypoint { name: "Azmon", lat: 30.85, lon: 34.20 },
+    Waypoint { name: "Hazar-addar", lat: 30.75, lon: 34.30 },
+    Waypoint { name: "Kadesh-barnea", lat: 30.69, lon: 34.49 },
+    Waypoint { name: "wilderness of Zin", lat: 30.80, lon: 34.80 },
+    Waypoint { name: "ascent of Akrabbim", lat: 30.95, lon: 35.20 },
+    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
+    Waypoint { name: "west shore of the Salt Sea", lat: 31.40, lon: 35.42 },
+];
+
 fn place_id(name: &str) -> PlaceId {
     PlaceId::new(format!("standin:{}", name.replace(' ', "-")))
 }
@@ -78,55 +110,96 @@ fn hash_id(tag: &str) -> ContentHash {
     ContentHash(h.finish())
 }
 
-fn num34_range() -> LocusRange<atlas_graph_types::text::BibleTag> {
-    let v = |verse| BibleLocus::whole(VerseRef { book: 4, chapter: 34, verse });
-    LocusRange::new(v(1), v(12)).expect("NUM 34:1-12 is ordered")
-}
-
 fn tp(year: i32) -> TimePoint {
     TimePoint::year_only(Year::new(year).expect("no year zero in survey data"))
 }
 
-/// The stand-in gazetteer for the survey waypoints — the shape of the
+/// One Scripture survey, ready to build: the verses, their traditional
+/// date, and the circuit the text walks.
+struct SurveySpec {
+    tag: &'static str,
+    label: &'static str,
+    note: &'static str,
+    book: u8,
+    chapter: u16,
+    verse_from: u16,
+    verse_to: u16,
+    /// Traditional (Ussher) year the survey takes effect.
+    year: i32,
+    circuit: &'static [Waypoint],
+}
+
+const SURVEYS: &[SurveySpec] = &[
+    SurveySpec {
+        tag: "NUM34",
+        label: "the land promised (NUM 34)",
+        note: "The border circuit God specified to Moses, NUM 34:1-12; waypoint \
+               coordinates are approximate traditional identifications (stand-in, \
+               see provenance), several northern and eastern ones uncertain.",
+        book: 4,
+        chapter: 34,
+        verse_from: 1,
+        verse_to: 12,
+        year: -1452,
+        circuit: NUM_34_CIRCUIT,
+    },
+    SurveySpec {
+        tag: "JOS15",
+        label: "Judah's allotment (JOS 15)",
+        note: "Judah's lot as drawn at the division of the land, JOS 15:1-12; \
+               waypoint coordinates are approximate traditional identifications \
+               (stand-in, see provenance).",
+        book: 6,
+        chapter: 15,
+        verse_from: 1,
+        verse_to: 12,
+        year: -1444,
+        circuit: JOS_15_CIRCUIT,
+    },
+];
+
+fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::text::BibleTag> {
+    let v = |verse| BibleLocus::whole(VerseRef { book: s.book, chapter: s.chapter, verse });
+    LocusRange::new(v(s.verse_from), v(s.verse_to)).expect("survey verses are ordered")
+}
+
+/// The stand-in gazetteer for every survey waypoint — the shape of the
 /// atlas C3 export, filled with traditional identifications until the
 /// real one arrives. Law 12c validates survey waypoints against this.
 pub fn stand_in_gazetteer() -> GazetteerExport {
     let mut places = BTreeMap::new();
-    for w in NUM_34_CIRCUIT {
-        places.insert(
-            place_id(w.name),
-            GazetteerEntry {
-                canonical_name: w.name.to_string(),
-                position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
-            },
-        );
+    for s in SURVEYS {
+        for w in s.circuit {
+            places.insert(
+                place_id(w.name),
+                GazetteerEntry {
+                    canonical_name: w.name.to_string(),
+                    position: UnitVec::from_lat_lon_deg(w.lat, w.lon),
+                },
+            );
+        }
     }
     GazetteerExport { atlas_root: ContentHash(0), places }
 }
 
-/// Build the survey timeline: one Scripture-surveyed boundary (the NUM
-/// 34 circuit) and the region it bounds, valid from the survey's
-/// traditional date (Ussher: the plains of Moab, 1452 BC) to the open
-/// edge of knowledge, with a narrated Rise grounded in the verses.
-pub fn promised_land_timeline() -> WorldTimeline {
+/// Add one survey to a timeline: the Scripture-surveyed boundary (a
+/// closed circuit), the region it bounds, valid from the survey's
+/// traditional date to the open edge of knowledge, and a narrated Rise
+/// grounded in the verses.
+fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec) {
     let justification = Justification {
-        text: Some(
-            "The border circuit God specified to Moses, NUM 34:1-12; waypoint \
-             coordinates are approximate traditional identifications (stand-in, \
-             see provenance), several northern and eastern ones uncertain."
-                .to_string(),
-        ),
-        grounds: [Ground::Scripture(num34_range())].into(),
+        text: Some(s.note.to_string()),
+        grounds: [Ground::Scripture(verses_of(s))].into(),
     };
 
     // The circuit closes: repeat the first point, our closed-arc form.
     let mut pts: Vec<UnitVec> =
-        NUM_34_CIRCUIT.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
+        s.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
     pts.push(pts[0]);
 
     let survey = BorderSurvey {
-        verses: num34_range(),
-        waypoints: NUM_34_CIRCUIT.iter().map(|w| AtlasPlaceRef(place_id(w.name))).collect(),
+        verses: verses_of(s),
+        waypoints: s.circuit.iter().map(|w| AtlasPlaceRef(place_id(w.name))).collect(),
         // Geodesic between waypoints — the disclosed (and only)
         // authored geometry. Coast-following is future authoring work.
         interpolation: InterpolationMethod::Geodesic,
@@ -140,18 +213,15 @@ pub fn promised_land_timeline() -> WorldTimeline {
         provenance: STAND_IN_PROVENANCE.to_string(),
     };
 
-    let boundary_id = BoundaryId(hash_id("scripture-survey:NUM34"));
-    let region_id = RegionId(hash_id("scripture-region:promised-land"));
-    let valid = Interval::open_from(tp(-1452));
+    let boundary_id = BoundaryId(hash_id(&format!("scripture-survey:{}", s.tag)));
+    let region_id = RegionId(hash_id(&format!("scripture-region:{}", s.tag)));
+    let valid = Interval::open_from(tp(s.year));
 
-    let mut boundaries = BTreeMap::new();
-    boundaries.insert(boundary_id, BoundaryHistory { versions: vec![(valid, boundary)] });
-
-    let mut regions = BTreeMap::new();
-    regions.insert(
+    tl.boundaries.insert(boundary_id, BoundaryHistory { versions: vec![(valid, boundary)] });
+    tl.regions.insert(
         region_id,
         RegionHistory {
-            label_history: vec![(valid, "the land promised (NUM 34)".to_string())],
+            label_history: vec![(valid, s.label.to_string())],
             geom_history: vec![(
                 valid,
                 RegionGeom {
@@ -163,18 +233,32 @@ pub fn promised_land_timeline() -> WorldTimeline {
             )],
         },
     );
-
-    let events = vec![ChangeEvent {
-        at: tp(-1452),
+    tl.events.push(ChangeEvent {
+        at: tp(s.year),
         kind: ChangeKind::Rise { region: region_id },
         // driver stays None until the atlas C2 export names this event;
         // law 12a will then hold the date to the atlas's placement.
         driver: None,
         justification,
         provenance: USSHER_PROVENANCE.to_string(),
-    }];
+    });
+}
 
-    WorldTimeline { anchor: None, boundaries, regions, events, atlas_pin: None }
+/// Every ingested Scripture survey as one timeline.
+pub fn scripture_timeline() -> WorldTimeline {
+    let mut tl = WorldTimeline::default();
+    for s in SURVEYS {
+        add_survey(&mut tl, s);
+    }
+    tl.events.sort_by_key(|e| e.at);
+    tl
+}
+
+/// The NUM 34 survey alone (the founding fixture; tests lean on it).
+pub fn promised_land_timeline() -> WorldTimeline {
+    let mut tl = WorldTimeline::default();
+    add_survey(&mut tl, &SURVEYS[0]);
+    tl
 }
 
 /// Merge two timelines from different sources into one world. Ids are
