@@ -275,11 +275,10 @@ fn law09_single_instant_accumulation_is_the_snapshot() {
 #[test]
 fn law09_accumulation_carries_every_state_age_ramped() {
     let (p, style) = provider_from(fixture_epochs());
-    let q = world_query(style, TimeSelector::Over(interval(-2000, -1000)));
-    let acc = p.render(&q).unwrap();
+    let acc = p.render(&world_query(style, TimeSelector::Over(interval(-2000, -1000)))).unwrap();
 
-    // Estia's two distinct geometries both appear (the long exposure),
-    // painted differently by age.
+    // A FOCUSED subject's range carries every state's fill, age-ramped:
+    // Estia's two distinct geometries in one still image.
     let estia: Vec<_> = p
         .subjects(tp(-1500))
         .into_iter()
@@ -288,12 +287,36 @@ fn law09_accumulation_carries_every_state_age_ramped() {
             _ => None,
         })
         .collect();
-    let estia_layers: Vec<_> = acc.regions.iter().filter(|r| r.region == estia[0]).collect();
+    let acc_estia = p
+        .render(&RenderQuery {
+            subject: RenderSubject::Region(estia[0]),
+            ..world_query(style, TimeSelector::Over(interval(-2000, -1000)))
+        })
+        .unwrap();
+    let estia_layers: Vec<_> = acc_estia.regions.iter().filter(|r| r.region == estia[0]).collect();
     assert!(estia_layers.len() >= 2, "both Estia states in one still image");
     assert!(
         estia_layers.windows(2).any(|w| w[0].paint != w[1].paint),
         "age renders as paint"
     );
+
+    // A WORLD range does not stack fills into a blob: each region
+    // fills once (its newest state), the lines carry the history.
+    let mut per_region: std::collections::BTreeMap<_, usize> = Default::default();
+    for r in &acc.regions {
+        *per_region.entry(r.region).or_default() += 1;
+    }
+    assert!(per_region.values().all(|&n| n == 1), "one fill per region in a world range");
+
+    // THE DIFFS ARE LINES: every border that existed in the range is
+    // drawn, and age renders in the stroke — at least two distinct
+    // tints, with the most recent lines drawn last (on top).
+    assert!(!acc.boundaries.is_empty(), "an accumulation draws its borders");
+    let strokes: std::collections::BTreeSet<_> =
+        acc.boundaries.iter().map(|b| b.stroke.color.3).collect();
+    assert!(strokes.len() >= 2, "border age renders as tint: {strokes:?}");
+    let alphas: Vec<u8> = acc.boundaries.iter().map(|b| b.stroke.color.3).collect();
+    assert!(alphas.windows(2).all(|w| w[0] <= w[1]), "newest lines on top");
 
     // The newest state is drawn last — on top.
     let last_estia = estia_layers.last().unwrap();

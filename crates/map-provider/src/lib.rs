@@ -415,6 +415,42 @@ impl TimelineProvider {
         Ok(())
     }
 
+    /// The arcs a subject wears at one instant — the accumulation's
+    /// per-sample border census.
+    fn subject_arcs_at(&self, subject: &RenderSubject, t: &TimePoint) -> Vec<BoundaryId> {
+        match subject {
+            RenderSubject::World => self
+                .timeline
+                .boundaries
+                .iter()
+                .filter(|(_, h)| h.at(t).is_some())
+                .map(|(id, _)| *id)
+                .collect(),
+            RenderSubject::Region(rid) => self
+                .timeline
+                .regions
+                .get(rid)
+                .and_then(|h| h.geom_at(t))
+                .map(|g| {
+                    g.parts
+                        .iter()
+                        .flat_map(|p| {
+                            p.cycle.iter().chain(p.holes.iter().flatten()).map(|(b, _)| *b)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            RenderSubject::Boundary(bid) => {
+                if self.timeline.boundaries.get(bid).and_then(|h| h.at(t)).is_some() {
+                    vec![*bid]
+                } else {
+                    Vec::new()
+                }
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// The long exposure: fold of overlay across the interval's
     /// distinct states — endpoints plus every change event (law 9).
     /// Temporal depth is STYLE: sample i of n wears the age ramp at its
@@ -422,6 +458,13 @@ impl TimelineProvider {
     /// IS its snapshot (fold identity), so the ramp applies only when
     /// there are at least two states. Labels ride only the newest
     /// sample — a long exposure of borders, captioned once.
+    ///
+    /// THE DIFFS ARE LINES: every distinct border that existed anywhere
+    /// in the range is drawn once, stroked in the ramp color of the
+    /// last sample it was alive at — vanished borders faint, current
+    /// borders strong, a moved border showing each of its positions.
+    /// Fills convey tenure (alpha stacks where territory held), lines
+    /// convey edges; both ride the same ramp.
     fn accumulation(&self, over: &Interval, q: &RenderQuery) -> Result<Snapshot, MapError> {
         let times = sample_times(over, &self.timeline.events);
         if times.len() <= 1 {
@@ -432,6 +475,8 @@ impl TimelineProvider {
         let ramp = style.age_ramp();
         let n = times.len();
         let mut scenes = Vec::with_capacity(n);
+        // Per arc: the last sample it was alive at (its recency tint).
+        let mut last_alive: BTreeMap<BoundaryId, usize> = BTreeMap::new();
         for (i, t) in times.iter().enumerate() {
             let newest = i == n - 1;
             let toward_new = (i as f64) / ((n - 1) as f64);
@@ -442,12 +487,19 @@ impl TimelineProvider {
             }
             let mut scene = Snapshot::empty();
             match &q.subject {
-                RenderSubject::World => {
+                // A world range would saturate under stacked fills
+                // (all land is always claimed by someone), so the
+                // world wears only its NEWEST state as fills and lets
+                // the tinted lines below carry every older border.
+                RenderSubject::World if newest => {
                     let ids: Vec<RegionId> = self.timeline.regions.keys().copied().collect();
                     for id in ids {
-                        self.push_region(&mut scene, &sub, id, t, style, paint, newest)?;
+                        self.push_region(&mut scene, &sub, id, t, style, style.region_paint(), true)?;
                     }
                 }
+                RenderSubject::World => {}
+                // A focused subject's range keeps every state's fill,
+                // age-ramped: its extent story, tenure as depth.
                 RenderSubject::Region(id) => {
                     self.push_region(&mut scene, &sub, *id, t, style, paint, newest)?;
                 }
@@ -455,9 +507,47 @@ impl TimelineProvider {
                     scene = self.snapshot_at(t, &sub)?;
                 }
             }
+            for arc in self.subject_arcs_at(&q.subject, t) {
+                last_alive.insert(arc, i);
+            }
             scenes.push(scene);
         }
-        Ok(accumulate(scenes))
+        let mut scene = accumulate(scenes);
+
+        // Draw each border once, oldest recency first so the newest
+        // lines land on top. Deterministic: sorted by (recency, id).
+        let mut by_recency: Vec<(usize, BoundaryId)> =
+            last_alive.iter().map(|(id, i)| (*i, *id)).collect();
+        by_recency.sort();
+        for (i, id) in by_recency {
+            let t = &times[i];
+            let b = self.boundary_at(id, t)?;
+            let toward_new = (i as f64) / ((n - 1) as f64);
+            let tint = mix_paint(ramp.oldest, ramp.newest, toward_new).fill;
+            let base = style.stroke_for(&b.character);
+            let stroke = map_types::style::Stroke {
+                color: map_types::style::Rgba(
+                    tint.0,
+                    tint.1,
+                    tint.2,
+                    // Lines must stay readable even at ancient ages.
+                    (120.0 + 135.0 * toward_new) as u8,
+                ),
+                width: base.width,
+                pattern: base.pattern,
+            };
+            let sb = StyledBoundary {
+                boundary: id,
+                pts: simplify_polyline(&b.pts, q.lod),
+                stroke,
+                sources: boundary_sources(b),
+            };
+            if in_viewport(&q.viewport, &sb.pts) {
+                scene.attribution.extend(sb.sources.iter().cloned());
+                scene.boundaries.push(sb);
+            }
+        }
+        Ok(scene)
     }
 }
 

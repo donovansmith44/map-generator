@@ -179,9 +179,12 @@
       </select>
     </div>
     <label class="inline" style="margin-top:8px">
-      <input type="checkbox" id="expose"> long exposure from
+      <input type="checkbox" id="expose"> overlay range from
       <select id="from" disabled style="flex:1"></select>
     </label>
+    <div id="rangehint" style="color:var(--dim);font-size:11px" hidden>
+      …to the scrubbed stop: every border in the range on one map, age as tint
+    </div>
   </section>
 
   <section class="group" aria-label="subject">
@@ -687,7 +690,11 @@ async function init() {
   $("context").addEventListener("change", () => render());
   $("lod").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
-  $("expose").addEventListener("change", () => { loadFromOptions(); render(); });
+  $("expose").addEventListener("change", () => {
+    $("rangehint").hidden = !$("expose").checked;
+    loadFromOptions();
+    render();
+  });
   $("from").addEventListener("change", () => render());
   $("hold").addEventListener("click", () => {
     state.held = currentParams();
