@@ -209,7 +209,14 @@
       <option value="0.0015">medium</option>
       <option value="0.008">coarse</option>
     </select>
+    <label for="res">resolution</label>
+    <select id="res">
+      <option value="1200">standard (1200)</option>
+      <option value="2400" selected>fine (2400)</option>
+      <option value="4800">ultra (4800)</option>
+    </select>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="labels" checked> labels</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="smooth" checked> smooth edges</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -286,10 +293,13 @@ function currentParams(quality) {
   if (quality === "drag") {
     p.set("lod", "0.008");
     p.set("labels", "0");
+    p.set("width", "1200");
   } else {
     p.set("lod", $("lod").value);
     p.set("labels", $("labels").checked ? "1" : "0");
+    p.set("width", $("res").value);
   }
+  p.set("smooth", $("smooth").checked ? "1" : "0");
   return p;
 }
 
@@ -689,6 +699,8 @@ async function init() {
   });
   $("context").addEventListener("change", () => render());
   $("lod").addEventListener("change", () => render());
+  $("res").addEventListener("change", () => render());
+  $("smooth").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
   $("expose").addEventListener("change", () => {
     $("rangehint").hidden = !$("expose").checked;
@@ -714,7 +726,7 @@ async function init() {
     const p = new URLSearchParams();
     for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
     for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
-    for (const k of ["style","encoder","projection","lod","labels","center","zoom"]) {
+    for (const k of ["style","encoder","projection","lod","labels","center","zoom","width","smooth"]) {
       if (now.get(k) !== null) p.set(k, now.get(k));
     }
     const res = await fetch("/api/overlay?" + p.toString());

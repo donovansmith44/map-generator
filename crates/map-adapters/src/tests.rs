@@ -37,7 +37,7 @@ fn creation_anchor() -> Anchor {
 }
 
 fn config() -> IngestConfig {
-    IngestConfig { source: SourceId::new("historical-basemaps"), anchor: Some(creation_anchor()) }
+    IngestConfig { source: SourceId::new("historical-basemaps"), anchor: Some(creation_anchor()), snap: None }
 }
 
 fn empty_exports() -> (ChronologyExport, GazetteerExport) {
@@ -190,7 +190,7 @@ fn pre_anchor_epochs_are_excluded_with_exemption() {
     }
     // Without an anchor, the same epochs all ingest — the anchor is a
     // parameter, not a hardcode.
-    let unanchored = IngestConfig { source: SourceId::new("historical-basemaps"), anchor: None };
+    let unanchored = IngestConfig { source: SourceId::new("historical-basemaps"), anchor: None, snap: None };
     let out2 = ingest(
         &unanchored,
         &[EpochSource {
@@ -223,6 +223,34 @@ fn unnamed_features_are_counted_not_silently_dropped() {
     assert_eq!(out.timeline.regions.len(), 1);
 }
 
+// ------------------------------------------- topology closure (snap)
+
+/// Two neighbors whose shared border misses by 0.004 degrees: exact
+/// matching sees two private rings; a disclosed 0.02-degree snap makes
+/// them MEET — one shared arc, no sliver gap. Fidelity still holds,
+/// against the source as snapped.
+#[test]
+fn snap_closes_near_miss_borders() {
+    let epoch = |label: &str| EpochSource {
+        year: -2000,
+        label: label.to_string(),
+        text: fc(&[
+            (Some("Westia"), vec![square(0.0, 0.0, 5.0, 10.0)]),
+            (Some("Estia"), vec![square(5.004, 0.0, 10.0, 10.0)]),
+        ]),
+    };
+    let exact = ingest(&config(), &[epoch("fx")]).unwrap();
+    assert_eq!(exact.timeline.boundaries.len(), 2, "near-miss stays private when exact");
+
+    let snapped_config = IngestConfig { snap: Some(0.02), ..config() };
+    let e = epoch("fx");
+    let snapped = ingest(&snapped_config, &[e.clone()]).unwrap();
+    assert_eq!(snapped.timeline.boundaries.len(), 3, "snapped neighbors share one arc");
+    assert_eq!(fidelity_violations(&snapped, &e).unwrap(), Vec::<String>::new());
+    let (chron, gaz) = empty_exports();
+    assert_eq!(validate_all(&snapped.timeline, &chron, &gaz), vec![]);
+}
+
 // ------------------------------------------------- helpers and units
 
 #[test]
@@ -237,11 +265,11 @@ fn epoch_labels_parse() {
 fn ring_cleaning_normalizes() {
     // Closing repeat dropped, consecutive duplicates collapsed.
     let cleaned =
-        clean_ring(&[(0.0, 0.0), (1.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]).unwrap();
+        clean_ring(&[(0.0, 0.0), (1.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)], None).unwrap();
     assert_eq!(cleaned.len(), 3);
     assert_eq!(cleaned[0], QPoint::from_lon_lat(0.0, 0.0));
     // Degenerate rings refuse to exist.
-    assert_eq!(clean_ring(&[(0.0, 0.0), (1.0, 0.0), (0.0, 0.0)]), None);
+    assert_eq!(clean_ring(&[(0.0, 0.0), (1.0, 0.0), (0.0, 0.0)], None), None);
 }
 
 // ------------------------------------- the Scripture survey source

@@ -29,9 +29,18 @@ impl QPoint {
 /// collapse, and the closing repeat of the first point (the input
 /// convention) is dropped — our rings leave closure implicit.
 /// Returns None for rings degenerate after cleaning (< 3 points).
-pub fn clean_ring(src: &[(f64, f64)]) -> Option<Vec<QPoint>> {
+///
+/// `snap` (degrees) is the disclosed topology-closure tolerance: with
+/// it, vertices round to that grid, so near-miss borders between
+/// neighbors MEET — shared arcs instead of sliver gaps. Choose it far
+/// below the source's own precision, and say so in the data.
+pub fn clean_ring(src: &[(f64, f64)], snap: Option<f64>) -> Option<Vec<QPoint>> {
     let mut pts: Vec<QPoint> = Vec::with_capacity(src.len());
-    for &(lon, lat) in src {
+    for &(mut lon, mut lat) in src {
+        if let Some(s) = snap {
+            lon = (lon / s).round() * s;
+            lat = (lat / s).round() * s;
+        }
         let q = QPoint::from_lon_lat(lon, lat);
         if pts.last() != Some(&q) {
             pts.push(q);

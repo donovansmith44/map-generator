@@ -122,7 +122,7 @@ fn honest_style() -> Style {
             newest: Paint { fill: Rgba(255, 0, 0, 255) },
             oldest: Paint { fill: Rgba(255, 0, 0, 40) },
         },
-        LabelStyle { color: Rgba(20, 20, 20, 255), size: 12.0 },
+        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
         DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
@@ -442,7 +442,7 @@ fn law06_provenance_totality_and_honesty() {
     let rest = (
         Paint { fill: Rgba(0, 0, 0, 0) },
         AgeRamp { newest: Paint { fill: Rgba(0, 0, 0, 0) }, oldest: Paint { fill: Rgba(0, 0, 0, 0) } },
-        LabelStyle { color: Rgba(0, 0, 0, 255), size: 10.0 },
+        LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 },
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
         DeltaEmphasis { before: line, after: line, seam: line },
     );

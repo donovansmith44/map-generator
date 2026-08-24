@@ -49,6 +49,10 @@ struct App {
     /// The declared frame this world stands under (read at the
     /// composition root; exposed so the bench can show biblical time).
     anchor: Option<(String, i32)>,
+    /// Per visible style: the (held, current) tints a comparison
+    /// overlay wears — the age ramp's oldest and newest, so an overlay
+    /// reads exactly like a range diff.
+    overlay_tints: BTreeMap<StyleId, (StyleId, StyleId)>,
 }
 
 // ------------------------------------------------------------- styles
@@ -67,7 +71,7 @@ fn parchment() -> Style {
             newest: Paint { fill: Rgba(174, 60, 40, 220) },
             oldest: Paint { fill: Rgba(174, 60, 40, 40) },
         },
-        LabelStyle { color: Rgba(56, 40, 26, 255), size: 11.0 },
+        LabelStyle { color: Rgba(56, 40, 26, 255), halo: Rgba(243, 233, 209, 235), size: 11.0 },
         MarkerStyle { color: Rgba(56, 40, 26, 255), size: 3.5 },
         DeltaEmphasis {
             before: s(Rgba(120, 116, 105, 255), 1.6, StrokePattern::Dashed),
@@ -92,7 +96,7 @@ fn slate() -> Style {
             newest: Paint { fill: Rgba(196, 90, 70, 220) },
             oldest: Paint { fill: Rgba(196, 90, 70, 40) },
         },
-        LabelStyle { color: Rgba(214, 211, 200, 255), size: 11.0 },
+        LabelStyle { color: Rgba(214, 211, 200, 255), halo: Rgba(22, 25, 31, 235), size: 11.0 },
         MarkerStyle { color: Rgba(214, 211, 200, 255), size: 3.5 },
         DeltaEmphasis {
             before: s(Rgba(120, 125, 135, 255), 1.6, StrokePattern::Dashed),
@@ -132,6 +136,35 @@ fn ghosted(base: &Style) -> Style {
     .expect("a faded honest style is still honest")
 }
 
+/// Recolor a style toward one paint — the dress a whole layer wears in
+/// a comparison overlay. Patterns and widths survive (honesty), color
+/// says WHICH layer.
+fn tinted(base: &Style, paint: Paint) -> Style {
+    let tint = |s: &Stroke| Stroke {
+        color: Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 235),
+        width: s.width,
+        pattern: s.pattern,
+    };
+    use map_types::EdgeCharacter as E;
+    let d = base.delta_emphasis();
+    let mut label = base.label_style();
+    label.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
+    Style::new(
+        BoundaryStrokes {
+            line: tint(base.stroke_for(&E::Line)),
+            frontier: tint(base.stroke_for(&E::Frontier { width_km: 0.0 })),
+            disputed: tint(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
+            unknown: tint(base.stroke_for(&E::Unknown)),
+        },
+        paint,
+        base.age_ramp(),
+        label,
+        base.marker_style(),
+        DeltaEmphasis { before: tint(&d.before), after: tint(&d.after), seam: tint(&d.seam) },
+    )
+    .expect("a tinted honest style is still honest")
+}
+
 // ---------------------------------------------------------- wiring
 
 fn tp(year: i32) -> Option<TimePoint> {
@@ -152,6 +185,9 @@ fn load() -> App {
     }
     let gen11 = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 1 });
     let config = IngestConfig {
+        // Topology closure at 0.02 degrees (~2 km) — two orders below
+        // the source's own precision, disclosed here and in Ingest.
+        snap: Some(0.02),
         source: SourceId::new("historical-basemaps"),
         anchor: Some(Anchor {
             frame: "biblical (Ussher tradition)".to_string(),
@@ -179,19 +215,28 @@ fn load() -> App {
     );
     assert!(violations.is_empty(), "merged world unlawful: {:?}", violations.first());
     let anchor = timeline.anchor.as_ref().map(|a| (a.frame.clone(), a.at.year.get()));
-    let out = map_adapters::Ingest { timeline, exemptions: out.exemptions };
+    let out = map_adapters::Ingest { timeline, exemptions: out.exemptions, snap: out.snap };
     let (p_style, s_style) = (parchment(), slate());
     let (p_ghost, s_ghost) = (ghosted(&p_style), ghosted(&s_style));
     let styles = vec![("parchment", p_style.id()), ("slate", s_style.id())];
     let ghosts = BTreeMap::from([(p_style.id(), p_ghost.id()), (s_style.id(), s_ghost.id())]);
+    let mut style_table = BTreeMap::from([
+        (p_style.id(), p_style.clone()),
+        (s_style.id(), s_style.clone()),
+        (p_ghost.id(), p_ghost),
+        (s_ghost.id(), s_ghost),
+    ]);
+    let mut overlay_tints = BTreeMap::new();
+    for base in [&p_style, &s_style] {
+        let ramp = base.age_ramp();
+        let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
+        overlay_tints.insert(base.id(), (held.id(), current.id()));
+        style_table.insert(held.id(), held);
+        style_table.insert(current.id(), current);
+    }
     let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(TimelineProvider {
         timeline: out.timeline,
-        styles: BTreeMap::from([
-            (p_style.id(), p_style),
-            (s_style.id(), s_style),
-            (p_ghost.id(), p_ghost),
-            (s_ghost.id(), s_ghost),
-        ]),
+        styles: style_table,
         gazetteer: None,
     });
 
@@ -219,7 +264,7 @@ fn load() -> App {
             }
         }
     }
-    App { provider, styles, ghosts, stops, presence, anchor }
+    App { provider, styles, ghosts, stops, presence, anchor, overlay_tints }
 }
 
 /// Keep only Scripture-derived elements: regions and boundaries whose
@@ -408,7 +453,16 @@ fn encode(
                     map_encoders::Projection::Globe { center, zoom }
                 }
             };
-            SvgEncoder { projection, ..SvgEncoder::default() }
+            // Scalable resolution: the output is vector, so width is a
+            // free parameter — strokes, labels, and geodesic precision
+            // all scale to it.
+            let width = p
+                .get("width")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(1200.0)
+                .clamp(320.0, 8000.0);
+            let smooth = p.get("smooth") != Some("0");
+            SvgEncoder { projection, width, smooth, ..SvgEncoder::default() }
                 .encode(scene)
                 .map(|s| (s, "image/svg+xml"))
                 .map_err(|e| e.0)
@@ -607,12 +661,18 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
         // level (the monoid), then encoded once — never on bytes.
         // Either side may itself be a multi-region list.
         "/api/overlay" => {
+            // The held side wears the ramp's OLDEST tint, the current
+            // side its NEWEST — an overlay reads exactly like a range
+            // diff, never two indistinguishable coats of one style.
             let side = |prefix: &str| -> Result<Snapshot, String> {
                 let keys = p.get(&format!("{prefix}subject")).unwrap_or("world").to_string();
                 let mut combined = Snapshot::empty();
                 let mut any = false;
                 for k in keys.split(',').filter(|s| !s.is_empty()) {
-                    let q = build_query(app, &p, prefix, Some(k)).ok_or("bad overlay query")?;
+                    let mut q = build_query(app, &p, prefix, Some(k)).ok_or("bad overlay query")?;
+                    if let Some((held, current)) = app.overlay_tints.get(&q.style) {
+                        q.style = if prefix == "a_" { *held } else { *current };
+                    }
                     match app.provider.render(&q) {
                         Ok(s) => {
                             combined = combined.combine(s);

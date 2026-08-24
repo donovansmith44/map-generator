@@ -52,6 +52,9 @@ pub fn epoch_year_from_label(label: &str) -> Option<i32> {
 pub struct IngestConfig {
     pub source: SourceId,
     pub anchor: Option<Anchor>,
+    /// Disclosed topology-closure tolerance in degrees: vertices snap
+    /// to this grid so near-miss borders meet (None = exact matching).
+    pub snap: Option<f64>,
 }
 
 /// Typed, counted, enumerable — the atlas's exemption discipline.
@@ -76,6 +79,9 @@ pub enum IngestError {
 pub struct Ingest {
     pub timeline: WorldTimeline,
     pub exemptions: Vec<Exemption>,
+    /// The snap tolerance this ingest ran under — the fidelity law
+    /// compares against the source AS SNAPPED, and says so.
+    pub snap: Option<f64>,
 }
 
 /// A source adapter turns ONE source's bytes into a lawful timeline.
@@ -142,6 +148,7 @@ struct EpochWorld {
 fn build_epoch(
     epoch: &EpochSource,
     features: &[SourceFeature],
+    snap: Option<f64>,
     exemptions: &mut Vec<Exemption>,
 ) -> EpochWorld {
     // Collect every ring (outer and hole) of every named feature into
@@ -162,7 +169,7 @@ fn build_epoch(
             continue;
         };
         for poly in &f.polygons {
-            let Some(outer) = clean_ring(&poly.outer) else {
+            let Some(outer) = clean_ring(&poly.outer, snap) else {
                 degenerate += 1;
                 continue;
             };
@@ -174,7 +181,7 @@ fn build_epoch(
             owners.push(Owner { name: name.clone(), part, hole: None });
             let mut holes_kept = 0usize;
             for hole in &poly.holes {
-                let Some(cleaned) = clean_ring(hole) else {
+                let Some(cleaned) = clean_ring(hole, snap) else {
                     degenerate += 1;
                     continue;
                 };
@@ -254,7 +261,7 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
     for e in &kept {
         let features = parse_features(&e.text)
             .map_err(|err| IngestError::Parse(e.label.clone(), err))?;
-        worlds.push(build_epoch(e, &features, &mut exemptions));
+        worlds.push(build_epoch(e, &features, config.snap, &mut exemptions));
     }
 
     // Interval end for epoch k: the next epoch's start; the last stays
@@ -393,6 +400,7 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
     }
 
     Ok(Ingest {
+        snap: config.snap,
         timeline: WorldTimeline {
             anchor: config.anchor.clone(),
             boundaries,
@@ -450,7 +458,7 @@ pub fn fidelity_violations(
         let entry = expected.entry(name.clone()).or_default();
         for poly in &f.polygons {
             for ring in std::iter::once(&poly.outer).chain(&poly.holes) {
-                if let Some(cleaned) = clean_ring(ring) {
+                if let Some(cleaned) = clean_ring(ring, ingest.snap) {
                     entry.insert(canon(&cleaned));
                 }
             }

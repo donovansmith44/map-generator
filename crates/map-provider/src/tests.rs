@@ -38,7 +38,7 @@ fn honest_style() -> Style {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
             oldest: Paint { fill: Rgba(220, 40, 40, 40) },
         },
-        LabelStyle { color: Rgba(20, 20, 20, 255), size: 12.0 },
+        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
         DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
@@ -103,7 +103,7 @@ fn fixture_epochs() -> Vec<EpochSource> {
 }
 
 fn provider_from(epochs: Vec<EpochSource>) -> (TimelineProvider, StyleId) {
-    let config = IngestConfig { source: SourceId::new("historical-basemaps"), anchor: None };
+    let config = IngestConfig { source: SourceId::new("historical-basemaps"), anchor: None, snap: None };
     let out = ingest(&config, &epochs).unwrap();
     let style = honest_style();
     let id = style.id();
@@ -438,6 +438,7 @@ fn real_source_renders_deterministically() {
         epochs.push(EpochSource { year, label, text: std::fs::read_to_string(&path).unwrap() });
     }
     let config = IngestConfig {
+        snap: None,
         source: SourceId::new("historical-basemaps"),
         anchor: Some(Anchor {
             frame: "biblical (Ussher tradition)".to_string(),

@@ -41,7 +41,7 @@ fn sample_scene() -> Snapshot {
         text: "Judah & <friends>".to_string(),
         at: uv(3.0, 5.0),
         subject: LabelSubject::Free,
-        style: LabelStyle { color: Rgba(10, 10, 10, 255), size: 12.0 },
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
     });
     s.attribution = sources;
     s
@@ -72,7 +72,7 @@ fn globe_clips_the_far_hemisphere() {
         text: "ANTIPODEAN".to_string(),
         at: uv(-3.0, -175.0),
         subject: LabelSubject::Free,
-        style: LabelStyle { color: Rgba(10, 10, 10, 255), size: 12.0 },
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
     });
     let enc = SvgEncoder {
         projection: Projection::Globe { center: Some((3.0, 5.0)), zoom: None },
@@ -139,6 +139,74 @@ fn geojson_is_deterministic_and_parses() {
     assert_eq!(v["type"], "FeatureCollection");
     assert_eq!(v["features"].as_array().unwrap().len(), 4);
     assert_eq!(v["attribution"][0], "historical-basemaps");
+}
+
+#[test]
+fn geodesics_curve_not_chord() {
+    // A 60-degree border segment must render as many small steps, not
+    // one straight chord across the globe.
+    let mut scene = Snapshot::empty();
+    scene.boundaries.push(StyledBoundary {
+        boundary: map_types::BoundaryId(atlas_graph_types::id::ContentHash(9)),
+        pts: vec![uv(10.0, 0.0), uv(10.0, 60.0)],
+        stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
+        sources: BTreeSet::new(),
+    });
+    let out = SvgEncoder {
+        projection: Projection::Globe { center: Some((10.0, 30.0)), zoom: Some(45.0) },
+        smooth: false, // isolate the densification from the spline
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    // The boundary path (not the graticule) carries the subdivision:
+    // find the path drawn with the boundary's stroke.
+    let seg = out.split("stroke=\"rgb(0,0,0)\"").next().unwrap();
+    let boundary_path = seg.rsplit("<path d=\"").next().unwrap();
+    let steps = boundary_path.matches('L').count();
+    assert!(steps >= 8, "60 degrees as {steps} steps is a chord, not a curve");
+}
+
+#[test]
+fn labels_fit_their_territory_and_never_collide() {
+    // A label longer than its tiny territory is DROPPED, not smeared
+    // across the map.
+    let mut scene = sample_scene();
+    let tiny = map_types::RegionId(atlas_graph_types::id::ContentHash(7));
+    scene.regions.push(StyledRegion {
+        region: tiny,
+        outer: vec![Ring::new(vec![uv(20.0, 20.0), uv(20.0, 20.1), uv(20.1, 20.05)]).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: BTreeSet::new(),
+    });
+    scene.labels.push(PlacedLabel {
+        text: "AN IMPOSSIBLY LONG NAME FOR A TINY PLACE".to_string(),
+        at: uv(20.03, 20.05),
+        subject: LabelSubject::Region(tiny),
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0 },
+    });
+    let out = SvgEncoder::default().encode(&scene).unwrap();
+    assert!(!out.contains("IMPOSSIBLY"), "a label that cannot fit is dropped");
+
+    // Two labels at the same anchor never overlap: the second nudges
+    // or yields. Same text twice -> if both survive, different y.
+    let mut scene = sample_scene();
+    scene.labels.push(scene.labels[0].clone());
+    let out = SvgEncoder::default().encode(&scene).unwrap();
+    let ys: Vec<&str> = out
+        .match_indices("<text x=")
+        .map(|(i, _)| {
+            let rest = &out[i..];
+            let y0 = rest.find("y=\"").unwrap() + 3;
+            &rest[y0..y0 + rest[y0..].find('"').unwrap()]
+        })
+        .collect();
+    if ys.len() == 2 {
+        assert_ne!(ys[0], ys[1], "colliding labels must separate");
+    }
+    // Halos ride every label.
+    assert!(out.contains("paint-order=\"stroke\""));
 }
 
 #[test]

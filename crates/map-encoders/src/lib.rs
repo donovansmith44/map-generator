@@ -67,6 +67,10 @@ pub struct SvgEncoder {
     /// Padding around the content, in px.
     pub padding: f64,
     pub projection: Projection,
+    /// Cartographer's finish: paths render as curves THROUGH every
+    /// attested vertex (an interpolating spline — no data point moves,
+    /// corners soften). Off = raw polylines.
+    pub smooth: bool,
 }
 
 impl Default for SvgEncoder {
@@ -75,6 +79,7 @@ impl Default for SvgEncoder {
             width: 1200.0,
             padding: 16.0,
             projection: Projection::Globe { center: None, zoom: None },
+            smooth: true,
         }
     }
 }
@@ -104,7 +109,94 @@ fn path_from(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
     d
 }
 
-/// Emit every scene element through a projector. `ring_of` returns the
+/// Catmull-Rom rendered as cubic curves: an INTERPOLATING spline — the
+/// path passes through every real vertex, only the corners between
+/// them soften. Endpoints stay pinned; short chunks fall back straight.
+fn path_smooth(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
+    let mut d = String::new();
+    for pts in chunks {
+        let n = pts.len();
+        if n < 3 {
+            let _ = write!(d, "{}", path_from(std::slice::from_ref(pts), close));
+            continue;
+        }
+        let at = |i: isize| -> (f64, f64) {
+            if close {
+                pts[i.rem_euclid(n as isize) as usize]
+            } else {
+                pts[i.clamp(0, n as isize - 1) as usize]
+            }
+        };
+        let last = if close { n } else { n - 1 };
+        let (x0, y0) = pts[0];
+        let _ = write!(d, "M{x0:.3} {y0:.3}");
+        for i in 0..last {
+            let p0 = at(i as isize - 1);
+            let p1 = at(i as isize);
+            let p2 = at(i as isize + 1);
+            let p3 = at(i as isize + 2);
+            let c1 = (p1.0 + (p2.0 - p0.0) / 6.0, p1.1 + (p2.1 - p0.1) / 6.0);
+            let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, p2.1 - (p3.1 - p1.1) / 6.0);
+            let _ = write!(
+                d,
+                "C{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}",
+                c1.0, c1.1, c2.0, c2.1, p2.0, p2.1
+            );
+        }
+        if close {
+            d.push('Z');
+        }
+    }
+    d
+}
+
+fn content_path(chunks: &[Vec<(f64, f64)>], close: bool, smooth: bool) -> String {
+    if smooth {
+        path_smooth(chunks, close)
+    } else {
+        path_from(chunks, close)
+    }
+}
+
+/// Subdivide along great circles so no chord strays visibly from the
+/// sphere: precision by construction, adapted to the render scale.
+fn densify(pts: &[UnitVec], max_step: f64, closed: bool) -> Vec<UnitVec> {
+    let n = pts.len();
+    if n < 2 {
+        return pts.to_vec();
+    }
+    let edges = if closed { n } else { n - 1 };
+    let mut out = Vec::with_capacity(n * 2);
+    for i in 0..edges {
+        let (p, q) = (&pts[i], &pts[(i + 1) % n]);
+        out.push(*p);
+        let angle = p.angle_to(q);
+        if angle > max_step {
+            let steps = (angle / max_step).ceil() as usize;
+            for k in 1..steps {
+                if let Ok(mid) = map_types::slerp(p, q, k as f64 / steps as f64) {
+                    out.push(mid);
+                }
+            }
+        }
+    }
+    if !closed {
+        out.push(pts[n - 1]);
+    }
+    out
+}
+
+type Bounds = (f64, f64, f64, f64);
+
+fn grow(b: &mut Option<Bounds>, (x, y): (f64, f64)) {
+    *b = Some(match *b {
+        None => (x, y, x, y),
+        Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+    });
+}
+
+/// Emit fills, strokes, and markers through a projector; returns each
+/// region's projected extent for the label pass. `ring_of` returns the
 /// page-space rings of a Ring (empty when fully out of view);
 /// `line_of` the visible runs of a polyline; `point_of` a visible point.
 fn emit_scene(
@@ -113,7 +205,9 @@ fn emit_scene(
     ring_of: &dyn Fn(&Ring) -> Vec<Vec<(f64, f64)>>,
     line_of: &dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>>,
     point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
-) {
+    smooth: bool,
+) -> std::collections::BTreeMap<u64, Bounds> {
+    let mut extents: std::collections::BTreeMap<u64, Bounds> = Default::default();
     for r in &scene.regions {
         let mut chunks: Vec<Vec<(f64, f64)>> = Vec::new();
         for ring in r.outer.iter().chain(&r.holes) {
@@ -122,11 +216,24 @@ fn emit_scene(
         if chunks.is_empty() {
             continue;
         }
+        let mut b: Option<Bounds> = None;
+        for pt in chunks.iter().flatten() {
+            grow(&mut b, *pt);
+        }
+        if let Some(b) = b {
+            // Later layers of the same region only widen its extent.
+            extents
+                .entry(r.region.0 .0)
+                .and_modify(|e| {
+                    *e = (e.0.min(b.0), e.1.min(b.1), e.2.max(b.2), e.3.max(b.3));
+                })
+                .or_insert(b);
+        }
         let _ = write!(
             s,
             "<path data-region=\"{:016x}\" d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
             r.region.0 .0,
-            path_from(&chunks, true),
+            content_path(&chunks, true, smooth),
             rgb(r.paint.fill),
             alpha(r.paint.fill)
         );
@@ -140,7 +247,7 @@ fn emit_scene(
         let _ = write!(
             s,
             "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.3}\" stroke-opacity=\"{:.3}\" stroke-linejoin=\"round\" stroke-linecap=\"round\"{}/>",
-            path_from(&chunks, false),
+            content_path(&chunks, false, smooth),
             rgb(b.stroke.color),
             width,
             opacity,
@@ -160,19 +267,66 @@ fn emit_scene(
             );
         }
     }
+    extents
+}
+
+/// The label pass: a label must FIT what it names and never collide.
+/// Region labels shrink to their territory's projected extent and are
+/// DROPPED when even the minimum readable size will not fit; every
+/// candidate then tries its anchor and small vertical nudges, and
+/// yields rather than overlap an earlier label. Deterministic: scene
+/// order is placement priority.
+fn emit_labels(
+    s: &mut String,
+    scene: &Snapshot,
+    extents: &std::collections::BTreeMap<u64, Bounds>,
+    point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
+    page_width: f64,
+) {
+    const CHAR_WIDTH: f64 = 0.62; // monospace em fraction
+    let min_size = (page_width / 260.0).max(4.0);
+    let mut placed: Vec<Bounds> = Vec::new();
+    let collides = |b: &Bounds, placed: &[Bounds]| {
+        placed.iter().any(|p| b.0 < p.2 && p.0 < b.2 && b.1 < p.3 && p.1 < b.3)
+    };
     for l in &scene.labels {
-        if let Some((x, y)) = point_of(&l.at) {
-            let _ = write!(
-                s,
-                "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
-                x,
-                y,
-                l.style.size,
-                rgb(l.style.color),
-                alpha(l.style.color),
-                esc(&l.text)
-            );
+        let Some((x, y)) = point_of(&l.at) else { continue };
+        let chars = l.text.chars().count().max(1) as f64;
+        let mut size = l.style.size;
+        if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
+            if let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) {
+                let fit_w = (x1 - x0) * 0.92 / (chars * CHAR_WIDTH);
+                let fit_h = (y1 - y0) * 0.8;
+                size = size.min(fit_w).min(fit_h);
+            }
         }
+        if size < min_size {
+            continue; // the territory cannot hold a readable label
+        }
+        let (w, h) = (chars * CHAR_WIDTH * size, size * 1.25);
+        let mut spot = None;
+        for dy in [0.0, -h, h, -2.0 * h, 2.0 * h] {
+            let b = (x - w / 2.0, y + dy - h * 0.75, x + w / 2.0, y + dy + h * 0.35);
+            if !collides(&b, &placed) {
+                spot = Some((y + dy, b));
+                break;
+            }
+        }
+        let Some((y, b)) = spot else { continue };
+        placed.push(b);
+        let _ = write!(
+            s,
+            "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
+            x,
+            y,
+            size,
+            rgb(l.style.color),
+            alpha(l.style.color),
+            rgb(l.style.halo),
+            alpha(l.style.halo),
+            size * 0.28,
+            esc(&l.text)
+        );
     }
 }
 
@@ -356,9 +510,13 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
             globe.cx, globe.cy, globe.scale
         );
     }
+    // Chord error stays under ~0.75px at this scale: precision follows
+    // resolution, so a wider plate is genuinely finer.
+    let max_step = (6.0 / globe.scale).sqrt().clamp(0.0015, 0.05);
+
     let mut grat = String::new();
     for line in graticule() {
-        for run in clip_line_front(&line, &center) {
+        for run in clip_line_front(&densify(&line, max_step, false), &center) {
             let pts: Vec<(f64, f64)> = run.iter().map(|p| globe.place_unclipped(p)).collect();
             let _ = write!(grat, "{}", path_from(&[pts], false));
         }
@@ -370,20 +528,21 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     );
 
     let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
-        let clipped = clip_ring_front(ring.points(), &center);
+        let clipped = clip_ring_front(&densify(ring.points(), max_step, true), &center);
         if clipped.len() < 3 {
             return Vec::new();
         }
         vec![clipped.iter().map(|p| globe.place_unclipped(p)).collect()]
     };
     let line_of = |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> {
-        clip_line_front(pts, &center)
+        clip_line_front(&densify(pts, max_step, false), &center)
             .into_iter()
             .map(|run| run.iter().map(|p| globe.place_unclipped(p)).collect())
             .collect()
     };
     let point_of = |p: &UnitVec| globe.place(p);
-    emit_scene(&mut s, scene, &ring_of, &line_of, &point_of);
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth);
+    emit_labels(&mut s, scene, &extents, &point_of, enc.width);
     s.push_str("</svg>");
     s
 }
@@ -424,7 +583,8 @@ fn encode_flat(enc: &SvgEncoder, scene: &Snapshot) -> Result<String, EncodeError
     let line_of =
         |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };
     let point_of = |p: &UnitVec| Some(place(p));
-    emit_scene(&mut s, scene, &ring_of, &line_of, &point_of);
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth);
+    emit_labels(&mut s, scene, &extents, &point_of, enc.width);
     s.push_str("</svg>");
     Ok(s)
 }

@@ -101,6 +101,27 @@ fn in_viewport(viewport: &Option<Bbox>, pts: &[UnitVec]) -> bool {
     }
 }
 
+/// A region's angular size — max angle from its centroid to any vertex.
+fn angular_radius(r: &StyledRegion) -> f64 {
+    let pts: Vec<&UnitVec> = r.outer.iter().flat_map(|ring| ring.points()).collect();
+    let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+    for p in &pts {
+        x += p.x();
+        y += p.y();
+        z += p.z();
+    }
+    let Ok(c) = UnitVec::normalize(x, y, z) else { return 0.0 };
+    pts.iter().map(|p| c.angle_to(p)).fold(0.0, f64::max)
+}
+
+/// Paint order is clickability and visibility: the largest regions go
+/// down first, so an empire never buries the vassals inside it.
+fn sort_largest_first(regions: &mut [StyledRegion]) {
+    regions.sort_by_cached_key(|r| {
+        (std::cmp::Reverse((angular_radius(r) * 1e9) as u64), r.region.0 .0)
+    });
+}
+
 // ------------------------------------------------------ the materializer
 
 impl TimelineProvider {
@@ -243,6 +264,7 @@ impl TimelineProvider {
                 for id in region_ids {
                     self.push_region(&mut scene, q, id, at, style, style.region_paint(), true)?;
                 }
+                sort_largest_first(&mut scene.regions);
                 let boundary_ids: Vec<BoundaryId> =
                     self.timeline.boundaries.keys().copied().collect();
                 for id in boundary_ids {
@@ -496,6 +518,7 @@ impl TimelineProvider {
                     for id in ids {
                         self.push_region(&mut scene, &sub, id, t, style, style.region_paint(), true)?;
                     }
+                    sort_largest_first(&mut scene.regions);
                 }
                 RenderSubject::World => {}
                 // A focused subject's range keeps every state's fill,

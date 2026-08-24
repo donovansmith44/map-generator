@@ -136,6 +136,8 @@ impl MapAddressed for Snapshot {
                 LabelSubject::Free => c.u8_(2),
             };
             let crate::style::Rgba(r, g, bl, a) = l.style.color;
+            c.u8_(r).u8_(g).u8_(bl).u8_(a);
+            let crate::style::Rgba(r, g, bl, a) = l.style.halo;
             c.u8_(r).u8_(g).u8_(bl).u8_(a).f64_(l.style.size);
         });
         let sources: Vec<_> = self.attribution.iter().collect();

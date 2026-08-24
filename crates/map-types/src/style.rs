@@ -64,6 +64,8 @@ pub struct AgeRamp {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LabelStyle {
     pub color: Rgba,
+    /// The casing that keeps text legible over any fill.
+    pub halo: Rgba,
     pub size: f64,
 }
 
@@ -165,6 +167,8 @@ impl Style {
         self.age.newest.canon(c);
         self.age.oldest.canon(c);
         let Rgba(r, g, b, a) = self.label.color;
+        c.u8_(r).u8_(g).u8_(b).u8_(a);
+        let Rgba(r, g, b, a) = self.label.halo;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.label.size);
         let Rgba(r, g, b, a) = self.marker.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.marker.size);
