@@ -258,7 +258,9 @@ pub fn validate_bible_preference(
         match chronology.placements.get(&driver.event) {
             None => v.push(Violation::DriverUnknownToAtlas { event: driver.event.clone() }),
             Some(p) => {
-                if e.at != p.date.from {
+                // A span-shaped placement (siege..fall) realizes at
+                // either ENDPOINT — never an invented interior date.
+                if e.at != p.date.from && e.at != p.date.to {
                     v.push(Violation::DriverDateMismatch {
                         event: driver.event.clone(),
                         map_at: e.at,

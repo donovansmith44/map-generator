@@ -1072,8 +1072,11 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         .collect();
     let mut fall_res: Option<(i32, Option<AtlasEventRef>)> = e.fall.map(|(y, book, ch, v0, v1, _)| {
         match atlas.and_then(|a| a.resolve_event(book, (ch, v0), (ch, v1))) {
-            Some((eid, ry, _)) => {
-                (ry, atlas.map(|a| AtlasEventRef { event: eid, atlas_root: a.root }))
+            // A fall realizes at the span's END: the atlas may place
+            // siege-through-fall as an interval; the fall is its
+            // consummation (their curation note agrees).
+            Some((eid, _, ty)) => {
+                (ty, atlas.map(|a| AtlasEventRef { event: eid, atlas_root: a.root }))
             }
             None => (y, None),
         }
@@ -1256,7 +1259,11 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
             );
         }
         if let Some((y, book, ch, v0, v1, _)) = e.fall {
-            push(format!("{}/fall", e.tag), atlas.resolve_event(book, (ch, v0), (ch, v1)), y);
+            // Falls adopt the span END — audit against the same.
+            let res = atlas
+                .resolve_event(book, (ch, v0), (ch, v1))
+                .map(|(eid, _, ty)| (eid, ty, ty));
+            push(format!("{}/fall", e.tag), res, y);
         }
     }
     for r in ROUTES {
