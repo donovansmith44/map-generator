@@ -296,12 +296,13 @@ function currentParams(quality) {
     p.set("lod", "0.008");
     p.set("labels", "0");
     p.set("width", "1200");
+    p.set("smooth", "0"); // curves double the bytes; drag frames go straight
   } else {
     p.set("lod", $("lod").value);
     p.set("labels", $("labels").checked ? "1" : "0");
     p.set("width", $("res").value);
+    p.set("smooth", $("smooth").checked ? "1" : "0");
   }
-  p.set("smooth", $("smooth").checked ? "1" : "0");
   p.set("topo", $("topo").checked ? "1" : "0");
   p.set("relief", $("relief").checked ? "1" : "0");
   return p;

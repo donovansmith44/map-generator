@@ -264,3 +264,67 @@ fn transition_json_is_faithful_and_deterministic() {
     assert_eq!(doc["steps"][3]["children"].as_array().unwrap().len(), 2);
     assert_eq!(doc["steps"][4]["child"], "0000000000000003");
 }
+
+// ------------------------------------------------------ viewport culling
+
+/// Performance honesty (the laggy-drag fix): paths the page cannot
+/// show are not emitted. Off-page geometry is culled, a ring that
+/// swallows the page survives (its FILL is the page), and on-page
+/// geometry is untouched.
+#[test]
+fn globe_culls_offscreen_but_keeps_swallowing_fills() {
+    use atlas_graph_types::covenant::ContentHash;
+    use map_types::RegionId;
+
+    let region = |n: u64, ring: Vec<UnitVec>| StyledRegion {
+        region: RegionId(ContentHash(n)),
+        outer: vec![Ring::new(ring).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(10 + n as u8, 20, 30, 200) },
+        sources: [SourceId::new("test")].into(),
+    };
+    let square = |lat0: f64, lon0: f64, d: f64| {
+        vec![
+            uv(lat0, lon0),
+            uv(lat0, lon0 + d),
+            uv(lat0 + d, lon0 + d),
+            uv(lat0 + d, lon0),
+        ]
+    };
+    let scene = Snapshot {
+        regions: vec![
+            region(1, square(31.0, 35.0, 2.0)),  // on page (view center)
+            region(2, square(31.0, 75.0, 2.0)),  // same hemisphere, far off page
+            region(3, square(11.0, 15.0, 42.0)), // swallows the 5-degree view
+        ],
+        boundaries: vec![],
+        markers: vec![],
+        labels: vec![],
+        attribution: [SourceId::new("test")].into(),
+    };
+    let enc = SvgEncoder {
+        width: 800.0,
+        padding: 16.0,
+        projection: Projection::Globe { center: Some((32.0, 36.0)), zoom: Some(5.0) },
+        smooth: false,
+    };
+    let svg = enc.encode(&scene).unwrap();
+    assert!(svg.contains("data-region=\"0000000000000001\""), "on-page region emitted");
+    assert!(
+        !svg.contains("data-region=\"0000000000000002\""),
+        "off-page region culled from the bytes"
+    );
+    assert!(
+        svg.contains("data-region=\"0000000000000003\""),
+        "a ring swallowing the page still fills it"
+    );
+    // Whole-hemisphere view: nothing in this scene may be culled.
+    let wide = SvgEncoder {
+        projection: Projection::Globe { center: Some((32.0, 36.0)), zoom: Some(90.0) },
+        ..enc
+    };
+    let svg = wide.encode(&scene).unwrap();
+    for n in 1..=3 {
+        assert!(svg.contains(&format!("data-region=\"{n:016x}\"")), "region {n} at zoom 90");
+    }
+}

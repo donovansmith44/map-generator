@@ -101,7 +101,7 @@ fn path_from(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
     let mut d = String::new();
     for pts in chunks {
         for (i, (x, y)) in pts.iter().enumerate() {
-            let _ = write!(d, "{}{:.3} {:.3}", if i == 0 { "M" } else { "L" }, x, y);
+            let _ = write!(d, "{}{:.1} {:.1}", if i == 0 { "M" } else { "L" }, x, y);
         }
         if close {
             d.push('Z');
@@ -130,7 +130,7 @@ fn path_smooth(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
         };
         let last = if close { n } else { n - 1 };
         let (x0, y0) = pts[0];
-        let _ = write!(d, "M{x0:.3} {y0:.3}");
+        let _ = write!(d, "M{x0:.1} {y0:.1}");
         for i in 0..last {
             let p0 = at(i as isize - 1);
             let p1 = at(i as isize);
@@ -140,7 +140,7 @@ fn path_smooth(chunks: &[Vec<(f64, f64)>], close: bool) -> String {
             let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, p2.1 - (p3.1 - p1.1) / 6.0);
             let _ = write!(
                 d,
-                "C{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}",
+                "C{:.1} {:.1} {:.1} {:.1} {:.1} {:.1}",
                 c1.0, c1.1, c2.0, c2.1, p2.0, p2.1
             );
         }
@@ -196,10 +196,39 @@ fn grow(b: &mut Option<Bounds>, (x, y): (f64, f64)) {
     });
 }
 
+/// Culling against the page (performance honesty: a path the page
+/// cannot show is pure parse cost downstream). A chunk survives when
+/// its bbox touches the padded page OR swallows it whole — a ring
+/// around the viewport still fills the viewport; one entirely beside
+/// it cannot paint a single visible pixel.
+fn chunk_matters(b: &Bounds, page: &Option<Bounds>) -> bool {
+    let Some(p) = page else { return true };
+    let touches = b.0 <= p.2 && p.0 <= b.2 && b.1 <= p.3 && p.1 <= b.3;
+    let swallows = b.0 <= p.0 && b.1 <= p.1 && b.2 >= p.2 && b.3 >= p.3;
+    touches || swallows
+}
+
+fn bbox_of(pts: &[(f64, f64)]) -> Option<Bounds> {
+    let mut b = None;
+    for pt in pts {
+        grow(&mut b, *pt);
+    }
+    b
+}
+
+/// Below this size on the page a shape cannot resolve; emitting it is
+/// bytes without pixels.
+const SUBPIXEL: f64 = 0.7;
+
+fn subpixel(b: &Bounds) -> bool {
+    b.2 - b.0 < SUBPIXEL && b.3 - b.1 < SUBPIXEL
+}
+
 /// Emit fills, strokes, and markers through a projector; returns each
 /// region's projected extent for the label pass. `ring_of` returns the
 /// page-space rings of a Ring (empty when fully out of view);
 /// `line_of` the visible runs of a polyline; `point_of` a visible point.
+/// `page` is the padded viewport for culling (None = emit everything).
 fn emit_scene(
     s: &mut String,
     scene: &Snapshot,
@@ -207,12 +236,20 @@ fn emit_scene(
     line_of: &dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>>,
     point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
     smooth: bool,
+    page: &Option<Bounds>,
 ) -> std::collections::BTreeMap<u64, Bounds> {
     let mut extents: std::collections::BTreeMap<u64, Bounds> = Default::default();
     for r in &scene.regions {
         let mut chunks: Vec<Vec<(f64, f64)>> = Vec::new();
         for ring in r.outer.iter().chain(&r.holes) {
-            chunks.extend(ring_of(ring));
+            // Per-ring culling is parity-safe under evenodd: a ring
+            // that neither touches nor swallows the page contributes
+            // zero winding to every visible pixel.
+            for chunk in ring_of(ring) {
+                if bbox_of(&chunk).is_some_and(|cb| chunk_matters(&cb, page)) {
+                    chunks.push(chunk);
+                }
+            }
         }
         if chunks.is_empty() {
             continue;
@@ -220,6 +257,9 @@ fn emit_scene(
         let mut b: Option<Bounds> = None;
         for pt in chunks.iter().flatten() {
             grow(&mut b, *pt);
+        }
+        if b.as_ref().is_some_and(subpixel) {
+            continue;
         }
         if let Some(b) = b {
             // Later layers of the same region only widen its extent.
@@ -240,7 +280,16 @@ fn emit_scene(
         );
     }
     for b in &scene.boundaries {
-        let chunks = line_of(&b.pts);
+        // A densified run that crosses the page has points ON the
+        // page, so a bbox-disjoint run is genuinely invisible; and a
+        // subpixel run resolves to nothing under its own stroke.
+        let chunks: Vec<Vec<(f64, f64)>> = line_of(&b.pts)
+            .into_iter()
+            .filter(|chunk| {
+                bbox_of(chunk)
+                    .is_some_and(|cb| chunk_matters(&cb, page) && !subpixel(&cb))
+            })
+            .collect();
         if chunks.is_empty() {
             continue;
         }
@@ -257,9 +306,12 @@ fn emit_scene(
     }
     for m in &scene.markers {
         if let Some((x, y)) = point_of(&m.at) {
+            if !chunk_matters(&(x, y, x, y), page) {
+                continue;
+            }
             let _ = write!(
                 s,
-                "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\"/>",
+                "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\"/>",
                 x,
                 y,
                 m.style.size,
@@ -283,6 +335,7 @@ fn emit_labels(
     extents: &std::collections::BTreeMap<u64, Bounds>,
     point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
     page_width: f64,
+    page: &Option<Bounds>,
 ) {
     const CHAR_WIDTH: f64 = 0.62; // monospace em fraction
     let min_size = (page_width / 260.0).max(4.0);
@@ -292,6 +345,9 @@ fn emit_labels(
     };
     for l in &scene.labels {
         let Some((x, y)) = point_of(&l.at) else { continue };
+        if !chunk_matters(&(x, y, x, y), page) {
+            continue; // anchored off the page: unreadable by definition
+        }
         let chars = l.text.chars().count().max(1) as f64;
         let mut size = l.style.size;
         if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
@@ -317,7 +373,7 @@ fn emit_labels(
         placed.push(b);
         let _ = write!(
             s,
-            "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
+            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
             x,
             y,
             size,
@@ -617,8 +673,13 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
             .collect()
     };
     let point_of = |p: &UnitVec| globe.place(p);
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth);
-    emit_labels(&mut s, scene, &extents, &point_of, enc.width);
+    // Cull to the page plus a stroke-and-label margin: zoomed views
+    // stop paying (in bytes and in the consumer's parse time) for the
+    // rest of the hemisphere.
+    let pad = (enc.width * 0.05).max(24.0);
+    let page = Some((-pad, -pad, enc.width + pad, enc.width + pad));
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &page);
+    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &page);
     s.push_str("</svg>");
     s
 }
@@ -659,8 +720,9 @@ fn encode_flat(enc: &SvgEncoder, scene: &Snapshot) -> Result<String, EncodeError
     let line_of =
         |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };
     let point_of = |p: &UnitVec| Some(place(p));
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth);
-    emit_labels(&mut s, scene, &extents, &point_of, enc.width);
+    // The flat plate fits the whole world to the page — nothing to cull.
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &None);
+    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &None);
     s.push_str("</svg>");
     Ok(s)
 }
