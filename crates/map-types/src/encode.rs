@@ -22,6 +22,7 @@
 //! lands: a semantic script, encodable per backend.
 
 use crate::scene::Snapshot;
+use crate::transition::TransitionScript;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncodeError(pub String);
@@ -29,4 +30,14 @@ pub struct EncodeError(pub String);
 pub trait SceneEncoder {
     type Output;
     fn encode(&self, scene: &Snapshot) -> Result<Self::Output, EncodeError>;
+}
+
+/// The promised treatment (phase 6): a `TransitionScript` is the last
+/// semantic type on the animation path, and every concrete animation
+/// format — JSON for a web player, CSS keyframes, a video timeline —
+/// is a terminal backend behind this trait, under the same law 11
+/// terms as scenes: deterministic bytes, no composition post-encode.
+pub trait TransitionEncoder {
+    type Output;
+    fn encode_transition(&self, script: &TransitionScript) -> Result<Self::Output, EncodeError>;
 }

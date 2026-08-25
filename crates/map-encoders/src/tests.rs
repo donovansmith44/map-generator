@@ -215,3 +215,52 @@ fn empty_scene_encodes() {
     assert!(SvgEncoder::default().encode(&empty).is_ok());
     assert!(GeoJsonEncoder.encode(&empty).is_ok());
 }
+
+// -------------------------------------------------- transition encoder
+
+/// The transition backend under law 11: identity encodes to an empty
+/// step list, every semantic verb passes through untranslated, and the
+/// bytes are deterministic.
+#[test]
+fn transition_json_is_faithful_and_deterministic() {
+    use crate::JsonTransitionEncoder;
+    use atlas_graph_types::covenant::ContentHash;
+    use map_types::{BoundaryId, RegionId, TransitionEncoder, TransitionScript, TransitionStep};
+
+    let empty = JsonTransitionEncoder.encode_transition(&TransitionScript::empty()).unwrap();
+    assert_eq!(empty, r#"{"steps":[]}"#);
+
+    let rid = |n| RegionId(ContentHash(n));
+    let script = TransitionScript {
+        steps: vec![
+            TransitionStep::Morph {
+                boundary: BoundaryId(ContentHash(7)),
+                from_pts: vec![uv(31.0, 35.0), uv(32.0, 35.0)],
+                to_pts: vec![uv(31.0, 35.5), uv(32.0, 35.5)],
+            },
+            TransitionStep::FadeIn { region: rid(1) },
+            TransitionStep::FadeOut { region: rid(2) },
+            TransitionStep::SplitAlong {
+                parent: rid(3),
+                seam: vec![uv(31.0, 35.0), uv(32.0, 35.0)],
+                children: vec![rid(4), rid(5)],
+            },
+            TransitionStep::MergeAcross { parents: vec![rid(4), rid(5)], child: rid(3) },
+        ],
+    };
+    let a = JsonTransitionEncoder.encode_transition(&script).unwrap();
+    let b = JsonTransitionEncoder.encode_transition(&script).unwrap();
+    assert_eq!(a, b, "law 11: same script, same bytes");
+
+    let doc: serde_json::Value = serde_json::from_str(&a).unwrap();
+    let kinds: Vec<&str> = doc["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["morph", "fade_in", "fade_out", "split", "merge"]);
+    assert_eq!(doc["steps"][0]["boundary"], "0000000000000007");
+    assert_eq!(doc["steps"][3]["children"].as_array().unwrap().len(), 2);
+    assert_eq!(doc["steps"][4]["child"], "0000000000000003");
+}

@@ -55,7 +55,7 @@ pub use boundary::{
     Orientation, RegionGeom, RegionPart,
 };
 pub use contracts::{ChronoSpan, ChronologyExport, GazetteerEntry, GazetteerExport};
-pub use encode::{EncodeError, SceneEncoder};
+pub use encode::{EncodeError, SceneEncoder, TransitionEncoder};
 pub use geom::{morph_rings, simplify_polyline, slerp, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
 pub use ident::{BoundaryId, ChangeEventId, MapAddressed, MapKind, MapPid, RegionId, StyleId};
 pub use laws::{validate_all, Violation};

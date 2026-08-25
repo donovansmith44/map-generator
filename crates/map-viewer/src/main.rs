@@ -19,7 +19,7 @@ use map_adapters::{
     scripture_timeline_with, EpochSource, IngestConfig,
 };
 use map_provider::SCRIPTURE_SOURCE;
-use map_encoders::{GeoJsonEncoder, SvgEncoder};
+use map_encoders::{GeoJsonEncoder, JsonTransitionEncoder, SvgEncoder};
 use map_provider::TimelineProvider;
 use map_types::style::*;
 use map_types::{
@@ -27,6 +27,7 @@ use map_types::{
     RenderQuery, RenderSubject, Snapshot, StyleId, TimeSelector,
 };
 use map_types::SceneEncoder as _;
+use map_types::TransitionEncoder as _;
 
 const PAGE: &str = include_str!("page.html");
 /// Default port. 8080/8081/8000/5000 belong to the Bible Atlas
@@ -653,6 +654,23 @@ fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<
                 })
                 .collect();
             (200, "application/json", serde_json::Value::Array(rows).to_string(), Vec::new())
+        }
+
+        "/api/transition" => {
+            // The semantic animation between two instants, in the
+            // terminal JSON encoding (phase 6): fades, splits, merges,
+            // morphs — never a blurred crossfade of the lot.
+            let (Some(from), Some(to)) = (p.year("from"), p.year("to")) else {
+                return bad("from and to required");
+            };
+            let lod = p.get("lod").and_then(|l| l.parse().ok()).map(Lod).unwrap_or(Lod(6.0));
+            match app.provider.transition(from, to, map_types::Bbox::whole_world(), lod) {
+                Ok(script) => match JsonTransitionEncoder.encode_transition(&script) {
+                    Ok(body) => (200, "application/json", body, Vec::new()),
+                    Err(e) => bad(&format!("encode: {}", e.0)),
+                },
+                Err(e) => bad(&format!("transition: {e:?}")),
+            }
         }
 
         "/api/render" => {

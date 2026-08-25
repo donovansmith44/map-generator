@@ -16,7 +16,8 @@ use std::fmt::Write as _;
 
 use map_types::scene::LabelSubject;
 use map_types::style::{Rgba, StrokePattern};
-use map_types::{EncodeError, Ring, SceneEncoder, Snapshot, UnitVec};
+use map_types::{EncodeError, Ring, SceneEncoder, Snapshot, TransitionEncoder, UnitVec};
+use map_types::{TransitionScript, TransitionStep};
 
 fn lat_lon(v: &UnitVec) -> (f64, f64) {
     (v.z().asin().to_degrees(), v.y().atan2(v.x()).to_degrees())
@@ -771,6 +772,70 @@ impl SceneEncoder for GeoJsonEncoder {
             "features": features
         });
         Ok(doc.to_string())
+    }
+}
+
+// ---------------------------------------------------- transition JSON
+
+/// The transition backend for a web player: each semantic step becomes
+/// one JSON object, ids in stable hex, points as [lon, lat] pairs. The
+/// verbs pass through untranslated — a consumer that animates a Split
+/// as a Morph would be lying about topology, so the format refuses to
+/// blur them.
+pub struct JsonTransitionEncoder;
+
+fn pts_json(pts: &[UnitVec]) -> serde_json::Value {
+    serde_json::Value::Array(
+        pts.iter()
+            .map(|p| {
+                let (lat, lon) = lat_lon(p);
+                serde_json::json!([lon, lat])
+            })
+            .collect(),
+    )
+}
+
+impl TransitionEncoder for JsonTransitionEncoder {
+    type Output = String;
+    fn encode_transition(&self, script: &TransitionScript) -> Result<String, EncodeError> {
+        let steps: Vec<serde_json::Value> = script
+            .steps
+            .iter()
+            .map(|s| match s {
+                TransitionStep::Morph { boundary, from_pts, to_pts } => serde_json::json!({
+                    "kind": "morph",
+                    "boundary": format!("{:016x}", boundary.0 .0),
+                    "from": pts_json(from_pts),
+                    "to": pts_json(to_pts),
+                }),
+                TransitionStep::FadeIn { region } => serde_json::json!({
+                    "kind": "fade_in",
+                    "region": format!("{:016x}", region.0 .0),
+                }),
+                TransitionStep::FadeOut { region } => serde_json::json!({
+                    "kind": "fade_out",
+                    "region": format!("{:016x}", region.0 .0),
+                }),
+                TransitionStep::SplitAlong { parent, seam, children } => serde_json::json!({
+                    "kind": "split",
+                    "parent": format!("{:016x}", parent.0 .0),
+                    "seam": pts_json(seam),
+                    "children": children
+                        .iter()
+                        .map(|c| format!("{:016x}", c.0 .0))
+                        .collect::<Vec<_>>(),
+                }),
+                TransitionStep::MergeAcross { parents, child } => serde_json::json!({
+                    "kind": "merge",
+                    "parents": parents
+                        .iter()
+                        .map(|p| format!("{:016x}", p.0 .0))
+                        .collect::<Vec<_>>(),
+                    "child": format!("{:016x}", child.0 .0),
+                }),
+            })
+            .collect();
+        Ok(serde_json::json!({ "steps": steps }).to_string())
     }
 }
 
