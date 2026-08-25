@@ -4,7 +4,7 @@
 
 PORT ?= 8090
 
-.PHONY: build test demo stop maps clean
+.PHONY: build test demo stop maps artifacts clean
 
 build:
 	cargo build --release
@@ -25,6 +25,12 @@ stop:
 # running demo's API into out/maps/ (SVG, scalable). Needs `make demo`.
 maps:
 	PORT=$(PORT) bash scripts/make-maps.sh
+
+# Serverless content-addressed plates: no server needed. Filenames are
+# the cache key (query hash + world pin); manifest.json maps names to
+# artifacts. Output: out/artifacts/.
+artifacts: build
+	./target/release/map-cli plates
 
 clean:
 	cargo clean
