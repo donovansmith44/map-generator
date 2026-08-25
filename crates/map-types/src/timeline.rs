@@ -74,6 +74,9 @@ pub enum RegionClass {
     #[default]
     Land,
     Water,
+    /// A hypsometric elevation band (phase 5): band index orders from
+    /// lowest to highest; the style's topo ramp picks the tint.
+    Terrain(u8),
 }
 
 #[derive(Clone, Debug, PartialEq)]

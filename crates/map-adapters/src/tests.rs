@@ -568,3 +568,63 @@ fn real_source_ingests_lawfully() {
         assert!(present > 10, "{present} regions present at 1900 BC");
     }
 }
+
+// ----------------------------------------------------------- terrain
+
+/// A synthetic hill: marching squares closes ONE ring around it, the
+/// run is deterministic, and the ingested timeline is lawful with the
+/// Terrain class on every band region.
+#[test]
+fn terrain_contours_close_and_ingest_lawfully() {
+    use crate::terrain::{contour_rings, ingest_terrain, ElevationGrid};
+    // 12x12 grid, 1-degree cells: a broad flat hill of 300 m in the
+    // middle of a 0 m plain.
+    let (rows, cols) = (12usize, 12usize);
+    let mut data = vec![0i16; rows * cols];
+    for i in 4..8 {
+        for j in 4..8 {
+            data[i * cols + j] = 300;
+        }
+    }
+    let grid = ElevationGrid { rows, cols, lat0: 10.0, lon0: 20.0, step: 1.0, data };
+    let rings = contour_rings(&grid, 200.0);
+    assert_eq!(rings.len(), 1, "one hill, one contour");
+    let ring = &rings[0];
+    assert!(ring.len() >= 8);
+    for (lat, lon) in ring {
+        // Every crossing lies inside the hill's collar, between the
+        // plain corners (14,24)..(17,27) padded by one cell.
+        assert!((13.0..=18.0).contains(lat) && (23.0..=28.0).contains(lon), "({lat},{lon})");
+    }
+    assert_eq!(rings, contour_rings(&grid, 200.0), "law 1: identical runs");
+
+    let tl = ingest_terrain(&grid, tp(-4004));
+    assert_eq!(tl.regions.len(), 1, "only the 200 m band exists on a 300 m hill");
+    let r = tl.regions.values().next().unwrap();
+    assert_eq!(r.class, map_types::RegionClass::Terrain(0));
+    let (chron, gaz) = empty_exports();
+    assert_eq!(validate_all(&tl, &chron, &gaz), vec![]);
+    // And the relief joins the scripture world lawfully.
+    use crate::surveys::{merge_timelines, scripture_timeline, stand_in_gazetteer};
+    let merged = merge_timelines(scripture_timeline(), tl).expect("relief merges");
+    assert_eq!(validate_all(&merged, &chron, &stand_in_gazetteer()), vec![]);
+}
+
+/// The vendored ETOPO grid parses and contours into all five bands —
+/// the earth has hills, uplands, highlands, mountains, and peaks.
+#[test]
+fn terrain_real_grid_smoke() {
+    use crate::terrain::{ingest_terrain, ElevationGrid, BANDS};
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/terrain/etopo_15min.bin");
+    let bytes = std::fs::read(path).expect("vendored terrain grid");
+    let grid = ElevationGrid::from_etopo_bin(&bytes).expect("shape 721x1441");
+    let tl = ingest_terrain(&grid, tp(-4004));
+    assert_eq!(tl.regions.len(), BANDS.len(), "every band is inhabited on the real earth");
+    for r in tl.regions.values() {
+        assert!(matches!(r.class, map_types::RegionClass::Terrain(_)));
+        assert!(!r.geom_history[0].1.parts.is_empty());
+    }
+    let (chron, gaz) = empty_exports();
+    assert_eq!(validate_all(&tl, &chron, &gaz), vec![]);
+}

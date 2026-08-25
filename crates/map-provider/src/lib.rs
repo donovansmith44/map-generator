@@ -249,8 +249,8 @@ impl TimelineProvider {
         paint: Paint,
         with_label: bool,
     ) -> Result<(), MapError> {
-        // Water is first-class but rides the TOPOGRAPHY layer, and
-        // always wears the water paint — the sea does not age-ramp.
+        // Water rides the TOPOGRAPHY layer in the water paint; relief
+        // bands ride RELIEF in the hypsometric ramp; neither age-ramps.
         let paint = match self.timeline.regions.get(&id).map(|h| h.class).unwrap_or_default() {
             map_types::RegionClass::Land => paint,
             map_types::RegionClass::Water => {
@@ -258,6 +258,13 @@ impl TimelineProvider {
                     return Ok(());
                 }
                 style.water_paint()
+            }
+            map_types::RegionClass::Terrain(band) => {
+                if !q.layers.contains(LayerSet::RELIEF) {
+                    return Ok(());
+                }
+                let ramp = style.topo_ramp();
+                mix_paint(ramp.oldest, ramp.newest, f64::from(band) / 4.0)
             }
         };
         if let Some((region, label)) = self.styled_region(id, at, q.lod, style, paint)? {
@@ -357,9 +364,26 @@ impl TimelineProvider {
                     self.push_region(&mut scene, q, id, at, style, paint_for(&id), true)?;
                 }
                 sort_largest_first(&mut scene.regions);
+                // Relief renders as tint bands, never as border strokes:
+                // arcs referenced by terrain regions are skipped here.
+                let terrain_arcs: BTreeSet<BoundaryId> = self
+                    .timeline
+                    .regions
+                    .values()
+                    .filter(|h| matches!(h.class, map_types::RegionClass::Terrain(_)))
+                    .filter_map(|h| h.geom_at(at))
+                    .flat_map(|g| {
+                        g.parts.iter().flat_map(|p| {
+                            p.cycle.iter().chain(p.holes.iter().flatten()).map(|(b, _)| *b)
+                        })
+                    })
+                    .collect();
                 let boundary_ids: Vec<BoundaryId> =
                     self.timeline.boundaries.keys().copied().collect();
                 for id in boundary_ids {
+                    if terrain_arcs.contains(&id) {
+                        continue;
+                    }
                     if self.timeline.boundaries[&id].at(at).is_some() {
                         let sb = self.styled_boundary(id, at, q.lod, style)?;
                         if in_viewport(&q.viewport, &sb.pts) {

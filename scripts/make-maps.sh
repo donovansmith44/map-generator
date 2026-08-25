@@ -43,6 +43,9 @@ render 17-land-in-vision-ezk47     "subject=world&year=-570&$LEVANT"
 render 18-tetrarchies-luk3         "subject=world&year=30&center=32.3,35.4&zoom=2.5&bible=1"
 render 19-pauls-journeys-acts      "subject=world&year=64&center=37.5,28&zoom=12&bible=1"
 
+# The land's own shape: hypsometric relief under the polities.
+render 20-relief-near-east         "subject=world&year=-2500&center=32.5,38&zoom=12&relief=1"
+
 # The world's context at key moments (all sources, not bible-only).
 render 11-world-at-abraham         "subject=world&year=-1900&center=33,38&zoom=18"
 render 12-world-at-the-exile       "subject=world&year=-586&center=33,38&zoom=18"

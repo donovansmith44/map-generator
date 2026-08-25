@@ -35,6 +35,10 @@ fn honest_style() -> Style {
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
+        AgeRamp {
+            newest: Paint { fill: Rgba(150, 110, 80, 200) },
+            oldest: Paint { fill: Rgba(225, 214, 180, 200) },
+        },
         None,
         AgeRamp {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
@@ -400,6 +404,10 @@ fn palette_colors_touching_regions_distinctly() {
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
+        AgeRamp {
+            newest: Paint { fill: Rgba(150, 110, 80, 200) },
+            oldest: Paint { fill: Rgba(225, 214, 180, 200) },
+        },
         Some(palette),
         AgeRamp {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },

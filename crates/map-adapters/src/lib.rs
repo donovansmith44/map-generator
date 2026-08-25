@@ -14,6 +14,7 @@ pub mod geojson;
 pub mod hydro;
 pub mod quantize;
 pub mod surveys;
+pub mod terrain;
 
 pub use basemaps::{
     epoch_year_from_label, fidelity_violations, ingest, EpochSource, Exemption, HistoricalBasemaps,
@@ -21,6 +22,7 @@ pub use basemaps::{
 };
 pub use exports::{load_exports, AtlasExports, ExportError};
 pub use hydro::{ingest_ocean, ingest_water, WaterSource};
+pub use terrain::{ingest_terrain, ElevationGrid};
 pub use surveys::{
     binding_report, merge_timelines, merged_gazetteer, promised_land_timeline,
     scripture_timeline, scripture_timeline_with, stand_in_gazetteer, BindingRow, MergeError,

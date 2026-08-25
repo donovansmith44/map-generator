@@ -68,6 +68,11 @@ fn parchment() -> Style {
         },
         Paint { fill: Rgba(221, 204, 161, 235) },
         Paint { fill: Rgba(148, 175, 178, 235) },
+        // Hypsometric: pale lowland sand rising to warm summit brown.
+        AgeRamp {
+            newest: Paint { fill: Rgba(151, 112, 80, 210) },
+            oldest: Paint { fill: Rgba(226, 215, 183, 210) },
+        },
         // The atlas look: the dataviz-validated categorical eight,
         // softened by fill alpha over the plate. Touching territories
         // never share a slot (provider graph coloring).
@@ -107,6 +112,10 @@ fn slate() -> Style {
         },
         Paint { fill: Rgba(58, 66, 80, 235) },
         Paint { fill: Rgba(33, 42, 56, 245) },
+        AgeRamp {
+            newest: Paint { fill: Rgba(108, 96, 84, 220) },
+            oldest: Paint { fill: Rgba(52, 60, 68, 220) },
+        },
         Some([
             Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
             Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
@@ -154,6 +163,10 @@ fn ghosted(base: &Style) -> Style {
         },
         fade_paint(base.region_paint()),
         fade_paint(base.water_paint()),
+        AgeRamp {
+            newest: fade_paint(base.topo_ramp().newest),
+            oldest: fade_paint(base.topo_ramp().oldest),
+        },
         None, // the ghost is a uniform disclosure, never colorful
         base.age_ramp(),
         base.label_style(),
@@ -185,6 +198,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
         },
         paint,
         base.water_paint(),
+        base.topo_ramp(),
         None, // a comparison layer is ONE tint, that is its meaning
         base.age_ramp(),
         label,
@@ -276,9 +290,22 @@ fn load() -> App {
     // The first Bible-driven borders join the imported world, and the
     // merged whole must be lawful — fail loud at the door, not in a
     // render (validated against the stand-in gazetteer until C3 lands).
+    // Relief (phase 5): the land's own shape, contoured from the
+    // vendored elevation grid into hypsometric bands.
+    let terrain_tl = {
+        let bytes = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../data/terrain/etopo_15min.bin"),
+        )
+        .expect("vendored terrain grid");
+        let grid =
+            map_adapters::ElevationGrid::from_etopo_bin(&bytes).expect("terrain grid shape");
+        map_adapters::ingest_terrain(&grid, tp(creation_year).unwrap())
+    };
     let mut timeline = merge_timelines(out.timeline, scripture_timeline_with(Some(&atlas)))
         .and_then(|tl| merge_timelines(tl, water_tl))
-        .expect("scripture surveys and waters merge cleanly");
+        .and_then(|tl| merge_timelines(tl, terrain_tl))
+        .expect("scripture surveys, waters, and relief merge cleanly");
     // C6: the pin is live — a re-vendored export with a new root
     // makes staleness detectable, never silent.
     timeline.atlas_pin = Some(map_types::AtlasPin { version_root: atlas.root });
@@ -499,6 +526,9 @@ fn build_query(
     };
     if p.get("topo") != Some("0") {
         layers = layers.with(LayerSet::TOPOGRAPHY); // the seas, on by default
+    }
+    if p.get("relief") == Some("1") {
+        layers = layers.with(LayerSet::RELIEF); // hypsometric bands, opt-in
     }
     Some(RenderQuery { subject, time, viewport: None, lod, layers, style: parse_style(app, p.get("style"))? })
 }

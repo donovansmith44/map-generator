@@ -111,6 +111,9 @@ pub struct Style {
     region: Paint,
     /// The sea's dress — water regions are as first-class as polities.
     water: Paint,
+    /// Hypsometric tinting: lowest band -> highest band, mixed by
+    /// band position (phase 5's "topo shading params" as data).
+    topo: AgeRamp,
     /// The atlas convention: distinct fills so it is obvious what's
     /// what. None = every land region wears the uniform region paint;
     /// Some = territories are assigned from these slots such that
@@ -128,6 +131,7 @@ impl Style {
         boundaries: BoundaryStrokes,
         region: Paint,
         water: Paint,
+        topo: AgeRamp,
         palette: Option<[Paint; 8]>,
         age: AgeRamp,
         label: LabelStyle,
@@ -140,7 +144,7 @@ impl Style {
         if boundaries.frontier.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
-        Ok(Style { boundaries, region, water, palette, age, label, marker, delta })
+        Ok(Style { boundaries, region, water, topo, palette, age, label, marker, delta })
     }
 
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
@@ -159,6 +163,10 @@ impl Style {
     }
     pub fn palette(&self) -> Option<&[Paint; 8]> {
         self.palette.as_ref()
+    }
+    /// newest = highest band, oldest = lowest (reusing the ramp shape).
+    pub fn topo_ramp(&self) -> AgeRamp {
+        self.topo
     }
     pub fn age_ramp(&self) -> AgeRamp {
         self.age
@@ -181,6 +189,8 @@ impl Style {
         self.boundaries.unknown.canon(c);
         self.region.canon(c);
         self.water.canon(c);
+        self.topo.newest.canon(c);
+        self.topo.oldest.canon(c);
         c.opt(&self.palette, |c, pal| {
             for p in pal.iter() {
                 p.canon(c);
@@ -227,6 +237,9 @@ impl LayerSet {
     pub const GEOMETRY: LayerSet = LayerSet(1);
     pub const TOPOGRAPHY: LayerSet = LayerSet(2);
     pub const LABELS: LayerSet = LayerSet(4);
+    /// Hypsometric elevation bands (phase 5). CONTRACT NOTE (for the
+    /// C5 freeze): joined the vocabulary when relief landed.
+    pub const RELIEF: LayerSet = LayerSet(8);
 
     pub fn empty() -> Self {
         LayerSet(0)
