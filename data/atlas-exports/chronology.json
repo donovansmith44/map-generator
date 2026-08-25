@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "atlas_version_root": "b483b302b8464e30",
+  "atlas_version_root": "a1b93a3b049a1fe0",
   "events": [
     {
       "id": "theo-1",
@@ -933,6 +933,23 @@
       }
     },
     {
+      "id": "theo-87",
+      "label": "Nimrod's kingdom begins",
+      "attestations": [
+        "GEN.10.10",
+        "GEN.10.11",
+        "GEN.10.12",
+        "GEN.10.8",
+        "GEN.10.9"
+      ],
+      "placement": {
+        "from_year": -2242,
+        "to_year": -2242,
+        "basis": "Traditional",
+        "seq": 53
+      }
+    },
+    {
       "id": "theo-54",
       "label": "Birth of Reu",
       "attestations": [
@@ -942,7 +959,7 @@
         "from_year": -2217,
         "to_year": -2217,
         "basis": "Traditional",
-        "seq": 53
+        "seq": 54
       }
     },
     {
@@ -956,7 +973,7 @@
         "from_year": -2217,
         "to_year": -2217,
         "basis": "Traditional",
-        "seq": 54
+        "seq": 55
       }
     },
     {
@@ -969,7 +986,7 @@
         "from_year": -2185,
         "to_year": -2185,
         "basis": "Traditional",
-        "seq": 55
+        "seq": 56
       }
     },
     {
@@ -983,7 +1000,7 @@
         "from_year": -2185,
         "to_year": -2185,
         "basis": "Traditional",
-        "seq": 56
+        "seq": 57
       }
     },
     {
@@ -996,7 +1013,7 @@
         "from_year": -2155,
         "to_year": -2155,
         "basis": "Traditional",
-        "seq": 57
+        "seq": 58
       }
     },
     {
@@ -1010,7 +1027,7 @@
         "from_year": -2155,
         "to_year": -2155,
         "basis": "Traditional",
-        "seq": 58
+        "seq": 59
       }
     },
     {
@@ -1023,7 +1040,7 @@
         "from_year": -2126,
         "to_year": -2126,
         "basis": "Traditional",
-        "seq": 59
+        "seq": 60
       }
     },
     {
@@ -1038,7 +1055,7 @@
         "from_year": -2126,
         "to_year": -2126,
         "basis": "Traditional",
-        "seq": 60
+        "seq": 61
       }
     },
     {
@@ -1052,7 +1069,7 @@
         "from_year": -2100,
         "to_year": -2092,
         "basis": "Traditional",
-        "seq": 61
+        "seq": 62
       }
     },
     {
@@ -1067,7 +1084,7 @@
         "from_year": -2092,
         "to_year": -2091,
         "basis": "Traditional",
-        "seq": 62
+        "seq": 63
       }
     },
     {
@@ -1081,7 +1098,7 @@
         "from_year": -2091,
         "to_year": -2091,
         "basis": "Traditional",
-        "seq": 63
+        "seq": 64
       }
     },
     {
@@ -1094,7 +1111,7 @@
         "from_year": -2091,
         "to_year": -2090,
         "basis": "Traditional",
-        "seq": 64
+        "seq": 65
       }
     },
     {
@@ -1114,7 +1131,7 @@
         "from_year": -2090,
         "to_year": -2089,
         "basis": "Traditional",
-        "seq": 65
+        "seq": 66
       }
     },
     {
@@ -1128,7 +1145,7 @@
         "from_year": -2088,
         "to_year": -2085,
         "basis": "Traditional",
-        "seq": 66
+        "seq": 67
       }
     },
     {
@@ -1141,7 +1158,7 @@
         "from_year": -2008,
         "to_year": -2008,
         "basis": "Traditional",
-        "seq": 67
+        "seq": 68
       }
     },
     {
@@ -1154,7 +1171,7 @@
         "from_year": -2007,
         "to_year": -2007,
         "basis": "Traditional",
-        "seq": 68
+        "seq": 69
       }
     },
     {
@@ -1167,7 +1184,7 @@
         "from_year": -1998,
         "to_year": -1998,
         "basis": "Traditional",
-        "seq": 69
+        "seq": 70
       }
     },
     {
@@ -1181,7 +1198,7 @@
         "from_year": -1997,
         "to_year": -1997,
         "basis": "Traditional",
-        "seq": 70
+        "seq": 71
       }
     },
     {
@@ -1195,7 +1212,7 @@
         "from_year": -1997,
         "to_year": -1997,
         "basis": "Traditional",
-        "seq": 71
+        "seq": 72
       }
     },
     {
@@ -1208,7 +1225,7 @@
         "from_year": -1978,
         "to_year": -1978,
         "basis": "Traditional",
-        "seq": 72
+        "seq": 73
       }
     },
     {
@@ -1221,7 +1238,7 @@
         "from_year": -1955,
         "to_year": -1955,
         "basis": "Traditional",
-        "seq": 73
+        "seq": 74
       }
     },
     {
@@ -1234,7 +1251,7 @@
         "from_year": -1930,
         "to_year": -1930,
         "basis": "Traditional",
-        "seq": 74
+        "seq": 75
       }
     },
     {
@@ -1255,7 +1272,7 @@
         "from_year": -1930,
         "to_year": -1930,
         "basis": "Traditional",
-        "seq": 75
+        "seq": 76
       }
     },
     {
@@ -1281,7 +1298,7 @@
         "from_year": -1929,
         "to_year": -1929,
         "basis": "Traditional",
-        "seq": 76
+        "seq": 77
       }
     },
     {
@@ -1294,7 +1311,7 @@
         "from_year": -1921,
         "to_year": -1921,
         "basis": "Traditional",
-        "seq": 77
+        "seq": 78
       }
     },
     {
@@ -1317,7 +1334,7 @@
         "from_year": -1921,
         "to_year": -1921,
         "basis": "Traditional",
-        "seq": 78
+        "seq": 79
       }
     },
     {
@@ -1332,7 +1349,7 @@
         "from_year": -1921,
         "to_year": -1921,
         "basis": "Traditional",
-        "seq": 79
+        "seq": 80
       }
     },
     {
@@ -1355,7 +1372,7 @@
         "from_year": -1921,
         "to_year": -1921,
         "basis": "Traditional",
-        "seq": 80
+        "seq": 81
       }
     },
     {
@@ -1369,7 +1386,7 @@
         "from_year": -1921,
         "to_year": -1921,
         "basis": "Traditional",
-        "seq": 81
+        "seq": 82
       }
     },
     {
@@ -1399,7 +1416,7 @@
         "from_year": -1920,
         "to_year": -1920,
         "basis": "Traditional",
-        "seq": 82
+        "seq": 83
       }
     },
     {
@@ -1427,7 +1444,7 @@
         "from_year": -1913,
         "to_year": -1913,
         "basis": "Traditional",
-        "seq": 83
+        "seq": 84
       }
     },
     {
@@ -1447,7 +1464,7 @@
         "from_year": -1913,
         "to_year": -1913,
         "basis": "Traditional",
-        "seq": 84
+        "seq": 85
       }
     },
     {
@@ -1479,7 +1496,7 @@
         "from_year": -1911,
         "to_year": -1911,
         "basis": "Traditional",
-        "seq": 85
+        "seq": 86
       }
     },
     {
@@ -1507,7 +1524,7 @@
         "from_year": -1911,
         "to_year": -1910,
         "basis": "Traditional",
-        "seq": 86
+        "seq": 87
       }
     },
     {
@@ -1525,7 +1542,7 @@
         "from_year": -1910,
         "to_year": -1910,
         "basis": "Traditional",
-        "seq": 87
+        "seq": 88
       }
     },
     {
@@ -1539,7 +1556,7 @@
         "from_year": -1910,
         "to_year": -1910,
         "basis": "Traditional",
-        "seq": 88
+        "seq": 89
       }
     },
     {
@@ -1553,7 +1570,7 @@
         "from_year": -1910,
         "to_year": -1910,
         "basis": "Traditional",
-        "seq": 89
+        "seq": 90
       }
     },
     {
@@ -1575,7 +1592,7 @@
         "from_year": -1910,
         "to_year": -1910,
         "basis": "Traditional",
-        "seq": 90
+        "seq": 91
       }
     },
     {
@@ -1588,7 +1605,7 @@
         "from_year": -1909,
         "to_year": -1909,
         "basis": "Traditional",
-        "seq": 91
+        "seq": 92
       }
     },
     {
@@ -1601,7 +1618,7 @@
         "from_year": -1908,
         "to_year": -1908,
         "basis": "Traditional",
-        "seq": 92
+        "seq": 93
       }
     },
     {
@@ -1620,7 +1637,7 @@
         "from_year": -1900,
         "to_year": -1900,
         "basis": "Traditional",
-        "seq": 93
+        "seq": 94
       }
     },
     {
@@ -1633,7 +1650,7 @@
         "from_year": -1898,
         "to_year": -1898,
         "basis": "Traditional",
-        "seq": 94
+        "seq": 95
       }
     },
     {
@@ -1646,7 +1663,7 @@
         "from_year": -1898,
         "to_year": -1898,
         "basis": "Traditional",
-        "seq": 95
+        "seq": 96
       }
     },
     {
@@ -1670,7 +1687,7 @@
         "from_year": -1898,
         "to_year": -1898,
         "basis": "Traditional",
-        "seq": 96
+        "seq": 97
       }
     },
     {
@@ -1702,7 +1719,7 @@
         "from_year": -1898,
         "to_year": -1898,
         "basis": "Traditional",
-        "seq": 97
+        "seq": 98
       }
     },
     {
@@ -1733,7 +1750,7 @@
         "from_year": -1898,
         "to_year": -1898,
         "basis": "Traditional",
-        "seq": 98
+        "seq": 99
       }
     },
     {
@@ -1779,7 +1796,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 99
+        "seq": 100
       }
     },
     {
@@ -1793,7 +1810,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 100
+        "seq": 101
       }
     },
     {
@@ -1819,7 +1836,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 101
+        "seq": 102
       }
     },
     {
@@ -1851,7 +1868,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 102
+        "seq": 103
       }
     },
     {
@@ -1872,7 +1889,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 103
+        "seq": 104
       }
     },
     {
@@ -1902,7 +1919,7 @@
         "from_year": -1897,
         "to_year": -1897,
         "basis": "Traditional",
-        "seq": 104
+        "seq": 105
       }
     },
     {
@@ -1916,7 +1933,7 @@
         "from_year": -1896,
         "to_year": -1896,
         "basis": "Traditional",
-        "seq": 105
+        "seq": 106
       }
     },
     {
@@ -1931,7 +1948,7 @@
         "from_year": -1896,
         "to_year": -1896,
         "basis": "Traditional",
-        "seq": 106
+        "seq": 107
       }
     },
     {
@@ -1951,7 +1968,7 @@
         "from_year": -1896,
         "to_year": -1896,
         "basis": "Traditional",
-        "seq": 107
+        "seq": 108
       }
     },
     {
@@ -1976,7 +1993,7 @@
         "from_year": -1896,
         "to_year": -1896,
         "basis": "Traditional",
-        "seq": 108
+        "seq": 109
       }
     },
     {
@@ -2001,7 +2018,7 @@
         "from_year": -1896,
         "to_year": -1896,
         "basis": "Traditional",
-        "seq": 109
+        "seq": 110
       }
     },
     {
@@ -2019,7 +2036,7 @@
         "from_year": -1885,
         "to_year": -1885,
         "basis": "Traditional",
-        "seq": 110
+        "seq": 111
       }
     },
     {
@@ -2032,7 +2049,7 @@
         "from_year": -1878,
         "to_year": -1878,
         "basis": "Traditional",
-        "seq": 111
+        "seq": 112
       }
     },
     {
@@ -2049,7 +2066,7 @@
         "from_year": -1876,
         "to_year": -1876,
         "basis": "Traditional",
-        "seq": 112
+        "seq": 113
       }
     },
     {
@@ -2069,7 +2086,7 @@
         "from_year": -1876,
         "to_year": -1876,
         "basis": "Traditional",
-        "seq": 113
+        "seq": 114
       }
     },
     {
@@ -2100,7 +2117,7 @@
         "from_year": -1872,
         "to_year": -1872,
         "basis": "Traditional",
-        "seq": 114
+        "seq": 115
       }
     },
     {
@@ -2132,7 +2149,7 @@
         "from_year": -1860,
         "to_year": -1860,
         "basis": "Traditional",
-        "seq": 115
+        "seq": 116
       }
     },
     {
@@ -2164,7 +2181,7 @@
         "from_year": -1857,
         "to_year": -1857,
         "basis": "Traditional",
-        "seq": 116
+        "seq": 117
       }
     },
     {
@@ -2177,7 +2194,7 @@
         "from_year": -1856,
         "to_year": -1856,
         "basis": "Traditional",
-        "seq": 117
+        "seq": 118
       }
     },
     {
@@ -2209,7 +2226,7 @@
         "from_year": -1856,
         "to_year": -1856,
         "basis": "Traditional",
-        "seq": 118
+        "seq": 119
       }
     },
     {
@@ -2222,7 +2239,7 @@
         "from_year": -1846,
         "to_year": -1846,
         "basis": "Traditional",
-        "seq": 119
+        "seq": 120
       }
     },
     {
@@ -2237,7 +2254,7 @@
         "from_year": -1836,
         "to_year": -1836,
         "basis": "Traditional",
-        "seq": 120
+        "seq": 121
       }
     },
     {
@@ -2253,7 +2270,7 @@
         "from_year": -1836,
         "to_year": -1836,
         "basis": "Traditional",
-        "seq": 121
+        "seq": 122
       }
     },
     {
@@ -2272,23 +2289,6 @@
       "placement": {
         "from_year": -1836,
         "to_year": -1836,
-        "basis": "Traditional",
-        "seq": 122
-      }
-    },
-    {
-      "id": "theo-87",
-      "label": "Nimrod's kingdom begins",
-      "attestations": [
-        "GEN.10.10",
-        "GEN.10.11",
-        "GEN.10.12",
-        "GEN.10.8",
-        "GEN.10.9"
-      ],
-      "placement": {
-        "from_year": -1822,
-        "to_year": -1822,
         "basis": "Traditional",
         "seq": 123
       }

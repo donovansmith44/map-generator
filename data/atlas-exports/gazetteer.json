@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "atlas_version_root": "b483b302b8464e30",
+  "atlas_version_root": "a1b93a3b049a1fe0",
   "places": [
     {
       "id": "abana",
@@ -12720,7 +12720,14 @@
     {
       "id": "lebo-hamath",
       "canonical": "Lebo-hamath",
-      "aliases": [],
+      "aliases": [
+        "entrance of Hamath",
+        "entering into Hamath",
+        "entering in of Hamath",
+        "entering of Hamath",
+        "entering in of Hemath",
+        "entering of Hemath"
+      ],
       "lat": 34.19491,
       "lon": 36.34956,
       "provenance": "curated-places",

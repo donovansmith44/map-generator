@@ -414,10 +414,12 @@ fn atlas_exports_bind_the_scripture_set() {
     )
     .expect("exports parse");
 
-    assert_eq!(format!("{:016x}", atlas.root.0), "b483b302b8464e30", "the pinned root");
+    assert_eq!(format!("{:016x}", atlas.root.0), "a1b93a3b049a1fe0", "the pinned root");
     assert_eq!(atlas.creation_anchor().map(|(y, _)| y), Some(-4004));
     assert!(atlas.resolve_place("Kadesh-barnea").is_some(), "canonical binding works");
     assert!(atlas.resolve_place("En-rogel").is_some());
+    assert!(atlas.resolve_place("entrance of Hamath").is_some(), "GAZ-1 alias binds");
+    assert!(atlas.resolve_place("Brook of Egypt").is_some());
     assert!(atlas.resolve_place("oblation southwest corner").is_none(), "descriptive points stay stand-in");
 
     let bound = scripture_timeline_with(Some(&atlas));
