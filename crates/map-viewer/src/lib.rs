@@ -406,6 +406,23 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
     Snapshot { regions, boundaries, markers: Vec::new(), labels, attribution }
 }
 
+/// Drop from the backdrop whatever the realized scene already carries:
+/// a region or boundary drawn in full must not also wear its ghost
+/// twin, or every realized border is drawn twice.
+fn without_realized(mut backdrop: Snapshot, realized: &Snapshot) -> Snapshot {
+    let regions: std::collections::BTreeSet<_> = realized.regions.iter().map(|r| r.region).collect();
+    let bounds: std::collections::BTreeSet<_> =
+        realized.boundaries.iter().map(|b| b.boundary).collect();
+    backdrop.regions.retain(|r| !regions.contains(&r.region));
+    backdrop.boundaries.retain(|b| !bounds.contains(&b.boundary));
+    backdrop.labels.retain(|l| match &l.subject {
+        map_types::scene::LabelSubject::Region(r) => !regions.contains(r),
+        map_types::scene::LabelSubject::Boundary(b) => !bounds.contains(b),
+        map_types::scene::LabelSubject::Free => true,
+    });
+    backdrop
+}
+
 /// The mean position of a scene's content — where a globe should face
 /// to look the subject in the eye.
 fn scene_centroid(scene: &Snapshot) -> Option<(f64, f64)> {
@@ -756,7 +773,9 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                         };
                         match app.provider.render(&ghost_q) {
                             Err(e) => return bad(&format!("{e:?}")),
-                            Ok(backdrop) => backdrop.combine(subject_scene),
+                            Ok(backdrop) => {
+                                without_realized(backdrop, &subject_scene).combine(subject_scene)
+                            }
                         }
                     }
                 }
@@ -903,6 +922,52 @@ mod tests {
         assert_eq!(url_decode("a+b%20c"), "a b c");
         assert_eq!(url_decode("plain"), "plain");
         assert_eq!(url_decode("bad%zz"), "bad%zz");
+    }
+
+    /// The ghost backdrop must not re-draw what the subject scene
+    /// already realizes — otherwise every scripture region wears a
+    /// ghost twin and every border is drawn twice.
+    #[test]
+    fn backdrop_yields_to_the_realized_scene() {
+        use atlas_graph_types::covenant::ContentHash;
+        use map_types::style::{Paint, Rgba, Stroke, StrokePattern};
+        use map_types::{BoundaryId, Monoid, RegionId, Ring, StyledBoundary, StyledRegion, UnitVec};
+
+        let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+        let region = |n: u64| StyledRegion {
+            region: RegionId(ContentHash(n)),
+            outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
+            holes: vec![],
+            paint: Paint { fill: Rgba(210, 190, 150, 255) },
+            sources: Default::default(),
+        };
+        let boundary = |n: u64| StyledBoundary {
+            boundary: BoundaryId(ContentHash(n)),
+            pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
+            stroke: Stroke {
+                color: Rgba(90, 60, 40, 255),
+                width: 1.5,
+                pattern: StrokePattern::Dashed,
+            },
+            sources: Default::default(),
+        };
+
+        let mut backdrop = Snapshot::empty();
+        backdrop.regions.extend([region(1), region(2)]);
+        backdrop.boundaries.extend([boundary(3), boundary(4)]);
+        let mut realized = Snapshot::empty();
+        realized.regions.push(region(2));
+        realized.boundaries.push(boundary(4));
+
+        let scene = without_realized(backdrop, &realized).combine(realized);
+        let region_hits =
+            scene.regions.iter().filter(|r| r.region == RegionId(ContentHash(2))).count();
+        let boundary_hits =
+            scene.boundaries.iter().filter(|b| b.boundary == BoundaryId(ContentHash(4))).count();
+        assert_eq!(region_hits, 1, "realized region must appear exactly once");
+        assert_eq!(boundary_hits, 1, "realized boundary must appear exactly once");
+        assert!(scene.regions.iter().any(|r| r.region == RegionId(ContentHash(1))));
+        assert!(scene.boundaries.iter().any(|b| b.boundary == BoundaryId(ContentHash(3))));
     }
 }
 
