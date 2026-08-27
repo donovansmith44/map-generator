@@ -13,20 +13,14 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use atlas_graph_types::covenant::{TimePoint, Year};
-use atlas_graph_types::covenant::{Ground, Justification};
 use atlas_graph_types::covenant::SourceId;
-use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
-use map_adapters::{
-    epoch_year_from_label, ingest, load_exports, merge_timelines, merged_gazetteer,
-    scripture_timeline_with, EpochSource, IngestConfig,
-};
+use map_adapters::{load_exports, merged_gazetteer};
 use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, JsonTransitionEncoder, SvgEncoder};
-use map_provider::TimelineProvider;
 use map_types::style::*;
 use map_types::{
-    Anchor, ChangeKind, Interval, LayerSet, Lod, MapAddressed, MapProvider, Monoid, RegionId,
+    ChangeKind, Interval, LayerSet, Lod, MapAddressed, MapProvider, Monoid, RegionId,
     RenderQuery, RenderSubject, Snapshot, StyleId, TimeSelector,
 };
 use map_types::SceneEncoder as _;
@@ -231,16 +225,18 @@ fn tp(year: i32) -> Option<TimePoint> {
 }
 
 pub fn load() -> App {
-    // The canon path (2026-08-27 design): when the compiled canon
-    // exists, the workbench serves it — the dumb renderer over the
-    // reconciled store. MAP_SOURCE=legacy forces the old pipeline
-    // until phase 6 deletes it.
+    // The canon is the only truth store (phase 6): data in, maps out.
+    // No canon file means the pipeline has not run — fail loud with
+    // the fix, never fall back to a second source of truth.
     let canon_path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/canon/canon.json");
-    if canon_path.exists() && std::env::var("MAP_SOURCE").as_deref() != Ok("legacy") {
-        return load_canon(&canon_path);
+    if !canon_path.exists() {
+        panic!(
+            "no compiled canon at {} — run: map-compile refresh && map-compile build",
+            canon_path.display()
+        );
     }
-    load_legacy()
+    load_canon(&canon_path)
 }
 
 /// The canon-backed composition root: same styles, same App shape,
@@ -318,170 +314,6 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         overlay_tints,
         canon: Some(canon_provider),
     }
-}
-
-fn load_legacy() -> App {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/historical-basemaps");
-    let mut epochs = Vec::new();
-    for entry in std::fs::read_dir(&dir).expect("vendored data present") {
-        let path = entry.unwrap().path();
-        if path.extension().and_then(|e| e.to_str()) != Some("geojson") {
-            continue;
-        }
-        let label = path.file_stem().unwrap().to_string_lossy().to_string();
-        let year = epoch_year_from_label(&label).expect("epoch label");
-        epochs.push(EpochSource { year, label, text: std::fs::read_to_string(&path).unwrap() });
-    }
-    // C2/C3: the atlas authority artifacts (vendored at the pinned
-    // root; the C6 stale-pin lives on the timeline).
-    let exp_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
-    let atlas = load_exports(
-        &std::fs::read_to_string(exp_dir.join("gazetteer.json")).expect("vendored gazetteer"),
-        &std::fs::read_to_string(exp_dir.join("chronology.json")).expect("vendored chronology"),
-    )
-    .expect("atlas exports parse");
-    let (creation_year, creation_citation) =
-        atlas.creation_anchor().expect("atlas chronology carries creation");
-
-    let gen11 = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 1 });
-    let config = IngestConfig {
-        // Topology closure at 0.02 degrees (~2 km) — two orders below
-        // the source's own precision, disclosed here and in Ingest.
-        snap: Some(0.02),
-        source: SourceId::new("historical-basemaps"),
-        anchor: Some(Anchor {
-            frame: "biblical (Ussher tradition)".to_string(),
-            at: tp(creation_year).expect("creation year from the atlas"),
-            justification: Justification {
-                text: Some(creation_citation),
-                grounds: [Ground::Scripture(LocusRange::new(gen11.clone(), gen11).unwrap())].into(),
-            },
-            provenance: format!("bible-atlas@{:016x}", atlas.root.0),
-        }),
-    };
-    let out = ingest(&config, &epochs).expect("real source ingests");
-    // The WHOLE world is the map: the seas join it as explorable water
-    // regions (Natural Earth shapes; the date the waters gathered is
-    // Scripture's, GEN 1:9-10 — creation, the anchor).
-    let ne_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/natural-earth");
-    let waters = vec![
-        map_adapters::WaterSource {
-            label_for_unnamed: "inland sea",
-            // 110m on purpose: it is the one NE scale that carries the
-            // Caspian as its own second feature — 10m/50m oceans are a
-            // single world-ocean polygon, and skip_largest would leave
-            // no interior seas at all.
-            text: std::fs::read_to_string(ne_dir.join("ne_110m_ocean.geojson"))
-                .expect("vendored ocean data"),
-            skip_largest_feature: true, // interior seas only; see ingest_ocean
-        },
-        map_adapters::WaterSource {
-            label_for_unnamed: "lake",
-            text: std::fs::read_to_string(ne_dir.join("ne_10m_lakes.geojson"))
-                .expect("vendored lakes data"),
-            skip_largest_feature: false,
-        },
-    ];
-    let ocean_tl = map_adapters::ingest_ocean(
-        &SourceId::new("natural-earth"),
-        tp(-4004).unwrap(),
-        &std::fs::read_to_string(ne_dir.join("ne_10m_land.geojson"))
-            .expect("vendored land data"),
-    )
-    .expect("ocean ingests");
-    let water_tl = map_adapters::ingest_water(
-        &SourceId::new("natural-earth"),
-        tp(-4004).unwrap(),
-        &waters,
-    )
-    .and_then(|w| Ok(map_adapters::merge_timelines(w, ocean_tl).expect("waters merge")))
-    .expect("water ingests");
-    // The first Bible-driven borders join the imported world, and the
-    // merged whole must be lawful — fail loud at the door, not in a
-    // render (validated against the stand-in gazetteer until C3 lands).
-    // Relief (phase 5): the land's own shape, contoured from the
-    // vendored elevation grid into hypsometric bands.
-    let terrain_tl = {
-        let bytes = std::fs::read(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../data/terrain/etopo_15min.bin"),
-        )
-        .expect("vendored terrain grid");
-        let grid =
-            map_adapters::ElevationGrid::from_etopo_bin(&bytes).expect("terrain grid shape");
-        map_adapters::ingest_terrain(&grid, tp(creation_year).unwrap())
-    };
-    let mut timeline = merge_timelines(out.timeline, scripture_timeline_with(Some(&atlas)))
-        .and_then(|tl| merge_timelines(tl, water_tl))
-        .and_then(|tl| merge_timelines(tl, terrain_tl))
-        .expect("scripture surveys, waters, and relief merge cleanly");
-    // C6: the pin is live — a re-vendored export with a new root
-    // makes staleness detectable, never silent.
-    timeline.atlas_pin = Some(map_types::AtlasPin { version_root: atlas.root });
-    let driven = timeline.events.iter().filter(|e| e.driver.is_some()).count();
-    eprintln!(
-        "atlas authority bound: {driven} driven events, root {:016x}",
-        atlas.root.0
-    );
-    let violations =
-        map_types::validate_all(&timeline, &atlas.chronology, &merged_gazetteer(&atlas));
-    assert!(violations.is_empty(), "merged world unlawful: {:?}", violations.first());
-    let anchor = timeline.anchor.as_ref().map(|a| (a.frame.clone(), a.at.year.get()));
-    let out = map_adapters::Ingest { timeline, exemptions: out.exemptions, snap: out.snap };
-    let (p_style, s_style) = (parchment(), slate());
-    let (p_ghost, s_ghost) = (ghosted(&p_style), ghosted(&s_style));
-    let styles = vec![("parchment", p_style.id()), ("slate", s_style.id())];
-    let ghosts = BTreeMap::from([(p_style.id(), p_ghost.id()), (s_style.id(), s_ghost.id())]);
-    let mut style_table = BTreeMap::from([
-        (p_style.id(), p_style.clone()),
-        (s_style.id(), s_style.clone()),
-        (p_ghost.id(), p_ghost),
-        (s_ghost.id(), s_ghost),
-    ]);
-    let mut overlay_tints = BTreeMap::new();
-    for base in [&p_style, &s_style] {
-        let ramp = base.age_ramp();
-        let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
-        overlay_tints.insert(base.id(), (held.id(), current.id()));
-        style_table.insert(held.id(), held);
-        style_table.insert(current.id(), current);
-    }
-    let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(TimelineProvider {
-        timeline: out.timeline,
-        styles: style_table,
-        // Landmarks: the atlas gazetteer (1,373 places) plus residual
-        // stand-ins serves Point subjects.
-        gazetteer: Some(merged_gazetteer(&atlas)),
-    });
-
-    // Scrub stops through the contract: probe the widest sensible span.
-    let (lo, hi) = (tp(-4004).unwrap(), tp(1900).unwrap());
-    let mut stops: Vec<i32> = provider
-        .changes_between(lo, hi)
-        .iter()
-        .map(|e| e.at.year.get())
-        .collect();
-    stops.dedup();
-    if let Some(&first) = stops.first() {
-        stops.insert(0, first - 100); // dawn: the state before the first change
-    }
-    let mut presence: BTreeMap<String, (String, Vec<i32>)> = BTreeMap::new();
-    for &year in &stops {
-        if let Some(at) = tp(year) {
-            for s in provider.subjects(at) {
-                let key = match &s.subject {
-                    RenderSubject::Region(id) => format!("region:{:016x}", id.0 .0),
-                    RenderSubject::Point(place) => format!("place:{}", place.0 .0),
-                    _ => continue,
-                };
-                let entry = presence.entry(key).or_insert_with(|| (s.label.clone(), Vec::new()));
-                entry.0 = s.label;
-                entry.1.push(year);
-            }
-        }
-    }
-    App { provider, styles, ghosts, stops, presence, anchor, overlay_tints, canon: None }
 }
 
 /// Keep only Scripture-derived elements: regions and boundaries whose

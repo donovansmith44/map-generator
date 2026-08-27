@@ -23,9 +23,11 @@ use map_types::{
 };
 use map_types::{accumulate, sample_times, simplify_polyline, LayerSet, Monoid};
 
-/// The reference provider: a timeline, the styles it may be asked to
-/// wear, and (when the atlas handshake lands) the gazetteer for place
-/// subjects.
+/// The LEGACY reference provider over the interval timeline. As of the
+/// 2026-08-27 canon design (phase 6) it serves NOTHING — the workbench
+/// and CLI run on `canon_provider::CanonProvider` only. It remains as
+/// the reference implementation of morph transitions and range
+/// accumulation until the canon provider gains morphs, then it goes.
 pub struct TimelineProvider {
     pub timeline: WorldTimeline,
     pub styles: BTreeMap<StyleId, Style>,
