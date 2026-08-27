@@ -420,7 +420,7 @@ function setupPlateNav() {
   let drag = null;
   plate.addEventListener("pointerdown", e => {
     stopPlayback();
-    if (state.projection !== "globe" || state.encoder !== "svg") return;
+    if (state.encoder !== "svg") return;
     if (!pinView()) return;
     // No pointer capture yet: capturing here would retarget the
     // eventual click away from the region path under the cursor.
@@ -430,7 +430,9 @@ function setupPlateNav() {
     if (!drag) return;
     const rect = plate.querySelector("svg")?.getBoundingClientRect();
     if (!rect) return;
-    const degPerPx = (2 * state.view.zoom) / rect.width;
+    // Flat's window is 2:1 (4*zoom degrees across); the globe shows
+    // 2*zoom degrees across its width.
+    const degPerPx = ((state.projection === "flat" ? 4 : 2) * state.view.zoom) / rect.width;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
       drag.moved = true;
@@ -456,7 +458,7 @@ function setupPlateNav() {
 
   let settle = null;
   plate.addEventListener("wheel", e => {
-    if (state.projection !== "globe" || state.encoder !== "svg") return;
+    if (state.encoder !== "svg") return;
     e.preventDefault();
     if (!pinView()) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;

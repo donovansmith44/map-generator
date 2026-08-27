@@ -70,6 +70,10 @@ fn parchment() -> Style {
             frontier: s(Rgba(150, 110, 60, 255), 1.2, StrokePattern::Zonal),
             disputed: s(Rgba(140, 50, 40, 255), 1.2, StrokePattern::Hatched),
             unknown: s(Rgba(120, 116, 105, 255), 1.1, StrokePattern::Dashed),
+            // A journey reads as a WAY, never a border: warm road-red,
+            // dashed (the stations are the text's, the road between is
+            // interpolation), heavier than any territorial stroke.
+            way: s(Rgba(168, 54, 32, 255), 2.0, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(221, 204, 161, 235) },
         Paint { fill: Rgba(148, 175, 178, 235) },
@@ -114,6 +118,7 @@ fn slate() -> Style {
             frontier: s(Rgba(150, 140, 110, 255), 1.1, StrokePattern::Zonal),
             disputed: s(Rgba(196, 90, 70, 255), 1.1, StrokePattern::Hatched),
             unknown: s(Rgba(120, 125, 135, 255), 1.0, StrokePattern::Dashed),
+            way: s(Rgba(235, 160, 90, 255), 2.0, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(58, 66, 80, 235) },
         Paint { fill: Rgba(33, 42, 56, 245) },
@@ -165,6 +170,7 @@ fn ghosted(base: &Style) -> Style {
             frontier: fade(base.stroke_for(&E::Frontier { width_km: 0.0 })),
             disputed: fade(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
             unknown: fade(base.stroke_for(&E::Unknown)),
+            way: fade(base.stroke_for(&E::Way)),
         },
         fade_paint(base.region_paint()),
         fade_paint(base.water_paint()),
@@ -200,6 +206,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
             frontier: tint(base.stroke_for(&E::Frontier { width_km: 0.0 })),
             disputed: tint(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
             unknown: tint(base.stroke_for(&E::Unknown)),
+            way: tint(base.stroke_for(&E::Way)),
         },
         paint,
         base.water_paint(),
@@ -402,12 +409,16 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
         })
         .cloned()
         .collect();
+    // Markers select by their own sources — a journey's stations are
+    // as scripture-grounded as the way through them.
+    let markers: Vec<_> =
+        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
     let attribution = regions
         .iter()
         .flat_map(|r| r.sources.iter().cloned())
         .chain(boundaries.iter().flat_map(|b| b.sources.iter().cloned()))
         .collect();
-    Snapshot { regions, boundaries, markers: Vec::new(), labels, attribution }
+    Snapshot { regions, boundaries, markers, labels, attribution }
 }
 
 /// Drop from the backdrop whatever the realized scene already carries:
@@ -601,25 +612,28 @@ fn encode(
             .map(|s| (s, "application/geo+json"))
             .map_err(|e| e.0),
         _ => {
+            // Explicit navigation: center=lat,lon and zoom=deg
+            // (angular radius). Absent, face the subject if we know
+            // where it lives; the encoder auto-frames last.
+            let center = p
+                .get("center")
+                .and_then(|v| {
+                    let (lat, lon) = v.split_once(',')?;
+                    Some((
+                        lat.parse::<f64>().ok()?.clamp(-89.9, 89.9),
+                        lon.parse::<f64>().ok()?,
+                    ))
+                })
+                .or(face);
+            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
             let projection = match p.get("projection") {
-                Some("flat") => map_encoders::Projection::Flat,
-                _ => {
-                    // Explicit navigation: center=lat,lon and zoom=deg
-                    // (angular radius). Absent, face the subject if we
-                    // know where it lives; the encoder auto-frames last.
-                    let center = p
-                        .get("center")
-                        .and_then(|v| {
-                            let (lat, lon) = v.split_once(',')?;
-                            Some((
-                                lat.parse::<f64>().ok()?.clamp(-89.9, 89.9),
-                                lon.parse::<f64>().ok()?,
-                            ))
-                        })
-                        .or(face);
-                    let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
-                    map_encoders::Projection::Globe { center, zoom }
-                }
+                // The flat plate takes the same camera; without one it
+                // fits the whole world (zoom drives the crop).
+                Some("flat") => map_encoders::Projection::Flat {
+                    center: zoom.is_some().then_some(center).flatten(),
+                    zoom,
+                },
+                _ => map_encoders::Projection::Globe { center, zoom },
             };
             // Scalable resolution: the output is vector, so width is a
             // free parameter — strokes, labels, and geodesic precision
@@ -968,6 +982,28 @@ mod tests {
         assert!((auto_lod(None, 2400.0) - 0.0015).abs() < 1e-12);
         // never finer than the floor, whatever the numbers say
         assert!(auto_lod(Some(0.001), 8000.0) >= 1e-6);
+    }
+
+    /// Bible mode keeps what Scripture grounds — including a journey's
+    /// station markers. (They used to be dropped wholesale: markers
+    /// carried no sources to select by.)
+    #[test]
+    fn scripture_selection_keeps_grounded_markers() {
+        use map_types::scene::StyledMarker;
+        use map_types::style::MarkerStyle;
+        use map_types::UnitVec;
+        let mut scene = Snapshot::empty();
+        let mk = |src: Option<&str>| StyledMarker {
+            at: UnitVec::from_lat_lon_deg(32.0, 35.0),
+            style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
+            sources: src.map(SourceId::new).into_iter().collect(),
+        };
+        scene.markers.push(mk(Some(SCRIPTURE_SOURCE)));
+        scene.markers.push(mk(Some("natural-earth")));
+        scene.markers.push(mk(None));
+        let kept = scripture_only(&scene);
+        assert_eq!(kept.markers.len(), 1, "exactly the scripture-grounded marker survives");
+        assert!(kept.markers[0].sources.contains(&SourceId::new(SCRIPTURE_SOURCE)));
     }
 
     /// The ghost backdrop must not re-draw what the subject scene

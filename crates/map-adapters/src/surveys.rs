@@ -909,7 +909,9 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
                 Interval { from: tp(from_year), to: to_year.map(tp) },
                 Boundary {
                     pts,
-                    character: EdgeCharacter::Unknown,
+                    // A journey is a WAY, never a border — its own
+                    // character, its own dress in every style.
+                    character: EdgeCharacter::Way,
                     source: BoundarySource::Survey(BorderSurvey {
                         verses,
                         waypoints,

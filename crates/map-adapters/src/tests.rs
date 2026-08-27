@@ -628,3 +628,24 @@ fn terrain_real_grid_smoke() {
     let (chron, gaz) = empty_exports();
     assert_eq!(validate_all(&tl, &chron, &gaz), vec![]);
 }
+
+/// A journey is a WAY, not a border: every scripture route wears
+/// EdgeCharacter::Way so no consumer can mistake an itinerary for a
+/// territorial claim (and every style dresses it distinctly).
+#[test]
+fn routes_wear_the_way_character() {
+    let tl = crate::surveys::scripture_timeline();
+    let ways: Vec<_> = tl
+        .boundaries
+        .values()
+        .flat_map(|h| h.versions.iter())
+        .filter(|(_, b)| b.character == map_types::EdgeCharacter::Way)
+        .collect();
+    assert!(ways.len() >= 5, "exodus + four Pauline routes at least, got {}", ways.len());
+    for (_, b) in ways {
+        assert!(
+            matches!(b.source, map_types::BoundarySource::Survey(_)),
+            "a way's stations come from the text"
+        );
+    }
+}

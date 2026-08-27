@@ -36,6 +36,7 @@ fn sample_scene() -> Snapshot {
     s.markers.push(StyledMarker {
         at: uv(4.0, 5.0),
         style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
+        sources: Default::default(),
     });
     s.labels.push(PlacedLabel {
         text: "Judah & <friends>".to_string(),
@@ -122,11 +123,58 @@ fn globe_zooms_to_a_regional_slice() {
 #[test]
 fn flat_projection_still_available() {
     let scene = sample_scene();
-    let flat = SvgEncoder { projection: Projection::Flat, ..SvgEncoder::default() };
+    let flat = SvgEncoder {
+        projection: Projection::Flat { center: None, zoom: None },
+        ..SvgEncoder::default()
+    };
     let a = flat.encode(&scene).unwrap();
     assert_eq!(a, flat.encode(&scene).unwrap());
     assert!(a.starts_with("<svg"));
     assert_ne!(a, SvgEncoder::default().encode(&scene).unwrap());
+}
+
+/// Flat gets a camera too: center+zoom crop the map to a window, cull
+/// what the window cannot show, and stamp the resolved view on the
+/// artifact so the workbench can pan and zoom it like the globe.
+#[test]
+fn flat_zooms_to_a_window() {
+    use atlas_graph_types::covenant::ContentHash;
+    use map_types::RegionId;
+    let region = |n: u64, lat: f64, lon: f64| StyledRegion {
+        region: RegionId(ContentHash(n)),
+        outer: vec![Ring::new(vec![
+            uv(lat, lon),
+            uv(lat, lon + 2.0),
+            uv(lat + 2.0, lon + 1.0),
+        ])
+        .unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: [SourceId::new("test")].into(),
+    };
+    let scene = Snapshot {
+        regions: vec![region(1, 31.0, 35.0), region(2, 31.0, 155.0)],
+        boundaries: vec![],
+        markers: vec![],
+        labels: vec![],
+        attribution: [SourceId::new("test")].into(),
+    };
+    let windowed = SvgEncoder {
+        projection: Projection::Flat { center: Some((32.0, 36.0)), zoom: Some(5.0) },
+        ..SvgEncoder::default()
+    };
+    let svg = windowed.encode(&scene).unwrap();
+    assert!(svg.contains("data-region=\"0000000000000001\""), "in-window region kept");
+    assert!(!svg.contains("data-region=\"0000000000000002\""), "far region culled");
+    assert!(svg.contains("data-clat=\"32.000\"") && svg.contains("data-zoom=\"5.000\""));
+    // The whole-world flat still carries a view for the navigator.
+    let world = SvgEncoder {
+        projection: Projection::Flat { center: None, zoom: None },
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    assert!(world.contains("data-zoom="), "unwindowed flat still reports its view");
 }
 
 #[test]

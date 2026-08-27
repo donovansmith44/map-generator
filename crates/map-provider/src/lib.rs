@@ -189,6 +189,53 @@ impl TimelineProvider {
         Ok((ring, sources))
     }
 
+    /// A Way's stations, made legible: one marker per waypoint the
+    /// gazetteer can resolve, and (labels layer on) the station's
+    /// canonical name, attached to the route so selection follows the
+    /// journey. Sources ride each marker — a semantic selection keeps
+    /// what the text grounds.
+    fn push_way_stations(
+        &self,
+        scene: &mut Snapshot,
+        id: BoundaryId,
+        at: &TimePoint,
+        q: &RenderQuery,
+        style: &Style,
+        seen: &mut BTreeSet<atlas_graph_types::covenant::PlaceId>,
+    ) -> Result<(), MapError> {
+        let Some(b) = self.timeline.boundaries[&id].at(at) else { return Ok(()) };
+        let BoundarySource::Survey(survey) = &b.source else { return Ok(()) };
+        let Some(gaz) = self.gazetteer.as_ref() else { return Ok(()) };
+        let sources = boundary_sources(b);
+        for wp in &survey.waypoints {
+            // A station shared by several journeys keeps ONE marker
+            // and one name — the ways cross, the place is itself.
+            if !seen.insert(wp.0.clone()) {
+                continue;
+            }
+            let Some(entry) = gaz.places.get(&wp.0) else { continue };
+            if !in_viewport(&q.viewport, std::slice::from_ref(&entry.position)) {
+                continue;
+            }
+            scene.markers.push(StyledMarker {
+                at: entry.position,
+                style: style.marker_style(),
+                sources: sources.clone(),
+            });
+            if q.layers.contains(LayerSet::LABELS) {
+                let mut label = style.label_style();
+                label.size *= 0.8; // a station is a footnote to the way
+                scene.labels.push(PlacedLabel {
+                    text: entry.canonical_name.clone(),
+                    at: entry.position,
+                    subject: LabelSubject::Boundary(id),
+                    style: label,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn styled_region(
         &self,
         id: RegionId,
@@ -392,15 +439,27 @@ impl TimelineProvider {
                     .collect();
                 let boundary_ids: Vec<BoundaryId> =
                     self.timeline.boundaries.keys().copied().collect();
+                let mut seen_stations = BTreeSet::new();
                 for id in boundary_ids {
                     if terrain_arcs.contains(&id) {
                         continue;
                     }
-                    if self.timeline.boundaries[&id].at(at).is_some() {
+                    if let Some(b) = self.timeline.boundaries[&id].at(at) {
                         let sb = self.styled_boundary(id, at, q.lod, style)?;
                         if in_viewport(&q.viewport, &sb.pts) {
                             scene.attribution.extend(sb.sources.iter().cloned());
+                            let is_way = b.character == map_types::EdgeCharacter::Way;
                             scene.boundaries.push(sb);
+                            if is_way {
+                                self.push_way_stations(
+                                    &mut scene,
+                                    id,
+                                    at,
+                                    q,
+                                    style,
+                                    &mut seen_stations,
+                                )?;
+                            }
                         }
                     }
                 }
@@ -425,7 +484,7 @@ impl TimelineProvider {
             }
             RenderSubject::RawPoint(p) => {
                 if in_viewport(&q.viewport, std::slice::from_ref(p)) {
-                    scene.markers.push(StyledMarker { at: *p, style: style.marker_style() });
+                    scene.markers.push(StyledMarker { at: *p, style: style.marker_style(), sources: Default::default() });
                 }
             }
             RenderSubject::Point(place) => {
@@ -439,7 +498,11 @@ impl TimelineProvider {
                 if in_viewport(&q.viewport, std::slice::from_ref(&entry.position)) {
                     scene
                         .markers
-                        .push(StyledMarker { at: entry.position, style: style.marker_style() });
+                        .push(StyledMarker {
+                            at: entry.position,
+                            style: style.marker_style(),
+                            sources: BTreeSet::from([SourceId::new("atlas-gazetteer")]),
+                        });
                     if q.layers.contains(LayerSet::LABELS) {
                         scene.labels.push(PlacedLabel {
                             text: entry.canonical_name.clone(),

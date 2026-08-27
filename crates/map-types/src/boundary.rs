@@ -24,6 +24,10 @@ pub enum EdgeCharacter {
     Disputed { claimants: Vec<RegionId> },
     /// Scholarship is silent — renders distinctly, never invented.
     Unknown,
+    /// A journey, not a border: an open way through the land (an
+    /// itinerary's stations joined by disclosed interpolation). Wears
+    /// its own dress so a route never reads as a territorial claim.
+    Way,
 }
 
 /// A reference into the atlas gazetteer (contract C3): the atlas owns

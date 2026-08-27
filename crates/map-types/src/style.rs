@@ -92,6 +92,8 @@ pub struct BoundaryStrokes {
     pub frontier: Stroke,
     pub disputed: Stroke,
     pub unknown: Stroke,
+    /// EdgeCharacter::Way — a journey's dress, distinct from every border.
+    pub way: Stroke,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +155,7 @@ impl Style {
             EdgeCharacter::Frontier { .. } => &self.boundaries.frontier,
             EdgeCharacter::Disputed { .. } => &self.boundaries.disputed,
             EdgeCharacter::Unknown => &self.boundaries.unknown,
+            EdgeCharacter::Way => &self.boundaries.way,
         }
     }
     pub fn region_paint(&self) -> Paint {

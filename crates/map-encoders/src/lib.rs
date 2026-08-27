@@ -58,8 +58,12 @@ pub enum Projection {
     /// The resolved view rides the svg root as data attributes, so an
     /// interactive consumer can seed its navigation from the artifact.
     Globe { center: Option<(f64, f64)>, zoom: Option<f64> },
-    /// Equirectangular plate for diagnostics.
-    Flat,
+    /// Equirectangular plate. With a center and zoom (angular radius
+    /// in degrees of the window's half-HEIGHT; the window is 2:1) it
+    /// crops to that window, culls what the window cannot show, and
+    /// stamps the resolved view like the globe does; with None it fits
+    /// the whole content to the page.
+    Flat { center: Option<(f64, f64)>, zoom: Option<f64> },
 }
 
 pub struct SvgEncoder {
@@ -749,14 +753,37 @@ fn flat_bounds(scene: &Snapshot) -> (f64, f64, f64, f64) {
     b.unwrap_or((-180.0, -90.0, 180.0, 90.0))
 }
 
-fn encode_flat(enc: &SvgEncoder, scene: &Snapshot) -> Result<String, EncodeError> {
-    let (x0, _y0, x1, y1) = flat_bounds(scene);
-    let span_x = (x1 - x0).max(1e-6);
-    let span_y = (y1 - _y0).max(1e-6);
+fn encode_flat(
+    enc: &SvgEncoder,
+    scene: &Snapshot,
+    center: Option<(f64, f64)>,
+    zoom: Option<f64>,
+) -> Result<String, EncodeError> {
     let inner = enc.width - 2.0 * enc.padding;
     if inner <= 0.0 {
         return Err(EncodeError("width smaller than padding".to_string()));
     }
+    // The window in map degrees: an explicit camera crops (half-height
+    // = zoom, 2:1 aspect); otherwise fit the whole content.
+    let (x0, y1, span_x, span_y, page) = match zoom {
+        Some(z) => {
+            let z = z.clamp(0.05, 90.0);
+            let (clat, clon) = center.unwrap_or((0.0, 0.0));
+            let pad = (enc.width * 0.05).max(24.0);
+            let height = enc.width / 2.0;
+            (
+                clon - 2.0 * z,
+                clat + z,
+                4.0 * z,
+                2.0 * z,
+                Some((-pad, -pad, enc.width + pad, height + pad)),
+            )
+        }
+        None => {
+            let (x0, y0, x1, y1) = flat_bounds(scene);
+            (x0, y1, (x1 - x0).max(1e-6), (y1 - y0).max(1e-6), None)
+        }
+    };
     let scale = inner / span_x;
     let height = span_y * scale + 2.0 * enc.padding;
     let place = move |p: &UnitVec| -> (f64, f64) {
@@ -764,16 +791,26 @@ fn encode_flat(enc: &SvgEncoder, scene: &Snapshot) -> Result<String, EncodeError
         (enc.padding + (lon - x0) * scale, enc.padding + (y1 - lat) * scale)
     };
 
-    let mut s = svg_head(enc.width, height, scene);
+    // The resolved view rides the root either way, so the workbench
+    // can pan and zoom the flat plate exactly like the globe.
+    let (clat, clon) = (y1 - span_y / 2.0, x0 + span_x / 2.0);
+    let mut s = svg_head(enc.width, height, scene).replace(
+        "<svg ",
+        &format!(
+            "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
+            clat,
+            clon,
+            span_y / 2.0
+        ),
+    );
     let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
         vec![ring.points().iter().map(place).collect()]
     };
     let line_of =
         |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };
     let point_of = |p: &UnitVec| Some(place(p));
-    // The flat plate fits the whole world to the page — nothing to cull.
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &None);
-    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &None);
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &page);
+    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &page);
     s.push_str("</svg>");
     Ok(s)
 }
@@ -786,7 +823,7 @@ impl SceneEncoder for SvgEncoder {
             return Err(EncodeError("width smaller than padding".to_string()));
         }
         match self.projection {
-            Projection::Flat => encode_flat(self, scene),
+            Projection::Flat { center, zoom } => encode_flat(self, scene, center, zoom),
             Projection::Globe { center, zoom } => {
                 let c = match center {
                     Some((lat, lon)) => UnitVec::from_lat_lon_deg(lat, lon),

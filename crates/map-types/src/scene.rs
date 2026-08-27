@@ -46,11 +46,14 @@ pub struct StyledBoundary {
     pub sources: BTreeSet<SourceId>,
 }
 
-/// A styled point — a place in period dress, or a raw point.
+/// A styled point — a place in period dress, or a raw point. Carries
+/// its sources like regions and boundaries do (honesty at element
+/// grain — a semantic selection can keep or drop it by provenance).
 #[derive(Clone, Debug, PartialEq)]
 pub struct StyledMarker {
     pub at: UnitVec,
     pub style: MarkerStyle,
+    pub sources: BTreeSet<SourceId>,
 }
 
 /// What a label is attached to — selection (law 10) follows labels by
@@ -126,6 +129,10 @@ impl MapAddressed for Snapshot {
             m.at.canon(c);
             let crate::style::Rgba(r, g, bl, a) = m.style.color;
             c.u8_(r).u8_(g).u8_(bl).u8_(a).f64_(m.style.size);
+            let srcs: Vec<_> = m.sources.iter().collect();
+            c.seq(&srcs, |c, s| {
+                c.str_(&s.0);
+            });
         });
         c.seq(&self.labels, |c, l| {
             c.str_(&l.text);

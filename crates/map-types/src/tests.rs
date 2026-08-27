@@ -117,6 +117,7 @@ fn honest_style() -> Style {
             frontier: stroke(60, StrokePattern::Zonal),
             disputed: stroke(120, StrokePattern::Hatched),
             unknown: stroke(180, StrokePattern::Dashed),
+            way: stroke(240, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
@@ -145,6 +146,7 @@ fn marker_scene(tag: u8) -> Snapshot {
     sc.markers.push(StyledMarker {
         at: uv(f64::from(tag), f64::from(tag)),
         style: MarkerStyle { color: Rgba(tag, tag, tag, 255), size: 3.0 },
+        sources: Default::default(),
     });
     sc.attribution.insert(SourceId::new(format!("src-{tag}")));
     sc
@@ -445,7 +447,7 @@ fn law06_provenance_totality_and_honesty() {
 
     let line = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid };
     let zonal = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Zonal };
-    let strokes = |unknown, frontier| BoundaryStrokes { line, frontier, disputed: line, unknown };
+    let strokes = |unknown, frontier| BoundaryStrokes { line, frontier, disputed: line, unknown, way: zonal };
     let rest = (
         Paint { fill: Rgba(0, 0, 0, 0) },
         Paint { fill: Rgba(0, 0, 60, 200) },

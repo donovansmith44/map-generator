@@ -32,6 +32,7 @@ fn honest_style() -> Style {
             frontier: stroke(60, StrokePattern::Zonal),
             disputed: stroke(120, StrokePattern::Hatched),
             unknown: stroke(180, StrokePattern::Dashed),
+            way: stroke(240, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
@@ -461,6 +462,7 @@ fn palette_colors_touching_regions_distinctly() {
             frontier: stroke(60, StrokePattern::Zonal),
             disputed: stroke(120, StrokePattern::Hatched),
             unknown: stroke(180, StrokePattern::Dashed),
+            way: stroke(240, StrokePattern::Dashed),
         },
         Paint { fill: Rgba(200, 200, 180, 255) },
         Paint { fill: Rgba(120, 160, 200, 235) },
@@ -653,4 +655,114 @@ fn real_source_renders_deterministically() {
         exact.select_region(some_region).canonical_bytes(),
         lone.canonical_bytes()
     );
+}
+
+/// A Way boundary's stations become markers and labels — the journey
+/// is legible, not a bare dashed line — and both carry the scripture
+/// source so a semantic selection keeps them.
+#[test]
+fn way_routes_emit_their_stations() {
+    use map_types::scene::LabelSubject;
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    let stations = [("Antioch of Syria", 36.2, 36.16), ("Seleucia", 36.12, 35.93)];
+    let place = |name: &str| atlas_graph_types::covenant::PlaceId::new(format!("place:{name}"));
+    let gaz = map_types::GazetteerExport {
+        atlas_root: atlas_graph_types::covenant::ContentHash(0),
+        places: stations
+            .iter()
+            .map(|(n, lat, lon)| {
+                (
+                    place(n),
+                    map_types::GazetteerEntry {
+                        canonical_name: n.to_string(),
+                        position: uv(*lat, *lon),
+                        aliases: Vec::new(),
+                        provenance: None,
+                        attestations: Vec::new(),
+                    },
+                )
+            })
+            .collect(),
+    };
+    p.gazetteer = Some(gaz);
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(9001));
+    let verses = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 13, verse: 1,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 14, verse: 28,
+        }),
+    )
+    .unwrap();
+    p.timeline.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(45)),
+                Boundary {
+                    pts: stations.iter().map(|(_, lat, lon)| uv(*lat, *lon)).collect(),
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses,
+                        waypoints: stations
+                            .iter()
+                            .map(|(n, _, _)| map_types::AtlasPlaceRef(place(n)))
+                            .collect(),
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route".to_string(),
+                },
+            )],
+        },
+    );
+
+    // A second way through a SHARED station: the station keeps ONE
+    // marker and one name, however many journeys pass through it.
+    let bid2 = BoundaryId(atlas_graph_types::covenant::ContentHash(9002));
+    let verses2 = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 15, verse: 36,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 18, verse: 22,
+        }),
+    )
+    .unwrap();
+    p.timeline.boundaries.insert(
+        bid2,
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(49)),
+                Boundary {
+                    pts: vec![uv(36.2, 36.16), uv(36.92, 34.9)],
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses: verses2,
+                        waypoints: vec![map_types::AtlasPlaceRef(place("Antioch of Syria"))],
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route2".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route2".to_string(),
+                },
+            )],
+        },
+    );
+
+    let scene = p.render(&world_query(style_id, TimeSelector::At(tp(64)))).unwrap();
+    let scripture = SourceId::new("scripture");
+    let station_markers: Vec<_> =
+        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).collect();
+    assert_eq!(station_markers.len(), 2, "one marker per station, shared stations deduped");
+    let station_labels: Vec<_> = scene
+        .labels
+        .iter()
+        .filter(|l| matches!(&l.subject, LabelSubject::Boundary(b) if *b == bid))
+        .collect();
+    assert_eq!(station_labels.len(), 2, "stations are named");
+    assert!(station_labels.iter().any(|l| l.text == "Seleucia"));
 }
