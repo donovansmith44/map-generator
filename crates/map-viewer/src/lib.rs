@@ -376,12 +376,14 @@ pub fn load() -> App {
     for &year in &stops {
         if let Some(at) = tp(year) {
             for s in provider.subjects(at) {
-                if let RenderSubject::Region(id) = s.subject {
-                    let key = format!("region:{:016x}", id.0 .0);
-                    let entry = presence.entry(key).or_insert_with(|| (s.label.clone(), Vec::new()));
-                    entry.0 = s.label;
-                    entry.1.push(year);
-                }
+                let key = match &s.subject {
+                    RenderSubject::Region(id) => format!("region:{:016x}", id.0 .0),
+                    RenderSubject::Point(place) => format!("place:{}", place.0 .0),
+                    _ => continue,
+                };
+                let entry = presence.entry(key).or_insert_with(|| (s.label.clone(), Vec::new()));
+                entry.0 = s.label;
+                entry.1.push(year);
             }
         }
     }
@@ -399,20 +401,23 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
         scene.boundaries.iter().filter(|b| b.sources.contains(&scripture)).cloned().collect();
     let kept_regions: std::collections::BTreeSet<_> = regions.iter().map(|r| r.region).collect();
     let kept_bounds: std::collections::BTreeSet<_> = boundaries.iter().map(|b| b.boundary).collect();
+    // Markers select by their own sources — a journey's stations are
+    // as scripture-grounded as the way through them.
+    let markers: Vec<_> =
+        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+    let kept_places: std::collections::BTreeSet<_> =
+        markers.iter().filter_map(|m| m.place.clone()).collect();
     let labels = scene
         .labels
         .iter()
         .filter(|l| match &l.subject {
             map_types::scene::LabelSubject::Region(r) => kept_regions.contains(r),
             map_types::scene::LabelSubject::Boundary(b) => kept_bounds.contains(b),
+            map_types::scene::LabelSubject::Place(p) => kept_places.contains(p),
             map_types::scene::LabelSubject::Free => false,
         })
         .cloned()
         .collect();
-    // Markers select by their own sources — a journey's stations are
-    // as scripture-grounded as the way through them.
-    let markers: Vec<_> =
-        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
     let attribution = regions
         .iter()
         .flat_map(|r| r.sources.iter().cloned())
@@ -433,6 +438,7 @@ fn without_realized(mut backdrop: Snapshot, realized: &Snapshot) -> Snapshot {
     backdrop.labels.retain(|l| match &l.subject {
         map_types::scene::LabelSubject::Region(r) => !regions.contains(r),
         map_types::scene::LabelSubject::Boundary(b) => !bounds.contains(b),
+        map_types::scene::LabelSubject::Place(_) => true,
         map_types::scene::LabelSubject::Free => true,
     });
     backdrop
@@ -525,6 +531,11 @@ impl Params {
 fn parse_subject(s: &str) -> Option<RenderSubject> {
     if s == "world" {
         return Some(RenderSubject::World);
+    }
+    if let Some(id) = s.strip_prefix("place:") {
+        return Some(RenderSubject::Point(map_types::AtlasPlaceRef(
+            atlas_graph_types::covenant::PlaceId::new(id.to_string()),
+        )));
     }
     let hex = s.strip_prefix("region:")?;
     let id = u64::from_str_radix(hex, 16).ok()?;
@@ -690,6 +701,7 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                     let key = match s.subject {
                         RenderSubject::World => "world".to_string(),
                         RenderSubject::Region(id) => format!("region:{:016x}", id.0 .0),
+                        RenderSubject::Point(ref place) => format!("place:{}", place.0 .0),
                         _ => return None,
                     };
                     Some(serde_json::json!({ "key": key, "label": s.label }))
@@ -997,6 +1009,7 @@ mod tests {
             at: UnitVec::from_lat_lon_deg(32.0, 35.0),
             style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
             sources: src.map(SourceId::new).into_iter().collect(),
+            place: None,
         };
         scene.markers.push(mk(Some(SCRIPTURE_SOURCE)));
         scene.markers.push(mk(Some("natural-earth")));

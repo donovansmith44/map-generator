@@ -221,6 +221,7 @@ impl TimelineProvider {
                 at: entry.position,
                 style: style.marker_style(),
                 sources: sources.clone(),
+                place: Some(wp.clone()),
             });
             if q.layers.contains(LayerSet::LABELS) {
                 let mut label = style.label_style();
@@ -228,7 +229,7 @@ impl TimelineProvider {
                 scene.labels.push(PlacedLabel {
                     text: entry.canonical_name.clone(),
                     at: entry.position,
-                    subject: LabelSubject::Boundary(id),
+                    subject: LabelSubject::Place(wp.clone()),
                     style: label,
                 });
             }
@@ -484,7 +485,12 @@ impl TimelineProvider {
             }
             RenderSubject::RawPoint(p) => {
                 if in_viewport(&q.viewport, std::slice::from_ref(p)) {
-                    scene.markers.push(StyledMarker { at: *p, style: style.marker_style(), sources: Default::default() });
+                    scene.markers.push(StyledMarker {
+                        at: *p,
+                        style: style.marker_style(),
+                        sources: Default::default(),
+                        place: None,
+                    });
                 }
             }
             RenderSubject::Point(place) => {
@@ -496,18 +502,34 @@ impl TimelineProvider {
                     .get(&place.0)
                     .ok_or_else(|| MapError::UnknownPlace(place.0 .0.clone()))?;
                 if in_viewport(&q.viewport, std::slice::from_ref(&entry.position)) {
-                    scene
-                        .markers
-                        .push(StyledMarker {
-                            at: entry.position,
-                            style: style.marker_style(),
-                            sources: BTreeSet::from([SourceId::new("atlas-gazetteer")]),
-                        });
+                    // A place a Survey walks through is scripture-
+                    // grounded — the text is why it is on the map at
+                    // all. Anything else stands on the gazetteer.
+                    let surveyed = self.timeline.boundaries.values().any(|h| {
+                        h.versions.iter().any(|(_, b)| match &b.source {
+                            BoundarySource::Survey(s) => {
+                                s.waypoints.iter().any(|w| w.0 == place.0)
+                            }
+                            _ => false,
+                        })
+                    });
+                    let sources = BTreeSet::from([SourceId::new(if surveyed {
+                        SCRIPTURE_SOURCE
+                    } else {
+                        "atlas-gazetteer"
+                    })]);
+                    scene.attribution.extend(sources.iter().cloned());
+                    scene.markers.push(StyledMarker {
+                        at: entry.position,
+                        style: style.marker_style(),
+                        sources,
+                        place: Some(place.clone()),
+                    });
                     if q.layers.contains(LayerSet::LABELS) {
                         scene.labels.push(PlacedLabel {
                             text: entry.canonical_name.clone(),
                             at: entry.position,
-                            subject: LabelSubject::Free,
+                            subject: LabelSubject::Place(place.clone()),
                             style: style.label_style(),
                         });
                     }
@@ -786,6 +808,29 @@ impl MapProvider for TimelineProvider {
                         subject: RenderSubject::Region(*id),
                         label: label.to_string(),
                     });
+                }
+            }
+        }
+        // Stations of the ways active now are subjects too: the
+        // places the text walks through, each listed once.
+        if let Some(gaz) = self.gazetteer.as_ref() {
+            let mut seen = BTreeSet::new();
+            for hist in self.timeline.boundaries.values() {
+                let Some(b) = hist.at(&at) else { continue };
+                if b.character != map_types::EdgeCharacter::Way {
+                    continue;
+                }
+                let BoundarySource::Survey(survey) = &b.source else { continue };
+                for wp in &survey.waypoints {
+                    if !seen.insert(wp.0.clone()) {
+                        continue;
+                    }
+                    if let Some(entry) = gaz.places.get(&wp.0) {
+                        out.push(SubjectListing {
+                            subject: RenderSubject::Point(wp.clone()),
+                            label: entry.canonical_name.clone(),
+                        });
+                    }
                 }
             }
         }

@@ -54,6 +54,10 @@ pub struct StyledMarker {
     pub at: UnitVec,
     pub style: MarkerStyle,
     pub sources: BTreeSet<SourceId>,
+    /// The gazetteer place this marker stands on, when it stands on
+    /// one — selection follows markers by their place (law 10's
+    /// spirit), never by guessing from position.
+    pub place: Option<crate::boundary::AtlasPlaceRef>,
 }
 
 /// What a label is attached to — selection (law 10) follows labels by
@@ -62,6 +66,8 @@ pub struct StyledMarker {
 pub enum LabelSubject {
     Region(RegionId),
     Boundary(BoundaryId),
+    /// A gazetteer place — a journey station, a landmark by name.
+    Place(crate::boundary::AtlasPlaceRef),
     Free,
 }
 
@@ -133,6 +139,10 @@ impl MapAddressed for Snapshot {
             c.seq(&srcs, |c, s| {
                 c.str_(&s.0);
             });
+            match &m.place {
+                None => c.str_(""),
+                Some(p) => c.str_(&p.0 .0),
+            };
         });
         c.seq(&self.labels, |c, l| {
             c.str_(&l.text);
@@ -141,6 +151,7 @@ impl MapAddressed for Snapshot {
                 LabelSubject::Region(r) => c.u8_(0).u64_(r.0 .0),
                 LabelSubject::Boundary(b) => c.u8_(1).u64_(b.0 .0),
                 LabelSubject::Free => c.u8_(2),
+                LabelSubject::Place(p) => c.u8_(3).str_(&p.0 .0),
             };
             let crate::style::Rgba(r, g, bl, a) = l.style.color;
             c.u8_(r).u8_(g).u8_(bl).u8_(a);

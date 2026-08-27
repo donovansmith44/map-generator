@@ -373,6 +373,18 @@ fn emit_scene(
                 rgb(m.style.color),
                 alpha(m.style.color)
             );
+            // A placed marker is clickable: its place id rides a
+            // finger-sized transparent hit circle over the dot.
+            if let Some(p) = &m.place {
+                let _ = write!(
+                    s,
+                    "<circle cx=\"{:.1}\" cy=\"{:.1}\" r=\"{:.1}\" fill=\"transparent\" data-place=\"{}\"/>",
+                    x,
+                    y,
+                    (m.style.size * 3.0).max(9.0),
+                    esc(&p.0 .0)
+                );
+            }
         }
     }
     extents
@@ -426,9 +438,15 @@ fn emit_labels(
         }
         let Some((y, b)) = spot else { continue };
         placed.push(b);
+        // A place-subject label is a click target for its place, just
+        // like the marker's hit circle.
+        let subject_attr = match &l.subject {
+            LabelSubject::Place(p) => format!(" data-place=\"{}\"", esc(&p.0 .0)),
+            _ => String::new(),
+        };
         let _ = write!(
             s,
-            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\">{}</text>",
+            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\"{}>{}</text>",
             x,
             y,
             size,
@@ -437,6 +455,7 @@ fn emit_labels(
             rgb(l.style.halo),
             alpha(l.style.halo),
             size * 0.28,
+            subject_attr,
             esc(&l.text)
         );
     }
@@ -907,6 +926,7 @@ impl SceneEncoder for GeoJsonEncoder {
             let subject = match &l.subject {
                 LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
                 LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
+                LabelSubject::Place(p) => format!("place:{}", p.0 .0),
                 LabelSubject::Free => "free".to_string(),
             };
             features.push(serde_json::json!({

@@ -147,6 +147,7 @@ fn marker_scene(tag: u8) -> Snapshot {
         at: uv(f64::from(tag), f64::from(tag)),
         style: MarkerStyle { color: Rgba(tag, tag, tag, 255), size: 3.0 },
         sources: Default::default(),
+        place: None,
     });
     sc.attribution.insert(SourceId::new(format!("src-{tag}")));
     sc

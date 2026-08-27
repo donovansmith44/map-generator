@@ -37,6 +37,7 @@ fn sample_scene() -> Snapshot {
         at: uv(4.0, 5.0),
         style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
         sources: Default::default(),
+        place: None,
     });
     s.labels.push(PlacedLabel {
         text: "Judah & <friends>".to_string(),
@@ -424,4 +425,29 @@ fn swallowing_geometry_ships_thin() {
     let pairs = path.matches('L').count();
     assert!(pairs < 400, "off-page ring detail must be thinned, got ~{pairs} segments");
     assert!(!svg.contains("stroke=\"rgb(0,0,0)\""), "an all-off-page stroke paints nothing");
+}
+
+/// A station marker is CLICKABLE: it carries its place id on the
+/// element and a generous transparent hit target around the dot.
+#[test]
+fn markers_with_places_are_clickable() {
+    use map_types::scene::StyledMarker;
+    let mut scene = Snapshot::empty();
+    scene.markers.push(StyledMarker {
+        at: uv(37.94, 27.34),
+        style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
+        sources: Default::default(),
+        place: Some(map_types::AtlasPlaceRef(
+            atlas_graph_types::covenant::PlaceId::new("place:Ephesus".to_string()),
+        )),
+    });
+    scene.attribution.insert(SourceId::new("test"));
+    let svg = SvgEncoder {
+        projection: Projection::Globe { center: Some((37.94, 27.34)), zoom: Some(5.0) },
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    assert!(svg.contains("data-place=\"place:Ephesus\""), "place id rides the marker");
+    assert!(svg.contains("fill=\"transparent\""), "a finger-sized hit target wraps the dot");
 }

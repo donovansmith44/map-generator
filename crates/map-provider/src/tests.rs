@@ -761,8 +761,85 @@ fn way_routes_emit_their_stations() {
     let station_labels: Vec<_> = scene
         .labels
         .iter()
-        .filter(|l| matches!(&l.subject, LabelSubject::Boundary(b) if *b == bid))
+        .filter(|l| matches!(&l.subject, LabelSubject::Place(_)))
         .collect();
-    assert_eq!(station_labels.len(), 2, "stations are named");
+    assert_eq!(station_labels.len(), 2, "stations are named, attached to their places");
     assert!(station_labels.iter().any(|l| l.text == "Seleucia"));
+    let _ = bid; // the way itself is still on the scene as a boundary
+}
+
+/// A journey's stations are SUBJECTS: they appear in subjects() while
+/// their way is active (click-to-focus needs a listing to bind to),
+/// and a focused station renders scripture-grounded, so bible mode
+/// keeps the very place the text walks through.
+#[test]
+fn way_stations_are_subjects_and_scripture_grounded() {
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    let pid = atlas_graph_types::covenant::PlaceId::new("place:Ephesus".to_string());
+    p.gazetteer = Some(map_types::GazetteerExport {
+        atlas_root: atlas_graph_types::covenant::ContentHash(0),
+        places: [(
+            pid.clone(),
+            map_types::GazetteerEntry {
+                canonical_name: "Ephesus".to_string(),
+                position: uv(37.94, 27.34),
+                aliases: Vec::new(),
+                provenance: None,
+                attestations: Vec::new(),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    });
+    let verses = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 18, verse: 23,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 21, verse: 17,
+        }),
+    )
+    .unwrap();
+    p.timeline.boundaries.insert(
+        BoundaryId(atlas_graph_types::covenant::ContentHash(9010)),
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(53)),
+                Boundary {
+                    pts: vec![uv(37.94, 27.34), uv(39.75, 26.15)],
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses,
+                        waypoints: vec![map_types::AtlasPlaceRef(pid.clone())],
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route".to_string(),
+                },
+            )],
+        },
+    );
+
+    // Listed while the way is active, absent before it.
+    let listed = |year: i32| {
+        p.subjects(tp(year)).into_iter().any(|s| {
+            matches!(&s.subject, RenderSubject::Point(r) if r.0 == pid) && s.label == "Ephesus"
+        })
+    };
+    assert!(listed(64), "an active way's station is a subject");
+    assert!(!listed(-1000), "a station is not listed before its way exists");
+
+    // A focused station is scripture-grounded (bible mode keeps it).
+    let q = RenderQuery {
+        subject: RenderSubject::Point(map_types::AtlasPlaceRef(pid)),
+        ..world_query(style_id, TimeSelector::At(tp(64)))
+    };
+    let scene = p.render(&q).unwrap();
+    assert_eq!(scene.markers.len(), 1);
+    assert!(
+        scene.markers[0].sources.contains(&SourceId::new("scripture")),
+        "a station the text walks through is scripture-grounded"
+    );
 }

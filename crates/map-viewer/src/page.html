@@ -130,6 +130,9 @@
   }
   #plate svg path[data-region] { cursor: pointer; }
   #plate svg path[data-region]:hover { stroke: var(--stop); stroke-width: 1.2; }
+  #plate svg [data-place] { cursor: pointer; }
+  #plate svg circle[data-place]:hover { fill: var(--stop); fill-opacity: 0.25; }
+  #plate svg text[data-place]:hover { text-decoration: underline; }
   #plate pre {
     max-width: 100%; max-height: 100%; overflow: auto;
     color: var(--dim); font-size: 11px; padding: 12px;
@@ -473,9 +476,12 @@ function setupPlateNav() {
   // Click toggles a region's focus; shift-click grows the selection.
   plate.addEventListener("click", e => {
     if (suppressClick) { suppressClick = false; return; }
-    const path = e.target.closest && e.target.closest("path[data-region]");
-    if (!path) return;
-    const key = "region:" + path.dataset.region;
+    // Regions by their fill, places (journey stations) by their
+    // marker's hit circle or their name.
+    const hit = e.target.closest && e.target.closest("path[data-region], [data-place]");
+    if (!hit) return;
+    const key = hit.dataset.region ? "region:" + hit.dataset.region
+                                   : "place:" + hit.dataset.place;
     pinView(); // map clicks never move the camera
     const has = state.selection.includes(key);
     let next;
