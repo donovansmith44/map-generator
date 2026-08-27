@@ -1,0 +1,17 @@
+[package]
+name = "map-compile"
+version = "0.1.0"
+edition = "2021"
+
+# The compiler side of the canon design (2026-08-27): pulls the atlas
+# API into typed vendored files (refresh), and compiles every witness
+# into data/canon. All intelligence lives here; the renderer stays dumb.
+[dependencies]
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+map-types = { path = "../map-types" }
+map-canon = { path = "../map-canon" }
+serde_json = "1"
+
+[[bin]]
+name = "map-compile"
+path = "src/main.rs"

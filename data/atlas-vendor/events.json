@@ -1,0 +1,6912 @@
+[
+  {
+    "id": "ab_ur",
+    "label": "Terah's family leaves Ur",
+    "places": [
+      "ur-1"
+    ],
+    "verses": [
+      "GEN.11.28",
+      "GEN.11.31"
+    ],
+    "when": {
+      "from_year": -2100,
+      "to_year": -2092
+    }
+  },
+  {
+    "id": "ab_haran",
+    "label": "Sojourn in Haran; the call of Abram",
+    "places": [
+      "haran"
+    ],
+    "verses": [
+      "GEN.11.31",
+      "GEN.12.1",
+      "GEN.12.4"
+    ],
+    "when": {
+      "from_year": -2092,
+      "to_year": -2091
+    }
+  },
+  {
+    "id": "ab_shechem",
+    "label": "Abram at the oak of Moreh",
+    "places": [
+      "shechem"
+    ],
+    "verses": [
+      "GEN.12.6",
+      "GEN.12.7"
+    ],
+    "when": {
+      "from_year": -2091,
+      "to_year": -2091
+    }
+  },
+  {
+    "id": "ab_bethel",
+    "label": "Altar between Bethel and Ai",
+    "places": [
+      "bethel-1"
+    ],
+    "verses": [
+      "GEN.12.8"
+    ],
+    "when": {
+      "from_year": -2091,
+      "to_year": -2090
+    }
+  },
+  {
+    "id": "ab_egypt",
+    "label": "Famine drives Abram to Egypt",
+    "places": [
+      "egypt"
+    ],
+    "verses": [
+      "GEN.12.10",
+      "GEN.12.14",
+      "GEN.12.15",
+      "GEN.12.16",
+      "GEN.12.17",
+      "GEN.12.18",
+      "GEN.12.19",
+      "GEN.12.20"
+    ],
+    "when": {
+      "from_year": -2090,
+      "to_year": -2089
+    }
+  },
+  {
+    "id": "ab_hebron",
+    "label": "Abram settles at Mamre in Hebron",
+    "places": [
+      "hebron"
+    ],
+    "verses": [
+      "GEN.13.1",
+      "GEN.13.18"
+    ],
+    "when": {
+      "from_year": -2088,
+      "to_year": -2085
+    }
+  },
+  {
+    "id": "cq_shittim",
+    "label": "Spies sent out from Shittim",
+    "places": [
+      "shittim"
+    ],
+    "verses": [
+      "JOS.2.1"
+    ],
+    "when": {
+      "from_year": -1406,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "cq_gilgal",
+    "label": "Israel camps at Gilgal",
+    "places": [
+      "gilgal-1"
+    ],
+    "verses": [
+      "JOS.4.19",
+      "JOS.4.20",
+      "JOS.4.21",
+      "JOS.4.22",
+      "JOS.4.23",
+      "JOS.4.24"
+    ],
+    "when": {
+      "from_year": -1406,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "cq_jericho",
+    "label": "The walls of Jericho fall",
+    "places": [
+      "jericho-1"
+    ],
+    "verses": [
+      "JOS.6.1",
+      "JOS.6.2",
+      "JOS.6.3",
+      "JOS.6.4",
+      "JOS.6.5",
+      "JOS.6.6",
+      "JOS.6.7",
+      "JOS.6.8",
+      "JOS.6.9",
+      "JOS.6.10",
+      "JOS.6.11",
+      "JOS.6.12",
+      "JOS.6.13",
+      "JOS.6.14",
+      "JOS.6.15",
+      "JOS.6.16",
+      "JOS.6.17",
+      "JOS.6.18",
+      "JOS.6.19",
+      "JOS.6.20"
+    ],
+    "when": {
+      "from_year": -1406,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "cq_ai",
+    "label": "Ai is captured and burned",
+    "places": [
+      "ai-1"
+    ],
+    "verses": [
+      "JOS.8.1",
+      "JOS.8.2",
+      "JOS.8.3",
+      "JOS.8.4",
+      "JOS.8.5",
+      "JOS.8.6",
+      "JOS.8.7",
+      "JOS.8.8",
+      "JOS.8.9",
+      "JOS.8.10",
+      "JOS.8.11",
+      "JOS.8.12",
+      "JOS.8.13",
+      "JOS.8.14",
+      "JOS.8.15",
+      "JOS.8.16",
+      "JOS.8.17",
+      "JOS.8.18",
+      "JOS.8.19",
+      "JOS.8.20"
+    ],
+    "when": {
+      "from_year": -1406,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "cq_gibeon",
+    "label": "The sun stands still over Gibeon",
+    "places": [
+      "gibeon"
+    ],
+    "verses": [
+      "JOS.10.6",
+      "JOS.10.7",
+      "JOS.10.8",
+      "JOS.10.9",
+      "JOS.10.10",
+      "JOS.10.11",
+      "JOS.10.12",
+      "JOS.10.13",
+      "JOS.10.14"
+    ],
+    "when": {
+      "from_year": -1405,
+      "to_year": -1405
+    }
+  },
+  {
+    "id": "cq_hazor",
+    "label": "Hazor is defeated and burned",
+    "places": [
+      "hazor-1"
+    ],
+    "verses": [
+      "JOS.11.10",
+      "JOS.11.11"
+    ],
+    "when": {
+      "from_year": -1400,
+      "to_year": -1400
+    }
+  },
+  {
+    "id": "cq_shiloh",
+    "label": "The tabernacle is set up at Shiloh",
+    "places": [
+      "shiloh"
+    ],
+    "verses": [
+      "JOS.18.1"
+    ],
+    "when": {
+      "from_year": -1399,
+      "to_year": -1399
+    }
+  },
+  {
+    "id": "df_ramah",
+    "label": "David flees to Samuel at Ramah",
+    "places": [
+      "ramah-4"
+    ],
+    "verses": [
+      "1SA.19.18"
+    ],
+    "when": {
+      "from_year": -1062,
+      "to_year": -1062
+    }
+  },
+  {
+    "id": "df_nob",
+    "label": "David receives bread and a sword at Nob",
+    "places": [
+      "nob"
+    ],
+    "verses": [
+      "1SA.21.1",
+      "1SA.21.2",
+      "1SA.21.3",
+      "1SA.21.4",
+      "1SA.21.5",
+      "1SA.21.6",
+      "1SA.21.7",
+      "1SA.21.8",
+      "1SA.21.9"
+    ],
+    "when": {
+      "from_year": -1061,
+      "to_year": -1061
+    }
+  },
+  {
+    "id": "df_gath",
+    "label": "David feigns madness before Achish at Gath",
+    "places": [
+      "gath-1"
+    ],
+    "verses": [
+      "1SA.21.10",
+      "1SA.21.11",
+      "1SA.21.12",
+      "1SA.21.13",
+      "1SA.21.14",
+      "1SA.21.15"
+    ],
+    "when": {
+      "from_year": -1061,
+      "to_year": -1061
+    }
+  },
+  {
+    "id": "df_adullam",
+    "label": "David gathers followers at the cave of Adullam",
+    "places": [
+      "adullam"
+    ],
+    "verses": [
+      "1SA.22.1",
+      "1SA.22.2"
+    ],
+    "when": {
+      "from_year": -1061,
+      "to_year": -1061
+    }
+  },
+  {
+    "id": "df_keilah",
+    "label": "David delivers Keilah from the Philistines",
+    "places": [
+      "keilah"
+    ],
+    "verses": [
+      "1SA.23.1",
+      "1SA.23.2",
+      "1SA.23.3",
+      "1SA.23.4",
+      "1SA.23.5",
+      "1SA.23.6",
+      "1SA.23.7",
+      "1SA.23.8",
+      "1SA.23.9",
+      "1SA.23.10",
+      "1SA.23.11",
+      "1SA.23.12",
+      "1SA.23.13"
+    ],
+    "when": {
+      "from_year": -1060,
+      "to_year": -1060
+    }
+  },
+  {
+    "id": "df_ziph",
+    "label": "Saul hunts David in the wilderness of Ziph",
+    "places": [
+      "ziph-1"
+    ],
+    "verses": [
+      "1SA.23.14",
+      "1SA.23.15",
+      "1SA.23.16",
+      "1SA.23.17",
+      "1SA.23.18",
+      "1SA.23.19",
+      "1SA.23.20",
+      "1SA.23.21",
+      "1SA.23.22",
+      "1SA.23.23",
+      "1SA.23.24"
+    ],
+    "when": {
+      "from_year": -1060,
+      "to_year": -1060
+    }
+  },
+  {
+    "id": "df_en_gedi",
+    "label": "David spares Saul's life at En-gedi",
+    "places": [
+      "engedi"
+    ],
+    "verses": [
+      "1SA.24.1",
+      "1SA.24.2",
+      "1SA.24.3",
+      "1SA.24.4",
+      "1SA.24.5",
+      "1SA.24.6",
+      "1SA.24.7",
+      "1SA.24.8",
+      "1SA.24.9",
+      "1SA.24.10",
+      "1SA.24.11",
+      "1SA.24.12",
+      "1SA.24.13",
+      "1SA.24.14",
+      "1SA.24.15",
+      "1SA.24.16",
+      "1SA.24.17",
+      "1SA.24.18",
+      "1SA.24.19",
+      "1SA.24.20"
+    ],
+    "when": {
+      "from_year": -1059,
+      "to_year": -1059
+    }
+  },
+  {
+    "id": "df_ziklag",
+    "label": "David given Ziklag by Achish",
+    "places": [
+      "ziklag"
+    ],
+    "verses": [
+      "1SA.27.5",
+      "1SA.27.6",
+      "1SA.27.7"
+    ],
+    "when": {
+      "from_year": -1058,
+      "to_year": -1058
+    }
+  },
+  {
+    "id": "df_hebron",
+    "label": "David anointed king over Judah at Hebron",
+    "places": [
+      "hebron"
+    ],
+    "verses": [
+      "2SA.2.1",
+      "2SA.2.2",
+      "2SA.2.3",
+      "2SA.2.4"
+    ],
+    "when": {
+      "from_year": -1055,
+      "to_year": -1055
+    }
+  },
+  {
+    "id": "el_tishbe",
+    "label": "Elijah announces the drought",
+    "places": [
+      "tishbe"
+    ],
+    "verses": [
+      "1KI.17.1"
+    ],
+    "when": {
+      "from_year": -870,
+      "to_year": -870
+    }
+  },
+  {
+    "id": "el_cherith",
+    "label": "Elijah fed by ravens at the brook Cherith",
+    "places": [
+      "cherith"
+    ],
+    "verses": [
+      "1KI.17.2",
+      "1KI.17.3",
+      "1KI.17.4",
+      "1KI.17.5",
+      "1KI.17.6",
+      "1KI.17.7"
+    ],
+    "when": {
+      "from_year": -870,
+      "to_year": -870
+    }
+  },
+  {
+    "id": "el_zarephath",
+    "label": "The widow of Zarephath's oil and meal",
+    "places": [
+      "zarephath"
+    ],
+    "verses": [
+      "1KI.17.8",
+      "1KI.17.9",
+      "1KI.17.10",
+      "1KI.17.11",
+      "1KI.17.12",
+      "1KI.17.13",
+      "1KI.17.14",
+      "1KI.17.15",
+      "1KI.17.16",
+      "1KI.17.17",
+      "1KI.17.18",
+      "1KI.17.19",
+      "1KI.17.20",
+      "1KI.17.21",
+      "1KI.17.22",
+      "1KI.17.23",
+      "1KI.17.24"
+    ],
+    "when": {
+      "from_year": -869,
+      "to_year": -869
+    }
+  },
+  {
+    "id": "el_carmel",
+    "label": "Elijah defeats the prophets of Baal on Carmel",
+    "places": [
+      "mount-carmel"
+    ],
+    "verses": [
+      "1KI.18.20",
+      "1KI.18.21",
+      "1KI.18.22",
+      "1KI.18.23",
+      "1KI.18.24",
+      "1KI.18.25",
+      "1KI.18.26",
+      "1KI.18.27",
+      "1KI.18.28",
+      "1KI.18.29",
+      "1KI.18.30",
+      "1KI.18.31",
+      "1KI.18.32",
+      "1KI.18.33",
+      "1KI.18.34",
+      "1KI.18.35",
+      "1KI.18.36",
+      "1KI.18.37",
+      "1KI.18.38",
+      "1KI.18.39"
+    ],
+    "when": {
+      "from_year": -866,
+      "to_year": -866
+    }
+  },
+  {
+    "id": "el_jezreel",
+    "label": "Elijah outruns Ahab's chariot to Jezreel",
+    "places": [
+      "jezreel-2"
+    ],
+    "verses": [
+      "1KI.18.45",
+      "1KI.18.46"
+    ],
+    "when": {
+      "from_year": -866,
+      "to_year": -866
+    }
+  },
+  {
+    "id": "el_beersheba",
+    "label": "Elijah flees Jezebel to Beersheba",
+    "places": [
+      "beersheba-1"
+    ],
+    "verses": [
+      "1KI.19.3"
+    ],
+    "when": {
+      "from_year": -865,
+      "to_year": -865
+    }
+  },
+  {
+    "id": "el_horeb",
+    "label": "Elijah hears the still small voice at Horeb",
+    "places": [
+      "mount-horeb"
+    ],
+    "verses": [
+      "1KI.19.8",
+      "1KI.19.9",
+      "1KI.19.10",
+      "1KI.19.11",
+      "1KI.19.12",
+      "1KI.19.13",
+      "1KI.19.14",
+      "1KI.19.15",
+      "1KI.19.16",
+      "1KI.19.17",
+      "1KI.19.18"
+    ],
+    "when": {
+      "from_year": -865,
+      "to_year": -865
+    }
+  },
+  {
+    "id": "el_abel_meholah",
+    "label": "Elijah calls Elisha at Abel-meholah",
+    "places": [
+      "abel-meholah"
+    ],
+    "verses": [
+      "1KI.19.19",
+      "1KI.19.20",
+      "1KI.19.21"
+    ],
+    "when": {
+      "from_year": -864,
+      "to_year": -864
+    }
+  },
+  {
+    "id": "exl_jerusalem",
+    "label": "Jerusalem falls to Babylon",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "2KI.25.1",
+      "2KI.25.2",
+      "2KI.25.3",
+      "2KI.25.4",
+      "2KI.25.5",
+      "2KI.25.6",
+      "2KI.25.7",
+      "2KI.25.8",
+      "2KI.25.9",
+      "2KI.25.10",
+      "JER.39.1",
+      "JER.39.2",
+      "JER.39.3",
+      "JER.39.4",
+      "JER.39.5",
+      "JER.39.6",
+      "JER.39.7",
+      "JER.39.8",
+      "JER.39.9",
+      "JER.39.10"
+    ],
+    "when": {
+      "from_year": -586,
+      "to_year": -586
+    }
+  },
+  {
+    "id": "exl_riblah",
+    "label": "Zedekiah judged at Riblah",
+    "places": [
+      "riblah-1"
+    ],
+    "verses": [
+      "2KI.25.6",
+      "2KI.25.7",
+      "2KI.25.20",
+      "2KI.25.21"
+    ],
+    "when": {
+      "from_year": -586,
+      "to_year": -586
+    }
+  },
+  {
+    "id": "exl_babylon",
+    "label": "The exiles weep by the rivers of Babylon",
+    "places": [
+      "babylon-1"
+    ],
+    "verses": [
+      "2KI.25.11",
+      "PSA.137.1"
+    ],
+    "when": {
+      "from_year": -586,
+      "to_year": -586
+    }
+  },
+  {
+    "id": "jer_jeremiah_stays_with_gedaliah",
+    "label": "Nebuzaradan releases Jeremiah; the remnant gathers to Gedaliah at Mizpah",
+    "places": [
+      "mizpah-3"
+    ],
+    "verses": [
+      "2KI.25.22",
+      "2KI.25.23",
+      "2KI.25.24",
+      "JER.40.1",
+      "JER.40.2",
+      "JER.40.3",
+      "JER.40.4",
+      "JER.40.5",
+      "JER.40.6",
+      "JER.40.7",
+      "JER.40.8",
+      "JER.40.9",
+      "JER.40.10",
+      "JER.40.11",
+      "JER.40.12",
+      "JER.40.13",
+      "JER.40.14",
+      "JER.40.15",
+      "JER.40.16"
+    ],
+    "when": {
+      "from_year": -586,
+      "to_year": -586
+    }
+  },
+  {
+    "id": "jer_the_assassination_of_gedaliah",
+    "label": "Ishmael smites Gedaliah, and all the Jews that were with him at Mizpah",
+    "places": [
+      "mizpah-3"
+    ],
+    "verses": [
+      "2KI.25.25",
+      "JER.41.1",
+      "JER.41.2",
+      "JER.41.3",
+      "JER.41.4",
+      "JER.41.5",
+      "JER.41.6",
+      "JER.41.7",
+      "JER.41.8",
+      "JER.41.9",
+      "JER.41.10",
+      "JER.41.11",
+      "JER.41.12",
+      "JER.41.13",
+      "JER.41.14",
+      "JER.41.15",
+      "JER.41.16",
+      "JER.41.17",
+      "JER.41.18"
+    ],
+    "when": {
+      "from_year": -586,
+      "to_year": -586
+    }
+  },
+  {
+    "id": "exl_tahpanhes",
+    "label": "The remnant flees to Tahpanhes in Egypt",
+    "places": [
+      "tahpanhes"
+    ],
+    "verses": [
+      "JER.43.5",
+      "JER.43.6",
+      "JER.43.7"
+    ],
+    "when": {
+      "from_year": -585,
+      "to_year": -585
+    }
+  },
+  {
+    "id": "ex_rameses",
+    "label": "Israel departs Rameses",
+    "places": [
+      "rameses"
+    ],
+    "verses": [
+      "EXO.12.37"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_succoth",
+    "label": "First camp at Succoth",
+    "places": [
+      "succoth-2"
+    ],
+    "verses": [
+      "EXO.12.37",
+      "EXO.13.20"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_red_sea",
+    "label": "Crossing the Red Sea",
+    "places": [
+      "red-sea-1"
+    ],
+    "verses": [
+      "EXO.14.21",
+      "EXO.14.22",
+      "EXO.14.23",
+      "EXO.14.24",
+      "EXO.14.25",
+      "EXO.14.26",
+      "EXO.14.27",
+      "EXO.14.28",
+      "EXO.14.29",
+      "EXO.14.30",
+      "EXO.14.31"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_marah",
+    "label": "Bitter water at Marah",
+    "places": [
+      "marah"
+    ],
+    "verses": [
+      "EXO.15.23",
+      "EXO.15.24",
+      "EXO.15.25"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_elim",
+    "label": "Twelve springs at Elim",
+    "places": [
+      "elim"
+    ],
+    "verses": [
+      "EXO.15.27"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_rephidim",
+    "label": "Water from the rock; war with Amalek",
+    "places": [
+      "rephidim"
+    ],
+    "verses": [
+      "EXO.17.1",
+      "EXO.17.8",
+      "EXO.17.9",
+      "EXO.17.10",
+      "EXO.17.11",
+      "EXO.17.12",
+      "EXO.17.13"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1446
+    }
+  },
+  {
+    "id": "ex_sinai",
+    "label": "Covenant at Sinai",
+    "places": [
+      "mount-sinai"
+    ],
+    "verses": [
+      "EXO.19.1",
+      "EXO.19.2",
+      "EXO.19.18",
+      "EXO.19.19",
+      "EXO.19.20"
+    ],
+    "when": {
+      "from_year": -1446,
+      "to_year": -1445
+    }
+  },
+  {
+    "id": "ex_kadesh",
+    "label": "Spies return to Kadesh-barnea",
+    "places": [
+      "kadesh-barnea"
+    ],
+    "verses": [
+      "NUM.13.26",
+      "NUM.14.1",
+      "NUM.14.2",
+      "NUM.14.3",
+      "NUM.14.4"
+    ],
+    "when": {
+      "from_year": -1445,
+      "to_year": -1444
+    }
+  },
+  {
+    "id": "ex_moab",
+    "label": "Camp on the plains of Moab",
+    "places": [
+      "moab-2"
+    ],
+    "verses": [
+      "NUM.22.1",
+      "DEU.34.1",
+      "DEU.34.2",
+      "DEU.34.3",
+      "DEU.34.4",
+      "DEU.34.5"
+    ],
+    "when": {
+      "from_year": -1407,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "ex_jordan",
+    "label": "Israel crosses the Jordan",
+    "places": [
+      "jericho-1"
+    ],
+    "verses": [
+      "JOS.3.14",
+      "JOS.3.15",
+      "JOS.3.16",
+      "JOS.3.17"
+    ],
+    "when": {
+      "from_year": -1406,
+      "to_year": -1406
+    }
+  },
+  {
+    "id": "jj_beersheba",
+    "label": "Jacob departs Beersheba for Haran",
+    "places": [
+      "beersheba-2"
+    ],
+    "verses": [
+      "GEN.28.10"
+    ],
+    "when": {
+      "from_year": -1930,
+      "to_year": -1930
+    }
+  },
+  {
+    "id": "jj_bethel_dream",
+    "label": "Jacob's ladder dream at Bethel",
+    "places": [
+      "bethel-1"
+    ],
+    "verses": [
+      "GEN.28.11",
+      "GEN.28.12",
+      "GEN.28.13",
+      "GEN.28.14",
+      "GEN.28.15",
+      "GEN.28.16",
+      "GEN.28.17",
+      "GEN.28.18",
+      "GEN.28.19"
+    ],
+    "when": {
+      "from_year": -1930,
+      "to_year": -1930
+    }
+  },
+  {
+    "id": "jj_haran",
+    "label": "Jacob serves Laban in Haran",
+    "places": [
+      "haran"
+    ],
+    "verses": [
+      "GEN.29.1",
+      "GEN.29.2",
+      "GEN.29.3",
+      "GEN.29.4",
+      "GEN.29.5",
+      "GEN.29.6",
+      "GEN.29.7",
+      "GEN.29.8",
+      "GEN.29.9",
+      "GEN.29.10",
+      "GEN.29.11",
+      "GEN.29.12",
+      "GEN.29.13",
+      "GEN.29.14"
+    ],
+    "when": {
+      "from_year": -1929,
+      "to_year": -1929
+    }
+  },
+  {
+    "id": "jj_mahanaim",
+    "label": "Angels meet Jacob at Mahanaim",
+    "places": [
+      "mahanaim"
+    ],
+    "verses": [
+      "GEN.32.1",
+      "GEN.32.2"
+    ],
+    "when": {
+      "from_year": -1910,
+      "to_year": -1910
+    }
+  },
+  {
+    "id": "jj_peniel",
+    "label": "Jacob wrestles at Peniel",
+    "places": [
+      "penuel"
+    ],
+    "verses": [
+      "GEN.32.22",
+      "GEN.32.23",
+      "GEN.32.24",
+      "GEN.32.25",
+      "GEN.32.26",
+      "GEN.32.27",
+      "GEN.32.28",
+      "GEN.32.29",
+      "GEN.32.30",
+      "GEN.32.31"
+    ],
+    "when": {
+      "from_year": -1910,
+      "to_year": -1910
+    }
+  },
+  {
+    "id": "jj_shechem",
+    "label": "Jacob settles near Shechem",
+    "places": [
+      "shechem"
+    ],
+    "verses": [
+      "GEN.33.18"
+    ],
+    "when": {
+      "from_year": -1909,
+      "to_year": -1909
+    }
+  },
+  {
+    "id": "jj_bethel_return",
+    "label": "Jacob returns to build an altar at Bethel",
+    "places": [
+      "bethel-1"
+    ],
+    "verses": [
+      "GEN.35.1",
+      "GEN.35.2",
+      "GEN.35.3",
+      "GEN.35.4",
+      "GEN.35.5",
+      "GEN.35.6",
+      "GEN.35.7"
+    ],
+    "when": {
+      "from_year": -1900,
+      "to_year": -1900
+    }
+  },
+  {
+    "id": "jj_hebron",
+    "label": "Jacob rejoins Isaac at Hebron",
+    "places": [
+      "hebron"
+    ],
+    "verses": [
+      "GEN.35.27"
+    ],
+    "when": {
+      "from_year": -1898,
+      "to_year": -1898
+    }
+  },
+  {
+    "id": "rob_zacharias_vision",
+    "label": "The angel Gabriel appears to Zacharias in the temple",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.1.5",
+      "LUK.1.6",
+      "LUK.1.7",
+      "LUK.1.8",
+      "LUK.1.9",
+      "LUK.1.10",
+      "LUK.1.11",
+      "LUK.1.12",
+      "LUK.1.13",
+      "LUK.1.14",
+      "LUK.1.15",
+      "LUK.1.16",
+      "LUK.1.17",
+      "LUK.1.18",
+      "LUK.1.19",
+      "LUK.1.20",
+      "LUK.1.21",
+      "LUK.1.22",
+      "LUK.1.23",
+      "LUK.1.24"
+    ],
+    "when": {
+      "from_year": -6,
+      "to_year": -6
+    }
+  },
+  {
+    "id": "rob_annunciation_mary",
+    "label": "The angel Gabriel announces Jesus's birth to Mary",
+    "places": [
+      "nazareth"
+    ],
+    "verses": [
+      "LUK.1.26",
+      "LUK.1.27",
+      "LUK.1.28",
+      "LUK.1.29",
+      "LUK.1.30",
+      "LUK.1.31",
+      "LUK.1.32",
+      "LUK.1.33",
+      "LUK.1.34",
+      "LUK.1.35",
+      "LUK.1.36",
+      "LUK.1.37",
+      "LUK.1.38"
+    ],
+    "when": {
+      "from_year": -6,
+      "to_year": -6
+    }
+  },
+  {
+    "id": "rob_elizabeth_greets_mary",
+    "label": "Elizabeth greets Mary; the babe leaps for joy",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.1.39",
+      "LUK.1.40",
+      "LUK.1.41",
+      "LUK.1.42",
+      "LUK.1.43",
+      "LUK.1.44",
+      "LUK.1.45"
+    ],
+    "when": {
+      "from_year": -6,
+      "to_year": -6
+    }
+  },
+  {
+    "id": "rob_magnificat",
+    "label": "Mary's Magnificat",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.1.46",
+      "LUK.1.47",
+      "LUK.1.48",
+      "LUK.1.49",
+      "LUK.1.50",
+      "LUK.1.51",
+      "LUK.1.52",
+      "LUK.1.53",
+      "LUK.1.54",
+      "LUK.1.55",
+      "LUK.1.56"
+    ],
+    "when": {
+      "from_year": -6,
+      "to_year": -6
+    }
+  },
+  {
+    "id": "rob_baptist_birth",
+    "label": "The birth of John the Baptist",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.1.57",
+      "LUK.1.58",
+      "LUK.1.59",
+      "LUK.1.60",
+      "LUK.1.61",
+      "LUK.1.62",
+      "LUK.1.63",
+      "LUK.1.64",
+      "LUK.1.65",
+      "LUK.1.66",
+      "LUK.1.67",
+      "LUK.1.68",
+      "LUK.1.69",
+      "LUK.1.70",
+      "LUK.1.71",
+      "LUK.1.72",
+      "LUK.1.73",
+      "LUK.1.74",
+      "LUK.1.75",
+      "LUK.1.76"
+    ],
+    "when": {
+      "from_year": -6,
+      "to_year": -6
+    }
+  },
+  {
+    "id": "rob_joseph_annunciation",
+    "label": "An angel reassures Joseph in a dream",
+    "places": [
+      "nazareth"
+    ],
+    "verses": [
+      "MAT.1.18",
+      "MAT.1.19",
+      "MAT.1.20",
+      "MAT.1.21",
+      "MAT.1.22",
+      "MAT.1.23",
+      "MAT.1.24",
+      "MAT.1.25"
+    ],
+    "when": {
+      "from_year": -5,
+      "to_year": -5
+    }
+  },
+  {
+    "id": "jm_bethlehem",
+    "label": "Jesus is born in Bethlehem",
+    "places": [
+      "bethlehem-1"
+    ],
+    "verses": [
+      "LUK.2.4",
+      "LUK.2.5",
+      "LUK.2.6",
+      "LUK.2.7"
+    ],
+    "when": {
+      "from_year": -5,
+      "to_year": -5
+    }
+  },
+  {
+    "id": "rob_shepherds",
+    "label": "The angels and the shepherds at Bethlehem",
+    "places": [
+      "bethlehem-1"
+    ],
+    "verses": [
+      "LUK.2.8",
+      "LUK.2.9",
+      "LUK.2.10",
+      "LUK.2.11",
+      "LUK.2.12",
+      "LUK.2.13",
+      "LUK.2.14",
+      "LUK.2.15",
+      "LUK.2.16",
+      "LUK.2.17",
+      "LUK.2.18",
+      "LUK.2.19",
+      "LUK.2.20"
+    ],
+    "when": {
+      "from_year": -5,
+      "to_year": -5
+    }
+  },
+  {
+    "id": "rob_circumcision",
+    "label": "The circumcision of Jesus",
+    "places": [
+      "bethlehem-1"
+    ],
+    "verses": [
+      "LUK.2.21"
+    ],
+    "when": {
+      "from_year": -5,
+      "to_year": -5
+    }
+  },
+  {
+    "id": "rob_presentation",
+    "label": "The presentation in the temple; Simeon and Anna",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.2.22",
+      "LUK.2.23",
+      "LUK.2.24",
+      "LUK.2.25",
+      "LUK.2.26",
+      "LUK.2.27",
+      "LUK.2.28",
+      "LUK.2.29",
+      "LUK.2.30",
+      "LUK.2.31",
+      "LUK.2.32",
+      "LUK.2.33",
+      "LUK.2.34",
+      "LUK.2.35",
+      "LUK.2.36",
+      "LUK.2.37",
+      "LUK.2.38"
+    ],
+    "when": {
+      "from_year": -5,
+      "to_year": -5
+    }
+  },
+  {
+    "id": "rob_magi",
+    "label": "The Magi visit the young child with gifts",
+    "places": [
+      "bethlehem-1"
+    ],
+    "verses": [
+      "MAT.2.1",
+      "MAT.2.2",
+      "MAT.2.3",
+      "MAT.2.4",
+      "MAT.2.5",
+      "MAT.2.6",
+      "MAT.2.7",
+      "MAT.2.8",
+      "MAT.2.9",
+      "MAT.2.10",
+      "MAT.2.11",
+      "MAT.2.12"
+    ],
+    "when": {
+      "from_year": -4,
+      "to_year": -4
+    }
+  },
+  {
+    "id": "jm_egypt",
+    "label": "The holy family flees to Egypt",
+    "places": [
+      "egypt"
+    ],
+    "verses": [
+      "MAT.2.13",
+      "MAT.2.14",
+      "MAT.2.15"
+    ],
+    "when": {
+      "from_year": -4,
+      "to_year": -4
+    }
+  },
+  {
+    "id": "rob_slaughter_innocents",
+    "label": "Herod slaughters the children of Bethlehem",
+    "places": [
+      "bethlehem-1"
+    ],
+    "verses": [
+      "MAT.2.16",
+      "MAT.2.17",
+      "MAT.2.18"
+    ],
+    "when": {
+      "from_year": -4,
+      "to_year": -4
+    }
+  },
+  {
+    "id": "jm_nazareth",
+    "label": "The family settles in Nazareth",
+    "places": [
+      "nazareth"
+    ],
+    "verses": [
+      "MAT.2.19",
+      "MAT.2.20",
+      "MAT.2.21",
+      "MAT.2.22",
+      "MAT.2.23",
+      "LUK.2.39"
+    ],
+    "when": {
+      "from_year": -4,
+      "to_year": -4
+    }
+  },
+  {
+    "id": "rob_boy_in_temple",
+    "label": "The boy Jesus among the teachers in the temple",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.2.41",
+      "LUK.2.42",
+      "LUK.2.43",
+      "LUK.2.44",
+      "LUK.2.45",
+      "LUK.2.46",
+      "LUK.2.47",
+      "LUK.2.48",
+      "LUK.2.49",
+      "LUK.2.50"
+    ],
+    "when": {
+      "from_year": 8,
+      "to_year": 8
+    }
+  },
+  {
+    "id": "rob_john_preaching",
+    "label": "John the Baptist begins preaching at the Jordan",
+    "places": [
+      "jordan"
+    ],
+    "verses": [
+      "MAT.3.1",
+      "MAT.3.2",
+      "MAT.3.3",
+      "MAT.3.4",
+      "MAT.3.5",
+      "MAT.3.6",
+      "MRK.1.2",
+      "MRK.1.3",
+      "MRK.1.4",
+      "MRK.1.5",
+      "MRK.1.6",
+      "LUK.3.3",
+      "LUK.3.4",
+      "LUK.3.5",
+      "LUK.3.6"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_john_specimen",
+    "label": "A specimen of John's preaching",
+    "places": [
+      "jordan"
+    ],
+    "verses": [
+      "MAT.3.7",
+      "MAT.3.8",
+      "MAT.3.9",
+      "MAT.3.10",
+      "LUK.3.7",
+      "LUK.3.8",
+      "LUK.3.9",
+      "LUK.3.10",
+      "LUK.3.11",
+      "LUK.3.12",
+      "LUK.3.13",
+      "LUK.3.14"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_john_messiah_picture",
+    "label": "John's own picture of the Messiah he had not yet seen",
+    "places": [
+      "jordan"
+    ],
+    "verses": [
+      "MAT.3.11",
+      "MAT.3.12",
+      "MRK.1.7",
+      "MRK.1.8",
+      "LUK.3.15",
+      "LUK.3.16",
+      "LUK.3.17",
+      "LUK.3.18"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "jm_jordan",
+    "label": "Jesus is baptized in the Jordan",
+    "places": [
+      "jordan"
+    ],
+    "verses": [
+      "MAT.3.13",
+      "MAT.3.14",
+      "MAT.3.15",
+      "MAT.3.16",
+      "MAT.3.17",
+      "MRK.1.9",
+      "MRK.1.10",
+      "MRK.1.11",
+      "LUK.3.21",
+      "LUK.3.22"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_temptation",
+    "label": "The temptation of Jesus in the wilderness",
+    "places": [
+      "jordan"
+    ],
+    "verses": [
+      "MAT.4.1",
+      "MAT.4.2",
+      "MAT.4.3",
+      "MAT.4.4",
+      "MAT.4.5",
+      "MAT.4.6",
+      "MAT.4.7",
+      "MAT.4.8",
+      "MAT.4.9",
+      "MAT.4.10",
+      "MAT.4.11",
+      "MRK.1.12",
+      "MRK.1.13",
+      "LUK.4.1",
+      "LUK.4.2",
+      "LUK.4.3",
+      "LUK.4.4",
+      "LUK.4.5",
+      "LUK.4.6",
+      "LUK.4.7",
+      "LUK.4.8",
+      "LUK.4.9",
+      "LUK.4.10",
+      "LUK.4.11",
+      "LUK.4.12",
+      "LUK.4.13"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_sanhedrin_testimony",
+    "label": "John's testimony before the priests and Levites",
+    "places": [
+      "bethany-2"
+    ],
+    "verses": [
+      "JHN.1.19",
+      "JHN.1.20",
+      "JHN.1.21",
+      "JHN.1.22",
+      "JHN.1.23",
+      "JHN.1.24",
+      "JHN.1.25",
+      "JHN.1.26",
+      "JHN.1.27",
+      "JHN.1.28"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_john_identifies_jesus",
+    "label": "John identifies Jesus as the Lamb of God",
+    "places": [
+      "bethany-2"
+    ],
+    "verses": [
+      "JHN.1.29",
+      "JHN.1.30",
+      "JHN.1.31",
+      "JHN.1.32",
+      "JHN.1.33",
+      "JHN.1.34"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "rob_first_disciples",
+    "label": "Jesus makes his first disciples",
+    "places": [
+      "bethany-2"
+    ],
+    "verses": [
+      "JHN.1.35",
+      "JHN.1.36",
+      "JHN.1.37",
+      "JHN.1.38",
+      "JHN.1.39",
+      "JHN.1.40",
+      "JHN.1.41",
+      "JHN.1.42",
+      "JHN.1.43",
+      "JHN.1.44",
+      "JHN.1.45",
+      "JHN.1.46",
+      "JHN.1.47",
+      "JHN.1.48",
+      "JHN.1.49",
+      "JHN.1.50",
+      "JHN.1.51"
+    ],
+    "when": {
+      "from_year": 29,
+      "to_year": 29
+    }
+  },
+  {
+    "id": "jm_cana",
+    "label": "Jesus turns water to wine at Cana",
+    "places": [
+      "cana"
+    ],
+    "verses": [
+      "JHN.2.1",
+      "JHN.2.2",
+      "JHN.2.3",
+      "JHN.2.4",
+      "JHN.2.5",
+      "JHN.2.6",
+      "JHN.2.7",
+      "JHN.2.8",
+      "JHN.2.9",
+      "JHN.2.10",
+      "JHN.2.11"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_capernaum_sojourn",
+    "label": "A brief sojourn at Capernaum",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "JHN.2.12"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "jm_temple_cleansing",
+    "label": "Jesus cleanses the temple for the first time",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.2.13",
+      "JHN.2.14",
+      "JHN.2.15",
+      "JHN.2.16",
+      "JHN.2.17",
+      "JHN.2.18",
+      "JHN.2.19",
+      "JHN.2.20",
+      "JHN.2.21",
+      "JHN.2.22"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_nicodemus",
+    "label": "Nicodemus comes to Jesus by night",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.2.23",
+      "JHN.2.24",
+      "JHN.2.25",
+      "JHN.3.1",
+      "JHN.3.2",
+      "JHN.3.3",
+      "JHN.3.4",
+      "JHN.3.5",
+      "JHN.3.6",
+      "JHN.3.7",
+      "JHN.3.8",
+      "JHN.3.9",
+      "JHN.3.10",
+      "JHN.3.11",
+      "JHN.3.12",
+      "JHN.3.13",
+      "JHN.3.14",
+      "JHN.3.15",
+      "JHN.3.16",
+      "JHN.3.17",
+      "JHN.3.18",
+      "JHN.3.19",
+      "JHN.3.20"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_parallel_ministry",
+    "label": "Jesus and John baptize side by side in Judea",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "JHN.3.22",
+      "JHN.3.23",
+      "JHN.3.24",
+      "JHN.3.25",
+      "JHN.3.26",
+      "JHN.3.27",
+      "JHN.3.28",
+      "JHN.3.29",
+      "JHN.3.30",
+      "JHN.3.31",
+      "JHN.3.32",
+      "JHN.3.33",
+      "JHN.3.34",
+      "JHN.3.35",
+      "JHN.3.36"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "jm_sychar",
+    "label": "Jesus speaks with the woman at the well in Sychar",
+    "places": [
+      "sychar"
+    ],
+    "verses": [
+      "JHN.4.4",
+      "JHN.4.5",
+      "JHN.4.6",
+      "JHN.4.7",
+      "JHN.4.8",
+      "JHN.4.9",
+      "JHN.4.10",
+      "JHN.4.11",
+      "JHN.4.12",
+      "JHN.4.13",
+      "JHN.4.14",
+      "JHN.4.15",
+      "JHN.4.16",
+      "JHN.4.17",
+      "JHN.4.18",
+      "JHN.4.19",
+      "JHN.4.20",
+      "JHN.4.21",
+      "JHN.4.22",
+      "JHN.4.23"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_galilee_arrival",
+    "label": "Jesus arrives in Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "JHN.4.43",
+      "JHN.4.44",
+      "JHN.4.45"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_cana_nobleman",
+    "label": "Jesus heals a nobleman's son at Cana",
+    "places": [
+      "cana"
+    ],
+    "verses": [
+      "JHN.4.46",
+      "JHN.4.47",
+      "JHN.4.48",
+      "JHN.4.49",
+      "JHN.4.50",
+      "JHN.4.51",
+      "JHN.4.52",
+      "JHN.4.53",
+      "JHN.4.54"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_nazareth_rejection",
+    "label": "Jesus is first rejected at Nazareth",
+    "places": [
+      "nazareth"
+    ],
+    "verses": [
+      "LUK.4.16",
+      "LUK.4.17",
+      "LUK.4.18",
+      "LUK.4.19",
+      "LUK.4.20",
+      "LUK.4.21",
+      "LUK.4.22",
+      "LUK.4.23",
+      "LUK.4.24",
+      "LUK.4.25",
+      "LUK.4.26",
+      "LUK.4.27",
+      "LUK.4.28",
+      "LUK.4.29",
+      "LUK.4.30",
+      "LUK.4.31"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "jm_capernaum",
+    "label": "Jesus makes Capernaum his base",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MAT.4.13"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_four_fishers",
+    "label": "Jesus calls four fishermen to follow him",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "MRK.1.16",
+      "MRK.1.17",
+      "MRK.1.18",
+      "MRK.1.19",
+      "MRK.1.20",
+      "LUK.5.1",
+      "LUK.5.2",
+      "LUK.5.3",
+      "LUK.5.4",
+      "LUK.5.5",
+      "LUK.5.6",
+      "LUK.5.7",
+      "LUK.5.8",
+      "LUK.5.9",
+      "LUK.5.10",
+      "LUK.5.11",
+      "MAT.4.18",
+      "MAT.4.19",
+      "MAT.4.20",
+      "MAT.4.21",
+      "MAT.4.22"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_capernaum_demoniac",
+    "label": "Jesus heals a demoniac in the Capernaum synagogue",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "LUK.4.31",
+      "LUK.4.32",
+      "LUK.4.33",
+      "LUK.4.34",
+      "LUK.4.35",
+      "LUK.4.36",
+      "LUK.4.37",
+      "MRK.1.21",
+      "MRK.1.22",
+      "MRK.1.23",
+      "MRK.1.24",
+      "MRK.1.25",
+      "MRK.1.26",
+      "MRK.1.27",
+      "MRK.1.28"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_peters_mother_in_law",
+    "label": "Jesus heals Peter's mother-in-law and many others",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.1.29",
+      "MRK.1.30",
+      "MRK.1.31",
+      "MRK.1.32",
+      "MRK.1.33",
+      "MRK.1.34",
+      "LUK.4.38",
+      "LUK.4.39",
+      "LUK.4.40",
+      "LUK.4.41",
+      "MAT.8.14",
+      "MAT.8.15",
+      "MAT.8.16",
+      "MAT.8.17"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_first_galilee_tour",
+    "label": "The first tour of Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.1.35",
+      "MRK.1.36",
+      "MRK.1.37",
+      "MRK.1.38",
+      "MRK.1.39",
+      "LUK.4.42",
+      "LUK.4.43",
+      "LUK.4.44",
+      "MAT.4.23",
+      "MAT.4.24",
+      "MAT.4.25"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_leper_healed",
+    "label": "A leper healed; great popular excitement",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.1.40",
+      "MRK.1.41",
+      "MRK.1.42",
+      "MRK.1.43",
+      "MRK.1.44",
+      "MRK.1.45",
+      "LUK.5.12",
+      "LUK.5.13",
+      "LUK.5.14",
+      "LUK.5.15",
+      "LUK.5.16",
+      "MAT.8.2",
+      "MAT.8.3",
+      "MAT.8.4"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_paralytic_roof",
+    "label": "A paralytic lowered through the roof at Capernaum",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.2.1",
+      "MRK.2.2",
+      "MRK.2.3",
+      "MRK.2.4",
+      "MRK.2.5",
+      "MRK.2.6",
+      "MRK.2.7",
+      "MRK.2.8",
+      "MRK.2.9",
+      "MRK.2.10",
+      "MRK.2.11",
+      "MRK.2.12",
+      "LUK.5.17",
+      "LUK.5.18",
+      "LUK.5.19",
+      "LUK.5.20",
+      "LUK.5.21",
+      "LUK.5.22",
+      "LUK.5.23",
+      "LUK.5.24",
+      "LUK.5.25",
+      "LUK.5.26",
+      "MAT.9.1",
+      "MAT.9.2",
+      "MAT.9.3",
+      "MAT.9.4",
+      "MAT.9.5",
+      "MAT.9.6",
+      "MAT.9.7",
+      "MAT.9.8"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_call_of_matthew",
+    "label": "The call of Matthew (Levi) the tax collector",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.2.13",
+      "MRK.2.14",
+      "MRK.2.15",
+      "MRK.2.16",
+      "MRK.2.17",
+      "LUK.5.27",
+      "LUK.5.28",
+      "LUK.5.29",
+      "LUK.5.30",
+      "LUK.5.31",
+      "LUK.5.32",
+      "MAT.9.9",
+      "MAT.9.10",
+      "MAT.9.11",
+      "MAT.9.12",
+      "MAT.9.13"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_fasting_parables",
+    "label": "Jesus defends his disciples for feasting instead of fasting",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.2.18",
+      "MRK.2.19",
+      "MRK.2.20",
+      "MRK.2.21",
+      "MRK.2.22",
+      "LUK.5.33",
+      "LUK.5.34",
+      "LUK.5.35",
+      "LUK.5.36",
+      "LUK.5.37",
+      "LUK.5.38",
+      "LUK.5.39",
+      "MAT.9.14",
+      "MAT.9.15",
+      "MAT.9.16",
+      "MAT.9.17"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_jerusalem_feast_healing",
+    "label": "Jesus heals a lame man at a Jerusalem feast on the sabbath",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.5.1",
+      "JHN.5.2",
+      "JHN.5.3",
+      "JHN.5.4",
+      "JHN.5.5",
+      "JHN.5.6",
+      "JHN.5.7",
+      "JHN.5.8",
+      "JHN.5.9",
+      "JHN.5.10",
+      "JHN.5.11",
+      "JHN.5.12",
+      "JHN.5.13",
+      "JHN.5.14",
+      "JHN.5.15",
+      "JHN.5.16",
+      "JHN.5.17",
+      "JHN.5.18",
+      "JHN.5.19",
+      "JHN.5.20"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_grain_sabbath",
+    "label": "The disciples pluck grain on the sabbath",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.2.23",
+      "MRK.2.24",
+      "MRK.2.25",
+      "MRK.2.26",
+      "MRK.2.27",
+      "MRK.2.28",
+      "LUK.6.1",
+      "LUK.6.2",
+      "LUK.6.3",
+      "LUK.6.4",
+      "LUK.6.5",
+      "MAT.12.1",
+      "MAT.12.2",
+      "MAT.12.3",
+      "MAT.12.4",
+      "MAT.12.5",
+      "MAT.12.6",
+      "MAT.12.7",
+      "MAT.12.8"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_withered_hand",
+    "label": "Jesus heals a man's withered hand on the sabbath",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.3.1",
+      "MRK.3.2",
+      "MRK.3.3",
+      "MRK.3.4",
+      "MRK.3.5",
+      "MRK.3.6",
+      "LUK.6.6",
+      "LUK.6.7",
+      "LUK.6.8",
+      "LUK.6.9",
+      "LUK.6.10",
+      "LUK.6.11",
+      "MAT.12.9",
+      "MAT.12.10",
+      "MAT.12.11",
+      "MAT.12.12",
+      "MAT.12.13",
+      "MAT.12.14"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_multitudes_by_sea",
+    "label": "Jesus teaches and heals great multitudes by the Sea of Galilee",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "MRK.3.7",
+      "MRK.3.8",
+      "MRK.3.9",
+      "MRK.3.10",
+      "MRK.3.11",
+      "MRK.3.12",
+      "MAT.12.15",
+      "MAT.12.16",
+      "MAT.12.17",
+      "MAT.12.18",
+      "MAT.12.19",
+      "MAT.12.20",
+      "MAT.12.21"
+    ],
+    "when": {
+      "from_year": 30,
+      "to_year": 30
+    }
+  },
+  {
+    "id": "rob_twelve_apostles",
+    "label": "Jesus selects the twelve apostles after a night of prayer",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "LUK.6.12",
+      "LUK.6.13",
+      "LUK.6.14",
+      "LUK.6.15",
+      "LUK.6.16",
+      "MRK.3.13",
+      "MRK.3.14",
+      "MRK.3.15",
+      "MRK.3.16",
+      "MRK.3.17",
+      "MRK.3.18",
+      "MRK.3.19"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_sermon_on_the_mount",
+    "label": "The Sermon on the Mount",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MAT.5.1",
+      "MAT.5.2",
+      "MAT.5.3",
+      "MAT.5.4",
+      "MAT.5.5",
+      "MAT.5.6",
+      "MAT.5.7",
+      "MAT.5.8",
+      "MAT.5.9",
+      "MAT.5.10",
+      "MAT.5.11",
+      "MAT.5.12",
+      "MAT.5.13",
+      "MAT.5.14",
+      "MAT.5.15",
+      "MAT.5.16",
+      "MAT.5.17",
+      "MAT.5.18",
+      "MAT.5.19",
+      "MAT.5.20",
+      "MAT.6.1",
+      "MAT.6.2",
+      "MAT.6.3",
+      "MAT.6.4",
+      "MAT.6.5",
+      "MAT.6.6",
+      "MAT.6.7",
+      "MAT.6.8",
+      "MAT.6.9",
+      "MAT.6.10",
+      "MAT.6.11",
+      "MAT.6.12",
+      "MAT.6.13",
+      "MAT.6.14",
+      "MAT.6.15",
+      "MAT.6.16",
+      "MAT.6.17",
+      "MAT.6.18",
+      "MAT.6.19",
+      "MAT.6.20",
+      "MAT.7.1",
+      "MAT.7.2",
+      "MAT.7.3",
+      "MAT.7.4",
+      "MAT.7.5",
+      "MAT.7.6",
+      "MAT.7.7",
+      "MAT.7.8",
+      "MAT.7.9",
+      "MAT.7.10",
+      "MAT.7.11",
+      "MAT.7.12",
+      "MAT.7.13",
+      "MAT.7.14",
+      "MAT.7.15",
+      "MAT.7.16",
+      "MAT.7.17",
+      "MAT.7.18",
+      "MAT.7.19",
+      "MAT.7.20",
+      "LUK.6.17",
+      "LUK.6.18",
+      "LUK.6.19",
+      "LUK.6.20",
+      "LUK.6.21",
+      "LUK.6.22",
+      "LUK.6.23",
+      "LUK.6.24",
+      "LUK.6.25",
+      "LUK.6.26",
+      "LUK.6.27",
+      "LUK.6.28",
+      "LUK.6.29",
+      "LUK.6.30",
+      "LUK.6.31",
+      "LUK.6.32",
+      "LUK.6.33",
+      "LUK.6.34",
+      "LUK.6.35",
+      "LUK.6.36"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_centurion_servant",
+    "label": "Jesus heals a centurion's servant at Capernaum",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "LUK.7.1",
+      "LUK.7.2",
+      "LUK.7.3",
+      "LUK.7.4",
+      "LUK.7.5",
+      "LUK.7.6",
+      "LUK.7.7",
+      "LUK.7.8",
+      "LUK.7.9",
+      "LUK.7.10",
+      "MAT.8.5",
+      "MAT.8.6",
+      "MAT.8.7",
+      "MAT.8.8",
+      "MAT.8.9",
+      "MAT.8.10",
+      "MAT.8.11",
+      "MAT.8.12",
+      "MAT.8.13"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_widow_of_nain",
+    "label": "Jesus raises a widow's son at Nain",
+    "places": [
+      "nain"
+    ],
+    "verses": [
+      "LUK.7.11",
+      "LUK.7.12",
+      "LUK.7.13",
+      "LUK.7.14",
+      "LUK.7.15",
+      "LUK.7.16",
+      "LUK.7.17"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_message_from_baptist",
+    "label": "John's disciples ask Jesus 'Art thou he that should come?'",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "LUK.7.18",
+      "LUK.7.19",
+      "LUK.7.20",
+      "LUK.7.21",
+      "LUK.7.22",
+      "LUK.7.23",
+      "LUK.7.24",
+      "LUK.7.25",
+      "LUK.7.26",
+      "LUK.7.27",
+      "LUK.7.28",
+      "LUK.7.29",
+      "LUK.7.30",
+      "LUK.7.31",
+      "LUK.7.32",
+      "LUK.7.33",
+      "LUK.7.34",
+      "LUK.7.35",
+      "MAT.11.2",
+      "MAT.11.3",
+      "MAT.11.4",
+      "MAT.11.5",
+      "MAT.11.6",
+      "MAT.11.7",
+      "MAT.11.8",
+      "MAT.11.9",
+      "MAT.11.10",
+      "MAT.11.11",
+      "MAT.11.12",
+      "MAT.11.13",
+      "MAT.11.14",
+      "MAT.11.15",
+      "MAT.11.16",
+      "MAT.11.17",
+      "MAT.11.18",
+      "MAT.11.19"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_woes_on_cities",
+    "label": "Jesus denounces the unrepentant cities of Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MAT.11.20",
+      "MAT.11.21",
+      "MAT.11.22",
+      "MAT.11.23",
+      "MAT.11.24",
+      "MAT.11.25",
+      "MAT.11.26",
+      "MAT.11.27",
+      "MAT.11.28",
+      "MAT.11.29",
+      "MAT.11.30"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_sinful_woman",
+    "label": "A sinful woman anoints Jesus's feet in a Pharisee's house",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "LUK.7.36",
+      "LUK.7.37",
+      "LUK.7.38",
+      "LUK.7.39",
+      "LUK.7.40",
+      "LUK.7.41",
+      "LUK.7.42",
+      "LUK.7.43",
+      "LUK.7.44",
+      "LUK.7.45",
+      "LUK.7.46",
+      "LUK.7.47",
+      "LUK.7.48",
+      "LUK.7.49",
+      "LUK.7.50"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_second_galilee_tour",
+    "label": "The second tour of Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "LUK.8.1",
+      "LUK.8.2",
+      "LUK.8.3"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_beelzebub_accusation",
+    "label": "The Pharisees accuse Jesus of league with Beelzebub",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.3.19",
+      "MRK.3.20",
+      "MRK.3.21",
+      "MRK.3.22",
+      "MRK.3.23",
+      "MRK.3.24",
+      "MRK.3.25",
+      "MRK.3.26",
+      "MRK.3.27",
+      "MRK.3.28",
+      "MRK.3.29",
+      "MRK.3.30",
+      "MAT.12.22",
+      "MAT.12.23",
+      "MAT.12.24",
+      "MAT.12.25",
+      "MAT.12.26",
+      "MAT.12.27",
+      "MAT.12.28",
+      "MAT.12.29",
+      "MAT.12.30",
+      "MAT.12.31",
+      "MAT.12.32",
+      "MAT.12.33",
+      "MAT.12.34",
+      "MAT.12.35",
+      "MAT.12.36",
+      "MAT.12.37"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_sign_demanded",
+    "label": "The scribes and Pharisees demand a sign",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MAT.12.38",
+      "MAT.12.39",
+      "MAT.12.40",
+      "MAT.12.41",
+      "MAT.12.42",
+      "MAT.12.43",
+      "MAT.12.44",
+      "MAT.12.45"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_mother_brethren",
+    "label": "Jesus's mother and brothers seek to take him home",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.3.31",
+      "MRK.3.32",
+      "MRK.3.33",
+      "MRK.3.34",
+      "MRK.3.35",
+      "LUK.8.19",
+      "LUK.8.20",
+      "LUK.8.21",
+      "MAT.12.46",
+      "MAT.12.47",
+      "MAT.12.48",
+      "MAT.12.49",
+      "MAT.12.50"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_first_parable_group",
+    "label": "The first great group of parables",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "MRK.4.1",
+      "MRK.4.2",
+      "MRK.4.3",
+      "MRK.4.4",
+      "MRK.4.5",
+      "MRK.4.6",
+      "MRK.4.7",
+      "MRK.4.8",
+      "MRK.4.9",
+      "MRK.4.10",
+      "MRK.4.11",
+      "MRK.4.12",
+      "MRK.4.13",
+      "MRK.4.14",
+      "MRK.4.15",
+      "MRK.4.16",
+      "MRK.4.17",
+      "MRK.4.18",
+      "MRK.4.19",
+      "MRK.4.20",
+      "LUK.8.4",
+      "LUK.8.5",
+      "LUK.8.6",
+      "LUK.8.7",
+      "LUK.8.8",
+      "LUK.8.9",
+      "LUK.8.10",
+      "LUK.8.11",
+      "LUK.8.12",
+      "LUK.8.13",
+      "LUK.8.14",
+      "LUK.8.15",
+      "LUK.8.16",
+      "LUK.8.17",
+      "LUK.8.18",
+      "MAT.13.1",
+      "MAT.13.2",
+      "MAT.13.3",
+      "MAT.13.4",
+      "MAT.13.5",
+      "MAT.13.6",
+      "MAT.13.7",
+      "MAT.13.8",
+      "MAT.13.9",
+      "MAT.13.10",
+      "MAT.13.11",
+      "MAT.13.12",
+      "MAT.13.13",
+      "MAT.13.14",
+      "MAT.13.15",
+      "MAT.13.16",
+      "MAT.13.17",
+      "MAT.13.18",
+      "MAT.13.19",
+      "MAT.13.20"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_stills_tempest",
+    "label": "Jesus stills the tempest on the lake",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "MRK.4.35",
+      "MRK.4.36",
+      "MRK.4.37",
+      "MRK.4.38",
+      "MRK.4.39",
+      "MRK.4.40",
+      "MRK.4.41",
+      "LUK.8.22",
+      "LUK.8.23",
+      "LUK.8.24",
+      "LUK.8.25",
+      "MAT.8.18",
+      "MAT.8.23",
+      "MAT.8.24",
+      "MAT.8.25",
+      "MAT.8.26",
+      "MAT.8.27"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_gadarene_demoniac",
+    "label": "Jesus heals the demoniac(s) in the country of the Gadarenes",
+    "places": [
+      "gadara"
+    ],
+    "verses": [
+      "MAT.8.28",
+      "MAT.8.29",
+      "MAT.8.30",
+      "MAT.8.31",
+      "MAT.8.32",
+      "MAT.8.33",
+      "MAT.8.34",
+      "LUK.8.26",
+      "LUK.8.27",
+      "LUK.8.28",
+      "LUK.8.29",
+      "LUK.8.30",
+      "LUK.8.31",
+      "LUK.8.32",
+      "LUK.8.33",
+      "LUK.8.34",
+      "LUK.8.35",
+      "LUK.8.36",
+      "LUK.8.37",
+      "LUK.8.38",
+      "LUK.8.39",
+      "MRK.5.1",
+      "MRK.5.2",
+      "MRK.5.3",
+      "MRK.5.4",
+      "MRK.5.5",
+      "MRK.5.6",
+      "MRK.5.7",
+      "MRK.5.8",
+      "MRK.5.9",
+      "MRK.5.10",
+      "MRK.5.11",
+      "MRK.5.12",
+      "MRK.5.13",
+      "MRK.5.14",
+      "MRK.5.15",
+      "MRK.5.16",
+      "MRK.5.17",
+      "MRK.5.18",
+      "MRK.5.19",
+      "MRK.5.20"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_jairus_daughter",
+    "label": "Jesus raises Jairus's daughter and heals the woman who touched his garment",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.5.21",
+      "MRK.5.22",
+      "MRK.5.23",
+      "MRK.5.24",
+      "MRK.5.25",
+      "MRK.5.26",
+      "MRK.5.27",
+      "MRK.5.28",
+      "MRK.5.29",
+      "MRK.5.30",
+      "MRK.5.31",
+      "MRK.5.32",
+      "MRK.5.33",
+      "MRK.5.34",
+      "MRK.5.35",
+      "MRK.5.36",
+      "MRK.5.37",
+      "MRK.5.38",
+      "MRK.5.39",
+      "MRK.5.40",
+      "LUK.8.40",
+      "LUK.8.41",
+      "LUK.8.42",
+      "LUK.8.43",
+      "LUK.8.44",
+      "LUK.8.45",
+      "LUK.8.46",
+      "LUK.8.47",
+      "LUK.8.48",
+      "LUK.8.49",
+      "LUK.8.50",
+      "LUK.8.51",
+      "LUK.8.52",
+      "LUK.8.53",
+      "LUK.8.54",
+      "LUK.8.55",
+      "LUK.8.56",
+      "MAT.9.18",
+      "MAT.9.19",
+      "MAT.9.20",
+      "MAT.9.21",
+      "MAT.9.22",
+      "MAT.9.23",
+      "MAT.9.24",
+      "MAT.9.25",
+      "MAT.9.26"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_two_blind_men",
+    "label": "Jesus heals two blind men and a mute demoniac",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MAT.9.27",
+      "MAT.9.28",
+      "MAT.9.29",
+      "MAT.9.30",
+      "MAT.9.31",
+      "MAT.9.32",
+      "MAT.9.33",
+      "MAT.9.34"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_last_nazareth_visit",
+    "label": "The last visit to Nazareth",
+    "places": [
+      "nazareth"
+    ],
+    "verses": [
+      "MRK.6.1",
+      "MRK.6.2",
+      "MRK.6.3",
+      "MRK.6.4",
+      "MRK.6.5",
+      "MRK.6.6",
+      "MAT.13.54",
+      "MAT.13.55",
+      "MAT.13.56",
+      "MAT.13.57",
+      "MAT.13.58"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_third_tour_sending_twelve",
+    "label": "The third tour of Galilee; the Twelve sent out by twos",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.6.6",
+      "MRK.6.7",
+      "MRK.6.8",
+      "MRK.6.9",
+      "MRK.6.10",
+      "MRK.6.11",
+      "MRK.6.12",
+      "MRK.6.13",
+      "LUK.9.1",
+      "LUK.9.2",
+      "LUK.9.3",
+      "LUK.9.4",
+      "LUK.9.5",
+      "LUK.9.6",
+      "MAT.9.35",
+      "MAT.9.36",
+      "MAT.9.37",
+      "MAT.9.38",
+      "MAT.10.1",
+      "MAT.10.2",
+      "MAT.10.3",
+      "MAT.10.4",
+      "MAT.10.5",
+      "MAT.10.6",
+      "MAT.10.7",
+      "MAT.10.8",
+      "MAT.10.9",
+      "MAT.10.10",
+      "MAT.10.11",
+      "MAT.10.12",
+      "MAT.10.13",
+      "MAT.10.14",
+      "MAT.10.15",
+      "MAT.10.16",
+      "MAT.10.17",
+      "MAT.10.18",
+      "MAT.10.19",
+      "MAT.10.20",
+      "MAT.11.1"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "rob_herod_fears",
+    "label": "Herod Antipas's guilty fears about Jesus",
+    "places": [
+      "tiberias"
+    ],
+    "verses": [
+      "MRK.6.14",
+      "MRK.6.15",
+      "MRK.6.16",
+      "MRK.6.17",
+      "MRK.6.18",
+      "MRK.6.19",
+      "MRK.6.20",
+      "MRK.6.21",
+      "MRK.6.22",
+      "MRK.6.23",
+      "MRK.6.24",
+      "MRK.6.25",
+      "MRK.6.26",
+      "MRK.6.27",
+      "MRK.6.28",
+      "MRK.6.29",
+      "LUK.9.7",
+      "LUK.9.8",
+      "LUK.9.9",
+      "MAT.14.1",
+      "MAT.14.2",
+      "MAT.14.3",
+      "MAT.14.4",
+      "MAT.14.5",
+      "MAT.14.6",
+      "MAT.14.7",
+      "MAT.14.8",
+      "MAT.14.9",
+      "MAT.14.10",
+      "MAT.14.11",
+      "MAT.14.12"
+    ],
+    "when": {
+      "from_year": 31,
+      "to_year": 31
+    }
+  },
+  {
+    "id": "jm_bethsaida",
+    "label": "Jesus feeds the five thousand near Bethsaida",
+    "places": [
+      "bethsaida-2"
+    ],
+    "verses": [
+      "MAT.14.13",
+      "MAT.14.14",
+      "MAT.14.15",
+      "MAT.14.16",
+      "MAT.14.17",
+      "MAT.14.18",
+      "MAT.14.19",
+      "MAT.14.20",
+      "MAT.14.21",
+      "MRK.6.30",
+      "MRK.6.31",
+      "MRK.6.32",
+      "MRK.6.33",
+      "MRK.6.34",
+      "MRK.6.35",
+      "MRK.6.36",
+      "MRK.6.37",
+      "MRK.6.38",
+      "MRK.6.39",
+      "MRK.6.40",
+      "MRK.6.41",
+      "MRK.6.42",
+      "MRK.6.43",
+      "MRK.6.44",
+      "JHN.6.1",
+      "JHN.6.2",
+      "JHN.6.3",
+      "JHN.6.4",
+      "JHN.6.5",
+      "JHN.6.6",
+      "JHN.6.7",
+      "JHN.6.8",
+      "JHN.6.9",
+      "JHN.6.10",
+      "JHN.6.11",
+      "JHN.6.12",
+      "JHN.6.13",
+      "LUK.9.10",
+      "LUK.9.11",
+      "LUK.9.12",
+      "LUK.9.13",
+      "LUK.9.14",
+      "LUK.9.15",
+      "LUK.9.16",
+      "LUK.9.17"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_prevents_kingship",
+    "label": "Jesus withdraws alone to a mountain to pray",
+    "places": [
+      "bethsaida-2"
+    ],
+    "verses": [
+      "MRK.6.45",
+      "MRK.6.46",
+      "JHN.6.14",
+      "JHN.6.15",
+      "MAT.14.22",
+      "MAT.14.23"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_walks_on_water",
+    "label": "Jesus walks on the water to the disciples in the storm",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "MRK.6.47",
+      "MRK.6.48",
+      "MRK.6.49",
+      "MRK.6.50",
+      "MRK.6.51",
+      "MRK.6.52",
+      "JHN.6.16",
+      "JHN.6.17",
+      "JHN.6.18",
+      "JHN.6.19",
+      "JHN.6.20",
+      "JHN.6.21",
+      "MAT.14.24",
+      "MAT.14.25",
+      "MAT.14.26",
+      "MAT.14.27",
+      "MAT.14.28",
+      "MAT.14.29",
+      "MAT.14.30",
+      "MAT.14.31",
+      "MAT.14.32",
+      "MAT.14.33"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_gennesaret_reception",
+    "label": "The reception at Gennesaret",
+    "places": [
+      "gennesaret"
+    ],
+    "verses": [
+      "MRK.6.53",
+      "MRK.6.54",
+      "MRK.6.55",
+      "MRK.6.56",
+      "MAT.14.34",
+      "MAT.14.35",
+      "MAT.14.36"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_bread_of_life",
+    "label": "The Bread of Life discourse in the Capernaum synagogue",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "JHN.6.22",
+      "JHN.6.23",
+      "JHN.6.24",
+      "JHN.6.25",
+      "JHN.6.26",
+      "JHN.6.27",
+      "JHN.6.28",
+      "JHN.6.29",
+      "JHN.6.30",
+      "JHN.6.31",
+      "JHN.6.32",
+      "JHN.6.33",
+      "JHN.6.34",
+      "JHN.6.35",
+      "JHN.6.36",
+      "JHN.6.37",
+      "JHN.6.38",
+      "JHN.6.39",
+      "JHN.6.40",
+      "JHN.6.41"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_defilement_controversy",
+    "label": "Jesus and the Pharisees dispute over ceremonial hand-washing",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.7.1",
+      "MRK.7.2",
+      "MRK.7.3",
+      "MRK.7.4",
+      "MRK.7.5",
+      "MRK.7.6",
+      "MRK.7.7",
+      "MRK.7.8",
+      "MRK.7.9",
+      "MRK.7.10",
+      "MRK.7.11",
+      "MRK.7.12",
+      "MRK.7.13",
+      "MRK.7.14",
+      "MRK.7.15",
+      "MRK.7.16",
+      "MRK.7.17",
+      "MRK.7.18",
+      "MRK.7.19",
+      "MRK.7.20",
+      "MAT.15.1",
+      "MAT.15.2",
+      "MAT.15.3",
+      "MAT.15.4",
+      "MAT.15.5",
+      "MAT.15.6",
+      "MAT.15.7",
+      "MAT.15.8",
+      "MAT.15.9",
+      "MAT.15.10",
+      "MAT.15.11",
+      "MAT.15.12",
+      "MAT.15.13",
+      "MAT.15.14",
+      "MAT.15.15",
+      "MAT.15.16",
+      "MAT.15.17",
+      "MAT.15.18",
+      "MAT.15.19",
+      "MAT.15.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_syrophoenician_woman",
+    "label": "Jesus heals the Syrophoenician woman's daughter",
+    "places": [
+      "tyre",
+      "sidon"
+    ],
+    "verses": [
+      "MRK.7.24",
+      "MRK.7.25",
+      "MRK.7.26",
+      "MRK.7.27",
+      "MRK.7.28",
+      "MRK.7.29",
+      "MRK.7.30",
+      "MAT.15.21",
+      "MAT.15.22",
+      "MAT.15.23",
+      "MAT.15.24",
+      "MAT.15.25",
+      "MAT.15.26",
+      "MAT.15.27",
+      "MAT.15.28"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_deaf_mute_feeding_4000",
+    "label": "Jesus heals a deaf-mute in Decapolis and feeds four thousand",
+    "places": [
+      "decapolis"
+    ],
+    "verses": [
+      "MRK.7.31",
+      "MRK.7.32",
+      "MRK.7.33",
+      "MRK.7.34",
+      "MRK.7.35",
+      "MRK.7.36",
+      "MRK.7.37",
+      "MRK.8.1",
+      "MRK.8.2",
+      "MRK.8.3",
+      "MRK.8.4",
+      "MRK.8.5",
+      "MRK.8.6",
+      "MRK.8.7",
+      "MRK.8.8",
+      "MRK.8.9",
+      "MAT.15.29",
+      "MAT.15.30",
+      "MAT.15.31",
+      "MAT.15.32",
+      "MAT.15.33",
+      "MAT.15.34",
+      "MAT.15.35",
+      "MAT.15.36",
+      "MAT.15.37",
+      "MAT.15.38"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_dalmanutha_sign",
+    "label": "The Pharisees and Sadducees demand a sign at Dalmanutha",
+    "places": [
+      "dalmanutha"
+    ],
+    "verses": [
+      "MRK.8.10",
+      "MRK.8.11",
+      "MRK.8.12",
+      "MAT.15.39",
+      "MAT.16.1",
+      "MAT.16.2",
+      "MAT.16.3",
+      "MAT.16.4"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_bethsaida_blind_man",
+    "label": "Jesus heals a blind man at Bethsaida",
+    "places": [
+      "bethsaida-2"
+    ],
+    "verses": [
+      "MAT.16.5",
+      "MAT.16.6",
+      "MAT.16.7",
+      "MAT.16.8",
+      "MAT.16.9",
+      "MAT.16.10",
+      "MAT.16.11",
+      "MAT.16.12",
+      "MRK.8.22",
+      "MRK.8.23",
+      "MRK.8.24",
+      "MRK.8.25",
+      "MRK.8.26"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "jm_caesarea_philippi",
+    "label": "Peter's confession at Caesarea Philippi",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MAT.16.13",
+      "MAT.16.14",
+      "MAT.16.15",
+      "MAT.16.16",
+      "MAT.16.17",
+      "MAT.16.18",
+      "MAT.16.19",
+      "MAT.16.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_foretells_death_1",
+    "label": "Jesus foretells his death and resurrection at Caesarea Philippi",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MRK.8.31",
+      "MRK.8.32",
+      "MRK.8.33",
+      "MRK.8.34",
+      "MRK.8.35",
+      "MRK.8.36",
+      "MRK.8.37",
+      "LUK.9.22",
+      "LUK.9.23",
+      "LUK.9.24",
+      "LUK.9.25",
+      "MAT.16.21",
+      "MAT.16.22",
+      "MAT.16.23",
+      "MAT.16.24",
+      "MAT.16.25",
+      "MAT.16.26"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_coming_of_son_of_man",
+    "label": "The coming of the Son of Man in that generation",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MRK.8.38",
+      "MRK.9.1",
+      "LUK.9.26",
+      "LUK.9.27",
+      "MAT.16.27",
+      "MAT.16.28"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_transfiguration",
+    "label": "The Transfiguration",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MRK.9.2",
+      "MRK.9.3",
+      "MRK.9.4",
+      "MRK.9.5",
+      "MRK.9.6",
+      "MRK.9.7",
+      "MRK.9.8",
+      "LUK.9.28",
+      "LUK.9.29",
+      "LUK.9.30",
+      "LUK.9.31",
+      "LUK.9.32",
+      "LUK.9.33",
+      "LUK.9.34",
+      "LUK.9.35",
+      "LUK.9.36",
+      "MAT.17.1",
+      "MAT.17.2",
+      "MAT.17.3",
+      "MAT.17.4",
+      "MAT.17.5",
+      "MAT.17.6",
+      "MAT.17.7",
+      "MAT.17.8"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_elijah_puzzle",
+    "label": "The disciples puzzle over the resurrection and Elijah",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MRK.9.9",
+      "MRK.9.10",
+      "MRK.9.11",
+      "MRK.9.12",
+      "MRK.9.13",
+      "MAT.17.9",
+      "MAT.17.10",
+      "MAT.17.11",
+      "MAT.17.12",
+      "MAT.17.13"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_demoniac_boy",
+    "label": "Jesus heals a demoniac boy the disciples could not heal",
+    "places": [
+      "caesarea-philippi"
+    ],
+    "verses": [
+      "MRK.9.14",
+      "MRK.9.15",
+      "MRK.9.16",
+      "MRK.9.17",
+      "MRK.9.18",
+      "MRK.9.19",
+      "MRK.9.20",
+      "MRK.9.21",
+      "MRK.9.22",
+      "MRK.9.23",
+      "MRK.9.24",
+      "MRK.9.25",
+      "MRK.9.26",
+      "MRK.9.27",
+      "MRK.9.28",
+      "MRK.9.29",
+      "LUK.9.37",
+      "LUK.9.38",
+      "LUK.9.39",
+      "LUK.9.40",
+      "LUK.9.41",
+      "LUK.9.42",
+      "LUK.9.43",
+      "MAT.17.14",
+      "MAT.17.15",
+      "MAT.17.16",
+      "MAT.17.17",
+      "MAT.17.18",
+      "MAT.17.19",
+      "MAT.17.20",
+      "MAT.17.21"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_foretells_death_2",
+    "label": "Jesus again foretells his death, returning through Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MRK.9.30",
+      "MRK.9.31",
+      "MRK.9.32",
+      "LUK.9.43",
+      "LUK.9.44",
+      "LUK.9.45",
+      "MAT.17.22",
+      "MAT.17.23"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_temple_tax",
+    "label": "Jesus pays the temple tax with a coin from a fish",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MAT.17.24",
+      "MAT.17.25",
+      "MAT.17.26",
+      "MAT.17.27"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_who_is_greatest",
+    "label": "The Twelve dispute who is greatest; Jesus sets a child before them",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.9.33",
+      "MRK.9.34",
+      "MRK.9.35",
+      "MRK.9.36",
+      "MRK.9.37",
+      "LUK.9.46",
+      "LUK.9.47",
+      "LUK.9.48",
+      "MAT.18.1",
+      "MAT.18.2",
+      "MAT.18.3",
+      "MAT.18.4",
+      "MAT.18.5"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_johns_zeal_rebuked",
+    "label": "John's zeal against an independent exorcist is rebuked",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MRK.9.38",
+      "MRK.9.39",
+      "MRK.9.40",
+      "MRK.9.41",
+      "MRK.9.42",
+      "MRK.9.43",
+      "MRK.9.44",
+      "MRK.9.45",
+      "MRK.9.46",
+      "MRK.9.47",
+      "MRK.9.48",
+      "MRK.9.49",
+      "MRK.9.50",
+      "LUK.9.49",
+      "LUK.9.50",
+      "MAT.18.6",
+      "MAT.18.7",
+      "MAT.18.8",
+      "MAT.18.9",
+      "MAT.18.10",
+      "MAT.18.11",
+      "MAT.18.12",
+      "MAT.18.13",
+      "MAT.18.14"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_forgiving_a_brother",
+    "label": "Right treatment of a sinning brother; the parable of the unmerciful servant",
+    "places": [
+      "capernaum"
+    ],
+    "verses": [
+      "MAT.18.15",
+      "MAT.18.16",
+      "MAT.18.17",
+      "MAT.18.18",
+      "MAT.18.19",
+      "MAT.18.20",
+      "MAT.18.21",
+      "MAT.18.22",
+      "MAT.18.23",
+      "MAT.18.24",
+      "MAT.18.25",
+      "MAT.18.26",
+      "MAT.18.27",
+      "MAT.18.28",
+      "MAT.18.29",
+      "MAT.18.30",
+      "MAT.18.31",
+      "MAT.18.32",
+      "MAT.18.33",
+      "MAT.18.34"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_cost_of_discipleship_1",
+    "label": "Would-be followers must give up everything",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.9.57",
+      "LUK.9.58",
+      "LUK.9.59",
+      "LUK.9.60",
+      "LUK.9.61",
+      "LUK.9.62",
+      "MAT.8.19",
+      "MAT.8.20",
+      "MAT.8.21",
+      "MAT.8.22"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_brothers_counsel_him",
+    "label": "Jesus's own brothers urge him to go to the feast",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "JHN.7.2",
+      "JHN.7.3",
+      "JHN.7.4",
+      "JHN.7.5",
+      "JHN.7.6",
+      "JHN.7.7",
+      "JHN.7.8",
+      "JHN.7.9"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_through_samaria",
+    "label": "Jesus sets his face toward Jerusalem, through Samaria",
+    "places": [
+      "samaria-2"
+    ],
+    "verses": [
+      "LUK.9.51",
+      "LUK.9.52",
+      "LUK.9.53",
+      "LUK.9.54",
+      "LUK.9.55",
+      "LUK.9.56"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_tabernacles_feast",
+    "label": "Jesus at the Feast of Tabernacles stirs intense debate",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.7.11",
+      "JHN.7.12",
+      "JHN.7.13",
+      "JHN.7.14",
+      "JHN.7.15",
+      "JHN.7.16",
+      "JHN.7.17",
+      "JHN.7.18",
+      "JHN.7.19",
+      "JHN.7.20",
+      "JHN.7.21",
+      "JHN.7.22",
+      "JHN.7.23",
+      "JHN.7.24",
+      "JHN.7.25",
+      "JHN.7.26",
+      "JHN.7.27",
+      "JHN.7.28",
+      "JHN.7.29",
+      "JHN.7.30"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_adulterous_woman",
+    "label": "A woman taken in adultery is brought to Jesus for judgment",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.7.53",
+      "JHN.8.1",
+      "JHN.8.2",
+      "JHN.8.3",
+      "JHN.8.4",
+      "JHN.8.5",
+      "JHN.8.6",
+      "JHN.8.7",
+      "JHN.8.8",
+      "JHN.8.9",
+      "JHN.8.10",
+      "JHN.8.11"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_light_of_the_world",
+    "label": "Jesus claims to be the Light of the World",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.8.12",
+      "JHN.8.13",
+      "JHN.8.14",
+      "JHN.8.15",
+      "JHN.8.16",
+      "JHN.8.17",
+      "JHN.8.18",
+      "JHN.8.19",
+      "JHN.8.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_pharisees_stone_attempt",
+    "label": "The Pharisees attempt to stone Jesus",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.8.21",
+      "JHN.8.22",
+      "JHN.8.23",
+      "JHN.8.24",
+      "JHN.8.25",
+      "JHN.8.26",
+      "JHN.8.27",
+      "JHN.8.28",
+      "JHN.8.29",
+      "JHN.8.30",
+      "JHN.8.31",
+      "JHN.8.32",
+      "JHN.8.33",
+      "JHN.8.34",
+      "JHN.8.35",
+      "JHN.8.36",
+      "JHN.8.37",
+      "JHN.8.38",
+      "JHN.8.39",
+      "JHN.8.40"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_man_born_blind",
+    "label": "Jesus heals a man born blind",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.9.1",
+      "JHN.9.2",
+      "JHN.9.3",
+      "JHN.9.4",
+      "JHN.9.5",
+      "JHN.9.6",
+      "JHN.9.7",
+      "JHN.9.8",
+      "JHN.9.9",
+      "JHN.9.10",
+      "JHN.9.11",
+      "JHN.9.12",
+      "JHN.9.13",
+      "JHN.9.14",
+      "JHN.9.15",
+      "JHN.9.16",
+      "JHN.9.17",
+      "JHN.9.18",
+      "JHN.9.19",
+      "JHN.9.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_good_shepherd",
+    "label": "The parable of the Good Shepherd",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.10.1",
+      "JHN.10.2",
+      "JHN.10.3",
+      "JHN.10.4",
+      "JHN.10.5",
+      "JHN.10.6",
+      "JHN.10.7",
+      "JHN.10.8",
+      "JHN.10.9",
+      "JHN.10.10",
+      "JHN.10.11",
+      "JHN.10.12",
+      "JHN.10.13",
+      "JHN.10.14",
+      "JHN.10.15",
+      "JHN.10.16",
+      "JHN.10.17",
+      "JHN.10.18",
+      "JHN.10.19",
+      "JHN.10.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_mission_of_seventy",
+    "label": "The mission of the Seventy",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.10.1",
+      "LUK.10.2",
+      "LUK.10.3",
+      "LUK.10.4",
+      "LUK.10.5",
+      "LUK.10.6",
+      "LUK.10.7",
+      "LUK.10.8",
+      "LUK.10.9",
+      "LUK.10.10",
+      "LUK.10.11",
+      "LUK.10.12",
+      "LUK.10.13",
+      "LUK.10.14",
+      "LUK.10.15",
+      "LUK.10.16",
+      "LUK.10.17",
+      "LUK.10.18",
+      "LUK.10.19",
+      "LUK.10.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_good_samaritan",
+    "label": "The parable of the Good Samaritan",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.10.25",
+      "LUK.10.26",
+      "LUK.10.27",
+      "LUK.10.28",
+      "LUK.10.29",
+      "LUK.10.30",
+      "LUK.10.31",
+      "LUK.10.32",
+      "LUK.10.33",
+      "LUK.10.34",
+      "LUK.10.35",
+      "LUK.10.36",
+      "LUK.10.37"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_martha_and_mary",
+    "label": "Jesus the guest of Martha and Mary",
+    "places": [
+      "bethany-1"
+    ],
+    "verses": [
+      "LUK.10.38",
+      "LUK.10.39",
+      "LUK.10.40",
+      "LUK.10.41",
+      "LUK.10.42"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_prayer_model_again",
+    "label": "Jesus again gives a model of prayer",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.11.1",
+      "LUK.11.2",
+      "LUK.11.3",
+      "LUK.11.4",
+      "LUK.11.5",
+      "LUK.11.6",
+      "LUK.11.7",
+      "LUK.11.8",
+      "LUK.11.9",
+      "LUK.11.10",
+      "LUK.11.11",
+      "LUK.11.12",
+      "LUK.11.13"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_beelzebub_again",
+    "label": "A second blasphemous accusation of league with Beelzebub",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.11.14",
+      "LUK.11.15",
+      "LUK.11.16",
+      "LUK.11.17",
+      "LUK.11.18",
+      "LUK.11.19",
+      "LUK.11.20",
+      "LUK.11.21",
+      "LUK.11.22",
+      "LUK.11.23",
+      "LUK.11.24",
+      "LUK.11.25",
+      "LUK.11.26",
+      "LUK.11.27",
+      "LUK.11.28",
+      "LUK.11.29",
+      "LUK.11.30",
+      "LUK.11.31",
+      "LUK.11.32",
+      "LUK.11.33"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_pharisees_denounced_breakfast",
+    "label": "Jesus denounces the Pharisees and lawyers at breakfast",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.11.37",
+      "LUK.11.38",
+      "LUK.11.39",
+      "LUK.11.40",
+      "LUK.11.41",
+      "LUK.11.42",
+      "LUK.11.43",
+      "LUK.11.44",
+      "LUK.11.45",
+      "LUK.11.46",
+      "LUK.11.47",
+      "LUK.11.48",
+      "LUK.11.49",
+      "LUK.11.50",
+      "LUK.11.51",
+      "LUK.11.52",
+      "LUK.11.53",
+      "LUK.11.54"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_hypocrisy_covetousness",
+    "label": "Jesus warns against hypocrisy, covetousness, and worldly anxiety",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.12.1",
+      "LUK.12.2",
+      "LUK.12.3",
+      "LUK.12.4",
+      "LUK.12.5",
+      "LUK.12.6",
+      "LUK.12.7",
+      "LUK.12.8",
+      "LUK.12.9",
+      "LUK.12.10",
+      "LUK.12.11",
+      "LUK.12.12",
+      "LUK.12.13",
+      "LUK.12.14",
+      "LUK.12.15",
+      "LUK.12.16",
+      "LUK.12.17",
+      "LUK.12.18",
+      "LUK.12.19",
+      "LUK.12.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_repent_or_perish",
+    "label": "Repent or perish; the parable of the barren fig tree",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.13.1",
+      "LUK.13.2",
+      "LUK.13.3",
+      "LUK.13.4",
+      "LUK.13.5",
+      "LUK.13.6",
+      "LUK.13.7",
+      "LUK.13.8",
+      "LUK.13.9"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_crippled_woman_sabbath",
+    "label": "Jesus heals a crippled woman on the sabbath",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.13.10",
+      "LUK.13.11",
+      "LUK.13.12",
+      "LUK.13.13",
+      "LUK.13.14",
+      "LUK.13.15",
+      "LUK.13.16",
+      "LUK.13.17",
+      "LUK.13.18",
+      "LUK.13.19",
+      "LUK.13.20",
+      "LUK.13.21"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_dedication_feast",
+    "label": "At the Feast of Dedication, Jesus will not yet openly claim to be the Messiah",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.10.22",
+      "JHN.10.23",
+      "JHN.10.24",
+      "JHN.10.25",
+      "JHN.10.26",
+      "JHN.10.27",
+      "JHN.10.28",
+      "JHN.10.29",
+      "JHN.10.30",
+      "JHN.10.31",
+      "JHN.10.32",
+      "JHN.10.33",
+      "JHN.10.34",
+      "JHN.10.35",
+      "JHN.10.36",
+      "JHN.10.37",
+      "JHN.10.38",
+      "JHN.10.39"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_withdrawal_beyond_jordan",
+    "label": "Jesus withdraws to Bethany beyond Jordan",
+    "places": [
+      "bethany-2"
+    ],
+    "verses": [
+      "JHN.10.40",
+      "JHN.10.41",
+      "JHN.10.42"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_teaching_in_perea",
+    "label": "Jesus teaches on the journey through Perea",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.13.22",
+      "LUK.13.23",
+      "LUK.13.24",
+      "LUK.13.25",
+      "LUK.13.26",
+      "LUK.13.27",
+      "LUK.13.28",
+      "LUK.13.29",
+      "LUK.13.30",
+      "LUK.13.31",
+      "LUK.13.32",
+      "LUK.13.33",
+      "LUK.13.34",
+      "LUK.13.35"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_pharisee_dinner_parables",
+    "label": "Dining with a chief Pharisee, Jesus tells three parables",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.14.1",
+      "LUK.14.2",
+      "LUK.14.3",
+      "LUK.14.4",
+      "LUK.14.5",
+      "LUK.14.6",
+      "LUK.14.7",
+      "LUK.14.8",
+      "LUK.14.9",
+      "LUK.14.10",
+      "LUK.14.11",
+      "LUK.14.12",
+      "LUK.14.13",
+      "LUK.14.14",
+      "LUK.14.15",
+      "LUK.14.16",
+      "LUK.14.17",
+      "LUK.14.18",
+      "LUK.14.19",
+      "LUK.14.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_cost_of_discipleship_2",
+    "label": "Jesus warns great crowds to count the cost of discipleship",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.14.25",
+      "LUK.14.26",
+      "LUK.14.27",
+      "LUK.14.28",
+      "LUK.14.29",
+      "LUK.14.30",
+      "LUK.14.31",
+      "LUK.14.32",
+      "LUK.14.33",
+      "LUK.14.34",
+      "LUK.14.35"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_lost_sheep_coin_son",
+    "label": "The parables of the lost sheep, the lost coin, and the lost son",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.15.1",
+      "LUK.15.2",
+      "LUK.15.3",
+      "LUK.15.4",
+      "LUK.15.5",
+      "LUK.15.6",
+      "LUK.15.7",
+      "LUK.15.8",
+      "LUK.15.9",
+      "LUK.15.10",
+      "LUK.15.11",
+      "LUK.15.12",
+      "LUK.15.13",
+      "LUK.15.14",
+      "LUK.15.15",
+      "LUK.15.16",
+      "LUK.15.17",
+      "LUK.15.18",
+      "LUK.15.19",
+      "LUK.15.20"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_stewardship_parables",
+    "label": "Three parables on stewardship",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.16.1",
+      "LUK.16.2",
+      "LUK.16.3",
+      "LUK.16.4",
+      "LUK.16.5",
+      "LUK.16.6",
+      "LUK.16.7",
+      "LUK.16.8",
+      "LUK.16.9",
+      "LUK.16.10",
+      "LUK.16.11",
+      "LUK.16.12",
+      "LUK.16.13",
+      "LUK.16.14",
+      "LUK.16.15",
+      "LUK.16.16",
+      "LUK.16.17",
+      "LUK.16.18",
+      "LUK.16.19",
+      "LUK.16.20",
+      "LUK.17.1",
+      "LUK.17.2",
+      "LUK.17.3",
+      "LUK.17.4",
+      "LUK.17.5",
+      "LUK.17.6",
+      "LUK.17.7",
+      "LUK.17.8",
+      "LUK.17.9",
+      "LUK.17.10"
+    ],
+    "when": {
+      "from_year": 32,
+      "to_year": 32
+    }
+  },
+  {
+    "id": "rob_lazarus_raised",
+    "label": "Jesus raises Lazarus from the dead",
+    "places": [
+      "bethany-1"
+    ],
+    "verses": [
+      "JHN.11.1",
+      "JHN.11.2",
+      "JHN.11.3",
+      "JHN.11.4",
+      "JHN.11.5",
+      "JHN.11.6",
+      "JHN.11.7",
+      "JHN.11.8",
+      "JHN.11.9",
+      "JHN.11.10",
+      "JHN.11.11",
+      "JHN.11.12",
+      "JHN.11.13",
+      "JHN.11.14",
+      "JHN.11.15",
+      "JHN.11.16",
+      "JHN.11.17",
+      "JHN.11.18",
+      "JHN.11.19",
+      "JHN.11.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_lazarus_effect",
+    "label": "The Sanhedrin resolves to kill Jesus after Lazarus's raising",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.11.45",
+      "JHN.11.46",
+      "JHN.11.47",
+      "JHN.11.48",
+      "JHN.11.49",
+      "JHN.11.50",
+      "JHN.11.51",
+      "JHN.11.52",
+      "JHN.11.53",
+      "JHN.11.54"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_last_journey_begins",
+    "label": "Jesus starts the last journey to Jerusalem, through Samaria and Galilee",
+    "places": [
+      "samaria-2"
+    ],
+    "verses": [
+      "LUK.17.11",
+      "LUK.17.12",
+      "LUK.17.13",
+      "LUK.17.14",
+      "LUK.17.15",
+      "LUK.17.16",
+      "LUK.17.17",
+      "LUK.17.18",
+      "LUK.17.19",
+      "LUK.17.20",
+      "LUK.17.21",
+      "LUK.17.22",
+      "LUK.17.23",
+      "LUK.17.24",
+      "LUK.17.25",
+      "LUK.17.26",
+      "LUK.17.27",
+      "LUK.17.28",
+      "LUK.17.29",
+      "LUK.17.30"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_prayer_parables",
+    "label": "Two parables on prayer: the persistent widow and the publican",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "LUK.18.1",
+      "LUK.18.2",
+      "LUK.18.3",
+      "LUK.18.4",
+      "LUK.18.5",
+      "LUK.18.6",
+      "LUK.18.7",
+      "LUK.18.8",
+      "LUK.18.9",
+      "LUK.18.10",
+      "LUK.18.11",
+      "LUK.18.12",
+      "LUK.18.13",
+      "LUK.18.14"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_teaching_on_divorce",
+    "label": "Jesus teaches on divorce, going through Perea",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "MRK.10.1",
+      "MRK.10.2",
+      "MRK.10.3",
+      "MRK.10.4",
+      "MRK.10.5",
+      "MRK.10.6",
+      "MRK.10.7",
+      "MRK.10.8",
+      "MRK.10.9",
+      "MRK.10.10",
+      "MRK.10.11",
+      "MRK.10.12",
+      "MAT.19.1",
+      "MAT.19.2",
+      "MAT.19.3",
+      "MAT.19.4",
+      "MAT.19.5",
+      "MAT.19.6",
+      "MAT.19.7",
+      "MAT.19.8",
+      "MAT.19.9",
+      "MAT.19.10",
+      "MAT.19.11",
+      "MAT.19.12"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_christ_and_children",
+    "label": "Christ blesses the children brought to him",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "MRK.10.13",
+      "MRK.10.14",
+      "MRK.10.15",
+      "MRK.10.16",
+      "LUK.18.15",
+      "LUK.18.16",
+      "LUK.18.17",
+      "MAT.19.13",
+      "MAT.19.14",
+      "MAT.19.15"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_rich_young_ruler",
+    "label": "The rich young ruler and the perils of riches",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "MRK.10.17",
+      "MRK.10.18",
+      "MRK.10.19",
+      "MRK.10.20",
+      "MRK.10.21",
+      "MRK.10.22",
+      "MRK.10.23",
+      "MRK.10.24",
+      "MRK.10.25",
+      "MRK.10.26",
+      "MRK.10.27",
+      "MRK.10.28",
+      "MRK.10.29",
+      "MRK.10.30",
+      "MRK.10.31",
+      "LUK.18.18",
+      "LUK.18.19",
+      "LUK.18.20",
+      "LUK.18.21",
+      "LUK.18.22",
+      "LUK.18.23",
+      "LUK.18.24",
+      "LUK.18.25",
+      "LUK.18.26",
+      "LUK.18.27",
+      "LUK.18.28",
+      "LUK.18.29",
+      "LUK.18.30",
+      "MAT.19.16",
+      "MAT.19.17",
+      "MAT.19.18",
+      "MAT.19.19",
+      "MAT.19.20",
+      "MAT.19.21",
+      "MAT.19.22",
+      "MAT.19.23",
+      "MAT.19.24",
+      "MAT.19.25",
+      "MAT.19.26",
+      "MAT.19.27",
+      "MAT.19.28",
+      "MAT.19.29",
+      "MAT.19.30",
+      "MAT.20.1",
+      "MAT.20.2",
+      "MAT.20.3",
+      "MAT.20.4",
+      "MAT.20.5",
+      "MAT.20.6",
+      "MAT.20.7",
+      "MAT.20.8",
+      "MAT.20.9",
+      "MAT.20.10",
+      "MAT.20.11",
+      "MAT.20.12",
+      "MAT.20.13",
+      "MAT.20.14",
+      "MAT.20.15",
+      "MAT.20.16"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_foretells_death_3",
+    "label": "Jesus foretells his death a third time; James and John rebuked",
+    "places": [
+      "judea-1"
+    ],
+    "verses": [
+      "MRK.10.32",
+      "MRK.10.33",
+      "MRK.10.34",
+      "MRK.10.35",
+      "MRK.10.36",
+      "MRK.10.37",
+      "MRK.10.38",
+      "MRK.10.39",
+      "MRK.10.40",
+      "MRK.10.41",
+      "MRK.10.42",
+      "MRK.10.43",
+      "MRK.10.44",
+      "MRK.10.45",
+      "LUK.18.31",
+      "LUK.18.32",
+      "LUK.18.33",
+      "LUK.18.34",
+      "MAT.20.17",
+      "MAT.20.18",
+      "MAT.20.19",
+      "MAT.20.20",
+      "MAT.20.21",
+      "MAT.20.22",
+      "MAT.20.23",
+      "MAT.20.24",
+      "MAT.20.25",
+      "MAT.20.26",
+      "MAT.20.27",
+      "MAT.20.28"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_blind_bartimaeus",
+    "label": "Blind Bartimaeus healed at Jericho",
+    "places": [
+      "jericho-2"
+    ],
+    "verses": [
+      "MRK.10.46",
+      "MRK.10.47",
+      "MRK.10.48",
+      "MRK.10.49",
+      "MRK.10.50",
+      "MRK.10.51",
+      "MRK.10.52",
+      "LUK.18.35",
+      "LUK.18.36",
+      "LUK.18.37",
+      "LUK.18.38",
+      "LUK.18.39",
+      "LUK.18.40",
+      "LUK.18.41",
+      "LUK.18.42",
+      "LUK.18.43",
+      "MAT.20.29",
+      "MAT.20.30",
+      "MAT.20.31",
+      "MAT.20.32",
+      "MAT.20.33",
+      "MAT.20.34"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "jm_jericho",
+    "label": "Jesus calls Zacchaeus at Jericho",
+    "places": [
+      "jericho-2"
+    ],
+    "verses": [
+      "LUK.19.1",
+      "LUK.19.2",
+      "LUK.19.3",
+      "LUK.19.4",
+      "LUK.19.5",
+      "LUK.19.6",
+      "LUK.19.7",
+      "LUK.19.8",
+      "LUK.19.9",
+      "LUK.19.10"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_parable_of_pounds",
+    "label": "The parable of the pounds, on the way out of Jericho",
+    "places": [
+      "jericho-2"
+    ],
+    "verses": [
+      "LUK.19.11",
+      "LUK.19.12",
+      "LUK.19.13",
+      "LUK.19.14",
+      "LUK.19.15",
+      "LUK.19.16",
+      "LUK.19.17",
+      "LUK.19.18",
+      "LUK.19.19",
+      "LUK.19.20",
+      "LUK.19.21",
+      "LUK.19.22",
+      "LUK.19.23",
+      "LUK.19.24",
+      "LUK.19.25",
+      "LUK.19.26",
+      "LUK.19.27",
+      "LUK.19.28"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "jm_bethany",
+    "label": "Jesus dines at Bethany before the Passover",
+    "places": [
+      "bethany-1"
+    ],
+    "verses": [
+      "JHN.12.1"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "je_hebron",
+    "label": "Joseph sent from Hebron to his brothers",
+    "places": [
+      "hebron"
+    ],
+    "verses": [
+      "GEN.37.14"
+    ],
+    "when": {
+      "from_year": -1898,
+      "to_year": -1898
+    }
+  },
+  {
+    "id": "je_dothan",
+    "label": "Joseph sold into slavery at Dothan",
+    "places": [
+      "dothan"
+    ],
+    "verses": [
+      "GEN.37.17",
+      "GEN.37.18",
+      "GEN.37.19",
+      "GEN.37.20",
+      "GEN.37.21",
+      "GEN.37.22",
+      "GEN.37.23",
+      "GEN.37.24",
+      "GEN.37.25",
+      "GEN.37.26",
+      "GEN.37.27",
+      "GEN.37.28"
+    ],
+    "when": {
+      "from_year": -1898,
+      "to_year": -1898
+    }
+  },
+  {
+    "id": "je_egypt_sold",
+    "label": "Joseph taken to Egypt as a slave",
+    "places": [
+      "egypt"
+    ],
+    "verses": [
+      "GEN.37.36",
+      "GEN.39.1"
+    ],
+    "when": {
+      "from_year": -1897,
+      "to_year": -1897
+    }
+  },
+  {
+    "id": "je_egypt_ruler",
+    "label": "Joseph rises to rule over Egypt",
+    "places": [
+      "egypt"
+    ],
+    "verses": [
+      "GEN.41.41",
+      "GEN.41.42",
+      "GEN.41.43",
+      "GEN.41.44",
+      "GEN.41.45",
+      "GEN.41.46"
+    ],
+    "when": {
+      "from_year": -1885,
+      "to_year": -1885
+    }
+  },
+  {
+    "id": "je_beersheba",
+    "label": "Jacob sets out for Egypt from Beersheba",
+    "places": [
+      "beersheba-2"
+    ],
+    "verses": [
+      "GEN.46.1",
+      "GEN.46.2",
+      "GEN.46.3",
+      "GEN.46.4",
+      "GEN.46.5"
+    ],
+    "when": {
+      "from_year": -1876,
+      "to_year": -1876
+    }
+  },
+  {
+    "id": "je_goshen",
+    "label": "Israel settles in Goshen",
+    "places": [
+      "goshen-1"
+    ],
+    "verses": [
+      "GEN.46.28",
+      "GEN.46.29",
+      "GEN.46.30",
+      "GEN.46.31",
+      "GEN.46.32",
+      "GEN.46.33",
+      "GEN.46.34",
+      "GEN.47.27"
+    ],
+    "when": {
+      "from_year": -1876,
+      "to_year": -1876
+    }
+  },
+  {
+    "id": "rob_arrives_at_bethany",
+    "label": "Jesus arrives at Bethany near Jerusalem",
+    "places": [
+      "bethany-1"
+    ],
+    "verses": [
+      "JHN.11.55",
+      "JHN.11.56",
+      "JHN.12.1",
+      "JHN.12.9",
+      "JHN.12.10",
+      "JHN.12.11"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_bethany",
+    "label": "Mary anoints Jesus at Bethany",
+    "places": [
+      "bethany-1"
+    ],
+    "verses": [
+      "MAT.26.6",
+      "MAT.26.7",
+      "MAT.26.8",
+      "MAT.26.9",
+      "MAT.26.10",
+      "MAT.26.11",
+      "MAT.26.12",
+      "MAT.26.13",
+      "MRK.14.3",
+      "MRK.14.4",
+      "MRK.14.5",
+      "MRK.14.6",
+      "MRK.14.7",
+      "MRK.14.8",
+      "MRK.14.9",
+      "JHN.12.1",
+      "JHN.12.2",
+      "JHN.12.3",
+      "JHN.12.4",
+      "JHN.12.5",
+      "JHN.12.6",
+      "JHN.12.7",
+      "JHN.12.8",
+      "JHN.12.9",
+      "JHN.12.10",
+      "JHN.12.11"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_jerusalem_entry",
+    "label": "The triumphal entry into Jerusalem",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.21.1",
+      "MAT.21.2",
+      "MAT.21.3",
+      "MAT.21.4",
+      "MAT.21.5",
+      "MAT.21.6",
+      "MAT.21.7",
+      "MAT.21.8",
+      "MAT.21.9",
+      "MAT.21.10",
+      "MAT.21.11",
+      "MRK.11.1",
+      "MRK.11.2",
+      "MRK.11.3",
+      "MRK.11.4",
+      "MRK.11.5",
+      "MRK.11.6",
+      "MRK.11.7",
+      "MRK.11.8",
+      "MRK.11.9",
+      "MRK.11.10",
+      "MRK.11.11",
+      "LUK.19.29",
+      "LUK.19.30",
+      "LUK.19.31",
+      "LUK.19.32",
+      "LUK.19.33",
+      "LUK.19.34",
+      "LUK.19.35",
+      "LUK.19.36",
+      "LUK.19.37",
+      "LUK.19.38",
+      "LUK.19.39",
+      "LUK.19.40",
+      "LUK.19.41",
+      "LUK.19.42",
+      "LUK.19.43",
+      "LUK.19.44",
+      "JHN.12.12",
+      "JHN.12.13",
+      "JHN.12.14",
+      "JHN.12.15",
+      "JHN.12.16",
+      "JHN.12.17",
+      "JHN.12.18",
+      "JHN.12.19"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_temple_cleansing",
+    "label": "Jesus cleanses the temple a second time",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.21.12",
+      "MAT.21.13",
+      "MRK.11.15",
+      "MRK.11.16",
+      "MRK.11.17",
+      "MRK.11.18",
+      "LUK.19.45",
+      "LUK.19.46",
+      "LUK.19.47",
+      "LUK.19.48"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_fig_tree_withered",
+    "label": "The barren fig tree found withered",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.21.19",
+      "MAT.21.20",
+      "MAT.21.21",
+      "MAT.21.22"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_authority_challenged",
+    "label": "The Sanhedrin formally challenges Jesus's authority",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.11.27",
+      "MRK.11.28",
+      "MRK.11.29",
+      "MRK.11.30",
+      "MRK.11.31",
+      "MRK.11.32",
+      "MRK.11.33",
+      "MRK.12.1",
+      "MRK.12.2",
+      "MRK.12.3",
+      "MRK.12.4",
+      "MRK.12.5",
+      "MRK.12.6",
+      "MRK.12.7",
+      "MRK.12.8",
+      "MRK.12.9",
+      "MRK.12.10",
+      "MRK.12.11",
+      "MRK.12.12",
+      "LUK.20.1",
+      "LUK.20.2",
+      "LUK.20.3",
+      "LUK.20.4",
+      "LUK.20.5",
+      "LUK.20.6",
+      "LUK.20.7",
+      "LUK.20.8",
+      "LUK.20.9",
+      "LUK.20.10",
+      "LUK.20.11",
+      "LUK.20.12",
+      "LUK.20.13",
+      "LUK.20.14",
+      "LUK.20.15",
+      "LUK.20.16",
+      "LUK.20.17",
+      "LUK.20.18",
+      "LUK.20.19",
+      "MAT.21.23",
+      "MAT.21.24",
+      "MAT.21.25",
+      "MAT.21.26",
+      "MAT.21.27",
+      "MAT.21.28",
+      "MAT.21.29",
+      "MAT.21.30",
+      "MAT.21.31",
+      "MAT.21.32",
+      "MAT.21.33",
+      "MAT.21.34",
+      "MAT.21.35",
+      "MAT.21.36",
+      "MAT.21.37",
+      "MAT.21.38",
+      "MAT.21.39",
+      "MAT.21.40",
+      "MAT.21.41",
+      "MAT.21.42",
+      "MAT.22.1",
+      "MAT.22.2",
+      "MAT.22.3",
+      "MAT.22.4",
+      "MAT.22.5",
+      "MAT.22.6",
+      "MAT.22.7",
+      "MAT.22.8",
+      "MAT.22.9",
+      "MAT.22.10",
+      "MAT.22.11",
+      "MAT.22.12",
+      "MAT.22.13",
+      "MAT.22.14"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_tribute_to_caesar",
+    "label": "The Pharisees and Herodians try to trap Jesus over tribute to Caesar",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.12.13",
+      "MRK.12.14",
+      "MRK.12.15",
+      "MRK.12.16",
+      "MRK.12.17",
+      "LUK.20.20",
+      "LUK.20.21",
+      "LUK.20.22",
+      "LUK.20.23",
+      "LUK.20.24",
+      "LUK.20.25",
+      "LUK.20.26",
+      "MAT.22.15",
+      "MAT.22.16",
+      "MAT.22.17",
+      "MAT.22.18",
+      "MAT.22.19",
+      "MAT.22.20",
+      "MAT.22.21",
+      "MAT.22.22"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_sadducees_resurrection",
+    "label": "The Sadducees ask Jesus a puzzling question about the resurrection",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.12.18",
+      "MRK.12.19",
+      "MRK.12.20",
+      "MRK.12.21",
+      "MRK.12.22",
+      "MRK.12.23",
+      "MRK.12.24",
+      "MRK.12.25",
+      "MRK.12.26",
+      "MRK.12.27",
+      "LUK.20.27",
+      "LUK.20.28",
+      "LUK.20.29",
+      "LUK.20.30",
+      "LUK.20.31",
+      "LUK.20.32",
+      "LUK.20.33",
+      "LUK.20.34",
+      "LUK.20.35",
+      "LUK.20.36",
+      "LUK.20.37",
+      "LUK.20.38",
+      "LUK.20.39",
+      "LUK.20.40",
+      "MAT.22.23",
+      "MAT.22.24",
+      "MAT.22.25",
+      "MAT.22.26",
+      "MAT.22.27",
+      "MAT.22.28",
+      "MAT.22.29",
+      "MAT.22.30",
+      "MAT.22.31",
+      "MAT.22.32",
+      "MAT.22.33"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_great_commandment",
+    "label": "Jesus names the great commandment",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.12.28",
+      "MRK.12.29",
+      "MRK.12.30",
+      "MRK.12.31",
+      "MRK.12.32",
+      "MRK.12.33",
+      "MRK.12.34",
+      "MAT.22.34",
+      "MAT.22.35",
+      "MAT.22.36",
+      "MAT.22.37",
+      "MAT.22.38",
+      "MAT.22.39",
+      "MAT.22.40"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_davids_son",
+    "label": "Jesus asks how the Messiah can be both David's son and David's Lord",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.12.35",
+      "MRK.12.36",
+      "MRK.12.37",
+      "LUK.20.41",
+      "LUK.20.42",
+      "LUK.20.43",
+      "LUK.20.44",
+      "MAT.22.41",
+      "MAT.22.42",
+      "MAT.22.43",
+      "MAT.22.44",
+      "MAT.22.45",
+      "MAT.22.46"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_woes_on_scribes",
+    "label": "Jesus denounces the scribes and Pharisees in his last public discourse",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.12.38",
+      "MRK.12.39",
+      "MRK.12.40",
+      "LUK.20.45",
+      "LUK.20.46",
+      "LUK.20.47",
+      "MAT.23.1",
+      "MAT.23.2",
+      "MAT.23.3",
+      "MAT.23.4",
+      "MAT.23.5",
+      "MAT.23.6",
+      "MAT.23.7",
+      "MAT.23.8",
+      "MAT.23.9",
+      "MAT.23.10",
+      "MAT.23.11",
+      "MAT.23.12",
+      "MAT.23.13",
+      "MAT.23.14",
+      "MAT.23.15",
+      "MAT.23.16",
+      "MAT.23.17",
+      "MAT.23.18",
+      "MAT.23.19",
+      "MAT.23.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_widows_mite",
+    "label": "Jesus commends the poor widow's gift",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.21.1",
+      "LUK.21.2",
+      "LUK.21.3",
+      "LUK.21.4",
+      "MRK.12.41",
+      "MRK.12.42",
+      "MRK.12.43",
+      "MRK.12.44"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_olivet_discourse",
+    "label": "The great eschatological discourse on the Mount of Olives",
+    "places": [
+      "mount-of-olives"
+    ],
+    "verses": [
+      "MAT.24.1",
+      "MAT.24.2",
+      "MAT.24.3",
+      "MAT.24.4",
+      "MAT.24.5",
+      "MAT.24.6",
+      "MAT.24.7",
+      "MAT.24.8",
+      "MAT.24.9",
+      "MAT.24.10",
+      "MAT.24.11",
+      "MAT.24.12",
+      "MAT.24.13",
+      "MAT.24.14",
+      "MAT.24.15",
+      "MAT.24.16",
+      "MAT.24.17",
+      "MAT.24.18",
+      "MAT.24.19",
+      "MAT.24.20",
+      "MAT.25.1",
+      "MAT.25.2",
+      "MAT.25.3",
+      "MAT.25.4",
+      "MAT.25.5",
+      "MAT.25.6",
+      "MAT.25.7",
+      "MAT.25.8",
+      "MAT.25.9",
+      "MAT.25.10",
+      "MAT.25.11",
+      "MAT.25.12",
+      "MAT.25.13",
+      "MAT.25.14",
+      "MAT.25.15",
+      "MAT.25.16",
+      "MAT.25.17",
+      "MAT.25.18",
+      "MAT.25.19",
+      "MAT.25.20",
+      "LUK.21.5",
+      "LUK.21.6",
+      "LUK.21.7",
+      "LUK.21.8",
+      "LUK.21.9",
+      "LUK.21.10",
+      "LUK.21.11",
+      "LUK.21.12",
+      "LUK.21.13",
+      "LUK.21.14",
+      "LUK.21.15",
+      "LUK.21.16",
+      "LUK.21.17",
+      "LUK.21.18",
+      "LUK.21.19",
+      "LUK.21.20",
+      "LUK.21.21",
+      "LUK.21.22",
+      "LUK.21.23",
+      "LUK.21.24",
+      "MRK.13.1",
+      "MRK.13.2",
+      "MRK.13.3",
+      "MRK.13.4",
+      "MRK.13.5",
+      "MRK.13.6",
+      "MRK.13.7",
+      "MRK.13.8",
+      "MRK.13.9",
+      "MRK.13.10",
+      "MRK.13.11",
+      "MRK.13.12",
+      "MRK.13.13",
+      "MRK.13.14",
+      "MRK.13.15",
+      "MRK.13.16",
+      "MRK.13.17",
+      "MRK.13.18",
+      "MRK.13.19",
+      "MRK.13.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_predicts_crucifixion_timing",
+    "label": "Jesus predicts his crucifixion two days hence",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.1",
+      "MRK.14.2",
+      "LUK.22.1",
+      "LUK.22.2",
+      "MAT.26.1",
+      "MAT.26.2",
+      "MAT.26.3",
+      "MAT.26.4",
+      "MAT.26.5"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_judas_bargains",
+    "label": "Judas bargains with the rulers to betray Jesus",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.10",
+      "MRK.14.11",
+      "LUK.22.3",
+      "LUK.22.4",
+      "LUK.22.5",
+      "LUK.22.6",
+      "MAT.26.14",
+      "MAT.26.15",
+      "MAT.26.16"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_passover_preparation",
+    "label": "The preparation for the Passover meal",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.12",
+      "MRK.14.13",
+      "MRK.14.14",
+      "MRK.14.15",
+      "MRK.14.16",
+      "LUK.22.7",
+      "LUK.22.8",
+      "LUK.22.9",
+      "LUK.22.10",
+      "LUK.22.11",
+      "LUK.22.12",
+      "LUK.22.13",
+      "MAT.26.17",
+      "MAT.26.18",
+      "MAT.26.19"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_paschal_meal_begins",
+    "label": "Jesus partakes of the Passover meal with the Twelve",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.17",
+      "LUK.22.14",
+      "LUK.22.15",
+      "LUK.22.16",
+      "LUK.22.24",
+      "LUK.22.25",
+      "LUK.22.26",
+      "LUK.22.27",
+      "LUK.22.28",
+      "LUK.22.29",
+      "LUK.22.30",
+      "MAT.26.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_foot_washing",
+    "label": "Jesus washes the disciples' feet",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.13.1",
+      "JHN.13.2",
+      "JHN.13.3",
+      "JHN.13.4",
+      "JHN.13.5",
+      "JHN.13.6",
+      "JHN.13.7",
+      "JHN.13.8",
+      "JHN.13.9",
+      "JHN.13.10",
+      "JHN.13.11",
+      "JHN.13.12",
+      "JHN.13.13",
+      "JHN.13.14",
+      "JHN.13.15",
+      "JHN.13.16",
+      "JHN.13.17",
+      "JHN.13.18",
+      "JHN.13.19",
+      "JHN.13.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_judas_pointed_out",
+    "label": "Jesus points out Judas as the betrayer",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.18",
+      "MRK.14.19",
+      "MRK.14.20",
+      "MRK.14.21",
+      "LUK.22.21",
+      "LUK.22.22",
+      "LUK.22.23",
+      "JHN.13.21",
+      "JHN.13.22",
+      "JHN.13.23",
+      "JHN.13.24",
+      "JHN.13.25",
+      "JHN.13.26",
+      "JHN.13.27",
+      "JHN.13.28",
+      "JHN.13.29",
+      "JHN.13.30",
+      "MAT.26.21",
+      "MAT.26.22",
+      "MAT.26.23",
+      "MAT.26.24",
+      "MAT.26.25"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_warns_against_desertion",
+    "label": "Jesus warns the disciples against desertion; all protest their loyalty",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.27",
+      "MRK.14.28",
+      "MRK.14.29",
+      "MRK.14.30",
+      "MRK.14.31",
+      "LUK.22.31",
+      "LUK.22.32",
+      "LUK.22.33",
+      "LUK.22.34",
+      "LUK.22.35",
+      "LUK.22.36",
+      "LUK.22.37",
+      "LUK.22.38",
+      "JHN.13.31",
+      "JHN.13.32",
+      "JHN.13.33",
+      "JHN.13.34",
+      "JHN.13.35",
+      "JHN.13.36",
+      "JHN.13.37",
+      "JHN.13.38",
+      "MAT.26.31",
+      "MAT.26.32",
+      "MAT.26.33",
+      "MAT.26.34",
+      "MAT.26.35"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_lords_supper",
+    "label": "Jesus institutes the Lord's Supper",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.22",
+      "MRK.14.23",
+      "MRK.14.24",
+      "MRK.14.25",
+      "LUK.22.17",
+      "LUK.22.18",
+      "LUK.22.19",
+      "LUK.22.20",
+      "MAT.26.26",
+      "MAT.26.27",
+      "MAT.26.28",
+      "MAT.26.29"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_farewell_discourse",
+    "label": "The farewell discourse to the disciples in the upper room",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.14.1",
+      "JHN.14.2",
+      "JHN.14.3",
+      "JHN.14.4",
+      "JHN.14.5",
+      "JHN.14.6",
+      "JHN.14.7",
+      "JHN.14.8",
+      "JHN.14.9",
+      "JHN.14.10",
+      "JHN.14.11",
+      "JHN.14.12",
+      "JHN.14.13",
+      "JHN.14.14",
+      "JHN.14.15",
+      "JHN.14.16",
+      "JHN.14.17",
+      "JHN.14.18",
+      "JHN.14.19",
+      "JHN.14.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_discourse_to_gethsemane",
+    "label": "The discourse on the way to Gethsemane: the true vine",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.15.1",
+      "JHN.15.2",
+      "JHN.15.3",
+      "JHN.15.4",
+      "JHN.15.5",
+      "JHN.15.6",
+      "JHN.15.7",
+      "JHN.15.8",
+      "JHN.15.9",
+      "JHN.15.10",
+      "JHN.15.11",
+      "JHN.15.12",
+      "JHN.15.13",
+      "JHN.15.14",
+      "JHN.15.15",
+      "JHN.15.16",
+      "JHN.15.17",
+      "JHN.15.18",
+      "JHN.15.19",
+      "JHN.15.20",
+      "JHN.16.1",
+      "JHN.16.2",
+      "JHN.16.3",
+      "JHN.16.4",
+      "JHN.16.5",
+      "JHN.16.6",
+      "JHN.16.7",
+      "JHN.16.8",
+      "JHN.16.9",
+      "JHN.16.10",
+      "JHN.16.11",
+      "JHN.16.12",
+      "JHN.16.13",
+      "JHN.16.14",
+      "JHN.16.15",
+      "JHN.16.16",
+      "JHN.16.17",
+      "JHN.16.18",
+      "JHN.16.19",
+      "JHN.16.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_intercessory_prayer",
+    "label": "Christ's intercessory prayer",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.17.1",
+      "JHN.17.2",
+      "JHN.17.3",
+      "JHN.17.4",
+      "JHN.17.5",
+      "JHN.17.6",
+      "JHN.17.7",
+      "JHN.17.8",
+      "JHN.17.9",
+      "JHN.17.10",
+      "JHN.17.11",
+      "JHN.17.12",
+      "JHN.17.13",
+      "JHN.17.14",
+      "JHN.17.15",
+      "JHN.17.16",
+      "JHN.17.17",
+      "JHN.17.18",
+      "JHN.17.19",
+      "JHN.17.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_gethsemane",
+    "label": "Jesus prays and is arrested at Gethsemane",
+    "places": [
+      "gethsemane"
+    ],
+    "verses": [
+      "MAT.26.36",
+      "MAT.26.37",
+      "MAT.26.38",
+      "MAT.26.39",
+      "MAT.26.40",
+      "MAT.26.41",
+      "MAT.26.42",
+      "MAT.26.43",
+      "MAT.26.44",
+      "MAT.26.45",
+      "MAT.26.46",
+      "MAT.26.47",
+      "MAT.26.48",
+      "MAT.26.49",
+      "MAT.26.50",
+      "MAT.26.51",
+      "MAT.26.52",
+      "MAT.26.53",
+      "MAT.26.54",
+      "MAT.26.55",
+      "MRK.14.32",
+      "MRK.14.33",
+      "MRK.14.34",
+      "MRK.14.35",
+      "MRK.14.36",
+      "MRK.14.37",
+      "MRK.14.38",
+      "MRK.14.39",
+      "MRK.14.40",
+      "MRK.14.41",
+      "MRK.14.42",
+      "MRK.14.43",
+      "MRK.14.44",
+      "MRK.14.45",
+      "MRK.14.46",
+      "MRK.14.47",
+      "MRK.14.48",
+      "MRK.14.49",
+      "MRK.14.50",
+      "MRK.14.51",
+      "LUK.22.39",
+      "LUK.22.40",
+      "LUK.22.41",
+      "LUK.22.42",
+      "LUK.22.43",
+      "LUK.22.44",
+      "LUK.22.45",
+      "LUK.22.46",
+      "LUK.22.47",
+      "LUK.22.48",
+      "LUK.22.49",
+      "LUK.22.50",
+      "LUK.22.51",
+      "LUK.22.52",
+      "LUK.22.53",
+      "JHN.18.1",
+      "JHN.18.2",
+      "JHN.18.3",
+      "JHN.18.4",
+      "JHN.18.5",
+      "JHN.18.6",
+      "JHN.18.7",
+      "JHN.18.8",
+      "JHN.18.9",
+      "JHN.18.10",
+      "JHN.18.11",
+      "JHN.18.12"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_before_annas",
+    "label": "Jesus is first examined by Annas",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.18.12",
+      "JHN.18.13",
+      "JHN.18.14",
+      "JHN.18.19",
+      "JHN.18.20",
+      "JHN.18.21",
+      "JHN.18.22",
+      "JHN.18.23"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_tried_by_caiaphas",
+    "label": "Jesus is tried and condemned by Caiaphas and the Sanhedrin",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.53",
+      "MRK.14.55",
+      "MRK.14.56",
+      "MRK.14.57",
+      "MRK.14.58",
+      "MRK.14.59",
+      "MRK.14.60",
+      "MRK.14.61",
+      "MRK.14.62",
+      "MRK.14.63",
+      "MRK.14.64",
+      "MRK.14.65",
+      "LUK.22.63",
+      "LUK.22.64",
+      "LUK.22.65",
+      "JHN.18.24",
+      "MAT.26.57",
+      "MAT.26.59",
+      "MAT.26.60",
+      "MAT.26.61",
+      "MAT.26.62",
+      "MAT.26.63",
+      "MAT.26.64",
+      "MAT.26.65",
+      "MAT.26.66",
+      "MAT.26.67",
+      "MAT.26.68"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_peter_denies",
+    "label": "Peter thrice denies his Lord",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.14.54",
+      "MRK.14.66",
+      "MRK.14.67",
+      "MRK.14.68",
+      "MRK.14.69",
+      "MRK.14.70",
+      "MRK.14.71",
+      "MRK.14.72",
+      "LUK.22.54",
+      "LUK.22.55",
+      "LUK.22.56",
+      "LUK.22.57",
+      "LUK.22.58",
+      "LUK.22.59",
+      "LUK.22.60",
+      "LUK.22.61",
+      "LUK.22.62",
+      "JHN.18.15",
+      "JHN.18.16",
+      "JHN.18.17",
+      "JHN.18.18",
+      "JHN.18.25",
+      "JHN.18.26",
+      "JHN.18.27",
+      "MAT.26.58",
+      "MAT.26.69",
+      "MAT.26.70",
+      "MAT.26.71",
+      "MAT.26.72",
+      "MAT.26.73",
+      "MAT.26.74",
+      "MAT.26.75"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_formally_condemned",
+    "label": "After dawn, Jesus is formally condemned by the Sanhedrin",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.22.66",
+      "LUK.22.67",
+      "LUK.22.68",
+      "LUK.22.69",
+      "LUK.22.70",
+      "LUK.22.71",
+      "MAT.27.1"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_judas_suicide",
+    "label": "The remorse and suicide of Judas",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.27.3",
+      "MAT.27.4",
+      "MAT.27.5",
+      "MAT.27.6",
+      "MAT.27.7",
+      "MAT.27.8",
+      "MAT.27.9",
+      "MAT.27.10"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_before_pilate_1",
+    "label": "Jesus before Pilate the first time",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.15.1",
+      "MRK.15.2",
+      "MRK.15.3",
+      "MRK.15.4",
+      "MRK.15.5",
+      "LUK.23.1",
+      "LUK.23.2",
+      "LUK.23.3",
+      "LUK.23.4",
+      "LUK.23.5",
+      "JHN.18.28",
+      "JHN.18.29",
+      "JHN.18.30",
+      "JHN.18.31",
+      "JHN.18.32",
+      "JHN.18.33",
+      "JHN.18.34",
+      "JHN.18.35",
+      "JHN.18.36",
+      "JHN.18.37",
+      "JHN.18.38",
+      "MAT.27.2",
+      "MAT.27.11",
+      "MAT.27.12",
+      "MAT.27.13",
+      "MAT.27.14"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_before_herod",
+    "label": "Jesus before Herod Antipas the tetrarch",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.23.6",
+      "LUK.23.7",
+      "LUK.23.8",
+      "LUK.23.9",
+      "LUK.23.10",
+      "LUK.23.11",
+      "LUK.23.12"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_before_pilate_2",
+    "label": "Jesus the second time before Pilate; Barabbas released",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.15.6",
+      "MRK.15.7",
+      "MRK.15.8",
+      "MRK.15.9",
+      "MRK.15.10",
+      "MRK.15.11",
+      "MRK.15.12",
+      "MRK.15.13",
+      "MRK.15.14",
+      "MRK.15.15",
+      "LUK.23.13",
+      "LUK.23.14",
+      "LUK.23.15",
+      "LUK.23.16",
+      "LUK.23.17",
+      "LUK.23.18",
+      "LUK.23.19",
+      "LUK.23.20",
+      "LUK.23.21",
+      "LUK.23.22",
+      "LUK.23.23",
+      "LUK.23.24",
+      "LUK.23.25",
+      "JHN.18.39",
+      "JHN.19.1",
+      "JHN.19.2",
+      "JHN.19.3",
+      "JHN.19.4",
+      "JHN.19.5",
+      "JHN.19.6",
+      "JHN.19.7",
+      "JHN.19.8",
+      "JHN.19.9",
+      "JHN.19.10",
+      "JHN.19.11",
+      "JHN.19.12",
+      "JHN.19.13",
+      "JHN.19.14",
+      "JHN.19.15",
+      "JHN.19.16",
+      "MAT.27.15",
+      "MAT.27.16",
+      "MAT.27.17",
+      "MAT.27.18",
+      "MAT.27.19",
+      "MAT.27.20",
+      "MAT.27.21",
+      "MAT.27.22",
+      "MAT.27.23",
+      "MAT.27.24",
+      "MAT.27.25",
+      "MAT.27.26"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_soldiers_mock",
+    "label": "The Roman soldiers mock Jesus",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.15.16",
+      "MRK.15.17",
+      "MRK.15.18",
+      "MRK.15.19",
+      "MAT.27.27",
+      "MAT.27.28",
+      "MAT.27.29",
+      "MAT.27.30"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_way_to_golgotha",
+    "label": "Jesus is led away on the road to Golgotha",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.15.20",
+      "MRK.15.21",
+      "MRK.15.22",
+      "MRK.15.23",
+      "LUK.23.26",
+      "LUK.23.27",
+      "LUK.23.28",
+      "LUK.23.29",
+      "LUK.23.30",
+      "LUK.23.31",
+      "LUK.23.32",
+      "LUK.23.33",
+      "JHN.19.16",
+      "JHN.19.17",
+      "MAT.27.31",
+      "MAT.27.32",
+      "MAT.27.33",
+      "MAT.27.34"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_golgotha",
+    "label": "The crucifixion at Golgotha",
+    "places": [
+      "golgotha"
+    ],
+    "verses": [
+      "MAT.27.33",
+      "MAT.27.34",
+      "MAT.27.35",
+      "MAT.27.36",
+      "MAT.27.37",
+      "MAT.27.38",
+      "MAT.27.39",
+      "MAT.27.40",
+      "MAT.27.41",
+      "MAT.27.42",
+      "MAT.27.43",
+      "MAT.27.44",
+      "MAT.27.45",
+      "MAT.27.46",
+      "MAT.27.47",
+      "MAT.27.48",
+      "MAT.27.49",
+      "MAT.27.50",
+      "MRK.15.22",
+      "MRK.15.23",
+      "MRK.15.24",
+      "MRK.15.25",
+      "MRK.15.26",
+      "MRK.15.27",
+      "MRK.15.28",
+      "MRK.15.29",
+      "MRK.15.30",
+      "MRK.15.31",
+      "MRK.15.32",
+      "MRK.15.33",
+      "MRK.15.34",
+      "MRK.15.35",
+      "MRK.15.36",
+      "MRK.15.37",
+      "LUK.23.33",
+      "LUK.23.34",
+      "LUK.23.35",
+      "LUK.23.36",
+      "LUK.23.37",
+      "LUK.23.38",
+      "LUK.23.39",
+      "LUK.23.40",
+      "LUK.23.41",
+      "LUK.23.42",
+      "LUK.23.43",
+      "LUK.23.44",
+      "LUK.23.45",
+      "LUK.23.46",
+      "JHN.19.17",
+      "JHN.19.18",
+      "JHN.19.19",
+      "JHN.19.20",
+      "JHN.19.21",
+      "JHN.19.22",
+      "JHN.19.23",
+      "JHN.19.24",
+      "JHN.19.25",
+      "JHN.19.26",
+      "JHN.19.27",
+      "JHN.19.28",
+      "JHN.19.29",
+      "JHN.19.30"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_death_phenomena",
+    "label": "The phenomena accompanying the death of Christ",
+    "places": [
+      "golgotha"
+    ],
+    "verses": [
+      "MRK.15.38",
+      "MRK.15.39",
+      "MRK.15.40",
+      "MRK.15.41",
+      "LUK.23.45",
+      "LUK.23.47",
+      "LUK.23.48",
+      "LUK.23.49",
+      "MAT.27.51",
+      "MAT.27.52",
+      "MAT.27.53",
+      "MAT.27.54",
+      "MAT.27.55",
+      "MAT.27.56"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_burial",
+    "label": "The burial of Jesus's body in Joseph of Arimathea's tomb",
+    "places": [
+      "golgotha"
+    ],
+    "verses": [
+      "MRK.15.42",
+      "MRK.15.43",
+      "MRK.15.44",
+      "MRK.15.45",
+      "MRK.15.46",
+      "LUK.23.50",
+      "LUK.23.51",
+      "LUK.23.52",
+      "LUK.23.53",
+      "LUK.23.54",
+      "JHN.19.31",
+      "JHN.19.32",
+      "JHN.19.33",
+      "JHN.19.34",
+      "JHN.19.35",
+      "JHN.19.36",
+      "JHN.19.37",
+      "JHN.19.38",
+      "JHN.19.39",
+      "JHN.19.40",
+      "JHN.19.41",
+      "JHN.19.42",
+      "MAT.27.57",
+      "MAT.27.58",
+      "MAT.27.59",
+      "MAT.27.60"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_watch_of_women",
+    "label": "The women keep watch by the tomb",
+    "places": [
+      "golgotha"
+    ],
+    "verses": [
+      "MAT.27.61",
+      "MAT.27.62",
+      "MAT.27.63",
+      "MAT.27.64",
+      "MAT.27.65",
+      "MAT.27.66"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_jerusalem_resurrection",
+    "label": "The empty tomb in Jerusalem",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.28.1",
+      "MAT.28.2",
+      "MAT.28.3",
+      "MAT.28.4",
+      "MAT.28.5",
+      "MAT.28.6",
+      "MAT.28.7",
+      "MAT.28.8",
+      "MAT.28.9",
+      "MAT.28.10",
+      "MRK.16.1",
+      "MRK.16.2",
+      "MRK.16.3",
+      "MRK.16.4",
+      "MRK.16.5",
+      "MRK.16.6",
+      "MRK.16.7",
+      "MRK.16.8",
+      "LUK.24.1",
+      "LUK.24.2",
+      "LUK.24.3",
+      "LUK.24.4",
+      "LUK.24.5",
+      "LUK.24.6",
+      "LUK.24.7",
+      "LUK.24.8",
+      "LUK.24.9",
+      "LUK.24.10",
+      "LUK.24.11",
+      "LUK.24.12",
+      "JHN.20.1",
+      "JHN.20.2",
+      "JHN.20.3",
+      "JHN.20.4",
+      "JHN.20.5",
+      "JHN.20.6",
+      "JHN.20.7",
+      "JHN.20.8",
+      "JHN.20.9",
+      "JHN.20.10"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_appears_to_mary_magdalene",
+    "label": "The risen Jesus appears to Mary Magdalene",
+    "places": [
+      "golgotha"
+    ],
+    "verses": [
+      "JHN.20.11",
+      "JHN.20.12",
+      "JHN.20.13",
+      "JHN.20.14",
+      "JHN.20.15",
+      "JHN.20.16",
+      "JHN.20.17",
+      "JHN.20.18",
+      "MRK.16.9",
+      "MRK.16.10",
+      "MRK.16.11"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_guard_reports",
+    "label": "The guards report to the chief priests, who bribe them to lie",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MAT.28.11",
+      "MAT.28.12",
+      "MAT.28.13",
+      "MAT.28.14",
+      "MAT.28.15"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_emmaus",
+    "label": "The road to Emmaus",
+    "places": [
+      "emmaus"
+    ],
+    "verses": [
+      "LUK.24.13",
+      "LUK.24.14",
+      "LUK.24.15",
+      "LUK.24.16",
+      "LUK.24.17",
+      "LUK.24.18",
+      "LUK.24.19",
+      "LUK.24.20",
+      "LUK.24.21",
+      "LUK.24.22",
+      "LUK.24.23",
+      "LUK.24.24",
+      "LUK.24.25",
+      "LUK.24.26",
+      "LUK.24.27",
+      "LUK.24.28",
+      "LUK.24.29",
+      "LUK.24.30",
+      "LUK.24.31",
+      "LUK.24.32",
+      "MRK.16.12",
+      "MRK.16.13"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_appears_thomas_absent",
+    "label": "Jesus appears to the disciples; Thomas, absent, will not believe",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "MRK.16.14",
+      "JHN.20.19",
+      "JHN.20.20",
+      "JHN.20.21",
+      "JHN.20.22",
+      "JHN.20.23",
+      "JHN.20.24",
+      "JHN.20.25",
+      "LUK.24.36",
+      "LUK.24.37",
+      "LUK.24.38",
+      "LUK.24.39",
+      "LUK.24.40",
+      "LUK.24.41",
+      "LUK.24.42",
+      "LUK.24.43"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_appears_thomas_convinced",
+    "label": "Jesus appears again the next Sunday; Thomas is convinced",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "JHN.20.26",
+      "JHN.20.27",
+      "JHN.20.28",
+      "JHN.20.29",
+      "JHN.20.30",
+      "JHN.20.31"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_appears_seven_galilee",
+    "label": "Jesus appears to seven disciples by the Sea of Galilee",
+    "places": [
+      "sea-of-galilee"
+    ],
+    "verses": [
+      "JHN.21.1",
+      "JHN.21.2",
+      "JHN.21.3",
+      "JHN.21.4",
+      "JHN.21.5",
+      "JHN.21.6",
+      "JHN.21.7",
+      "JHN.21.8",
+      "JHN.21.9",
+      "JHN.21.10",
+      "JHN.21.11",
+      "JHN.21.12",
+      "JHN.21.13",
+      "JHN.21.14",
+      "JHN.21.15",
+      "JHN.21.16",
+      "JHN.21.17",
+      "JHN.21.18",
+      "JHN.21.19",
+      "JHN.21.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_galilee",
+    "label": "Jesus commissions the disciples in Galilee",
+    "places": [
+      "galilee-1"
+    ],
+    "verses": [
+      "MAT.28.16",
+      "MAT.28.17",
+      "MAT.28.18",
+      "MAT.28.19",
+      "MAT.28.20",
+      "MRK.16.15",
+      "MRK.16.16",
+      "MRK.16.17",
+      "MRK.16.18"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "rob_final_commission",
+    "label": "Jesus gives a final commission and promises the Spirit",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "LUK.24.44",
+      "LUK.24.45",
+      "LUK.24.46",
+      "LUK.24.47",
+      "LUK.24.48",
+      "LUK.24.49"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "pw_mount_of_olives",
+    "label": "The ascension from the Mount of Olives",
+    "places": [
+      "mount-of-olives"
+    ],
+    "verses": [
+      "LUK.24.50",
+      "LUK.24.51",
+      "LUK.24.52",
+      "LUK.24.53",
+      "ACT.1.9",
+      "ACT.1.10",
+      "ACT.1.11",
+      "ACT.1.12",
+      "MRK.16.19",
+      "MRK.16.20"
+    ],
+    "when": {
+      "from_year": 33,
+      "to_year": 33
+    }
+  },
+  {
+    "id": "p1_antioch",
+    "label": "Barnabas and Saul sent from Antioch",
+    "places": [
+      "antioch-1"
+    ],
+    "verses": [
+      "ACT.13.1",
+      "ACT.13.2",
+      "ACT.13.3"
+    ],
+    "when": {
+      "from_year": 46,
+      "to_year": 46
+    }
+  },
+  {
+    "id": "p1_seleucia",
+    "label": "Down to the port of Seleucia",
+    "places": [
+      "seleucia"
+    ],
+    "verses": [
+      "ACT.13.4"
+    ],
+    "when": {
+      "from_year": 46,
+      "to_year": 46
+    }
+  },
+  {
+    "id": "p1_salamis",
+    "label": "Preaching in the synagogues of Salamis",
+    "places": [
+      "salamis"
+    ],
+    "verses": [
+      "ACT.13.5"
+    ],
+    "when": {
+      "from_year": 46,
+      "to_year": 46
+    }
+  },
+  {
+    "id": "p1_paphos",
+    "label": "Elymas blinded; the proconsul believes",
+    "places": [
+      "paphos"
+    ],
+    "verses": [
+      "ACT.13.6",
+      "ACT.13.7",
+      "ACT.13.8",
+      "ACT.13.9",
+      "ACT.13.10",
+      "ACT.13.11",
+      "ACT.13.12"
+    ],
+    "when": {
+      "from_year": 46,
+      "to_year": 47
+    }
+  },
+  {
+    "id": "p1_perga",
+    "label": "John Mark departs at Perga",
+    "places": [
+      "perga"
+    ],
+    "verses": [
+      "ACT.13.13"
+    ],
+    "when": {
+      "from_year": 47,
+      "to_year": 47
+    }
+  },
+  {
+    "id": "p1_pisidian_antioch",
+    "label": "Sermon in Pisidian Antioch",
+    "places": [
+      "antioch-2"
+    ],
+    "verses": [
+      "ACT.13.14",
+      "ACT.13.15",
+      "ACT.13.16",
+      "ACT.13.17",
+      "ACT.13.18",
+      "ACT.13.19",
+      "ACT.13.20",
+      "ACT.13.21",
+      "ACT.13.22",
+      "ACT.13.23",
+      "ACT.13.24",
+      "ACT.13.25",
+      "ACT.13.26",
+      "ACT.13.27",
+      "ACT.13.28",
+      "ACT.13.29",
+      "ACT.13.30",
+      "ACT.13.31",
+      "ACT.13.32",
+      "ACT.13.33"
+    ],
+    "when": {
+      "from_year": 47,
+      "to_year": 47
+    }
+  },
+  {
+    "id": "p1_iconium",
+    "label": "The city divided at Iconium",
+    "places": [
+      "iconium"
+    ],
+    "verses": [
+      "ACT.14.1",
+      "ACT.14.2",
+      "ACT.14.3",
+      "ACT.14.4",
+      "ACT.14.5",
+      "ACT.14.6",
+      "ACT.14.7"
+    ],
+    "when": {
+      "from_year": 47,
+      "to_year": 48
+    }
+  },
+  {
+    "id": "p1_lystra",
+    "label": "Stoned at Lystra",
+    "places": [
+      "lystra"
+    ],
+    "verses": [
+      "ACT.14.8",
+      "ACT.14.9",
+      "ACT.14.10",
+      "ACT.14.11",
+      "ACT.14.12",
+      "ACT.14.13",
+      "ACT.14.14",
+      "ACT.14.15",
+      "ACT.14.16",
+      "ACT.14.17",
+      "ACT.14.18",
+      "ACT.14.19",
+      "ACT.14.20"
+    ],
+    "when": {
+      "from_year": 48,
+      "to_year": 48
+    }
+  },
+  {
+    "id": "p1_derbe",
+    "label": "Many disciples at Derbe",
+    "places": [
+      "derbe"
+    ],
+    "verses": [
+      "ACT.14.20",
+      "ACT.14.21"
+    ],
+    "when": {
+      "from_year": 48,
+      "to_year": 48
+    }
+  },
+  {
+    "id": "p1_return",
+    "label": "Sailing home to Antioch",
+    "places": [
+      "attalia"
+    ],
+    "verses": [
+      "ACT.14.24",
+      "ACT.14.25",
+      "ACT.14.26"
+    ],
+    "when": {
+      "from_year": 48,
+      "to_year": 48
+    }
+  },
+  {
+    "id": "pr_caesarea",
+    "label": "Paul sails from Caesarea under guard",
+    "places": [
+      "caesarea"
+    ],
+    "verses": [
+      "ACT.27.1",
+      "ACT.27.2"
+    ],
+    "when": {
+      "from_year": 59,
+      "to_year": 59
+    }
+  },
+  {
+    "id": "pr_sidon",
+    "label": "Paul allowed ashore at Sidon",
+    "places": [
+      "sidon"
+    ],
+    "verses": [
+      "ACT.27.3"
+    ],
+    "when": {
+      "from_year": 59,
+      "to_year": 59
+    }
+  },
+  {
+    "id": "pr_myra",
+    "label": "The centurion finds a ship at Myra",
+    "places": [
+      "myra"
+    ],
+    "verses": [
+      "ACT.27.5",
+      "ACT.27.6"
+    ],
+    "when": {
+      "from_year": 59,
+      "to_year": 59
+    }
+  },
+  {
+    "id": "pr_fair_havens",
+    "label": "Slow progress to Fair Havens",
+    "places": [
+      "fair-havens"
+    ],
+    "verses": [
+      "ACT.27.8"
+    ],
+    "when": {
+      "from_year": 59,
+      "to_year": 59
+    }
+  },
+  {
+    "id": "pr_malta",
+    "label": "Shipwrecked on Malta",
+    "places": [
+      "malta"
+    ],
+    "verses": [
+      "ACT.28.1"
+    ],
+    "when": {
+      "from_year": 59,
+      "to_year": 59
+    }
+  },
+  {
+    "id": "pr_syracuse",
+    "label": "Three days at Syracuse",
+    "places": [
+      "syracuse"
+    ],
+    "verses": [
+      "ACT.28.12"
+    ],
+    "when": {
+      "from_year": 60,
+      "to_year": 60
+    }
+  },
+  {
+    "id": "pr_rhegium",
+    "label": "A brief stop at Rhegium",
+    "places": [
+      "rhegium"
+    ],
+    "verses": [
+      "ACT.28.13"
+    ],
+    "when": {
+      "from_year": 60,
+      "to_year": 60
+    }
+  },
+  {
+    "id": "pr_puteoli",
+    "label": "Landing at Puteoli",
+    "places": [
+      "puteoli"
+    ],
+    "verses": [
+      "ACT.28.13",
+      "ACT.28.14"
+    ],
+    "when": {
+      "from_year": 60,
+      "to_year": 60
+    }
+  },
+  {
+    "id": "pr_rome",
+    "label": "Paul arrives at Rome",
+    "places": [
+      "rome"
+    ],
+    "verses": [
+      "ACT.28.16"
+    ],
+    "when": {
+      "from_year": 60,
+      "to_year": 60
+    }
+  },
+  {
+    "id": "ret_babylon",
+    "label": "Cyrus decrees the return from Babylon",
+    "places": [
+      "babylon-1"
+    ],
+    "verses": [
+      "EZR.1.1",
+      "EZR.1.2",
+      "EZR.1.3",
+      "EZR.1.4",
+      "2CH.36.22",
+      "2CH.36.23"
+    ],
+    "when": {
+      "from_year": -538,
+      "to_year": -538
+    }
+  },
+  {
+    "id": "ezr_altar_and_foundation",
+    "label": "The altar rebuilt; the temple's foundation laid",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "EZR.3.1",
+      "EZR.3.2",
+      "EZR.3.3",
+      "EZR.3.4",
+      "EZR.3.5",
+      "EZR.3.6",
+      "EZR.3.7",
+      "EZR.3.8",
+      "EZR.3.9",
+      "EZR.3.10",
+      "EZR.3.11",
+      "EZR.3.12",
+      "EZR.3.13"
+    ],
+    "when": {
+      "from_year": -536,
+      "to_year": -536
+    }
+  },
+  {
+    "id": "ret_jerusalem_temple",
+    "label": "The second temple completed in Jerusalem",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "EZR.6.14",
+      "EZR.6.15"
+    ],
+    "when": {
+      "from_year": -516,
+      "to_year": -516
+    }
+  },
+  {
+    "id": "ret_susa",
+    "label": "Nehemiah hears of Jerusalem's ruin in Susa",
+    "places": [
+      "susa"
+    ],
+    "verses": [
+      "NEH.1.1"
+    ],
+    "when": {
+      "from_year": -455,
+      "to_year": -455
+    }
+  },
+  {
+    "id": "ret_jerusalem_wall",
+    "label": "Nehemiah completes Jerusalem's wall",
+    "places": [
+      "jerusalem"
+    ],
+    "verses": [
+      "NEH.2.11",
+      "NEH.6.15"
+    ],
+    "when": {
+      "from_year": -454,
+      "to_year": -454
+    }
+  }
+]

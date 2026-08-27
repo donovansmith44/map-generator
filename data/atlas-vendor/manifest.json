@@ -1,0 +1,29 @@
+{
+  "files": [
+    {
+      "bytes": 749,
+      "file": "eras.json"
+    },
+    {
+      "bytes": 123099,
+      "file": "events.json"
+    },
+    {
+      "bytes": 1658,
+      "file": "land-mask.json"
+    },
+    {
+      "bytes": 2651,
+      "file": "landmarks.json"
+    },
+    {
+      "bytes": 6009,
+      "file": "narratives.json"
+    },
+    {
+      "bytes": 25301,
+      "file": "polities.json"
+    }
+  ],
+  "pin": "d1d647c939d5f9d2"
+}
