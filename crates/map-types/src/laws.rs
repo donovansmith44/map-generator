@@ -319,7 +319,7 @@ pub fn validate_event_refs(tl: &WorldTimeline) -> Vec<Violation> {
             ChangeKind::Rise { region }
             | ChangeKind::Fall { region }
             | ChangeKind::Rename { region } => check_region(region, &mut v),
-            ChangeKind::Shift { boundary } => {
+            ChangeKind::Shift { boundary } | ChangeKind::Journey { boundary } => {
                 if !tl.boundaries.contains_key(boundary) {
                     v.push(Violation::UnknownBoundaryInEvent { boundary: *boundary });
                 }

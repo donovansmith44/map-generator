@@ -117,6 +117,10 @@ pub enum ChangeKind {
     Split { parent: RegionId, children: Vec<RegionId>, seam: Vec<UnitVec> },
     Merge { parents: Vec<RegionId>, child: RegionId },
     Rename { region: RegionId },
+    /// A journey departs or arrives: the Way boundary's walk reaches
+    /// this moment. Gives every itinerary its scrub stops — a snapshot
+    /// mid-walk shows the road so far, the arrival stop the whole way.
+    Journey { boundary: BoundaryId },
 }
 
 /// BIBLE-DRIVEN (C4): when the change corresponds to a Scripture-
@@ -210,6 +214,9 @@ impl MapAddressed for ChangeEvent {
             }
             ChangeKind::Shift { boundary } => {
                 c.u8_(2).u64_(boundary.0 .0);
+            }
+            ChangeKind::Journey { boundary } => {
+                c.u8_(6).u64_(boundary.0 .0);
             }
             ChangeKind::Split { parent, children, seam } => {
                 c.u8_(3).u64_(parent.0 .0);

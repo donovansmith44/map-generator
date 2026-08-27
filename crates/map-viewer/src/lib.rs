@@ -729,6 +729,7 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                         ChangeKind::Split { parent, .. } => ("split", format!("region:{:016x}", parent.0 .0)),
                         ChangeKind::Merge { child, .. } => ("merge", format!("region:{:016x}", child.0 .0)),
                         ChangeKind::Rename { region } => ("rename", format!("region:{:016x}", region.0 .0)),
+                        ChangeKind::Journey { boundary } => ("journey", format!("boundary:{:016x}", boundary.0 .0)),
                     };
                     serde_json::json!({
                         "year": e.at.year.get(),

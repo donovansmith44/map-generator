@@ -917,3 +917,124 @@ fn journeys_are_a_toggleable_layer() {
     assert!(with.0 && with.1 == 1, "journeys layer carries the way and its station");
     assert!(!without.0 && without.1 == 0, "without the layer, no way and no stations");
 }
+
+/// A journey mid-walk shows THE ROAD SO FAR: at each stop inside its
+/// span the way is truncated to the time-proportional piece, stations
+/// appear as they are reached, outside the span nothing shows, and a
+/// range bracketing the whole walk carries the whole way.
+#[test]
+fn journeys_render_partially_in_time() {
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    let stations = [("Alpha", 0.0, 30.0), ("Bravo", 0.0, 35.0), ("Charlie", 0.0, 40.0)];
+    let place = |name: &str| atlas_graph_types::covenant::PlaceId::new(format!("place:{name}"));
+    p.gazetteer = Some(map_types::GazetteerExport {
+        atlas_root: atlas_graph_types::covenant::ContentHash(0),
+        places: stations
+            .iter()
+            .map(|(n, lat, lon)| {
+                (
+                    place(n),
+                    map_types::GazetteerEntry {
+                        canonical_name: n.to_string(),
+                        position: uv(*lat, *lon),
+                        aliases: Vec::new(),
+                        provenance: None,
+                        attestations: Vec::new(),
+                    },
+                )
+            })
+            .collect(),
+    });
+    let verses = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 13, verse: 1,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 14, verse: 28,
+        }),
+    )
+    .unwrap();
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(9030));
+    p.timeline.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                // departure 45, arrival 47, half-open end
+                Interval::new(tp(45), Some(tp(48))).unwrap(),
+                Boundary {
+                    pts: stations.iter().map(|(_, lat, lon)| uv(*lat, *lon)).collect(),
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses,
+                        waypoints: stations
+                            .iter()
+                            .map(|(n, _, _)| map_types::AtlasPlaceRef(place(n)))
+                            .collect(),
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route".to_string(),
+                },
+            )],
+        },
+    );
+
+    // The journey's own scrub stops, as the adapter would write them.
+    for year in [45, 47] {
+        p.timeline.events.push(ChangeEvent {
+            at: tp(year),
+            kind: ChangeKind::Journey { boundary: bid },
+            driver: None,
+            justification: Justification::default(),
+            provenance: "test:route".to_string(),
+        });
+    }
+
+    let render_at = |time: TimeSelector| {
+        let q = RenderQuery {
+            layers: LayerSet::GEOMETRY.with(LayerSet::LABELS).with(LayerSet::JOURNEYS),
+            ..world_query(style_id, time)
+        };
+        let scene = p.render(&q).unwrap();
+        let way = scene.boundaries.iter().find(|b| b.boundary == bid).cloned();
+        let max_lon = way.as_ref().map(|b| {
+            b.pts
+                .iter()
+                .map(|pt| pt.y().atan2(pt.x()).to_degrees())
+                .fold(f64::NEG_INFINITY, f64::max)
+        });
+        (way.is_some(), max_lon, scene.markers.len())
+    };
+
+    // Outside the span: nothing.
+    assert_eq!(render_at(TimeSelector::At(tp(44))).0, false, "not yet departed");
+    assert_eq!(render_at(TimeSelector::At(tp(48))).0, false, "long since arrived");
+
+    // Year one of three: a third of the road, first station only.
+    let (there, lon, stations_seen) = render_at(TimeSelector::At(tp(45)));
+    assert!(there);
+    let lon = lon.unwrap();
+    assert!(
+        (lon - 33.33).abs() < 0.5,
+        "one third of the ten-degree road, got as far as {lon:.2}"
+    );
+    assert_eq!(stations_seen, 1, "only Alpha is behind them");
+
+    // Year two: two thirds, Bravo reached.
+    let (_, lon, stations_seen) = render_at(TimeSelector::At(tp(46)));
+    assert!((lon.unwrap() - 36.66).abs() < 0.5);
+    assert_eq!(stations_seen, 2);
+
+    // Arrival year: the whole way.
+    let (_, lon, stations_seen) = render_at(TimeSelector::At(tp(47)));
+    assert!((lon.unwrap() - 40.0).abs() < 0.01);
+    assert_eq!(stations_seen, 3);
+
+    // A range bracketing the walk: the whole way.
+    let over = TimeSelector::Over(Interval::new(tp(44), Some(tp(48))).unwrap());
+    let (there, lon, _) = render_at(over);
+    assert!(there, "the range carries the journey");
+    assert!((lon.unwrap() - 40.0).abs() < 0.01, "…all of it");
+}

@@ -913,13 +913,13 @@ const ROUTES: &[RouteSpec] = &[
     RouteSpec {
         tag: "R-ABRAHAM", note: ROUTE_NOTE,
         book: 1, chapter_from: 11, verse_from: 31, chapter_to: 13, verse_to: 18,
-        from_year: -1921, to_year: None,
+        from_year: -1921, to_year: Some(-1917),
         stations: R_ABRAHAM,
     },
     RouteSpec {
         tag: "R-JACOB", note: ROUTE_NOTE,
         book: 1, chapter_from: 28, verse_from: 10, chapter_to: 35, verse_to: 27,
-        from_year: -1760, to_year: None,
+        from_year: -1760, to_year: Some(-1739),
         stations: R_JACOB,
     },
     RouteSpec {
@@ -967,7 +967,7 @@ const ROUTES: &[RouteSpec] = &[
     RouteSpec {
         tag: "R-NATIVITY", note: ROUTE_NOTE,
         book: 40, chapter_from: 2, verse_from: 1, chapter_to: 2, verse_to: 23,
-        from_year: -4, to_year: None,
+        from_year: -4, to_year: Some(-2),
         stations: R_NATIVITY,
     },
     RouteSpec {
@@ -1006,25 +1006,25 @@ const ROUTES: &[RouteSpec] = &[
     RouteSpec {
         tag: "R-PAUL1", note: ROUTE_NOTE,
         book: 44, chapter_from: 13, verse_from: 1, chapter_to: 14, verse_to: 28,
-        from_year: 45, to_year: None,
+        from_year: 45, to_year: Some(47),
         stations: R_PAUL1,
     },
     RouteSpec {
         tag: "R-PAUL2", note: ROUTE_NOTE,
         book: 44, chapter_from: 15, verse_from: 36, chapter_to: 18, verse_to: 22,
-        from_year: 49, to_year: None,
+        from_year: 49, to_year: Some(52),
         stations: R_PAUL2,
     },
     RouteSpec {
         tag: "R-PAUL3", note: ROUTE_NOTE,
         book: 44, chapter_from: 18, verse_from: 23, chapter_to: 21, verse_to: 17,
-        from_year: 53, to_year: None,
+        from_year: 53, to_year: Some(57),
         stations: R_PAUL3,
     },
     RouteSpec {
         tag: "R-ROME", note: ROUTE_NOTE,
         book: 44, chapter_from: 27, verse_from: 1, chapter_to: 28, verse_to: 16,
-        from_year: 60, to_year: None,
+        from_year: 60, to_year: Some(62),
         stations: R_ROME,
     },
 ];
@@ -1044,14 +1044,16 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
     let resolved = atlas.and_then(|a| {
         a.resolve_event(r.book, (r.chapter_from, r.verse_from), (r.chapter_to, r.verse_to))
     });
-    // A journey, once walked, stays on the record: the interval opens
-    // at the journey's start and never closes — the JOURNEYS layer
-    // toggle, not the calendar, is what hides it. (r.to_year remains
-    // in the spec as the walk's own duration, for the justification.)
-    let (from_year, _to_year) = match &resolved {
+    // A journey happens IN TIME: the interval runs departure through
+    // arrival (half-open, so `to` is the year after arrival — minding
+    // the missing year zero). A snapshot outside the span shows none
+    // of it; a snapshot mid-walk shows the road so far.
+    let (from_year, to_year) = match &resolved {
         Some((_, fy, ty)) => (*fy, if ty > fy { Some(*ty) } else { r.to_year }),
         None => (r.from_year, r.to_year),
     };
+    let arrival = to_year.unwrap_or(from_year).max(from_year);
+    let year_after = if arrival == -1 { 1 } else { arrival + 1 };
     let (pts, waypoints, bound) = resolve_circuit(r.stations, atlas);
     let provenance = circuit_provenance(atlas, bound, r.stations.len());
     let bid = BoundaryId(hash_id(&format!("scripture-route/{}", r.tag)));
@@ -1059,7 +1061,7 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
         bid,
         BoundaryHistory {
             versions: vec![(
-                Interval { from: tp(from_year), to: None },
+                Interval { from: tp(from_year), to: Some(tp(year_after)) },
                 Boundary {
                     pts,
                     // A journey is a WAY, never a border — its own
@@ -1071,12 +1073,29 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
                         interpolation: InterpolationMethod::Geodesic,
                         provenance: provenance.clone(),
                     }),
-                    justification,
-                    provenance,
+                    justification: justification.clone(),
+                    provenance: provenance.clone(),
                 },
             )],
         },
     );
+    // Every journey is a scrub stop: the departure always, and the
+    // arrival too when the walk crosses years — so the scrubber can
+    // land mid-walk (the road so far) and at journey's end (the whole
+    // way), and the range picker can bracket it.
+    let mut push_stop = |year: i32| {
+        tl.events.push(ChangeEvent {
+            at: tp(year),
+            kind: ChangeKind::Journey { boundary: bid },
+            driver: None,
+            justification: justification.clone(),
+            provenance: provenance.clone(),
+        });
+    };
+    push_stop(from_year);
+    if arrival > from_year {
+        push_stop(arrival);
+    }
 }
 
 fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::covenant::BibleTag> {

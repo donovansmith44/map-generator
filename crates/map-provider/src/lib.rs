@@ -101,6 +101,61 @@ fn in_viewport(viewport: &Option<Bbox>, pts: &[UnitVec]) -> bool {
     }
 }
 
+/// Linear year index that skips the missing year zero.
+fn year_index(y: i32) -> i32 {
+    if y > 0 {
+        y - 1
+    } else {
+        y
+    }
+}
+
+/// How much of a Way's span has elapsed by `t`, at year grain,
+/// inclusive: the departure year walks the first 1/n of the road, the
+/// arrival year completes it. An open interval is a completed walk.
+fn way_fraction(interval: &Interval, t: &TimePoint) -> f64 {
+    let from = year_index(interval.from.year.get());
+    let Some(to) = interval.to else { return 1.0 };
+    let arrival = year_index(to.year.get()) - 1; // half-open end
+    let duration = f64::from((arrival - from + 1).max(1));
+    let elapsed = f64::from((year_index(t.year.get()) - from + 1).max(0));
+    (elapsed / duration).clamp(0.0, 1.0)
+}
+
+/// The road walked so far: the polyline truncated at the arc-length
+/// fraction, ending mid-leg on an interpolated point — the walk is
+/// between stations, not teleporting station to station.
+fn walked_prefix(pts: &[UnitVec], f: f64) -> Vec<UnitVec> {
+    if f >= 1.0 || pts.len() < 2 {
+        return pts.to_vec();
+    }
+    let mut cum = vec![0.0f64];
+    for w in pts.windows(2) {
+        cum.push(cum.last().unwrap() + w[0].angle_to(&w[1]));
+    }
+    let total = *cum.last().unwrap();
+    if total <= 0.0 {
+        return pts.to_vec();
+    }
+    let cut = total * f;
+    let mut out = vec![pts[0]];
+    for i in 1..pts.len() {
+        if cum[i] <= cut {
+            out.push(pts[i]);
+            continue;
+        }
+        let seg = cum[i] - cum[i - 1];
+        let t = if seg > 0.0 { (cut - cum[i - 1]) / seg } else { 0.0 };
+        if t > 1e-9 {
+            if let Ok(mid) = slerp(&pts[i - 1], &pts[i], t) {
+                out.push(mid);
+            }
+        }
+        break;
+    }
+    out
+}
+
 /// A region's angular size — max angle from its centroid to any vertex.
 fn angular_radius(r: &StyledRegion) -> f64 {
     let pts: Vec<&UnitVec> = r.outer.iter().flat_map(|ring| ring.points()).collect();
@@ -133,6 +188,18 @@ impl TimelineProvider {
         let hist =
             self.timeline.boundaries.get(&id).ok_or(MapError::UnknownBoundary(id))?;
         hist.at(at).ok_or(MapError::NothingAtTime(*at))
+    }
+
+    /// The version alive at `at`, with its own interval — the walk's
+    /// span is what a Way's partial rendering is computed against.
+    fn version_at(&self, id: BoundaryId, at: &TimePoint) -> Option<(&Interval, &Boundary)> {
+        self.timeline
+            .boundaries
+            .get(&id)?
+            .versions
+            .iter()
+            .find(|(iv, _)| iv.contains(at))
+            .map(|(iv, b)| (iv, b))
     }
 
     /// Resolve one part's cycle to a ring: oriented simplified arcs,
@@ -203,11 +270,26 @@ impl TimelineProvider {
         style: &Style,
         seen: &mut BTreeSet<atlas_graph_types::covenant::PlaceId>,
     ) -> Result<(), MapError> {
-        let Some(b) = self.timeline.boundaries[&id].at(at) else { return Ok(()) };
+        let Some((iv, b)) = self.version_at(id, at) else { return Ok(()) };
         let BoundarySource::Survey(survey) = &b.source else { return Ok(()) };
         let Some(gaz) = self.gazetteer.as_ref() else { return Ok(()) };
         let sources = boundary_sources(b);
-        for wp in &survey.waypoints {
+        // A station appears when the walk REACHES it: its arc position
+        // along the way against the elapsed fraction of the span.
+        let f = way_fraction(iv, at);
+        let mut cum = vec![0.0f64];
+        for w in b.pts.windows(2) {
+            cum.push(cum.last().unwrap() + w[0].angle_to(&w[1]));
+        }
+        let total = *cum.last().unwrap();
+        for (idx, wp) in survey.waypoints.iter().enumerate() {
+            let reached = match cum.get(idx) {
+                Some(c) if total > 0.0 => c / total <= f + 1e-9,
+                _ => true,
+            };
+            if !reached {
+                break; // stations come in text order; the walk stops here
+            }
             // A station shared by several journeys keeps ONE marker
             // and one name — the ways cross, the place is itself.
             if !seen.insert(wp.0.clone()) {
@@ -445,14 +527,18 @@ impl TimelineProvider {
                     if terrain_arcs.contains(&id) {
                         continue;
                     }
-                    if let Some(b) = self.timeline.boundaries[&id].at(at) {
+                    if let Some((iv, b)) = self.version_at(id, at) {
                         // Journeys are their own layer: a way and its
                         // stations render only when asked for.
                         let is_way = b.character == map_types::EdgeCharacter::Way;
                         if is_way && !q.layers.contains(LayerSet::JOURNEYS) {
                             continue;
                         }
-                        let sb = self.styled_boundary(id, at, q.lod, style)?;
+                        let mut sb = self.styled_boundary(id, at, q.lod, style)?;
+                        if is_way {
+                            // Mid-walk, the map shows the road so far.
+                            sb.pts = walked_prefix(&sb.pts, way_fraction(iv, at));
+                        }
                         if in_viewport(&q.viewport, &sb.pts) {
                             scene.attribution.extend(sb.sources.iter().cloned());
                             scene.boundaries.push(sb);
@@ -648,6 +734,17 @@ impl TimelineProvider {
                 }
                 stroke_region(*child, Which::After, d.after)?;
             }
+            ChangeKind::Journey { boundary } => {
+                // The walk so far, in the "after" emphasis.
+                if let Ok(b) = self.boundary_at(*boundary, &at) {
+                    scene.boundaries.push(StyledBoundary {
+                        boundary: *boundary,
+                        pts: simplify_polyline(&b.pts, q.lod),
+                        stroke: d.after,
+                        sources: boundary_sources(b),
+                    });
+                }
+            }
         }
         for b in &scene.boundaries {
             scene.attribution.extend(b.sources.iter().cloned());
@@ -769,6 +866,10 @@ impl TimelineProvider {
         for (i, id) in by_recency {
             let t = &times[i];
             let b = self.boundary_at(id, t)?;
+            let is_way = b.character == map_types::EdgeCharacter::Way;
+            if is_way && !q.layers.contains(LayerSet::JOURNEYS) {
+                continue;
+            }
             let toward_new = (i as f64) / ((n - 1) as f64);
             let tint = mix_paint(ramp.oldest, ramp.newest, toward_new).fill;
             let base = style.stroke_for(&b.character);
@@ -783,15 +884,33 @@ impl TimelineProvider {
                 width: base.width,
                 pattern: base.pattern,
             };
-            let sb = StyledBoundary {
-                boundary: id,
-                pts: simplify_polyline(&b.pts, q.lod),
-                stroke,
-                sources: boundary_sources(b),
-            };
+            let mut pts = simplify_polyline(&b.pts, q.lod);
+            if is_way {
+                // In a range, a way shows what was walked BY its last
+                // living sample — the whole road when the range holds
+                // the whole walk, the road so far when it is cut short.
+                if let Some((iv, _)) = self.version_at(id, t) {
+                    pts = walked_prefix(&pts, way_fraction(iv, t));
+                }
+            }
+            let sb = StyledBoundary { boundary: id, pts, stroke, sources: boundary_sources(b) };
             if in_viewport(&q.viewport, &sb.pts) {
                 scene.attribution.extend(sb.sources.iter().cloned());
                 scene.boundaries.push(sb);
+            }
+        }
+        // The range's stations: each way's stops as reached by its
+        // last living sample, deduped across journeys.
+        if q.layers.contains(LayerSet::JOURNEYS) {
+            let mut seen = BTreeSet::new();
+            for (id, i) in &last_alive {
+                let t = &times[*i];
+                if self
+                    .version_at(*id, t)
+                    .is_some_and(|(_, b)| b.character == map_types::EdgeCharacter::Way)
+                {
+                    self.push_way_stations(&mut scene, *id, t, q, style, &mut seen)?;
+                }
             }
         }
         Ok(scene)
@@ -929,6 +1048,10 @@ impl MapProvider for TimelineProvider {
                         }
                     }
                 }
+                // A journey's progress is time-parameterized rendering,
+                // not a topology change: transitions carry no step for
+                // it (the growing road is the At-time render's job).
+                ChangeKind::Journey { .. } => {}
             }
         }
         Ok(script)

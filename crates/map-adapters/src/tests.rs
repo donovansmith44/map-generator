@@ -676,9 +676,26 @@ fn journeys_cover_the_whole_bible() {
         ways.iter().filter(|(i, _)| year(i) >= 30).count() >= 6,
         "the church walks (Acts beyond Paul)"
     );
-    // Every journey, once walked, remains on the record: open intervals.
+    // Every journey happens IN TIME: a closed span from departure to
+    // arrival — a snapshot outside the span shows nothing of it.
     assert!(
-        ways.iter().all(|(i, _)| i.to.is_none()),
-        "journeys persist — the layer toggle, not the calendar, hides them"
+        ways.iter().all(|(i, _)| i.to.is_some()),
+        "journeys have spans; the calendar, not just the toggle, governs them"
     );
+    // And every journey is a scrub stop: departure always, arrival too
+    // when the walk crosses years — the scrubber can land on it.
+    let journey_events = tl
+        .events
+        .iter()
+        .filter(|e| matches!(e.kind, map_types::ChangeKind::Journey { .. }))
+        .count();
+    assert!(
+        journey_events >= ways.len(),
+        "at least one stop per journey, got {journey_events} for {} ways",
+        ways.len()
+    );
+    let multi_year = ways.iter().filter(|(i, _)| {
+        i.to.unwrap().year.get() - i.from.year.get() > 1
+    }).count();
+    assert!(multi_year >= 5, "exodus, Abraham, Jacob, Paul's long roads span years");
 }
