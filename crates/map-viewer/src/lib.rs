@@ -321,8 +321,17 @@ fn load_canon(canon_path: &std::path::Path) -> App {
 /// selection on the scene — never on encoded bytes.
 fn scripture_only(scene: &Snapshot) -> Snapshot {
     let scripture = SourceId::new(SCRIPTURE_SOURCE);
-    let regions: Vec<_> =
-        scene.regions.iter().filter(|r| r.sources.contains(&scripture)).cloned().collect();
+    // The physical stage — seas, lakes, relief — is never a claim to
+    // filter: the whole world stays part of the map in bible mode.
+    let stage = |srcs: &std::collections::BTreeSet<SourceId>| {
+        srcs.iter().any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth" || s.0 == "etopo1")
+    };
+    let regions: Vec<_> = scene
+        .regions
+        .iter()
+        .filter(|r| r.sources.contains(&scripture) || stage(&r.sources))
+        .cloned()
+        .collect();
     let boundaries: Vec<_> =
         scene.boundaries.iter().filter(|b| b.sources.contains(&scripture)).cloned().collect();
     let kept_regions: std::collections::BTreeSet<_> = regions.iter().map(|r| r.region).collect();
@@ -1109,6 +1118,31 @@ mod tests {
         assert_eq!(parse_timestamp("0"), None, "there is no year zero");
         assert_eq!(parse_timestamp("-1450-13"), None, "no thirteenth month");
         assert_eq!(parse_timestamp("nonsense"), None);
+    }
+
+    /// Bible mode filters CLAIMS, not the stage: the seas, lakes, and
+    /// relief (natural-earth witness) stay realized — the owner's law
+    /// is that the whole world is part of the map. Scholarship claims
+    /// (basemap witness) still ghost.
+    #[test]
+    fn bible_mode_keeps_the_stage() {
+        use atlas_graph_types::covenant::ContentHash;
+        use map_types::{RegionId, Ring, StyledRegion, UnitVec};
+        let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+        let region = |n: u64, src: &str| StyledRegion {
+            region: RegionId(ContentHash(n)),
+            outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
+            holes: vec![],
+            paint: Paint { fill: Rgba(1, 2, 3, 200) },
+            sources: [SourceId::new(src)].into(),
+        };
+        let mut scene = Snapshot::empty();
+        scene.regions.push(region(1, "witness:natural-earth")); // the sea
+        scene.regions.push(region(2, "natural-earth")); // legacy tag, same stage
+        scene.regions.push(region(3, "witness:basemap")); // a scholarship claim
+        let kept = scripture_only(&scene);
+        let ids: Vec<u64> = kept.regions.iter().map(|r| r.region.0 .0).collect();
+        assert_eq!(ids, vec![1, 2], "the stage stays; the claim ghosts");
     }
 
     /// Bible mode keeps what Scripture grounds — including a journey's
