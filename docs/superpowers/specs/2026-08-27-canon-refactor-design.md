@@ -62,16 +62,29 @@ struct BorderId(Hash);                        // content hash of Border
 struct Area  { entity: EntityId, name: String,
                rings: BTreeSet<BorderId>, holes: BTreeSet<BorderId> }
 struct Route { entity: EntityId, name: String, legs: Vec<Leg> }
-struct Leg   { from: PlaceId, to: PlaceId, border: BorderId, span: (Year, Year) }
+struct Leg   { from: PlaceId, to: PlaceId, border: BorderId,
+               span: (Timestamp, Timestamp) }   // day-granular walks welcome
 struct Point { entity: EntityId, name: String, at: Vec3 }
 
 enum Feature { Area(Area), Way(Route), Point(Point) }
 struct FeatureId(Hash);                       // content hash of Feature
 
-// The world through time: piecewise-constant snapshots (owner's sketch).
+// TIME: the covenant's own TimePoint — year + optional month + optional
+// day, totally ordered, arbitrarily refinable (the crucifixion week and
+// a border that moves in two days are representable; the atlas can
+// refine granularity further and this type follows). The map side NEVER
+// flattens a Timestamp to a bare year again — bare-year fields are a
+// compile error in canon types.
+type Timestamp = atlas_graph_types::covenant::TimePoint;
+
+// The world through time: a SET of (timestamp, snapshot) pairs — not a
+// list; no ordering is baked into the data. It is keyed by Timestamp
+// (iteration order derives from Timestamp's total order), and the key
+// carries a law: ONE world state per instant — two snapshots at the
+// same timestamp is a contradiction the type cannot express.
 struct Snapshot { features: BTreeSet<FeatureId> }
 struct SnapshotId(Hash);
-struct World    { moments: Vec<(Year, SnapshotId)> }
+struct World    { moments: BTreeMap<Timestamp, SnapshotId> }
 
 // Canonical sets that cannot contradict: layers.
 enum LayerKind { Territory, ScriptureClaims, Journeys, Water, Relief, Background }
@@ -86,8 +99,10 @@ struct Canon {
 
 Partial journeys are a **typed time filter**: each `Leg` carries its
 span; rendering `At(t)` draws the legs whose span has begun, clipping
-the in-progress leg proportionally; `Over(a, b)` draws the legs the
-range covers. No fraction arithmetic smeared through the renderer.
+the in-progress leg proportionally at the span's own granularity (a
+three-day leg clips by days, a forty-year wandering by years);
+`Over(a, b)` draws the legs the range covers. No fraction arithmetic
+smeared through the renderer.
 
 ### Laws (compile-time validators, all fail loud)
 
@@ -133,7 +148,7 @@ name matching unrepresentable.
 
 ```rust
 struct RenderRequest {
-    time:     TimeSel,               // At(Year) | Over(Year, Year)
+    time:     TimeSel,               // At(Timestamp) | Over(Timestamp, Timestamp)
     camera:   Camera,                // Globe { center, zoom } | Flat { center, zoom }
     layers:   BTreeSet<LayerKind>,
     pieces:   Option<BTreeSet<EntityId>>, // None = whole scene; Some = just these
@@ -162,6 +177,8 @@ GET /api/meta                                  # pin, layers, moments, templates
 GET /api/scaffold?camera&width&template        # the STAGE: land, water, relief, graticule — no claims
 GET /api/entities?layer&at                     # listing: EntityId, name, kind, active spans
 GET /api/features?ids=…&at|from,to&format=geojson|canon   # raw composable DATA
+# Timestamps on the wire: "-1450" | "-1450-01" | "-1450-01-14" —
+# year, optional month, optional day, matching covenant TimePoint.
 GET /api/render?…                              # whole-world snapshot image (as today)
 GET /api/render?pieces=rome,egypt&…            # an image LAYER: transparent, only those entities
 ```
