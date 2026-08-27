@@ -55,6 +55,7 @@
     outline: 2px solid var(--stop); outline-offset: 1px;
   }
   .inline { display: flex; gap: 6px; align-items: center; }
+  [hidden] { display: none !important; } /* hidden wins over .inline's flex */
   .inline > * { width: auto; }
   input[type="checkbox"] { accent-color: var(--stop); }
   .radio-row { display: flex; gap: 10px; }
@@ -160,7 +161,7 @@
 
   <section class="group" aria-label="frame">
     <h2>Frame</h2>
-    <label class="inline"><input type="checkbox" id="bible"> bible mode</label>
+    <label class="inline"><input type="checkbox" id="bible" checked> bible mode</label>
     <div id="frameinfo"></div>
   </section>
 
@@ -182,11 +183,15 @@
       </select>
     </div>
     <label class="inline" style="margin-top:8px">
-      <input type="checkbox" id="expose"> overlay range from
-      <select id="from" disabled style="flex:1"></select>
+      <input type="checkbox" id="expose"> time range
     </label>
+    <div id="rangebox" class="inline" style="margin-top:4px" hidden>
+      <select id="from" style="flex:1"></select>
+      <span style="color:var(--dim)">→</span>
+      <select id="to" style="flex:1"></select>
+    </div>
     <div id="rangehint" style="color:var(--dim);font-size:11px" hidden>
-      …to the scrubbed stop: every border in the range on one map, age as tint
+      every border in the range on one map — older claims wear the older tint
     </div>
   </section>
 
@@ -652,15 +657,26 @@ async function loadChanges() {
 }
 
 function loadFromOptions() {
-  const sel = $("from");
-  sel.innerHTML = "";
+  // The range's two ends: "to" mirrors the scrubbed stop (changing it
+  // scrubs), "from" offers every earlier stop and keeps its pick
+  // across scrubs when it still applies.
+  const from = $("from"), to = $("to");
+  const keep = from.value;
+  from.innerHTML = "";
   state.stops.slice(0, state.idx).forEach(y => {
     const o = document.createElement("option");
     o.value = y; o.textContent = fmtYear(y);
-    sel.appendChild(o);
+    from.appendChild(o);
   });
-  sel.disabled = !$("expose").checked || sel.options.length === 0;
-  if (sel.options.length) sel.value = sel.options[0].value;
+  if ([...from.options].some(o => o.value === keep)) from.value = keep;
+  from.disabled = from.options.length === 0;
+  to.innerHTML = "";
+  state.stops.forEach((y, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = fmtYear(y);
+    to.appendChild(o);
+  });
+  to.value = state.idx;
 }
 
 function radioRow(el, items, current, onpick) {
@@ -719,11 +735,12 @@ async function init() {
   $("relief").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
   $("expose").addEventListener("change", () => {
-    $("rangehint").hidden = !$("expose").checked;
+    $("rangebox").hidden = $("rangehint").hidden = !$("expose").checked;
     loadFromOptions();
     render();
   });
   $("from").addEventListener("change", () => render());
+  $("to").addEventListener("change", e => setStop(Number(e.target.value)));
   $("hold").addEventListener("click", () => {
     state.held = currentParams();
     $("held").innerHTML = "held: <b></b>";
@@ -755,7 +772,7 @@ async function init() {
       setSelection([], { keepView: true });
     }
   });
-  setBible(false);
+  setBible($("bible").checked); // bible mode is the default dress
   setupPlateNav();
   await setStop(state.idx);
 }
