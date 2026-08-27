@@ -1112,3 +1112,256 @@ fn journeys_ride_focused_subjects() {
     );
     assert_eq!(scene.markers.len(), 1, "and its station comes along");
 }
+
+// ==================== the canon provider (phase 4, tests first)
+
+mod canon_provider_laws {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use atlas_graph_types::covenant::{PlaceId, SourceId, TimePoint, Year};
+    use map_canon::{
+        Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+        Witness, World,
+    };
+    use map_types::style::*;
+    use map_types::{
+        GazetteerEntry, GazetteerExport, LayerSet, Lod, MapAddressed, MapProvider, RenderQuery,
+        RenderSubject, StyleId, TimeSelector, UnitVec,
+    };
+
+    use crate::canon_provider::CanonProvider;
+
+    fn ts(y: i32) -> TimePoint {
+        TimePoint::year_only(Year::new(y).unwrap())
+    }
+    fn uv(lat: f64, lon: f64) -> UnitVec {
+        UnitVec::from_lat_lon_deg(lat, lon)
+    }
+
+    fn style() -> Style {
+        let stroke = |r, pattern| Stroke { color: Rgba(r, 0, 0, 255), width: 1.0, pattern };
+        Style::new(
+            BoundaryStrokes {
+                line: stroke(0, StrokePattern::Solid),
+                frontier: stroke(60, StrokePattern::Zonal),
+                disputed: stroke(120, StrokePattern::Hatched),
+                unknown: stroke(180, StrokePattern::Dashed),
+                way: stroke(240, StrokePattern::Dashed),
+            },
+            Paint { fill: Rgba(200, 200, 180, 255) },
+            Paint { fill: Rgba(120, 160, 200, 235) },
+            AgeRamp {
+                newest: Paint { fill: Rgba(150, 110, 80, 200) },
+                oldest: Paint { fill: Rgba(225, 214, 180, 200) },
+            },
+            Some([
+                Paint { fill: Rgba(1, 1, 1, 205) },
+                Paint { fill: Rgba(2, 2, 2, 205) },
+                Paint { fill: Rgba(3, 3, 3, 205) },
+                Paint { fill: Rgba(4, 4, 4, 205) },
+                Paint { fill: Rgba(5, 5, 5, 205) },
+                Paint { fill: Rgba(6, 6, 6, 205) },
+                Paint { fill: Rgba(7, 7, 7, 205) },
+                Paint { fill: Rgba(8, 8, 8, 205) },
+            ]),
+            AgeRamp {
+                newest: Paint { fill: Rgba(220, 40, 40, 255) },
+                oldest: Paint { fill: Rgba(220, 40, 40, 40) },
+            },
+            LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+            MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
+            DeltaEmphasis {
+                before: stroke(90, StrokePattern::Dashed),
+                after: stroke(30, StrokePattern::Solid),
+                seam: stroke(250, StrokePattern::Solid),
+            },
+        )
+        .unwrap()
+    }
+
+    /// A tiny real canon: Assyria in Territory (-1900..-911 exclusive),
+    /// a two-leg journey in Journeys (45..47, 47..49), one sea in Water.
+    fn fixture() -> CanonStore {
+        let mut store = CanonStore::default();
+        let square = |lat0: f64, lon0: f64, d: f64| {
+            Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+        };
+        // Territory: Assyria
+        let b = store.insert_border(square(35.0, 42.0, 3.0));
+        let assyria = store.insert_feature(Feature::Area(Area {
+            entity: EntityId("assyria".into()),
+            name: "Assyria".into(),
+            rings: BTreeSet::from([b]),
+            holes: BTreeSet::new(),
+        }));
+        store.set_provenance(assyria, Provenance {
+            witness: Witness::Atlas,
+            verses: vec!["2KI.15.19".into()],
+            note: "t".into(),
+        });
+        let s1 = store.insert_snapshot(Snapshot { features: BTreeSet::from([assyria]) });
+        let s0 = store.insert_snapshot(Snapshot { features: BTreeSet::new() });
+        let mut territory = World::default();
+        territory.insert(ts(-1900), s1).unwrap();
+        territory.insert(ts(-911), s0).unwrap();
+        store.set_layer(LayerKind::Territory, territory);
+
+        // Journeys: two legs, 45..47 and 47..49
+        let road1 = store.insert_border(Border(vec![uv(36.2, 36.16), uv(37.9, 27.3)]));
+        let road2 = store.insert_border(Border(vec![uv(37.9, 27.3), uv(41.89, 12.49)]));
+        let way = store.insert_feature(Feature::Way(Route {
+            entity: EntityId("test-walk".into()),
+            name: "a test walk".into(),
+            legs: vec![
+                Leg { from: PlaceId::new("antioch".to_string()), to: PlaceId::new("ephesus".to_string()),
+                      border: road1, span: (ts(45), ts(47)) },
+                Leg { from: PlaceId::new("ephesus".to_string()), to: PlaceId::new("rome".to_string()),
+                      border: road2, span: (ts(47), ts(49)) },
+            ],
+        }));
+        store.set_provenance(way, Provenance {
+            witness: Witness::Atlas,
+            verses: vec!["ACT.19.1".into()],
+            note: "t".into(),
+        });
+        let sj = store.insert_snapshot(Snapshot { features: BTreeSet::from([way]) });
+        let sj0 = store.insert_snapshot(Snapshot { features: BTreeSet::new() });
+        let mut journeys = World::default();
+        journeys.insert(ts(45), sj).unwrap();
+        journeys.insert(ts(50), sj0).unwrap();
+        store.set_layer(LayerKind::Journeys, journeys);
+
+        // Water: one static sea
+        let sea = store.insert_border(square(31.0, 30.0, 4.0));
+        let water = store.insert_feature(Feature::Area(Area {
+            entity: EntityId("natural-earth:the-sea".into()),
+            name: "the sea".into(),
+            rings: BTreeSet::from([sea]),
+            holes: BTreeSet::new(),
+        }));
+        store.set_provenance(water, Provenance {
+            witness: Witness::NaturalEarth,
+            verses: vec![],
+            note: "t".into(),
+        });
+        let sw = store.insert_snapshot(Snapshot { features: BTreeSet::from([water]) });
+        let mut w = World::default();
+        w.insert(ts(-4004), sw).unwrap();
+        store.set_layer(LayerKind::Water, w);
+        store
+    }
+
+    fn provider() -> (CanonProvider, StyleId) {
+        let s = style();
+        let sid = s.id();
+        let gaz = GazetteerExport {
+            atlas_root: atlas_graph_types::covenant::ContentHash(0),
+            places: [
+                ("antioch", 36.2, 36.16, "Antioch"),
+                ("ephesus", 37.9, 27.3, "Ephesus"),
+                ("rome", 41.89, 12.49, "Rome"),
+            ]
+            .into_iter()
+            .map(|(id, lat, lon, name)| {
+                (PlaceId::new(id.to_string()), GazetteerEntry {
+                    canonical_name: name.to_string(),
+                    position: uv(lat, lon),
+                    aliases: vec![],
+                    provenance: None,
+                    attestations: vec![],
+                })
+            })
+            .collect(),
+        };
+        (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gaz)), sid)
+    }
+
+    fn world_q(sid: StyleId, y: i32) -> RenderQuery {
+        RenderQuery {
+            subject: RenderSubject::World,
+            time: TimeSelector::At(ts(y)),
+            viewport: None,
+            lod: Lod::exact(),
+            layers: LayerSet::GEOMETRY
+                .with(LayerSet::LABELS)
+                .with(LayerSet::TOPOGRAPHY)
+                .with(LayerSet::JOURNEYS),
+            style: sid,
+        }
+    }
+
+    /// The canon renders through the SAME contract: areas appear only
+    /// within their moments, water rides the TOPOGRAPHY bit, sources
+    /// carry the witness AND the scripture tag for atlas/authored
+    /// truth (bible mode needs no name-matching ever again).
+    #[test]
+    fn canon_scenes_respect_time_layers_and_witness() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, -1000)).unwrap();
+        let assyria = scene
+            .regions
+            .iter()
+            .find(|r| r.sources.contains(&SourceId::new("witness:atlas")))
+            .expect("assyria realized");
+        assert!(assyria.sources.contains(&SourceId::new("scripture")), "atlas truth is scripture-grounded");
+        assert!(
+            scene.labels.iter().any(|l| l.text == "Assyria"),
+            "areas carry their names"
+        );
+        assert!(
+            scene.regions.iter().any(|r| r.sources.contains(&SourceId::new("witness:natural-earth"))),
+            "water rides along"
+        );
+
+        // After the era: gone. Before: gone. Water (static) stays.
+        let after = p.render(&world_q(sid, -500)).unwrap();
+        assert!(!after.labels.iter().any(|l| l.text == "Assyria"));
+        assert!(!after.regions.is_empty(), "the sea remains");
+        let before = p.render(&world_q(sid, -2000)).unwrap();
+        assert!(!before.labels.iter().any(|l| l.text == "Assyria"));
+
+        // Determinism (law 1) holds through the canon.
+        let a = p.render(&world_q(sid, -1000)).unwrap();
+        let b = p.render(&world_q(sid, -1000)).unwrap();
+        assert_eq!(a.canonical_bytes(), b.canonical_bytes());
+    }
+
+    /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// stations appear as reached, named from the gazetteer; outside
+    /// the span, no way at all.
+    #[test]
+    fn canon_journeys_walk_in_time() {
+        let (p, sid) = provider();
+        let way_pts = |y: i32| -> Option<usize> {
+            let scene = p.render(&world_q(sid, y)).unwrap();
+            scene
+                .boundaries
+                .iter()
+                .find(|b| b.sources.contains(&SourceId::new("witness:atlas")))
+                .map(|b| b.pts.len())
+        };
+        assert_eq!(way_pts(44), None, "not yet departed");
+        assert_eq!(way_pts(51), None, "long arrived");
+        assert!(way_pts(46).is_some(), "mid-first-leg the road shows");
+        let stations = |y: i32| -> usize {
+            p.render(&world_q(sid, y)).unwrap().markers.len()
+        };
+        assert_eq!(stations(46), 1, "only Antioch is behind them");
+        assert_eq!(stations(49), 3, "arrived: all three stations");
+        let named = p.render(&world_q(sid, 49)).unwrap();
+        assert!(named.labels.iter().any(|l| l.text == "Ephesus"), "stations named from the gazetteer");
+    }
+
+    /// The scrubber lives: subjects at a time list the entities, and
+    /// changes_between yields the canon's moment edges as stops.
+    #[test]
+    fn canon_subjects_and_stops() {
+        let (p, _sid) = provider();
+        let subs = p.subjects(ts(-1000));
+        assert!(subs.iter().any(|s| s.label == "Assyria"));
+        let stops = p.changes_between(ts(-4004), ts(100));
+        let years: Vec<i32> = stops.iter().map(|e| e.at.year.get()).collect();
+        assert!(years.contains(&-1900) && years.contains(&-911) && years.contains(&45));
+        assert!(stops.windows(2).all(|w| w[0].at <= w[1].at));
+    }
+}

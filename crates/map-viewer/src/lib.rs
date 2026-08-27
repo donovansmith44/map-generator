@@ -227,6 +227,94 @@ fn tp(year: i32) -> Option<TimePoint> {
 }
 
 pub fn load() -> App {
+    // The canon path (2026-08-27 design): when the compiled canon
+    // exists, the workbench serves it — the dumb renderer over the
+    // reconciled store. MAP_SOURCE=legacy forces the old pipeline
+    // until phase 6 deletes it.
+    let canon_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/canon/canon.json");
+    if canon_path.exists() && std::env::var("MAP_SOURCE").as_deref() != Ok("legacy") {
+        return load_canon(&canon_path);
+    }
+    load_legacy()
+}
+
+/// The canon-backed composition root: same styles, same App shape,
+/// same routes — a different truth store underneath.
+fn load_canon(canon_path: &std::path::Path) -> App {
+    let p_style = parchment();
+    let s_style = slate();
+    let styles: Vec<(&'static str, StyleId)> =
+        vec![("parchment", p_style.id()), ("slate", s_style.id())];
+    let mut ghosts = BTreeMap::new();
+    let mut style_table = BTreeMap::new();
+    for base in [&p_style, &s_style] {
+        let ghost = ghosted(base);
+        ghosts.insert(base.id(), ghost.id());
+        style_table.insert(ghost.id(), ghost);
+        style_table.insert(base.id(), *base);
+    }
+    let mut overlay_tints = BTreeMap::new();
+    for base in [&p_style, &s_style] {
+        let ramp = base.age_ramp();
+        let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
+        overlay_tints.insert(base.id(), (held.id(), current.id()));
+        style_table.insert(held.id(), held);
+        style_table.insert(current.id(), current);
+    }
+    let exp_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
+    let atlas = load_exports(
+        &std::fs::read_to_string(exp_dir.join("gazetteer.json")).expect("vendored gazetteer"),
+        &std::fs::read_to_string(exp_dir.join("chronology.json")).expect("vendored chronology"),
+    )
+    .expect("atlas exports parse");
+    let anchor = atlas
+        .creation_anchor()
+        .map(|(y, _)| ("biblical (Ussher tradition)".to_string(), y));
+    let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(
+        map_provider::canon_provider::CanonProvider::from_canon_file(
+            canon_path,
+            style_table,
+            Some(merged_gazetteer(&atlas)),
+        )
+        .expect("the compiled canon loads"),
+    );
+    eprintln!("serving the CANON ({} )", canon_path.display());
+
+    let (lo, hi) = (tp(-4004).unwrap(), tp(1900).unwrap());
+    let mut stops: Vec<i32> = provider.changes_between(lo, hi).iter().map(|e| e.at.year.get()).collect();
+    stops.dedup();
+    if let Some(&first) = stops.first() {
+        stops.insert(0, first - 100);
+    }
+    let mut presence: BTreeMap<String, (String, Vec<i32>)> = BTreeMap::new();
+    for &year in &stops {
+        if let Some(at) = tp(year) {
+            for s in provider.subjects(at) {
+                let key = match &s.subject {
+                    RenderSubject::Region(id) => format!("region:{:016x}", id.0 .0),
+                    RenderSubject::Point(place) => format!("place:{}", place.0 .0),
+                    _ => continue,
+                };
+                let entry = presence.entry(key).or_insert_with(|| (s.label.clone(), Vec::new()));
+                entry.0 = s.label;
+                entry.1.push(year);
+            }
+        }
+    }
+    App {
+        provider,
+        styles,
+        ghosts,
+        stops,
+        presence,
+        anchor,
+        overlay_tints,
+    }
+}
+
+fn load_legacy() -> App {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/historical-basemaps");
     let mut epochs = Vec::new();
     for entry in std::fs::read_dir(&dir).expect("vendored data present") {

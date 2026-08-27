@@ -6,6 +6,7 @@ description = "The reference MapProvider for map-generator — phase 3. Material
 
 [dependencies]
 map-types = { path = "../map-types" }
+map-canon = { path = "../map-canon" }
 atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
 
 [dev-dependencies]

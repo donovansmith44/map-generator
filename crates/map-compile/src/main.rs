@@ -241,6 +241,7 @@ fn build(args: &[String]) {
         "authored",
         Some(map_types::RegionClass::Land),
         &drops,
+        &BTreeMap::new(),
     )
     .unwrap_or_else(|e| die(&e));
     report_md.push_str(&format!(
@@ -289,6 +290,7 @@ fn build(args: &[String]) {
         "natural-earth",
         Some(map_types::RegionClass::Water),
         &BTreeSet::new(),
+        &BTreeMap::new(),
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("water: bridged");
@@ -307,6 +309,7 @@ fn build(args: &[String]) {
         "etopo",
         Some(map_types::RegionClass::Terrain(0)),
         &BTreeSet::new(),
+        &BTreeMap::new(),
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("relief: bridged");
@@ -337,6 +340,34 @@ fn build(args: &[String]) {
         anchor: None,
     };
     let bm = map_adapters::ingest(&config, &epochs).unwrap_or_else(|e| die(&format!("{e:?}")));
+    // Rule-based supersession, reported: a background region whose
+    // slug matches an atlas polity id or era-name slug is shadowed by
+    // Territory — the same entity must not wear two witnesses at once.
+    let slugify = |s: &str| -> String {
+        let mut out = String::new();
+        let mut dash = false;
+        for ch in s.chars() {
+            if ch.is_ascii_alphanumeric() {
+                out.push(ch.to_ascii_lowercase());
+                dash = false;
+            } else if !dash && !out.is_empty() {
+                out.push('-');
+                dash = true;
+            }
+        }
+        out.trim_end_matches('-').to_string()
+    };
+    let mut bg_shadows: BTreeMap<String, Vec<(i32, i32)>> = BTreeMap::new();
+    for p in &polities {
+        for key in [slugify(&p.id), slugify(&p.name)] {
+            bg_shadows.entry(key).or_default().push((p.from_year, p.to_year));
+        }
+    }
+    report_md.push_str(&format!(
+        "- Background: {} entity slugs shadowed by atlas Territory DURING its eras (never outside them)
+",
+        bg_shadows.len()
+    ));
     bridge_filtered(
         &mut store,
         &bm.timeline,
@@ -345,6 +376,7 @@ fn build(args: &[String]) {
         "basemap",
         Some(map_types::RegionClass::Land),
         &BTreeSet::new(),
+        &bg_shadows,
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("background: {} epochs bridged", epochs.len());

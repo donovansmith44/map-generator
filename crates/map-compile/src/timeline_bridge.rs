@@ -37,7 +37,7 @@ pub fn bridge_timeline_regions(
     witness: Witness,
     prefix: &str,
 ) -> Result<(), String> {
-    bridge_filtered(store, tl, layer, witness, prefix, None, &BTreeSet::new())
+    bridge_filtered(store, tl, layer, witness, prefix, None, &BTreeSet::new(), &BTreeMap::new())
 }
 
 /// The full-control bridge: an optional class filter and a drop-list
@@ -50,9 +50,13 @@ pub fn bridge_filtered(
     prefix: &str,
     class_filter: Option<RegionClass>,
     drop_slugs: &BTreeSet<String>,
+    // Time-aware shadowing: slug -> year spans during which ANOTHER
+    // witness owns this entity (atlas Territory eras). The region
+    // still exists outside those spans — a shadow is never a hole.
+    shadow_spans: &BTreeMap<String, Vec<(i32, i32)>>,
 ) -> Result<(), String> {
-    // (interval, feature) rows, then edge sweep.
-    let mut rows: Vec<(map_types::Interval, map_canon::FeatureId)> = Vec::new();
+    // (interval, slug, feature) rows, then edge sweep.
+    let mut rows: Vec<(map_types::Interval, String, map_canon::FeatureId)> = Vec::new();
 
     for (rid, hist) in &tl.regions {
         if let Some(filter) = class_filter {
@@ -106,16 +110,26 @@ pub fn bridge_filtered(
                     note: format!("bridged from the interval model ({prefix})"),
                 },
             );
-            rows.push((*iv, fid));
+            rows.push((*iv, entity_slug, fid));
         }
     }
 
     // Edge sweep: every from and every (exclusive) to is a moment.
     let mut edges: BTreeSet<Timestamp> = BTreeSet::new();
-    for (iv, _) in &rows {
+    for (iv, _, _) in &rows {
         edges.insert(iv.from);
         if let Some(to) = iv.to {
             edges.insert(to);
+        }
+    }
+    // Shadow boundaries are moments too: the background reappears the
+    // year an atlas era ends.
+    for spans in shadow_spans.values() {
+        for (from, to) in spans {
+            if let (Ok(a), Ok(b)) = (year_ts(*from), year_ts(year_after(*to))) {
+                edges.insert(a);
+                edges.insert(b);
+            }
         }
     }
     let mut world = store
@@ -140,8 +154,15 @@ pub fn bridge_filtered(
             .next_back()
             .map(|(_, f)| f.clone())
             .unwrap_or_default();
-        for (iv, fid) in &rows {
-            if iv.contains(&edge) {
+        let y = edge.year.get();
+        for (iv, slug, fid) in &rows {
+            if !iv.contains(&edge) {
+                continue;
+            }
+            let shadowed = shadow_spans
+                .get(slug)
+                .is_some_and(|spans| spans.iter().any(|(a, b)| *a <= y && y <= *b));
+            if !shadowed {
                 active.insert(*fid);
             }
         }
@@ -164,6 +185,16 @@ fn resolve_cycle(
     cycle: &[(map_types::BoundaryId, Orientation)],
     iv: &map_types::Interval,
 ) -> Result<Option<map_canon::BorderId>, String> {
+    // An EMPTY cycle is the whole sphere (the world-ocean part): it
+    // crosses the bridge as the same near-antipodal sentinel ring the
+    // old provider used, which projections render as everything.
+    if cycle.is_empty() {
+        return Ok(Some(store.insert_border(Border(vec![
+            map_types::UnitVec::from_lat_lon_deg(0.0, 0.0),
+            map_types::UnitVec::from_lat_lon_deg(0.1, 179.95),
+            map_types::UnitVec::from_lat_lon_deg(5.0, 90.0),
+        ]))));
+    }
     let mut ring: Vec<map_types::UnitVec> = Vec::new();
     for (bid, orientation) in cycle {
         let hist = tl
@@ -189,4 +220,18 @@ fn resolve_cycle(
         return Ok(None);
     }
     Ok(Some(store.insert_border(Border(ring))))
+}
+
+fn year_after(y: i32) -> i32 {
+    if y == -1 {
+        1
+    } else {
+        y + 1
+    }
+}
+
+fn year_ts(y: i32) -> Result<Timestamp, ()> {
+    atlas_graph_types::covenant::Year::new(y)
+        .map(atlas_graph_types::covenant::TimePoint::year_only)
+        .map_err(|_| ())
 }

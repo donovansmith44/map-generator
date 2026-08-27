@@ -1118,3 +1118,4 @@ fn invert(script: TransitionScript) -> TransitionScript {
 
 #[cfg(test)]
 mod tests;
+pub mod canon_provider;
