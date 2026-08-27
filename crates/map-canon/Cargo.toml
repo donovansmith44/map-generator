@@ -1,0 +1,13 @@
+[package]
+name = "map-canon"
+version = "0.1.0"
+edition = "2021"
+
+# The canonical data spine (2026-08-27 design): content-addressed
+# borders/features/snapshots, worlds as timestamp-keyed sets, layered
+# canon with fail-loud validators. Depends only on the covenant (time,
+# ids, hashing discipline) and map-types (geometry + the canonical-byte
+# writer) — no adapters, no providers, no encoders.
+[dependencies]
+atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+map-types = { path = "../map-types" }
