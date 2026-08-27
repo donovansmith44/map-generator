@@ -267,13 +267,17 @@ pub fn load() -> App {
     let waters = vec![
         map_adapters::WaterSource {
             label_for_unnamed: "inland sea",
+            // 110m on purpose: it is the one NE scale that carries the
+            // Caspian as its own second feature — 10m/50m oceans are a
+            // single world-ocean polygon, and skip_largest would leave
+            // no interior seas at all.
             text: std::fs::read_to_string(ne_dir.join("ne_110m_ocean.geojson"))
                 .expect("vendored ocean data"),
             skip_largest_feature: true, // interior seas only; see ingest_ocean
         },
         map_adapters::WaterSource {
             label_for_unnamed: "lake",
-            text: std::fs::read_to_string(ne_dir.join("ne_50m_lakes.geojson"))
+            text: std::fs::read_to_string(ne_dir.join("ne_10m_lakes.geojson"))
                 .expect("vendored lakes data"),
             skip_largest_feature: false,
         },
@@ -281,7 +285,7 @@ pub fn load() -> App {
     let ocean_tl = map_adapters::ingest_ocean(
         &SourceId::new("natural-earth"),
         tp(-4004).unwrap(),
-        &std::fs::read_to_string(ne_dir.join("ne_50m_land.geojson"))
+        &std::fs::read_to_string(ne_dir.join("ne_10m_land.geojson"))
             .expect("vendored land data"),
     )
     .expect("ocean ingests");
@@ -531,6 +535,18 @@ fn parse_style(app: &App, s: Option<&str>) -> Option<StyleId> {
     app.styles.iter().any(|(_, sid)| *sid == id).then_some(id)
 }
 
+/// Simplification tolerance that follows the camera: ~half an
+/// on-screen pixel at the requested zoom (angular radius in degrees
+/// over page width in px), converted to the radians Lod speaks.
+/// Clamped so hemisphere views stay light and deep zooms never ask
+/// for sub-source precision.
+fn auto_lod(zoom: Option<f64>, width: f64) -> f64 {
+    match zoom {
+        Some(z) => (z / width).to_radians().clamp(1e-6, 0.01),
+        None => 0.0015,
+    }
+}
+
 fn build_query(
     app: &App,
     p: &Params,
@@ -548,7 +564,18 @@ fn build_query(
         }
         _ => TimeSelector::At(at),
     };
-    let lod = Lod(p.get("lod").and_then(|v| v.parse().ok()).unwrap_or(0.0015));
+    let lod = match p.get("lod").filter(|v| *v != "auto").and_then(|v| v.parse().ok()) {
+        Some(explicit) => Lod(explicit),
+        None => {
+            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+            let width = p
+                .get("width")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(1200.0)
+                .clamp(320.0, 8000.0);
+            Lod(auto_lod(zoom, width))
+        }
+    };
     let mut layers = if p.get("labels") == Some("0") {
         LayerSet::GEOMETRY
     } else {
@@ -922,6 +949,25 @@ mod tests {
         assert_eq!(url_decode("a+b%20c"), "a b c");
         assert_eq!(url_decode("plain"), "plain");
         assert_eq!(url_decode("bad%zz"), "bad%zz");
+    }
+
+    /// Detail must follow the camera: about half an on-screen pixel of
+    /// tolerance at any zoom, so zooming in never flattens a coast and
+    /// zooming out never pays for invisible vertices.
+    #[test]
+    fn auto_lod_tracks_the_view() {
+        // zoom is angular radius in DEGREES; width is the page in px;
+        // Lod is RADIANS — the formula must convert.
+        let deep = auto_lod(Some(0.5), 2400.0);
+        let mid = auto_lod(Some(22.0), 2400.0);
+        assert!(deep < mid, "deeper zoom must mean finer tolerance");
+        assert!((deep - (0.5f64 / 2400.0).to_radians()).abs() < 1e-12);
+        // hemisphere views clamp so whole-globe bytes stay sane
+        assert!(auto_lod(Some(90.0), 2400.0) <= 0.01);
+        // no zoom (flat / auto-frame): today's default, in radians
+        assert!((auto_lod(None, 2400.0) - 0.0015).abs() < 1e-12);
+        // never finer than the floor, whatever the numbers say
+        assert!(auto_lod(Some(0.001), 8000.0) >= 1e-6);
     }
 
     /// The ghost backdrop must not re-draw what the subject scene

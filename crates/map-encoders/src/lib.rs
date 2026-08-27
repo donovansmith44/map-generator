@@ -208,6 +208,44 @@ fn chunk_matters(b: &Bounds, page: &Option<Bounds>) -> bool {
     touches || swallows
 }
 
+/// Touch-only test for strokes and markers: a stroke paints pixels
+/// only where it crosses the page, so the swallow exemption (which
+/// exists for fill winding) never applies.
+fn chunk_touches(b: &Bounds, page: &Option<Bounds>) -> bool {
+    let Some(p) = page else { return true };
+    b.0 <= p.2 && p.0 <= b.2 && b.1 <= p.3 && p.1 <= b.3
+}
+
+/// Thin a fill chunk's far-off-page runs: outside a margin of half
+/// the page's own size, only the ring's winding matters, so every
+/// 16th point carries it. Points anywhere near the page keep full
+/// detail; run edges stay pinned so the path re-enters exactly where
+/// the real geometry does.
+fn thin_offpage(chunk: Vec<(f64, f64)>, page: &Option<Bounds>) -> Vec<(f64, f64)> {
+    let Some(p) = page else { return chunk };
+    let (w, h) = (p.2 - p.0, p.3 - p.1);
+    let margin = (p.0 - 0.5 * w, p.1 - 0.5 * h, p.2 + 0.5 * w, p.3 + 0.5 * h);
+    let near =
+        |(x, y): &(f64, f64)| *x >= margin.0 && *x <= margin.2 && *y >= margin.1 && *y <= margin.3;
+    let n = chunk.len();
+    let mut out = Vec::with_capacity(n.min(64));
+    let mut run = 0usize; // consecutive far points since the last kept one
+    for (i, pt) in chunk.iter().enumerate() {
+        let keep = near(pt)
+            || i == 0
+            || i == n - 1
+            || run >= 16
+            || chunk.get(i + 1).is_some_and(|nx| near(nx));
+        if keep {
+            out.push(*pt);
+            run = 0;
+        } else {
+            run += 1;
+        }
+    }
+    out
+}
+
 fn bbox_of(pts: &[(f64, f64)]) -> Option<Bounds> {
     let mut b = None;
     for pt in pts {
@@ -247,7 +285,7 @@ fn emit_scene(
             // zero winding to every visible pixel.
             for chunk in ring_of(ring) {
                 if bbox_of(&chunk).is_some_and(|cb| chunk_matters(&cb, page)) {
-                    chunks.push(chunk);
+                    chunks.push(thin_offpage(chunk, page));
                 }
             }
         }
@@ -283,13 +321,26 @@ fn emit_scene(
         // A densified run that crosses the page has points ON the
         // page, so a bbox-disjoint run is genuinely invisible; and a
         // subpixel run resolves to nothing under its own stroke.
-        let chunks: Vec<Vec<(f64, f64)>> = line_of(&b.pts)
-            .into_iter()
-            .filter(|chunk| {
-                bbox_of(chunk)
-                    .is_some_and(|cb| chunk_matters(&cb, page) && !subpixel(&cb))
-            })
-            .collect();
+        // Strokes cull by WINDOW, not whole-run bbox: a boundary that
+        // circles the page has a bbox containing it while painting
+        // nothing visible. Windows share an endpoint, so kept
+        // neighbors stay continuous under round joins.
+        let mut chunks: Vec<Vec<(f64, f64)>> = Vec::new();
+        for run in line_of(&b.pts) {
+            if page.is_none() {
+                chunks.push(run);
+                continue;
+            }
+            let mut i = 0;
+            while i + 1 < run.len() {
+                let end = (i + 32).min(run.len() - 1);
+                let win = &run[i..=end];
+                if bbox_of(win).is_some_and(|cb| chunk_touches(&cb, page) && !subpixel(&cb)) {
+                    chunks.push(win.to_vec());
+                }
+                i = end;
+            }
+        }
         if chunks.is_empty() {
             continue;
         }

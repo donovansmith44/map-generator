@@ -208,7 +208,8 @@
     <div class="radio-row" id="projections"></div>
     <label for="lod">detail</label>
     <select id="lod">
-      <option value="0" selected>exact</option>
+      <option value="auto" selected>auto (match zoom)</option>
+      <option value="0">exact</option>
       <option value="0.0015">medium</option>
       <option value="0.008">coarse</option>
     </select>
@@ -296,7 +297,11 @@ function currentParams(quality) {
   if (state.view.lat !== null) p.set("center", state.view.lat.toFixed(3) + "," + state.view.lon.toFixed(3));
   if (state.view.zoom !== null) p.set("zoom", state.view.zoom.toFixed(3));
   if (quality === "drag") {
-    p.set("lod", "0.008");
+    // Coarse but camera-aware: ~4px tolerance at the current zoom
+    // (in the radians lod speaks), so deep-zoom drags aren't
+    // flattened to nothing.
+    const z = state.view.zoom;
+    p.set("lod", z ? String(Math.min(0.008, (z * 8 / 1200) * Math.PI / 180)) : "0.008");
     p.set("labels", "0");
     p.set("width", "1200");
     p.set("smooth", "0"); // curves double the bytes; drag frames go straight
@@ -450,7 +455,7 @@ function setupPlateNav() {
     e.preventDefault();
     if (!pinView()) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
-    state.view.zoom = Math.max(2, Math.min(90, state.view.zoom * factor));
+    state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
     render("drag");
     clearTimeout(settle);
     settle = setTimeout(() => render(), 220);

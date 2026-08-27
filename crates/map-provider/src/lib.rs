@@ -172,7 +172,19 @@ impl TimelineProvider {
             Ok(ring)
         };
         let simplified = build(lod, &mut sources)?;
-        let pts = if simplified.len() >= 3 { simplified } else { build(Lod::exact(), &mut sources)? };
+        let pts = if simplified.len() >= 3 {
+            simplified
+        } else {
+            // Collapse fallback: the feature is smaller than the
+            // tolerance, so keep a MINIMAL ring — four evenly spaced
+            // real vertices. Returning the exact geometry here would
+            // invert law 7 (coarser lod growing the scene: with
+            // fine-grained sources, thousands of collapsed islands
+            // each re-inflated to full detail).
+            let exact = build(Lod::exact(), &mut sources)?;
+            let n = exact.len();
+            if n <= 4 { exact } else { (0..4).map(|k| exact[k * n / 4]).collect() }
+        };
         let ring = Ring::new(pts).map_err(|_| MapError::NothingAtTime(*at))?;
         Ok((ring, sources))
     }

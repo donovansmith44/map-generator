@@ -328,3 +328,52 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         assert!(svg.contains(&format!("data-region=\"{n:016x}\"")), "region {n} at zoom 90");
     }
 }
+
+/// A swallowing ring keeps the fill but must not ship its full
+/// off-page detail: only the winding matters out there. And a stroke
+/// gains nothing from the swallow rule — an entirely off-page
+/// boundary paints no visible pixel, whatever its bbox spans.
+#[test]
+fn swallowing_geometry_ships_thin() {
+    use atlas_graph_types::covenant::ContentHash;
+    use map_types::RegionId;
+
+    // A dense ring circling the view center 40 degrees out: 1440
+    // points, every one of them far off a 5-degree page.
+    let circle: Vec<UnitVec> = (0..1440)
+        .map(|i| {
+            let a = i as f64 / 1440.0 * std::f64::consts::TAU;
+            uv(32.0 + 40.0 * a.cos(), 36.0 + 40.0 * a.sin())
+        })
+        .collect();
+    let scene = Snapshot {
+        regions: vec![StyledRegion {
+            region: RegionId(ContentHash(1)),
+            outer: vec![Ring::new(circle.clone()).unwrap()],
+            holes: vec![],
+            paint: Paint { fill: Rgba(10, 20, 30, 200) },
+            sources: [SourceId::new("test")].into(),
+        }],
+        boundaries: vec![StyledBoundary {
+            boundary: map_types::BoundaryId(ContentHash(2)),
+            pts: circle,
+            stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
+            sources: [SourceId::new("test")].into(),
+        }],
+        markers: vec![],
+        labels: vec![],
+        attribution: [SourceId::new("test")].into(),
+    };
+    let enc = SvgEncoder {
+        width: 800.0,
+        padding: 16.0,
+        projection: Projection::Globe { center: Some((32.0, 36.0)), zoom: Some(5.0) },
+        smooth: false,
+    };
+    let svg = enc.encode(&scene).unwrap();
+    let start = svg.find("data-region=\"0000000000000001\"").expect("swallowing fill survives");
+    let path = &svg[start..svg[start..].find("/>").map(|e| start + e).unwrap()];
+    let pairs = path.matches('L').count();
+    assert!(pairs < 400, "off-page ring detail must be thinned, got ~{pairs} segments");
+    assert!(!svg.contains("stroke=\"rgb(0,0,0)\""), "an all-off-page stroke paints nothing");
+}

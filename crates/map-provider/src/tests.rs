@@ -251,6 +251,66 @@ fn same_arc_shift_morphs() {
     assert!(p.render(&q).is_ok());
 }
 
+/// Law 7's second clause, sharpened: when simplification would
+/// collapse a ring below three points, the feature keeps a MINIMAL
+/// ring — never its full exact geometry. (The old fallback returned
+/// every source vertex, so coarser lod made hemisphere scenes BIGGER.)
+#[test]
+fn collapsed_rings_fall_back_minimal_not_exact() {
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    // A 64-point island 0.2 degrees across — far below a 0.05 rad
+    // tolerance, so DP collapses it and the fallback must kick in.
+    let mut pts: Vec<UnitVec> = (0..64)
+        .map(|i| {
+            let a = i as f64 / 64.0 * std::f64::consts::TAU;
+            uv(30.0 + 0.1 * a.sin(), 40.0 + 0.1 * a.cos())
+        })
+        .collect();
+    let first = pts[0];
+    pts.push(first); // closed polyline
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(4242));
+    p.timeline.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(-3000)),
+                Boundary {
+                    pts,
+                    character: EdgeCharacter::Line,
+                    source: BoundarySource::Authored { justification: Justification::default() },
+                    justification: Justification::default(),
+                    provenance: "test:island".to_string(),
+                },
+            )],
+        },
+    );
+    let rid = map_types::RegionId(atlas_graph_types::covenant::ContentHash(4243));
+    p.timeline.regions.insert(
+        rid,
+        map_types::RegionHistory {
+            class: map_types::RegionClass::Land,
+            label_history: vec![(Interval::open_from(tp(-3000)), "tiny island".to_string())],
+            geom_history: vec![(
+                Interval::open_from(tp(-3000)),
+                map_types::RegionGeom {
+                    parts: vec![map_types::RegionPart {
+                        cycle: vec![(bid, map_types::Orientation::Forward)],
+                        holes: vec![],
+                    }],
+                },
+            )],
+        },
+    );
+
+    let q = RenderQuery { lod: Lod(0.05), ..world_query(style_id, TimeSelector::At(tp(-1900))) };
+    let scene = p.render(&q).unwrap();
+    let island = scene.regions.iter().find(|r| r.region == rid).expect("island renders");
+    let n = island.outer.iter().map(|ring| ring.len()).sum::<usize>();
+    assert!(n >= 3, "topology preserved: a ring survives");
+    assert!(n <= 8, "collapse fallback must be minimal, got {n} points");
+}
+
 #[test]
 fn resample_keeps_endpoints_and_count() {
     let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
@@ -557,6 +617,22 @@ fn real_source_renders_deterministically() {
         s.regions.iter().flat_map(|r| &r.outer).map(|ring| ring.len()).sum()
     };
     assert!(pts(&a) < pts(&exact), "{} !< {}", pts(&a), pts(&exact));
+
+    // …and MONOTONICALLY: a coarser lod never emits more points. The
+    // collapse fallback must yield a minimal ring, not the full exact
+    // geometry, or hemisphere views inflate as tolerance grows.
+    let coarse =
+        p.render(&RenderQuery { lod: Lod(0.02), ..world_query(sid, TimeSelector::At(tp(-1900))) })
+            .unwrap();
+    let all_pts = |s: &map_types::Snapshot| -> usize {
+        s.regions.iter().flat_map(|r| r.outer.iter().chain(&r.holes)).map(|ring| ring.len()).sum()
+    };
+    assert!(
+        all_pts(&coarse) <= all_pts(&a),
+        "coarser lod grew the scene: {} > {}",
+        all_pts(&coarse),
+        all_pts(&a)
+    );
 
     // Selection coherence holds on real data too.
     let some_region = p
