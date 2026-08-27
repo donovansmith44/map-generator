@@ -609,6 +609,9 @@ fn build_query(
     if p.get("relief") == Some("1") {
         layers = layers.with(LayerSet::RELIEF); // hypsometric bands, opt-in
     }
+    if p.get("journeys") != Some("0") {
+        layers = layers.with(LayerSet::JOURNEYS); // itineraries, on by default
+    }
     Some(RenderQuery { subject, time, viewport: None, lod, layers, style: parse_style(app, p.get("style"))? })
 }
 

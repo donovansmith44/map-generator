@@ -365,12 +365,9 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     let journeys = all
         .boundaries
         .values()
-        .filter(|h| {
-            let b = &h.versions[0].1;
-            b.pts.first() != b.pts.last() // open: a way, not a border
-        })
+        .filter(|h| h.versions[0].1.character == map_types::EdgeCharacter::Way)
         .count();
-    assert_eq!(journeys, 5, "the exodus and Paul's four voyages");
+    assert_eq!(journeys, 19, "the whole-Bible route book, patriarchs to Paul");
     assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![]);
 
     // The kingdom arc has real BORDER CHANGES: Shifts grounded in
@@ -648,4 +645,40 @@ fn routes_wear_the_way_character() {
             "a way's stations come from the text"
         );
     }
+}
+
+/// The whole Bible travels: journeys span the patriarchs through the
+/// apostles, not just the Exodus and Paul.
+#[test]
+fn journeys_cover_the_whole_bible() {
+    let tl = crate::surveys::scripture_timeline();
+    let ways: Vec<_> = tl
+        .boundaries
+        .values()
+        .flat_map(|h| h.versions.iter())
+        .filter(|(_, b)| b.character == map_types::EdgeCharacter::Way)
+        .collect();
+    assert!(ways.len() >= 15, "a whole-Bible route book, got {}", ways.len());
+    let year = |i: &map_types::Interval| i.from.year.get();
+    assert!(
+        ways.iter().any(|(i, _)| year(i) <= -1900),
+        "the patriarchs walk (Abraham's call and after)"
+    );
+    assert!(
+        ways.iter().any(|(i, _)| (-1200..=-580).contains(&year(i))),
+        "the kingdom era walks (ark, prophets, exile)"
+    );
+    assert!(
+        ways.iter().any(|(i, _)| (-10..=40).contains(&year(i))),
+        "the Gospels walk (nativity, ministry)"
+    );
+    assert!(
+        ways.iter().filter(|(i, _)| year(i) >= 30).count() >= 6,
+        "the church walks (Acts beyond Paul)"
+    );
+    // Every journey, once walked, remains on the record: open intervals.
+    assert!(
+        ways.iter().all(|(i, _)| i.to.is_none()),
+        "journeys persist — the layer toggle, not the calendar, hides them"
+    );
 }

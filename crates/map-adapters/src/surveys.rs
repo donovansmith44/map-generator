@@ -801,6 +801,71 @@ circuit!(R_EXODUS:
     (31.76,35.72,"mountains of Abarim before Nebo"),
     (31.85,35.62,"plains of Moab by Jordan"));
 
+circuit!(R_ABRAHAM:
+    (30.96,46.10,"Ur of the Chaldees"),(36.87,39.03,"Haran"),(32.21,35.28,"Sichem"),
+    (31.93,35.22,"Bethel with Hai eastward"),(30.50,31.20,"Egypt in the famine"),
+    (31.25,34.79,"the south country"),(31.93,35.22,"Bethel again, to the altar"),
+    (31.54,35.09,"the plain of Mamre in Hebron"));
+
+circuit!(R_JACOB:
+    (31.24,34.84,"Beer-sheba"),(31.93,35.22,"Bethel, the ladder"),(36.87,39.03,"Haran, to Laban"),
+    (32.35,35.85,"Mahanaim"),(32.19,35.61,"Peniel"),(32.20,35.65,"Succoth of Jacob"),
+    (32.21,35.28,"Shalem, a city of Shechem"),(31.93,35.22,"Bethel, El-beth-el"),
+    (31.70,35.20,"the way to Ephrath, which is Bethlehem"),(31.54,35.09,"Mamre, unto Isaac"));
+
+circuit!(R_JOSEPH:
+    (31.54,35.09,"the vale of Hebron"),(32.21,35.28,"Shechem, seeking his brethren"),
+    (32.40,35.35,"Dothan, the pit"),(30.55,32.10,"the way of the Ishmeelites"),
+    (30.05,31.25,"Egypt, Potiphar's house"));
+
+circuit!(R_SPIES:
+    (30.69,34.49,"the wilderness of Zin"),(31.25,34.79,"the south country of the spies"),
+    (31.54,35.09,"Hebron, where Anak's children were"),(31.68,35.10,"the brook of Eshcol"),
+    (33.25,35.85,"Rehob, as men come to Hamath"),(30.69,34.49,"Kadesh, to bring word"));
+
+circuit!(R_ARK:
+    (31.90,34.90,"Eben-ezer, where Israel pitched"),(31.75,34.65,"Ashdod, the house of Dagon"),
+    (31.70,34.85,"Gath of the Philistines"),(31.78,34.99,"Ekron"),
+    (31.75,34.97,"Beth-shemesh, the great stone"),(31.80,35.10,"Kirjath-jearim, twenty years"));
+
+circuit!(R_ELIJAH:
+    (32.56,35.33,"Jezreel, before Ahab's chariot"),(31.24,34.84,"Beer-sheba of Judah"),
+    (30.85,34.60,"a day's journey into the wilderness"),(28.54,33.97,"Horeb the mount of God"));
+
+circuit!(R_JONAH:
+    (32.74,35.34,"Gath-hepher"),(32.05,34.75,"Joppa, the ship to Tarshish"),
+    (33.50,32.50,"the sea, the great fish"),(36.36,43.15,"Nineveh, that great city"));
+
+circuit!(R_EXILE:
+    (31.78,35.22,"Jerusalem, the city broken up"),(34.45,36.52,"Riblah in the land of Hamath"),
+    (35.10,40.42,"the way of the plain"),(32.54,44.42,"Babylon, by the rivers"));
+
+circuit!(R_RETURN:
+    (32.54,44.42,"Babylon, when the LORD turned the captivity"),
+    (35.10,40.42,"the river of Ahava"),(34.45,36.52,"the crossing of the west"),
+    (31.78,35.22,"Jerusalem, the house of the LORD"));
+
+circuit!(R_NATIVITY:
+    (32.70,35.30,"Nazareth of Galilee"),(31.70,35.20,"Bethlehem of Judaea"),
+    (30.50,31.20,"Egypt, out of which the Son was called"),(32.70,35.30,"Nazareth, that it might be fulfilled"));
+
+circuit!(R_MINISTRY:
+    (32.88,35.58,"Capernaum, his own city"),(32.21,35.28,"Sychar's country of Samaria"),
+    (31.87,35.44,"Jericho, where Zacchaeus climbed"),(31.77,35.26,"Bethany, at the mount of Olives"),
+    (31.78,35.22,"Jerusalem, the city of the great King"));
+
+circuit!(R_PHILIP:
+    (31.78,35.22,"Jerusalem"),(31.53,34.60,"the way that goeth down to Gaza"),
+    (31.75,34.65,"Azotus, where Philip was found"),(32.50,34.89,"Caesarea, preaching in all the cities"));
+
+circuit!(R_DAMASCUS:
+    (31.78,35.22,"Jerusalem, breathing threatenings"),(32.60,35.50,"the road north"),
+    (33.51,36.29,"Damascus, the street called Straight"));
+
+circuit!(R_PETER:
+    (31.95,34.89,"Lydda, where Aeneas lay"),(32.05,34.75,"Joppa, the house of Simon a tanner"),
+    (32.50,34.89,"Caesarea, the house of Cornelius"));
+
 circuit!(R_PAUL1:
     (36.20,36.16,"Antioch of Syria"),(36.12,35.93,"Seleucia"),(35.18,33.90,"Salamis"),
     (34.77,32.42,"Paphos"),(36.96,30.85,"Perga in Pamphylia"),
@@ -845,6 +910,90 @@ const ROUTE_NOTE: &str = "A journey: the stations are the text's, the way betwee
     approximate traditional identifications (stand-in); Ussher dates.";
 
 const ROUTES: &[RouteSpec] = &[
+    RouteSpec {
+        tag: "R-ABRAHAM", note: ROUTE_NOTE,
+        book: 1, chapter_from: 11, verse_from: 31, chapter_to: 13, verse_to: 18,
+        from_year: -1921, to_year: None,
+        stations: R_ABRAHAM,
+    },
+    RouteSpec {
+        tag: "R-JACOB", note: ROUTE_NOTE,
+        book: 1, chapter_from: 28, verse_from: 10, chapter_to: 35, verse_to: 27,
+        from_year: -1760, to_year: None,
+        stations: R_JACOB,
+    },
+    RouteSpec {
+        tag: "R-JOSEPH", note: ROUTE_NOTE,
+        book: 1, chapter_from: 37, verse_from: 12, chapter_to: 37, verse_to: 36,
+        from_year: -1729, to_year: None,
+        stations: R_JOSEPH,
+    },
+    RouteSpec {
+        tag: "R-SPIES", note: ROUTE_NOTE,
+        book: 4, chapter_from: 13, verse_from: 17, chapter_to: 13, verse_to: 26,
+        from_year: -1490, to_year: None,
+        stations: R_SPIES,
+    },
+    RouteSpec {
+        tag: "R-ARK", note: ROUTE_NOTE,
+        book: 9, chapter_from: 4, verse_from: 1, chapter_to: 7, verse_to: 2,
+        from_year: -1141, to_year: None,
+        stations: R_ARK,
+    },
+    RouteSpec {
+        tag: "R-ELIJAH", note: ROUTE_NOTE,
+        book: 11, chapter_from: 19, verse_from: 1, chapter_to: 19, verse_to: 8,
+        from_year: -906, to_year: None,
+        stations: R_ELIJAH,
+    },
+    RouteSpec {
+        tag: "R-JONAH", note: ROUTE_NOTE,
+        book: 32, chapter_from: 1, verse_from: 3, chapter_to: 3, verse_to: 3,
+        from_year: -787, to_year: None,
+        stations: R_JONAH,
+    },
+    RouteSpec {
+        tag: "R-EXILE", note: ROUTE_NOTE,
+        book: 12, chapter_from: 25, verse_from: 1, chapter_to: 25, verse_to: 21,
+        from_year: -586, to_year: None,
+        stations: R_EXILE,
+    },
+    RouteSpec {
+        tag: "R-RETURN", note: ROUTE_NOTE,
+        book: 15, chapter_from: 1, verse_from: 1, chapter_to: 2, verse_to: 70,
+        from_year: -536, to_year: None,
+        stations: R_RETURN,
+    },
+    RouteSpec {
+        tag: "R-NATIVITY", note: ROUTE_NOTE,
+        book: 40, chapter_from: 2, verse_from: 1, chapter_to: 2, verse_to: 23,
+        from_year: -4, to_year: None,
+        stations: R_NATIVITY,
+    },
+    RouteSpec {
+        tag: "R-MINISTRY", note: ROUTE_NOTE,
+        book: 42, chapter_from: 9, verse_from: 51, chapter_to: 19, verse_to: 28,
+        from_year: 33, to_year: None,
+        stations: R_MINISTRY,
+    },
+    RouteSpec {
+        tag: "R-PHILIP", note: ROUTE_NOTE,
+        book: 44, chapter_from: 8, verse_from: 26, chapter_to: 8, verse_to: 40,
+        from_year: 34, to_year: None,
+        stations: R_PHILIP,
+    },
+    RouteSpec {
+        tag: "R-DAMASCUS", note: ROUTE_NOTE,
+        book: 44, chapter_from: 9, verse_from: 1, chapter_to: 9, verse_to: 19,
+        from_year: 35, to_year: None,
+        stations: R_DAMASCUS,
+    },
+    RouteSpec {
+        tag: "R-PETER", note: ROUTE_NOTE,
+        book: 44, chapter_from: 9, verse_from: 32, chapter_to: 10, verse_to: 48,
+        from_year: 37, to_year: None,
+        stations: R_PETER,
+    },
     RouteSpec {
         tag: "R-EXODUS",
         note: "\"These are the journeys of the children of Israel\" — the Word's own \
@@ -895,7 +1044,11 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
     let resolved = atlas.and_then(|a| {
         a.resolve_event(r.book, (r.chapter_from, r.verse_from), (r.chapter_to, r.verse_to))
     });
-    let (from_year, to_year) = match &resolved {
+    // A journey, once walked, stays on the record: the interval opens
+    // at the journey's start and never closes — the JOURNEYS layer
+    // toggle, not the calendar, is what hides it. (r.to_year remains
+    // in the spec as the walk's own duration, for the justification.)
+    let (from_year, _to_year) = match &resolved {
         Some((_, fy, ty)) => (*fy, if ty > fy { Some(*ty) } else { r.to_year }),
         None => (r.from_year, r.to_year),
     };
@@ -906,7 +1059,7 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
         bid,
         BoundaryHistory {
             versions: vec![(
-                Interval { from: tp(from_year), to: to_year.map(tp) },
+                Interval { from: tp(from_year), to: None },
                 Boundary {
                     pts,
                     // A journey is a WAY, never a border — its own

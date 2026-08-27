@@ -753,7 +753,12 @@ fn way_routes_emit_their_stations() {
         },
     );
 
-    let scene = p.render(&world_query(style_id, TimeSelector::At(tp(64)))).unwrap();
+    let scene = p
+        .render(&RenderQuery {
+            layers: LayerSet::GEOMETRY.with(LayerSet::LABELS).with(LayerSet::JOURNEYS),
+            ..world_query(style_id, TimeSelector::At(tp(64)))
+        })
+        .unwrap();
     let scripture = SourceId::new("scripture");
     let station_markers: Vec<_> =
         scene.markers.iter().filter(|m| m.sources.contains(&scripture)).collect();
@@ -842,4 +847,73 @@ fn way_stations_are_subjects_and_scripture_grounded() {
         scene.markers[0].sources.contains(&SourceId::new("scripture")),
         "a station the text walks through is scripture-grounded"
     );
+}
+
+/// Journeys are their own LAYER: a query without LayerSet::JOURNEYS
+/// gets a map with no ways and no stations — maps with and without
+/// them are both first-class artifacts.
+#[test]
+fn journeys_are_a_toggleable_layer() {
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    let pid = atlas_graph_types::covenant::PlaceId::new("place:Derbe".to_string());
+    p.gazetteer = Some(map_types::GazetteerExport {
+        atlas_root: atlas_graph_types::covenant::ContentHash(0),
+        places: [(
+            pid.clone(),
+            map_types::GazetteerEntry {
+                canonical_name: "Derbe".to_string(),
+                position: uv(37.35, 33.25),
+                aliases: Vec::new(),
+                provenance: None,
+                attestations: Vec::new(),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    });
+    let verses = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 13, verse: 1,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 14, verse: 28,
+        }),
+    )
+    .unwrap();
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(9020));
+    p.timeline.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(45)),
+                Boundary {
+                    pts: vec![uv(37.35, 33.25), uv(37.58, 32.45)],
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses,
+                        waypoints: vec![map_types::AtlasPlaceRef(pid)],
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route".to_string(),
+                },
+            )],
+        },
+    );
+
+    let has_way = |layers: LayerSet| {
+        let q = RenderQuery {
+            layers,
+            ..world_query(style_id, TimeSelector::At(tp(64)))
+        };
+        let scene = p.render(&q).unwrap();
+        let way = scene.boundaries.iter().any(|b| b.boundary == bid);
+        (way, scene.markers.len())
+    };
+    let with = has_way(LayerSet::GEOMETRY.with(LayerSet::LABELS).with(LayerSet::JOURNEYS));
+    let without = has_way(LayerSet::GEOMETRY.with(LayerSet::LABELS));
+    assert!(with.0 && with.1 == 1, "journeys layer carries the way and its station");
+    assert!(!without.0 && without.1 == 0, "without the layer, no way and no stations");
 }

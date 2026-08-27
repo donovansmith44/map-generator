@@ -38,10 +38,11 @@ RenderQuery {
   query, same world → byte-identical scene (law 1). The `map-cli`
   artifact files are named by exactly this discipline.
 - `LayerSet` closed vocabulary as of this draft:
-  `GEOMETRY=1, TOPOGRAPHY=2 (water), LABELS=4, RELIEF=8`.
-  **RELIEF is an addition since the handoff spec** (phase 5,
-  hypsometric elevation bands); consumers that never set the bit never
-  see terrain.
+  `GEOMETRY=1, TOPOGRAPHY=2 (water), LABELS=4, RELIEF=8, JOURNEYS=16`.
+  **RELIEF and JOURNEYS are additions since the handoff spec** —
+  RELIEF (phase 5, hypsometric elevation bands) and JOURNEYS (the
+  whole-Bible itinerary layer: Way boundaries plus their gazetteer
+  stations); consumers that never set a bit never see that layer.
 - Time is `TimePoint` — the atlas covenant's own type (C1); B.C./A.D.
   display is consumer-side, Anno Mundi conversion stays under the hood.
 

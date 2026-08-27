@@ -231,6 +231,7 @@
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="smooth" checked> smooth edges</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief" checked> relief</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="journeys" checked> journeys</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -322,6 +323,7 @@ function currentParams(quality) {
   p.set("topo", $("topo").checked ? "1" : "0");
   // relief triples the terrain bytes; drag frames skip it, release restores it
   p.set("relief", quality !== "drag" && $("relief").checked ? "1" : "0");
+  p.set("journeys", $("journeys").checked ? "1" : "0");
   return p;
 }
 
@@ -741,6 +743,7 @@ async function init() {
   $("smooth").addEventListener("change", () => render());
   $("topo").addEventListener("change", () => render());
   $("relief").addEventListener("change", () => render());
+  $("journeys").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
   $("expose").addEventListener("change", () => {
     $("rangebox").hidden = $("rangehint").hidden = !$("expose").checked;
@@ -767,7 +770,7 @@ async function init() {
     const p = new URLSearchParams();
     for (const [k, v] of state.held) if (["subject","year","to"].includes(k)) p.set("a_" + k, v);
     for (const [k, v] of now) if (["subject","year","to"].includes(k)) p.set("b_" + k, v);
-    for (const k of ["style","encoder","projection","lod","labels","center","zoom","width","smooth","topo","relief"]) {
+    for (const k of ["style","encoder","projection","lod","labels","center","zoom","width","smooth","topo","relief","journeys"]) {
       if (now.get(k) !== null) p.set(k, now.get(k));
     }
     const res = await fetch("/api/overlay?" + p.toString());

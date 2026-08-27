@@ -446,10 +446,15 @@ impl TimelineProvider {
                         continue;
                     }
                     if let Some(b) = self.timeline.boundaries[&id].at(at) {
+                        // Journeys are their own layer: a way and its
+                        // stations render only when asked for.
+                        let is_way = b.character == map_types::EdgeCharacter::Way;
+                        if is_way && !q.layers.contains(LayerSet::JOURNEYS) {
+                            continue;
+                        }
                         let sb = self.styled_boundary(id, at, q.lod, style)?;
                         if in_viewport(&q.viewport, &sb.pts) {
                             scene.attribution.extend(sb.sources.iter().cloned());
-                            let is_way = b.character == map_types::EdgeCharacter::Way;
                             scene.boundaries.push(sb);
                             if is_way {
                                 self.push_way_stations(

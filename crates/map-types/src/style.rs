@@ -243,6 +243,11 @@ impl LayerSet {
     /// Hypsometric elevation bands (phase 5). CONTRACT NOTE (for the
     /// C5 freeze): joined the vocabulary when relief landed.
     pub const RELIEF: LayerSet = LayerSet(8);
+    /// Journeys: Way boundaries and their stations — an itinerary
+    /// layer over the same globe, never part of the territorial
+    /// GEOMETRY. CONTRACT NOTE (C5 freeze): joined the vocabulary when
+    /// the whole-Bible route book landed.
+    pub const JOURNEYS: LayerSet = LayerSet(16);
 
     pub fn empty() -> Self {
         LayerSet(0)
