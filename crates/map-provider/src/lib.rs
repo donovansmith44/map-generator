@@ -637,6 +637,30 @@ impl TimelineProvider {
                 self.render_delta(&mut scene, q, event, style)?;
             }
         }
+        // The JOURNEYS layer rides EVERY scene that asks for it:
+        // focusing a subject never hides the ways walked through the
+        // world around it. (The World arm draws them in its own
+        // boundary walk above.)
+        if q.layers.contains(LayerSet::JOURNEYS)
+            && !matches!(q.subject, RenderSubject::World)
+        {
+            let mut seen = BTreeSet::new();
+            let ids: Vec<BoundaryId> = self.timeline.boundaries.keys().copied().collect();
+            for id in ids {
+                if let Some((iv, b)) = self.version_at(id, at) {
+                    if b.character != map_types::EdgeCharacter::Way {
+                        continue;
+                    }
+                    let mut sb = self.styled_boundary(id, at, q.lod, style)?;
+                    sb.pts = walked_prefix(&sb.pts, way_fraction(iv, at));
+                    if in_viewport(&q.viewport, &sb.pts) {
+                        scene.attribution.extend(sb.sources.iter().cloned());
+                        scene.boundaries.push(sb);
+                        self.push_way_stations(&mut scene, id, at, q, style, &mut seen)?;
+                    }
+                }
+            }
+        }
         Ok(scene)
     }
 

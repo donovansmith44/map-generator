@@ -798,7 +798,12 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
             // BIBLE MODE: only what is derived from Scripture is
             // realized — a semantic selection by the scripture source.
             let bible = p.get("bible") == Some("1");
-            if bible {
+            let is_world_only = keys == ["world"];
+            // Bible mode is a filter on the WORLD, never on the user's
+            // own selection: a focused Roman Empire stays realized (its
+            // sources disclose what grounds it) — only the un-asked-for
+            // world reduces to what Scripture says.
+            if bible && is_world_only {
                 subject_scene = scripture_only(&subject_scene);
             }
             // The whole globe as context, the subject the realized
@@ -808,7 +813,6 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
             // disclosure that the rest is NOT Scripture-derived.
             let q = queries[0].clone();
             let face = scene_centroid(&subject_scene);
-            let is_world_only = keys == ["world"];
             let want_context =
                 bible || (p.get("context") != Some("0") && !is_world_only);
             let scene = if want_context {

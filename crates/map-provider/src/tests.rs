@@ -1038,3 +1038,77 @@ fn journeys_render_partially_in_time() {
     assert!(there, "the range carries the journey");
     assert!((lon.unwrap() - 40.0).abs() < 0.01, "…all of it");
 }
+
+/// The JOURNEYS layer rides EVERY scene that asks for it: focusing a
+/// region must not silently drop the ways walked through it.
+#[test]
+fn journeys_ride_focused_subjects() {
+    let (mut p, style_id) = provider_from(fixture_epochs());
+    let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
+    let pid = atlas_graph_types::covenant::PlaceId::new("place:Waystop".to_string());
+    p.gazetteer = Some(map_types::GazetteerExport {
+        atlas_root: atlas_graph_types::covenant::ContentHash(0),
+        places: [(
+            pid.clone(),
+            map_types::GazetteerEntry {
+                canonical_name: "Waystop".to_string(),
+                position: uv(2.0, 3.0),
+                aliases: Vec::new(),
+                provenance: None,
+                attestations: Vec::new(),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    });
+    let verses = atlas_graph_types::covenant::LocusRange::new(
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 13, verse: 1,
+        }),
+        atlas_graph_types::covenant::BibleLocus::whole(atlas_graph_types::covenant::VerseRef {
+            book: 44, chapter: 14, verse: 28,
+        }),
+    )
+    .unwrap();
+    let bid = BoundaryId(atlas_graph_types::covenant::ContentHash(9040));
+    p.timeline.boundaries.insert(
+        bid,
+        BoundaryHistory {
+            versions: vec![(
+                Interval::open_from(tp(-1800)),
+                Boundary {
+                    pts: vec![uv(2.0, 3.0), uv(4.0, 7.0)],
+                    character: EdgeCharacter::Way,
+                    source: BoundarySource::Survey(map_types::BorderSurvey {
+                        verses,
+                        waypoints: vec![map_types::AtlasPlaceRef(pid)],
+                        interpolation: map_types::InterpolationMethod::Geodesic,
+                        provenance: "test:route".to_string(),
+                    }),
+                    justification: Justification::default(),
+                    provenance: "test:route".to_string(),
+                },
+            )],
+        },
+    );
+
+    let westia = p
+        .subjects(tp(-1800))
+        .into_iter()
+        .find_map(|s| match s.subject {
+            RenderSubject::Region(id) if s.label == "Westia" => Some(id),
+            _ => None,
+        })
+        .expect("Westia exists");
+    let q = RenderQuery {
+        subject: RenderSubject::Region(westia),
+        layers: LayerSet::GEOMETRY.with(LayerSet::LABELS).with(LayerSet::JOURNEYS),
+        ..world_query(style_id, TimeSelector::At(tp(-1800)))
+    };
+    let scene = p.render(&q).unwrap();
+    assert!(
+        scene.boundaries.iter().any(|b| b.boundary == bid),
+        "the way renders under a focused region"
+    );
+    assert_eq!(scene.markers.len(), 1, "and its station comes along");
+}
