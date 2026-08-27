@@ -329,3 +329,38 @@ fn dechunk(body: &[u8]) -> Result<Vec<u8>, String> {
         rest = &rest[size + 2..];
     }
 }
+
+/// Parse the events file WE wrote at refresh time (a flat array of
+/// {id, label, when, places, verses} rows).
+pub fn parse_vendored_events(json: &str) -> Result<Vec<EventRow>, String> {
+    let v: Value = serde_json::from_str(json).map_err(|e| format!("events: bad json: {e}"))?;
+    v.as_array()
+        .ok_or("events: not an array")?
+        .iter()
+        .map(|row| {
+            let ctx = format!("event '{}'", row.get("id").and_then(Value::as_str).unwrap_or("?"));
+            let when = match row.get("when") {
+                Some(w) if !w.is_null() => {
+                    Some((i32_field(w, &ctx, "from_year")?, i32_field(w, &ctx, "to_year")?))
+                }
+                _ => None,
+            };
+            Ok(EventRow {
+                id: str_field(row, &ctx, "id")?,
+                label: str_field(row, &ctx, "label")?,
+                when,
+                places: field(row, &ctx, "places")?
+                    .as_array()
+                    .ok_or_else(|| format!("{ctx}: places"))?
+                    .iter()
+                    .map(|p| p.as_str().map(str::to_string).ok_or_else(|| format!("{ctx}: place")))
+                    .collect::<Result<Vec<_>, _>>()?,
+                verses: row
+                    .get("verses")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect()
+}

@@ -137,6 +137,8 @@ pub enum Witness {
     Atlas,
     Authored,
     Basemap,
+    /// Natural Earth / ETOPO physical base data (coasts, lakes, relief).
+    NaturalEarth,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -558,33 +560,76 @@ fn segments_cross(a0: &UnitVec, a1: &UnitVec, b0: &UnitVec, b1: &UnitVec) -> boo
     false
 }
 
-/// Interior intersection of two closed rings.
+/// Interpenetration below this angular depth (degrees) is tracing
+/// slop at the sources' own precision, not a contradiction. Measured
+/// on real atlas polities 2026-08-27: adjacent-kingdom slivers reach
+/// ~0.09 deg; the one real conflict (Babylon/Sumer) penetrates ~1 deg.
+pub const TERRITORY_TOLERANCE_DEG: f64 = 0.2;
+
+/// Angular distance (radians) from a point to the nearest point of a
+/// closed ring's boundary.
+fn distance_to_ring(p: &UnitVec, ring: &[UnitVec]) -> f64 {
+    let mut best = f64::MAX;
+    for i in 0..ring.len() {
+        let (a, b) = (&ring[i], &ring[(i + 1) % ring.len()]);
+        let n = cross(a, b);
+        let ln = norm(n);
+        let d = if ln < 1e-12 {
+            p.angle_to(a)
+        } else {
+            let nn = (n.0 / ln, n.1 / ln, n.2 / ln);
+            let off = dot3(as_tuple(p), nn).clamp(-1.0, 1.0).asin().abs();
+            // Is the foot of the perpendicular within the arc?
+            let d0 = p.angle_to(a);
+            let d1 = p.angle_to(b);
+            let span = a.angle_to(b);
+            let within = (d0 * d0 - off * off).max(0.0).sqrt()
+                + (d1 * d1 - off * off).max(0.0).sqrt()
+                <= span + 1e-9;
+            if within { off } else { d0.min(d1) }
+        };
+        best = best.min(d);
+    }
+    best
+}
+
+/// Interior intersection of two closed rings, measured by DEPTH: some
+/// vertex of one sits inside the other, farther from its boundary
+/// than the tracing tolerance. Crossing slivers shallower than the
+/// tolerance are peace (disclosed); containment is always deep.
 fn rings_overlap(ra: &[UnitVec], rb: &[UnitVec]) -> bool {
     if ra.len() < 3 || rb.len() < 3 {
         return false;
     }
     const MARGIN: f64 = 1e-9;
+    let tol_rad = TERRITORY_TOLERANCE_DEG.to_radians();
     let (a0, a1, a2, a3) = bbox(ra);
     let (b0, b1, b2, b3) = bbox(rb);
     if !boxes_intersect((a0 - MARGIN, a1 - MARGIN, a2 + MARGIN, a3 + MARGIN), (b0, b1, b2, b3)) {
         return false;
     }
-    if ra.iter().any(|p| point_strictly_in_ring(p, rb))
-        || rb.iter().any(|p| point_strictly_in_ring(p, ra))
-    {
-        return true;
-    }
-    for i in 0..ra.len() {
-        let (p0, p1) = (&ra[i], &ra[(i + 1) % ra.len()]);
-        for j in 0..rb.len() {
-            let (q0, q1) = (&rb[j], &rb[(j + 1) % rb.len()]);
-            if segments_cross(p0, p1, q0, q1) {
-                return true;
+    let deep = |p: &UnitVec, other: &[UnitVec]| {
+        point_strictly_in_ring(p, other) && distance_to_ring(p, other) > tol_rad
+    };
+    // Probe vertices AND points along each edge: aligned borders put
+    // the penetrating vertices exactly ON the other's boundary, where
+    // strictness would hide them; edge-interior samples cannot hide.
+    let probes = |ring: &[UnitVec]| -> Vec<UnitVec> {
+        let mut out: Vec<UnitVec> = ring.to_vec();
+        for i in 0..ring.len() {
+            let (a, b) = (&ring[i], &ring[(i + 1) % ring.len()]);
+            for t in [0.25, 0.5, 0.75] {
+                if let Ok(m) = map_types::slerp(a, b, t) {
+                    out.push(m);
+                }
             }
         }
-    }
-    false
+        out
+    };
+    probes(ra).iter().any(|p| deep(p, rb)) || probes(rb).iter().any(|p| deep(p, ra))
 }
+
+pub mod persist;
 
 #[cfg(test)]
 mod tests;

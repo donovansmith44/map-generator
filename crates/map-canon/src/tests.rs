@@ -298,3 +298,63 @@ fn route_legs_carry_ordered_spans() {
         .iter()
         .any(|v| matches!(v, CanonViolation::BackwardLeg { feature, .. } if *feature == backward)));
 }
+
+// ------------------------------------------- persistence, deterministic
+
+/// A canon saves to bytes and loads back EQUAL, and the bytes are a
+/// pure function of the content — no clocks, no map iteration luck.
+#[test]
+fn canon_roundtrips_deterministically() {
+    let mut store = CanonStore::default();
+    let f = area(&mut store, "egypt", square(25.0, 26.0, 8.0));
+    let road = store.insert_border(Border(vec![uv(31.0, 35.0), uv(33.0, 36.0)]));
+    let way = store.insert_feature(Feature::Way(Route {
+        entity: entity("walk"),
+        name: "a walk".to_string(),
+        legs: vec![Leg {
+            from: PlaceId::new("a".to_string()),
+            to: PlaceId::new("b".to_string()),
+            border: road,
+            span: (ts_day(-2092, 3, 1), ts(-2091)),
+        }],
+    }));
+    let snap = store.insert_snapshot(Snapshot { features: BTreeSet::from([f, way]) });
+    let mut world = World::default();
+    world.insert(ts(-2092), snap).unwrap();
+    store.set_layer(LayerKind::Territory, world);
+    store.set_provenance(
+        f,
+        Provenance { witness: Witness::Atlas, verses: vec!["GEN.12.10".into()], note: "t".into() },
+    );
+
+    let bytes = persist::to_bytes(&store).expect("saves");
+    let again = persist::from_bytes(&bytes).expect("loads");
+    assert_eq!(store, again, "load(save(x)) == x");
+    let bytes2 = persist::to_bytes(&again).expect("saves again");
+    assert_eq!(bytes, bytes2, "byte-stable across roundtrips");
+    assert!(persist::from_bytes(b"{\"not\": \"a canon\"}").is_err());
+}
+
+/// The no-overlap law measures DEPTH, not touch: interpenetration
+/// below the source's own tracing precision (TERRITORY_TOLERANCE_DEG)
+/// is a sliver, not a contradiction — while a deep overlap stays a
+/// violation however it is drawn.
+#[test]
+fn slivers_are_tolerated_deep_overlaps_are_not() {
+    // Two squares overlapping by 0.05 degrees: tracing slop.
+    let mut store = CanonStore::default();
+    let a = area(&mut store, "a", square(10.0, 10.0, 5.0));
+    let b = area(&mut store, "b", square(10.0, 14.95, 5.0));
+    territory_with(&mut store, ts(-1000), &[a, b]);
+    assert_eq!(store.validate(), vec![], "a 0.05-degree sliver is peace");
+
+    // Overlapping by a full degree: a real contradiction.
+    let mut store2 = CanonStore::default();
+    let c = area(&mut store2, "c", square(10.0, 10.0, 5.0));
+    let d = area(&mut store2, "d", square(10.0, 14.0, 5.0));
+    territory_with(&mut store2, ts(-1000), &[c, d]);
+    assert!(
+        store2.validate().iter().any(|v| matches!(v, CanonViolation::TerritorialOverlap { .. })),
+        "a one-degree interpenetration is war"
+    );
+}

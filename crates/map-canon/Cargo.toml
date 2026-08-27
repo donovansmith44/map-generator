@@ -11,3 +11,4 @@ edition = "2021"
 [dependencies]
 atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
 map-types = { path = "../map-types" }
+serde_json = { version = "1", features = ["float_roundtrip"] }

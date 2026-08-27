@@ -22,6 +22,7 @@ pub use basemaps::{
 };
 pub use exports::{load_exports, AtlasExports, ExportError};
 pub use hydro::{ingest_ocean, ingest_water, WaterSource};
+pub use surveys::{authored_routes, AuthoredRoute};
 pub use terrain::{ingest_terrain, ElevationGrid};
 pub use surveys::{
     binding_report, merge_timelines, merged_gazetteer, promised_land_timeline,

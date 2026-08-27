@@ -1,0 +1,171 @@
+{
+  "_comment": "Reconciliation between witnesses (2026-08-27 canon design). Every authored route MUST appear here \u2014 the compiler refuses silent precedence. 'superseded_by' names the atlas narrative/polity that carries the same claim; 'keep': true keeps the authored data under the Authored witness. OWNER-REVIEWABLE DATA.",
+  "routes": [
+    {
+      "authored": "R-ABRAHAM",
+      "superseded_by": "abraham-migration"
+    },
+    {
+      "authored": "R-JACOB",
+      "superseded_by": "jacob-journeys"
+    },
+    {
+      "authored": "R-JOSEPH",
+      "superseded_by": "joseph-to-egypt"
+    },
+    {
+      "authored": "R-EXODUS",
+      "superseded_by": "exodus"
+    },
+    {
+      "authored": "R-SPIES",
+      "keep": true
+    },
+    {
+      "authored": "R-ARK",
+      "keep": true
+    },
+    {
+      "authored": "R-ELIJAH",
+      "superseded_by": "elijah"
+    },
+    {
+      "authored": "R-JONAH",
+      "keep": true
+    },
+    {
+      "authored": "R-EXILE",
+      "superseded_by": "exile"
+    },
+    {
+      "authored": "R-RETURN",
+      "superseded_by": "return"
+    },
+    {
+      "authored": "R-NATIVITY",
+      "keep": true
+    },
+    {
+      "authored": "R-MINISTRY",
+      "superseded_by": "jesus-ministry"
+    },
+    {
+      "authored": "R-PHILIP",
+      "keep": true
+    },
+    {
+      "authored": "R-DAMASCUS",
+      "keep": true
+    },
+    {
+      "authored": "R-PETER",
+      "keep": true
+    },
+    {
+      "authored": "R-PAUL1",
+      "superseded_by": "paul-first-journey"
+    },
+    {
+      "authored": "R-PAUL2",
+      "keep": true
+    },
+    {
+      "authored": "R-PAUL3",
+      "keep": true
+    },
+    {
+      "authored": "R-ROME",
+      "superseded_by": "paul-rome-voyage"
+    }
+  ],
+  "territory_conflicts": [
+    {
+      "a": "babylon",
+      "b": "sumer",
+      "note": "Atlas eras genuinely coexist -2100..-2004 with ~112 km interpenetration; era-boundary ruling requested from the atlas session 2026-08-27."
+    },
+    {
+      "a": "alexander-empire",
+      "b": "egypt",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "alexander-empire",
+      "b": "judah",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "babylon",
+      "b": "assyria",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "babylon",
+      "b": "judah",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "babylon",
+      "b": "persia",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "elam",
+      "b": "assyria",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "elam",
+      "b": "persia",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "israel",
+      "b": "assyria",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "judah",
+      "b": "assyria",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "persia",
+      "b": "alexander-empire",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "persia",
+      "b": "egypt",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "persia",
+      "b": "judah",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    },
+    {
+      "a": "roman-empire",
+      "b": "egypt",
+      "note": "Empire-vs-contemporary-kingdom overlap (maximal-extent drawing). Sovereignty-tier ruling requested from the owner/atlas 2026-08-27."
+    }
+  ],
+  "regions": [
+    {
+      "authored_slug": "the-kingdom-of-israel-united",
+      "superseded_by": "israel"
+    },
+    {
+      "authored_slug": "the-kingdom-of-israel",
+      "superseded_by": "israel"
+    },
+    {
+      "authored_slug": "the-kingdom-of-judah",
+      "superseded_by": "judah"
+    },
+    {
+      "authored_slug": "judah-returned-yehud",
+      "superseded_by": "judah"
+    }
+  ]
+}

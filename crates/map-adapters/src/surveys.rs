@@ -1502,3 +1502,58 @@ pub fn merge_timelines(
     base.events.sort_by_key(|e| e.at);
     Ok(base)
 }
+
+/// The authored route book, exposed for the canon compiler's
+/// reconciliation against atlas narratives (2026-08-27 design). Each
+/// row is the spec's own data: tag, verse span, Ussher-stand-in years,
+/// and the stations with their stand-in coordinates.
+pub struct AuthoredRoute {
+    pub tag: &'static str,
+    pub display: &'static str,
+    pub book: u8,
+    pub chapter_from: u16,
+    pub chapter_to: u16,
+    pub from_year: i32,
+    pub to_year: Option<i32>,
+    pub stations: Vec<(&'static str, f64, f64)>,
+}
+
+pub fn authored_routes() -> Vec<AuthoredRoute> {
+    let display = |tag: &str| -> &'static str {
+        match tag {
+            "R-ABRAHAM" => "Abraham's call (GEN 11-13)",
+            "R-JACOB" => "Jacob to Haran and back (GEN 28-35)",
+            "R-JOSEPH" => "Joseph to Egypt (GEN 37)",
+            "R-SPIES" => "the spies' circuit (NUM 13)",
+            "R-ARK" => "the ark among the Philistines (1SA 4-7)",
+            "R-ELIJAH" => "Elijah to Horeb (1KI 19)",
+            "R-JONAH" => "Jonah to Nineveh (JON 1-3)",
+            "R-EXILE" => "the road into exile (2KI 25)",
+            "R-RETURN" => "the return (EZR 1-2)",
+            "R-NATIVITY" => "the nativity flight (MAT 2)",
+            "R-MINISTRY" => "the last journey to Jerusalem (LUK 9-19)",
+            "R-PHILIP" => "Philip on the Gaza road (ACT 8)",
+            "R-DAMASCUS" => "the Damascus road (ACT 9)",
+            "R-PETER" => "Peter to Caesarea (ACT 9-10)",
+            "R-EXODUS" => "the Exodus (NUM 33)",
+            "R-PAUL1" => "Paul's first journey (ACT 13-14)",
+            "R-PAUL2" => "Paul's second journey (ACT 15-18)",
+            "R-PAUL3" => "Paul's third journey (ACT 18-21)",
+            "R-ROME" => "the voyage to Rome (ACT 27-28)",
+            _ => "a journey",
+        }
+    };
+    ROUTES
+        .iter()
+        .map(|r| AuthoredRoute {
+            tag: r.tag,
+            display: display(r.tag),
+            book: r.book,
+            chapter_from: r.chapter_from,
+            chapter_to: r.chapter_to,
+            from_year: r.from_year,
+            to_year: r.to_year,
+            stations: r.stations.iter().map(|w| (w.name, w.lat, w.lon)).collect(),
+        })
+        .collect()
+}
