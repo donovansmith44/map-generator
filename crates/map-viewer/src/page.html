@@ -120,7 +120,10 @@
   @media (prefers-reduced-motion: reduce) { #plate .layer.entering { animation: none; } }
   #plate svg {
     max-width: 100%; max-height: 100%; height: auto;
-    background: #10120f;
+    /* Paper, not slate: the scene's translucent fills (land, terrain
+       bands) compose against this ground — a dark ground turns the
+       hypsometric relief to mud. */
+    background: #f6f1e4;
     border: 1px solid var(--edge);
     box-shadow: 0 0 60px rgba(0,0,0,.5);
   }
@@ -218,7 +221,7 @@
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="labels" checked> labels</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="smooth" checked> smooth edges</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
-    <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief"> relief</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief" checked> relief</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -304,7 +307,8 @@ function currentParams(quality) {
     p.set("smooth", $("smooth").checked ? "1" : "0");
   }
   p.set("topo", $("topo").checked ? "1" : "0");
-  p.set("relief", $("relief").checked ? "1" : "0");
+  // relief triples the terrain bytes; drag frames skip it, release restores it
+  p.set("relief", quality !== "drag" && $("relief").checked ? "1" : "0");
   return p;
 }
 
