@@ -8,6 +8,7 @@ description = "The workbench (phase 4): a one-page viewer over the public contra
 map-types = { path = "../map-types" }
 map-adapters = { path = "../map-adapters" }
 map-provider = { path = "../map-provider" }
+map-canon = { path = "../map-canon" }
 map-encoders = { path = "../map-encoders" }
 atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
 serde_json = "1"

@@ -116,7 +116,11 @@ trait TransitionEncoder { type Output; fn encode_transition(&self, &TransitionSc
 ## Reference serving (non-contractual, for orientation)
 
 The workbench exposes the surface over HTTP —
-`/api/{meta,subjects,changes,render,overlay,region_times,transition}` —
+`/api/{meta,subjects,changes,render,overlay,region_times,transition}`
+plus the composable canon API
+`/api/{scaffold,entities,features}` and `render?pieces=` (alignment
+law: same camera+width, same projection and viewBox; timestamps on the
+wire as year[-month[-day]]) —
 and `map-cli` writes the same routes' bytes as content-addressed files
 with a manifest. Both are consumers of C5, not part of it.
 

@@ -1352,6 +1352,24 @@ mod canon_provider_laws {
         assert!(named.labels.iter().any(|l| l.text == "Ephesus"), "stations named from the gazetteer");
     }
 
+    /// A pieces render carries ONLY the asked entities — the caller
+    /// arranges layers as they choose; everything else stays home.
+    #[test]
+    fn pieces_filter_to_named_entities() {
+        let (p, sid) = provider();
+        let q = world_q(sid, -1000);
+        let all = p.render(&q).unwrap();
+        assert!(all.regions.len() >= 2, "assyria + the sea");
+        let only = p
+            .render_pieces(&q, &[map_canon::EntityId("assyria".into())].into_iter().collect())
+            .unwrap();
+        assert_eq!(only.regions.len(), 1, "just assyria");
+        assert!(only.labels.iter().any(|l| l.text == "Assyria"));
+        assert!(only.regions[0]
+            .sources
+            .contains(&atlas_graph_types::covenant::SourceId::new("witness:atlas")));
+    }
+
     /// The scrubber lives: subjects at a time list the entities, and
     /// changes_between yields the canon's moment edges as stops.
     #[test]
@@ -1365,3 +1383,4 @@ mod canon_provider_laws {
         assert!(stops.windows(2).all(|w| w[0].at <= w[1].at));
     }
 }
+

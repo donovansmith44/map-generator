@@ -58,6 +58,10 @@ pub struct App {
     /// overlay wears — the age ramp's oldest and newest, so an overlay
     /// reads exactly like a range diff.
     overlay_tints: BTreeMap<StyleId, (StyleId, StyleId)>,
+    /// The typed canon handle (Some when serving the canon): the
+    /// composable API (entities, features, pieces, scaffold) needs
+    /// more than the dyn contract exposes.
+    canon: Option<Arc<map_provider::canon_provider::CanonProvider>>,
 }
 
 // ------------------------------------------------------------- styles
@@ -272,7 +276,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
     let anchor = atlas
         .creation_anchor()
         .map(|(y, _)| ("biblical (Ussher tradition)".to_string(), y));
-    let provider: Arc<dyn MapProvider + Send + Sync> = Arc::new(
+    let canon_provider = Arc::new(
         map_provider::canon_provider::CanonProvider::from_canon_file(
             canon_path,
             style_table,
@@ -280,7 +284,8 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         )
         .expect("the compiled canon loads"),
     );
-    eprintln!("serving the CANON ({} )", canon_path.display());
+    let provider: Arc<dyn MapProvider + Send + Sync> = canon_provider.clone();
+    eprintln!("serving the CANON ({})", canon_path.display());
 
     let (lo, hi) = (tp(-4004).unwrap(), tp(1900).unwrap());
     let mut stops: Vec<i32> = provider.changes_between(lo, hi).iter().map(|e| e.at.year.get()).collect();
@@ -311,6 +316,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         presence,
         anchor,
         overlay_tints,
+        canon: Some(canon_provider),
     }
 }
 
@@ -475,7 +481,7 @@ fn load_legacy() -> App {
             }
         }
     }
-    App { provider, styles, ghosts, stops, presence, anchor, overlay_tints }
+    App { provider, styles, ghosts, stops, presence, anchor, overlay_tints, canon: None }
 }
 
 /// Keep only Scripture-derived elements: regions and boundaries whose
@@ -614,6 +620,44 @@ impl Params {
     fn year(&self, k: &str) -> Option<TimePoint> {
         self.get(k)?.parse::<i32>().ok().and_then(tp)
     }
+}
+
+/// Timestamps on the wire: "-1450" | "-1450-01" | "-1450-01-14" —
+/// year (minding the missing zero), optional month, optional day; the
+/// covenant TimePoint verbatim.
+fn parse_timestamp(s: &str) -> Option<TimePoint> {
+    let s = s.trim();
+    let (neg, rest) = match s.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
+    let parts: Vec<&str> = rest.split('-').collect();
+    if parts.is_empty() || parts.len() > 3 || parts[0].is_empty() {
+        return None;
+    }
+    let year: i32 = parts[0].parse().ok()?;
+    let year = if neg { -year } else { year };
+    let month: Option<u8> = match parts.get(1) {
+        Some(p) => {
+            let m: u8 = p.parse().ok()?;
+            if m == 0 || m > 12 {
+                return None;
+            }
+            Some(m)
+        }
+        None => None,
+    };
+    let day: Option<u8> = match parts.get(2) {
+        Some(p) => {
+            let d: u8 = p.parse().ok()?;
+            if d == 0 || d > 31 {
+                return None;
+            }
+            Some(d)
+        }
+        None => None,
+    };
+    TimePoint::new(Year::new(year).ok()?, month, day).ok()
 }
 
 fn parse_subject(s: &str) -> Option<RenderSubject> {
@@ -847,7 +891,132 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
             }
         }
 
+        // ---- the composable API (canon only) ----
+        // The stage alone: land, water, relief — no claims, no ways.
+        // Requires an explicit camera: the alignment law is that every
+        // artifact with the same camera+width shares its projection.
+        "/api/scaffold" => {
+            if p.get("center").is_none() || p.get("zoom").is_none() {
+                return bad("scaffold requires center and zoom (alignment law)");
+            }
+            let Some(year) = p.year("year") else { return bad("year required") };
+            let mut q = match build_query(app, &p, "", Some("world")) {
+                Some(q) => q,
+                None => return bad("bad query"),
+            };
+            q.time = TimeSelector::At(year);
+            q.layers = LayerSet::GEOMETRY.with(LayerSet::TOPOGRAPHY).with(LayerSet::RELIEF);
+            let scene = match app.provider.render(&q) {
+                Ok(s) => s,
+                Err(e) => return bad(&format!("{e:?}")),
+            };
+            // The GEOMETRY bit satisfies the provider; the scaffold
+            // then strips every claim, keeping only the physical base.
+            let scene = Snapshot {
+                regions: scene
+                    .regions
+                    .into_iter()
+                    .filter(|r| {
+                        r.sources
+                            .iter()
+                            .any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth")
+                    })
+                    .collect(),
+                boundaries: Vec::new(),
+                markers: Vec::new(),
+                labels: Vec::new(),
+                attribution: scene.attribution,
+            };
+            match encode(&p, &scene, None) {
+                Err(e) => bad(&e),
+                Ok((body, ctype)) => (200, ctype, body, Vec::new()),
+            }
+        }
+
+        // The entity listing: what pieces exist at a timestamp.
+        "/api/entities" => {
+            let Some(canon) = app.canon.as_ref() else {
+                return bad("entities requires the canon (run map-compile build)");
+            };
+            let Some(at) = p.get("at").and_then(parse_timestamp) else {
+                return bad("at required: year[-month[-day]]");
+            };
+            let rows: Vec<serde_json::Value> = canon
+                .entities_at(&at)
+                .into_iter()
+                .map(|(ent, name, kind, witness)| {
+                    serde_json::json!({
+                        "entity": ent.0,
+                        "name": name,
+                        "kind": kind,
+                        "witness": witness,
+                    })
+                })
+                .collect();
+            (200, "application/json", serde_json::Value::Array(rows).to_string(), Vec::new())
+        }
+
+        // Raw composable data: the named entities as GeoJSON.
+        "/api/features" => {
+            let Some(canon) = app.canon.as_ref() else {
+                return bad("features requires the canon (run map-compile build)");
+            };
+            let Some(at) = p.get("at").and_then(parse_timestamp) else {
+                return bad("at required: year[-month[-day]]");
+            };
+            let Some(ids) = p.get("ids") else { return bad("ids required") };
+            let set: std::collections::BTreeSet<map_canon::EntityId> = ids
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| map_canon::EntityId(s.to_string()))
+                .collect();
+            let q = RenderQuery {
+                subject: RenderSubject::World,
+                time: TimeSelector::At(at),
+                viewport: None,
+                lod: Lod(0.0),
+                layers: LayerSet::GEOMETRY
+                    .with(LayerSet::LABELS)
+                    .with(LayerSet::TOPOGRAPHY)
+                    .with(LayerSet::RELIEF)
+                    .with(LayerSet::JOURNEYS),
+                style: app.styles.first().map(|(_, sid)| *sid).expect("a style"),
+            };
+            match canon.render_pieces(&q, &set) {
+                Err(e) => bad(&format!("{e:?}")),
+                Ok(scene) => match GeoJsonEncoder.encode(&scene) {
+                    Err(e) => bad(&e.0),
+                    Ok(body) => (200, "application/geo+json", body, Vec::new()),
+                },
+            }
+        }
+
         "/api/render" => {
+            // A PIECES render: a transparent, aligned image layer of
+            // just the named entities — composable by construction.
+            if let Some(ids) = p.get("pieces") {
+                let Some(canon) = app.canon.as_ref() else {
+                    return bad("pieces requires the canon (run map-compile build)");
+                };
+                if p.get("center").is_none() || p.get("zoom").is_none() {
+                    return bad("pieces requires center and zoom (alignment law)");
+                }
+                let set: std::collections::BTreeSet<map_canon::EntityId> = ids
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| map_canon::EntityId(s.to_string()))
+                    .collect();
+                let Some(q) = build_query(app, &p, "", Some("world")) else {
+                    return bad("bad query");
+                };
+                return match canon.render_pieces(&q, &set) {
+                    Err(e) => bad(&format!("{e:?}")),
+                    Ok(scene) => match encode(&p, &scene, None) {
+                        Err(e) => bad(&e),
+                        Ok((body, ctype)) => (200, ctype, body, Vec::new()),
+                    },
+                };
+            }
             // The subject may be a comma-list: a multi-region map is
             // the overlay of each region's own query (the monoid).
             let keys: Vec<&str> = p
@@ -1090,6 +1259,24 @@ mod tests {
         assert!((auto_lod(None, 2400.0) - 0.0015).abs() < 1e-12);
         // never finer than the floor, whatever the numbers say
         assert!(auto_lod(Some(0.001), 8000.0) >= 1e-6);
+    }
+
+    /// Timestamps on the wire: "-1450" | "-1450-01" | "-1450-01-14" —
+    /// year, optional month, optional day, covenant granularity.
+    #[test]
+    fn timestamps_parse_at_covenant_granularity() {
+        use atlas_graph_types::covenant::{TimePoint, Year};
+        let ts = |y: i32, m: Option<u8>, d: Option<u8>| {
+            TimePoint::new(Year::new(y).unwrap(), m, d).unwrap()
+        };
+        assert_eq!(parse_timestamp("-1450"), Some(ts(-1450, None, None)));
+        assert_eq!(parse_timestamp("-1450-01"), Some(ts(-1450, Some(1), None)));
+        assert_eq!(parse_timestamp("-1450-01-14"), Some(ts(-1450, Some(1), Some(14))));
+        assert_eq!(parse_timestamp("33-04-03"), Some(ts(33, Some(4), Some(3))));
+        assert_eq!(parse_timestamp("57"), Some(ts(57, None, None)));
+        assert_eq!(parse_timestamp("0"), None, "there is no year zero");
+        assert_eq!(parse_timestamp("-1450-13"), None, "no thirteenth month");
+        assert_eq!(parse_timestamp("nonsense"), None);
     }
 
     /// Bible mode keeps what Scripture grounds — including a journey's

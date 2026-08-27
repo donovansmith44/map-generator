@@ -315,19 +315,27 @@ impl CanonProvider {
         }
     }
 
-    fn scene_at(&self, t: &Timestamp, q: &RenderQuery) -> Result<Snapshot, MapError> {
+    fn scene_at(
+        &self,
+        t: &Timestamp,
+        q: &RenderQuery,
+        pieces: Option<&BTreeSet<EntityId>>,
+    ) -> Result<Snapshot, MapError> {
         let style = self.style(q.style)?;
         let mut scene = Snapshot::empty();
-        let only: Option<&EntityId> = match &q.subject {
-            RenderSubject::Region(rid) => Some(
-                self.entity_by_rid.get(rid).ok_or(MapError::UnknownRegion(*rid))?,
-            ),
+        let subject_only: Option<BTreeSet<EntityId>> = match &q.subject {
+            RenderSubject::Region(rid) => Some(BTreeSet::from([self
+                .entity_by_rid
+                .get(rid)
+                .ok_or(MapError::UnknownRegion(*rid))?
+                .clone()])),
             _ => None,
         };
+        let only: Option<&BTreeSet<EntityId>> = pieces.or(subject_only.as_ref());
         for layer in layers_wanted(q.layers) {
             for (fid, f) in self.active(layer, t) {
-                if let Some(ent) = only {
-                    if f.entity() != ent {
+                if let Some(set) = only {
+                    if !set.contains(f.entity()) {
                         continue;
                     }
                 }
@@ -388,6 +396,57 @@ impl CanonProvider {
     }
 }
 
+impl CanonProvider {
+    /// A COMPOSABLE PIECE: the same scene machinery filtered to the
+    /// named entities — callers stack the resulting layers however
+    /// they choose (the alignment law lives at the camera).
+    pub fn render_pieces(
+        &self,
+        q: &RenderQuery,
+        entities: &BTreeSet<EntityId>,
+    ) -> Result<Snapshot, MapError> {
+        let t = match &q.time {
+            TimeSelector::At(t) => *t,
+            TimeSelector::Over(i) => i.to.unwrap_or(i.from),
+        };
+        self.scene_at(&t, q, Some(entities))
+    }
+
+    /// The entities alive at `t`, with kind and witness — the listing
+    /// callers pick pieces from.
+    pub fn entities_at(&self, t: &Timestamp) -> Vec<(EntityId, String, &'static str, &'static str)> {
+        let mut out = Vec::new();
+        let mut seen = BTreeSet::new();
+        for (layer, kind_name) in [
+            (LayerKind::Territory, "territory"),
+            (LayerKind::ScriptureClaims, "scripture-claim"),
+            (LayerKind::Journeys, "journey"),
+            (LayerKind::Water, "water"),
+            (LayerKind::Relief, "relief"),
+            (LayerKind::Background, "background"),
+        ] {
+            for (fid, f) in self.active(layer, t) {
+                if !seen.insert(f.entity().clone()) {
+                    continue;
+                }
+                let witness = self
+                    .store
+                    .provenance()
+                    .get(&fid)
+                    .map(|p| match p.witness {
+                        Witness::Atlas => "atlas",
+                        Witness::Authored => "authored",
+                        Witness::Basemap => "basemap",
+                        Witness::NaturalEarth => "natural-earth",
+                    })
+                    .unwrap_or("unknown");
+                out.push((f.entity().clone(), f.name().to_string(), kind_name, witness));
+            }
+        }
+        out
+    }
+}
+
 impl MapProvider for CanonProvider {
     fn subjects(&self, at: TimePoint) -> Vec<SubjectListing> {
         let mut out = vec![SubjectListing {
@@ -437,14 +496,14 @@ impl MapProvider for CanonProvider {
 
     fn render(&self, q: &RenderQuery) -> Result<Snapshot, MapError> {
         match &q.time {
-            TimeSelector::At(t) => self.scene_at(t, q),
+            TimeSelector::At(t) => self.scene_at(t, q, None),
             TimeSelector::Over(interval) => {
                 // A range wears its END state in full, with every older
                 // distinct area outline stroked in the age ramp beneath
                 // (the range story as tinted lines, like the legacy
                 // accumulation, simplified).
                 let end = interval.to.unwrap_or(interval.from);
-                let mut scene = self.scene_at(&end, q)?;
+                let mut scene = self.scene_at(&end, q, None)?;
                 let style = self.style(q.style)?;
                 let ramp = style.age_ramp();
                 // Distinct feature versions alive anywhere in the range.
