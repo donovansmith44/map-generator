@@ -149,6 +149,54 @@ fn slate() -> Style {
     .expect("slate style is honest")
 }
 
+
+/// The "canaan" dress: matched to the owner's reference plate
+/// (Knowing the Bible, "Canaan Before the Conquest of Joshua").
+/// Flat OPAQUE muted fills, no border strokes, solid blue water,
+/// bold dark labels on cream. Same data, different clothes.
+fn canaan() -> Style {
+    let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
+    let invisible = |w| Stroke { color: Rgba(0, 0, 0, 0), width: w, pattern: StrokePattern::Solid };
+    Style::new(
+        BoundaryStrokes {
+            line: invisible(0.8),
+            frontier: s(Rgba(0, 0, 0, 0), 0.8, StrokePattern::Zonal),
+            disputed: invisible(0.9),
+            unknown: Stroke { color: Rgba(0, 0, 0, 0), width: 0.7, pattern: StrokePattern::Dashed },
+            way: s(Rgba(139, 46, 32, 255), 2.0, StrokePattern::Dashed),
+        },
+        Paint { fill: Rgba(0xED, 0xE3, 0xCD, 255) },   // cream land
+        Paint { fill: Rgba(0x7C, 0x9D, 0xC9, 255) },   // reference sea blue
+        AgeRamp {
+            newest: Paint { fill: Rgba(0xC9, 0xB4, 0x90, 255) },
+            oldest: Paint { fill: Rgba(0xEA, 0xE0, 0xC8, 255) },
+        },
+        // The reference's own muted region tones, sampled from the plate.
+        Some([
+            Paint { fill: Rgba(0x8F, 0xA0, 0x83, 255) }, // sage (Canaanites)
+            Paint { fill: Rgba(0x8E, 0x8C, 0x9E, 255) }, // slate (Amorites)
+            Paint { fill: Rgba(0xDD, 0x9A, 0x57, 255) }, // orange (Phoenicia)
+            Paint { fill: Rgba(0xE9, 0xBE, 0x6B, 255) }, // gold (Ammon)
+            Paint { fill: Rgba(0xC4, 0x9A, 0x6F, 255) }, // tan (Moab)
+            Paint { fill: Rgba(0xA4, 0x69, 0x6B, 255) }, // brick (Edom)
+            Paint { fill: Rgba(0xA9, 0xA8, 0x73, 255) }, // olive
+            Paint { fill: Rgba(0x7F, 0x9A, 0x94, 255) }, // sea-green
+        ]),
+        AgeRamp {
+            newest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 220) },
+            oldest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 40) },
+        },
+        LabelStyle { color: Rgba(0x20, 0x24, 0x2B, 255), halo: Rgba(0xF2, 0xEC, 0xDC, 210), size: 14.0 },
+        MarkerStyle { color: Rgba(0x20, 0x24, 0x2B, 255), size: 3.2 },
+        DeltaEmphasis {
+            before: s(Rgba(120, 116, 105, 255), 1.4, StrokePattern::Dashed),
+            after: s(Rgba(164, 105, 107, 255), 1.6, StrokePattern::Solid),
+            seam: s(Rgba(139, 46, 32, 255), 2.0, StrokePattern::Solid),
+        },
+    )
+    .expect("the canaan style is honest")
+}
+
 /// Derive a style's ghost: same bones, faded flesh. Patterns survive
 /// (honesty renders even in the background), colors thin out.
 fn ghosted(base: &Style) -> Style {
@@ -244,18 +292,22 @@ pub fn load() -> App {
 fn load_canon(canon_path: &std::path::Path) -> App {
     let p_style = parchment();
     let s_style = slate();
-    let styles: Vec<(&'static str, StyleId)> =
-        vec![("parchment", p_style.id()), ("slate", s_style.id())];
+    let c_style = canaan();
+    let styles: Vec<(&'static str, StyleId)> = vec![
+        ("parchment", p_style.id()),
+        ("slate", s_style.id()),
+        ("canaan", c_style.id()),
+    ];
     let mut ghosts = BTreeMap::new();
     let mut style_table = BTreeMap::new();
-    for base in [&p_style, &s_style] {
+    for base in [&p_style, &s_style, &c_style] {
         let ghost = ghosted(base);
         ghosts.insert(base.id(), ghost.id());
         style_table.insert(ghost.id(), ghost);
         style_table.insert(base.id(), *base);
     }
     let mut overlay_tints = BTreeMap::new();
-    for base in [&p_style, &s_style] {
+    for base in [&p_style, &s_style, &c_style] {
         let ramp = base.age_ramp();
         let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
         overlay_tints.insert(base.id(), (held.id(), current.id()));

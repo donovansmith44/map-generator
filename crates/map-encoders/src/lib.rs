@@ -446,7 +446,7 @@ fn emit_labels(
         };
         let _ = write!(
             s,
-            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"ui-monospace,monospace\"{}>{}</text>",
+            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"'Segoe UI', ui-sans-serif, system-ui, sans-serif\" font-weight=\"600\"{}>{}</text>",
             x,
             y,
             size,
