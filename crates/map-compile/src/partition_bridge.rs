@@ -27,7 +27,7 @@ use map_types::UnitVec;
 /// the law suite builds exactly what the compiler builds.
 pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
     let canaan = map_adapters::plate_canaan_ring();
-    let (seas, _plate_lakes) = map_adapters::plate_water_witnesses();
+    let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
 
     // rivers: OSM's connected network, clipped at the water witnesses
@@ -392,6 +392,32 @@ fn data_path(rel: &str) -> std::path::PathBuf {
         return direct;
     }
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
+}
+
+/// The real Mediterranean (vendored NE land complement).
+fn load_ne_med() -> Result<Vec<Vec<UnitVec>>, String> {
+    let text = std::fs::read_to_string(data_path("data/natural-earth/med_clip.geojson"))
+        .map_err(|e| format!("med clip: {e}"))?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("med clip: {e}"))?;
+    let mut out = Vec::new();
+    for f in v["features"].as_array().into_iter().flatten() {
+        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first()) else {
+            continue;
+        };
+        let ring: Vec<UnitVec> = outer
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| Some(UnitVec::from_lat_lon_deg(c[1].as_f64()?, c[0].as_f64()?)))
+            .collect();
+        if ring.len() >= 3 {
+            out.push(ring);
+        }
+    }
+    if out.is_empty() {
+        return Err("med clip: empty".into());
+    }
+    Ok(out)
 }
 
 /// Natural Earth lakes inside the frame, by name.

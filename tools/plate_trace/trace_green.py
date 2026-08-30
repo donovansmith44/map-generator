@@ -69,15 +69,15 @@ for f in rj['features']:
 # plate sea (wide blue only: opening kills the drawn rivers)
 blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
 sea_m_all = cv2.morphologyEx(blue_m.astype(np.uint8) * 255, cv2.MORPH_OPEN, disk(8))
-# the SEA is the largest wide-water component only; the plate's
-# stylized lakes are NOT real water — they carry the plate's intent
-# and are attributed below, not treated as geography
-sl, sc = ndi.label(sea_m_all > 0)
-if sc > 0:
-    sizes_s = ndi.sum(sea_m_all > 0, sl, index=range(1, sc + 1))
-    sea_m = ((sl == (1 + int(np.argmax(sizes_s)))) * 255).astype(np.uint8)
-else:
-    sea_m = sea_m_all
+# the REAL sea (vendored NE land complement) is the geography; the
+# plate's own sea and lakes carry only intent, attributed below
+sea_m = np.zeros((H, W), np.uint8)
+mj = json.load(open(r'C:/Users/donov/Documents/the-best-maps-ever/data/natural-earth/med_clip.geojson', encoding='utf8'))
+for f in mj['features']:
+    ring = [[int(round(x)), int(round(y))] for x, y in
+            (to_px(c[0], c[1]) for c in f['geometry']['coordinates'][0])]
+    if len(ring) >= 3:
+        cv2.fillPoly(sea_m, [np.array(ring, np.int32)], 255)
 
 # drawn rivers (networks >= 30 km, the same set the map renders) are
 # water too: the border wadis south of the Dead Sea must attract the

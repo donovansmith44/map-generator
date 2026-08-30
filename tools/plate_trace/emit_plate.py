@@ -24,6 +24,9 @@ def _load_targets():
         polys = g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']]
         for poly in polys:
             targets.append([(c[0], c[1]) for c in poly[0]])
+    mj = _json.load(open(r'C:/Users/donov/Documents/the-best-maps-ever/data/natural-earth/med_clip.geojson', encoding='utf8'))
+    for f in mj['features']:
+        targets.append([(c[0], c[1]) for c in f['geometry']['coordinates'][0]])
     return targets
 
 def _snap_splice(ll, targets, budget_deg):
