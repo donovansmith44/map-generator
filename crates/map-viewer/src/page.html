@@ -350,9 +350,6 @@ async function render(quality) {
 }
 
 function absorbSvg(layer, body) {
-  layer.style.transform = "";
-  layer.style.transformOrigin = "";
-  if (window.__resetPreview) window.__resetPreview();
   layer.innerHTML = body;
   const svg = layer.querySelector("svg");
   if (svg && svg.dataset.clat !== undefined) {
@@ -361,7 +358,11 @@ function absorbSvg(layer, body) {
       lon: parseFloat(svg.dataset.clon),
       zoom: parseFloat(svg.dataset.zoom),
     };
+    // the frame declares its own view; the transform derives from it,
+    // so a new frame LANDS where the eased camera already is
+    state.frameView = { ...state.resolved };
   }
+  if (state.applyViewTransform) state.applyViewTransform();
 }
 
 function frameStatus(res, body) {
@@ -433,61 +434,105 @@ function pinView() {
 function setupPlateNav() {
   const plate = $("plate");
   let drag = null;
-  // THE PREVIEW: a single cumulative transform (origin 0 0) over the
-  // current frame — translate t, scale s. Pan adds to t; a wheel at
-  // cursor c keeps the content point under c fixed:
-  // t' = c - (s'/s)(c - t). The compositor does all the work; the
-  // real frame arrives on release/settle and resets it.
-  const preview = { s: 1, tx: 0, ty: 0 };
-  function applyPreview() {
-    const layer = plate.querySelector(".layer");
-    if (!layer) return;
-    layer.style.transformOrigin = "0 0";
-    layer.style.transform =
-      `translate(${preview.tx}px, ${preview.ty}px) scale(${preview.s})`;
-  }
-  function resetPreview() { preview.s = 1; preview.tx = 0; preview.ty = 0; }
-  window.__resetPreview = resetPreview;
-  // degrees of ground per pixel — THE CAMERA LAW: the page width
-  // spans 2*zoom great-circle degrees on either projection.
-  function groundPerPx() {
-    const svg = plate.querySelector("svg");
-    if (!svg) return null;
-    const box = svg.getBoundingClientRect();
-    // the CONTENT box: the viewBox letterboxed (xMidYMid meet) inside
-    // the element — pointer math must speak in drawn pixels
-    const vb = svg.viewBox?.baseVal;
-    let rect = box;
-    if (vb && vb.width > 0 && vb.height > 0) {
-      const k = Math.min(box.width / vb.width, box.height / vb.height);
-      const w = vb.width * k, h = vb.height * k;
-      rect = {
-        width: w, height: h,
-        left: box.left + (box.width - w) / 2,
-        top: box.top + (box.height - h) / 2,
-      };
+
+  // THE EASED CAMERA: the wheel and drags set the TARGET (state.view);
+  // a per-frame lerp carries the VISUAL view toward it, and one
+  // transform — derived from the displayed frame's own stamped view —
+  // shows the difference. A newly arrived frame lands seamlessly:
+  // its stamp replaces frameView and the same math yields the same
+  // pixels. Nothing is ever reset; everything converges.
+  const visual = { lat: null, lon: null, zoom: null };
+  function ensureVisual() {
+    if (visual.zoom === null || !pinView()) {
+      visual.lat = state.view.lat; visual.lon = state.view.lon; visual.zoom = state.view.zoom;
     }
-    return { g: (2 * state.view.zoom) / rect.width, rect };
   }
+  function contentBoxOf(layer) {
+    const svg = layer.querySelector("svg");
+    if (!svg) return null;
+    const lrect = layer.getBoundingClientRect(); // layer is untransformed
+    const vb = svg.viewBox?.baseVal;
+    if (!vb || vb.width <= 0) return null;
+    const k = Math.min(lrect.width / vb.width, lrect.height / vb.height);
+    return { w: vb.width * k, h: vb.height * k, cx: lrect.width / 2, cy: lrect.height / 2, lrect };
+  }
+  function applyViewTransform() {
+    const layer = plate.querySelector(".layer");
+    const svg = layer?.querySelector("svg");
+    if (!layer || !svg) return;
+    const fv = state.frameView;
+    if (!fv || visual.zoom === null) { svg.style.transform = ""; return; }
+    const cb = contentBoxOf(layer);
+    if (!cb) return;
+    const s = fv.zoom / visual.zoom;
+    const flat = state.projection === "flat";
+    let ox = 0, oy = 0;
+    if (flat) {
+      // the flat chart pans by translation: offset of the visual
+      // center from the frame's center, in displayed content px
+      const kx = Math.max(0.05, Math.cos(visual.lat * Math.PI / 180));
+      const ppg = cb.w / (2 * fv.zoom); // px per ground degree
+      ox = (visual.lon - fv.lon) * kx * ppg;
+      oy = (fv.lat - visual.lat) * ppg;
+    }
+    // transform x -> t + s·x (origin 0 0), require the ground point at
+    // content offset o from the frame center to sit at the box center
+    const tx = cb.cx - s * (cb.cx + ox);
+    const ty = cb.cy - s * (cb.cy + oy);
+    svg.style.transformOrigin = "0 0";
+    svg.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+  }
+  state.applyViewTransform = applyViewTransform;
+
+  let animating = false, lastT = 0;
+  function tick(ts) {
+    if (!animating) return;
+    const dt = Math.min(50, lastT ? ts - lastT : 16);
+    lastT = ts;
+    const k = 1 - Math.exp(-dt / 90); // ~90 ms time constant: the lerp
+    visual.zoom += (state.view.zoom - visual.zoom) * k;
+    visual.lat += (state.view.lat - visual.lat) * k;
+    visual.lon += (state.view.lon - visual.lon) * k;
+    applyViewTransform();
+    const done =
+      Math.abs(visual.zoom / state.view.zoom - 1) < 0.002 &&
+      Math.abs(visual.lat - state.view.lat) < 1e-4 &&
+      Math.abs(visual.lon - state.view.lon) < 1e-4;
+    if (done) {
+      visual.zoom = state.view.zoom; visual.lat = state.view.lat; visual.lon = state.view.lon;
+      applyViewTransform();
+      animating = false; lastT = 0;
+      render(); // the settled frame: same view, transform -> identity
+    } else {
+      requestAnimationFrame(tick);
+    }
+  }
+  function animate() {
+    ensureVisual();
+    if (!animating) { animating = true; lastT = 0; requestAnimationFrame(tick); }
+  }
+
+  function groundPerPx() {
+    const layer = plate.querySelector(".layer");
+    if (!layer) return null;
+    const cb = contentBoxOf(layer);
+    if (!cb) return null;
+    return { g: (2 * state.view.zoom) / cb.w, cb };
+  }
+
   plate.addEventListener("pointerdown", e => {
     stopPlayback();
     if (state.encoder !== "svg") return;
     if (!pinView()) return;
-    // No pointer capture yet: capturing here would retarget the
-    // eventual click away from the region path under the cursor.
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false, ptx: preview.tx, pty: preview.ty };
+    ensureVisual();
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false };
   });
   plate.addEventListener("pointermove", e => {
     if (!drag) return;
     const gp = groundPerPx();
     if (!gp) return;
-    // The camera law holds on both charts: ground degrees per px is
-    // 2*zoom/width; longitude divides by cos(lat) on flat (the
-    // standard parallel keeps a square league square).
     const flat = state.projection === "flat";
     const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
-    const lonPerPx = gp.g / (flat ? kx : 1);
-    const latPerPx = gp.g;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
       drag.moved = true;
@@ -495,18 +540,16 @@ function setupPlateNav() {
       plate.setPointerCapture(drag.id);
     }
     if (!drag.moved) return;
-    state.view.lon = drag.lon - dx * lonPerPx;
-    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * latPerPx));
+    state.view.lon = drag.lon - dx * (gp.g / kx);
+    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * gp.g));
     if (flat) {
-      // translation IS the flat chart's pan: slide the frame on the
-      // compositor, fetch the real frame on release.
-      preview.tx = drag.ptx + dx;
-      preview.ty = drag.pty + dy;
-      applyPreview();
+      // a drag is DIRECT manipulation: visual follows the hand 1:1,
+      // the transform shows it, the frame comes on release
+      visual.lat = state.view.lat; visual.lon = state.view.lon;
+      applyViewTransform();
     } else {
-      // the globe's pan is a ROTATION — only a fresh frame can show
-      // it. Drag-quality frames are ~100 KB now; the in-flight queue
-      // coalesces moves, so this is the live spin it always was.
+      // the globe's pan is a rotation: live drag-quality frames
+      visual.lat = state.view.lat; visual.lon = state.view.lon;
       render("drag");
     }
   });
@@ -522,42 +565,28 @@ function setupPlateNav() {
   plate.addEventListener("pointerup", finish);
   plate.addEventListener("pointercancel", finish);
 
-  let settle = null;
   plate.addEventListener("wheel", e => {
     if (state.encoder !== "svg") return;
     e.preventDefault();
     if (!pinView()) return;
+    ensureVisual();
     const gp = groundPerPx();
     if (!gp) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
     const oldZoom = state.view.zoom;
     state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
-    const f = oldZoom / state.view.zoom; // on-screen magnification
-    // CURSOR-ANCHORED both in the preview and in the CAMERA: the
-    // ground under the cursor stays under the cursor, so the settled
-    // frame lands exactly where the preview promised.
+    const f = oldZoom / state.view.zoom;
+    // CURSOR-ANCHORED TARGET: the ground under the cursor stays under
+    // the cursor when the lerp arrives
     const flat = state.projection === "flat";
     const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
-    const cx = e.clientX - gp.rect.left - gp.rect.width / 2;
-    const cy = e.clientY - gp.rect.top - gp.rect.height / 2;
-    // the geo point under the cursor moves toward/away from center as
-    // zoom changes; recenter so it stays put
-    state.view.lon += cx * (gp.g / (flat ? kx : 1)) * (1 - 1 / f);
-    state.view.lat = Math.max(-89, Math.min(89,
-      state.view.lat - cy * gp.g * (1 - 1 / f)));
-    // preview transform about the cursor (page coordinates)
     const layer = plate.querySelector(".layer");
-    if (layer) {
-      const lrect = layer.getBoundingClientRect();
-      const px = e.clientX - (lrect.left - preview.tx);
-      const py = e.clientY - (lrect.top - preview.ty);
-      preview.tx = px - f * (px - preview.tx);
-      preview.ty = py - f * (py - preview.ty);
-      preview.s *= f;
-      applyPreview();
-    }
-    clearTimeout(settle);
-    settle = setTimeout(() => render(), 180);
+    const lrect = layer.getBoundingClientRect();
+    const cx = e.clientX - lrect.left - gp.cb.cx;
+    const cy = e.clientY - lrect.top - gp.cb.cy;
+    state.view.lon += cx * (gp.g / kx) * (1 - 1 / f);
+    state.view.lat = Math.max(-89, Math.min(89, state.view.lat - cy * gp.g * (1 - 1 / f)));
+    animate(); // the lerp carries the visuals; done -> one true frame
   }, { passive: false });
 
   plate.addEventListener("dblclick", () => { resetView(); render(); });
