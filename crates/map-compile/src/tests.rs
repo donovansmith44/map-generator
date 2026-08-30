@@ -350,35 +350,8 @@ mod waiver_laws {
 /// the world sums to 4π.
 #[test]
 fn plate_partition_face_census() {
-    let canaan = map_adapters::plate_canaan_ring();
-    let (seas, lakes) = map_adapters::plate_water_witnesses();
-    let (rivers, jordan) = map_adapters::plate_river_paths();
-    let mut regions = vec![map_partition::WitnessRegion {
-        id: "canaan".into(),
-        kind: map_partition::FaceKind::LandClaim,
-        rings: vec![canaan],
-    }];
-    for (i, ring) in seas.into_iter().enumerate() {
-        regions.push(map_partition::WitnessRegion {
-            id: format!("great-sea{}", if i == 0 { "".into() } else { format!("-{i}") }),
-            kind: map_partition::FaceKind::Sea,
-            rings: vec![ring],
-        });
-    }
-    for (name, ring) in lakes {
-        regions.push(map_partition::WitnessRegion {
-            id: name,
-            kind: map_partition::FaceKind::Lake,
-            rings: vec![ring],
-        });
-    }
-    let mut polylines = Vec::new();
-    for (i, pts) in jordan.into_iter().enumerate() {
-        polylines.push(map_partition::WitnessPolyline { id: format!("jordan-{i}"), pts });
-    }
-    for (i, pts) in rivers.into_iter().enumerate() {
-        polylines.push(map_partition::WitnessPolyline { id: format!("river-{i}"), pts });
-    }
+    let (regions, polylines) =
+        crate::partition_bridge::gather_witnesses().expect("witnesses gather");
     let p = map_partition::build(&regions, &polylines, &map_partition::PartitionConfig::default())
         .expect("plate partition builds");
     for (i, f) in p.faces.iter().enumerate() {
