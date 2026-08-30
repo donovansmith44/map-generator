@@ -112,9 +112,8 @@
     width: 100%; height: 100%;
     display: grid; place-items: center;
     min-width: 0; min-height: 0;
-    /* pan/zoom previews are pure compositor transforms — the SVG is
-       repainted only when a real frame arrives */
-    will-change: transform;
+    contain: layout paint; /* a landing frame's work stays inside */
+
   }
   #plate > pre { place-self: center; }
   /* The fade runs on insert and ENDS at full opacity — no class
@@ -128,6 +127,9 @@
        display at exactly the same size (sharpness is the only
        difference), so the frame can never resize mid-gesture */
     width: 100%; height: 100%;
+    /* the eased camera transforms THIS element: promote it, or every
+       tick repaints the whole svg on the CPU instead of compositing */
+    will-change: transform;
     /* Paper, not slate: the scene's translucent fills (land, terrain
        bands) compose against this ground — a dark ground turns the
        hypsometric relief to mud. */
@@ -319,7 +321,7 @@ function currentParams(quality) {
     const z = state.view.zoom;
     p.set("lod", z ? String(Math.min(0.008, (z * 8 / 1200) * Math.PI / 180)) : "0.008");
     p.set("labels", "0");
-    p.set("width", "1200");
+    p.set("width", "900");
     p.set("smooth", "0"); // curves double the bytes; drag frames go straight
   } else {
     p.set("lod", $("lod").value);
@@ -335,6 +337,46 @@ function currentParams(quality) {
 }
 
 let inFlight = false, queued = null;
+// The SCENE identity of a motion frame: everything about the request
+// except the camera (center/zoom and the zoom-derived lod). A retained
+// motion frame may be reused only while this key matches — any change
+// of year, subject, style, chart, or toggles invalidates it.
+function motionKey() {
+  const p = currentParams("drag");
+  p.delete("center"); p.delete("zoom"); p.delete("lod");
+  return p.toString();
+}
+
+// Fetch and parse a drag-quality frame OFF the hot path, while the
+// screen rests, and retain it for the next gesture start. If motion
+// begins meanwhile, the gesture's own render takes over — bail.
+let prewarmT = null;
+function schedulePrewarm() {
+  clearTimeout(prewarmT);
+  prewarmT = setTimeout(async () => {
+    const key = motionKey();
+    // a stash for THIS scene is already warm; a stale one is replaced
+    if (state.motionFrame && state.motionFrame.key === key) return;
+    if (state.moving && state.moving()) return;
+    try {
+      const res = await fetch("/api/render?" + currentParams("drag").toString());
+      const body = await res.text();
+      if (key !== motionKey()) return; // scene moved on
+      if (state.moving && state.moving()) return;           // motion owns renders now
+      const doc = new DOMParser().parseFromString(body, "image/svg+xml");
+      const svg = doc.documentElement;
+      if (!svg || svg.nodeName !== "svg" || svg.dataset.clat === undefined) return;
+      const view = {
+        lat: parseFloat(svg.dataset.clat),
+        lon: parseFloat(svg.dataset.clon),
+        zoom: parseFloat(svg.dataset.zoom),
+      };
+      if (!isFinite(view.zoom)) return;
+      state.motionFrame = { node: document.adoptNode(svg), view, key };
+    } catch {}
+  }, 500);
+}
+
 async function render(quality) {
   if (inFlight) { queued = quality || "full"; return; }
   inFlight = true;
@@ -343,6 +385,11 @@ async function render(quality) {
     const res = await fetch("/api/render?" + p.toString());
     const body = await res.text();
     showPlate(res, body, p.get("encoder"));
+    state.frameQuality = quality === "drag" ? "drag" : "full";
+    // a sharp frame at rest: warm the NEXT gesture's motion frame in
+    // the idle, so even the first gesture on a fresh scene starts
+    // with a parsed drag frame in hand
+    if (quality !== "drag") schedulePrewarm();
   } finally {
     inFlight = false;
     if (queued) { const q = queued === "full" ? undefined : queued; queued = null; render(q); }
@@ -361,6 +408,11 @@ function absorbSvg(layer, body) {
     // the frame declares its own view; the transform derives from it,
     // so a new frame LANDS where the eased camera already is
     state.frameView = { ...state.resolved };
+    // a live-rotating globe never slides: while panning the sphere,
+    // the visual view IS whatever the latest frame shows
+    if (state.projection !== "flat" && state.syncVisualToFrame) {
+      state.syncVisualToFrame(state.frameView);
+    }
   }
   if (state.applyViewTransform) state.applyViewTransform();
 }
@@ -457,7 +509,8 @@ function setupPlateNav() {
     return { w: vb.width * k, h: vb.height * k, cx: lrect.width / 2, cy: lrect.height / 2, lrect };
   }
   function applyViewTransform() {
-    const layer = plate.querySelector(".layer");
+    const layers = plate.querySelectorAll(".layer");
+    const layer = layers[layers.length - 1];
     const svg = layer?.querySelector("svg");
     if (!layer || !svg) return;
     const fv = state.frameView;
@@ -465,16 +518,14 @@ function setupPlateNav() {
     const cb = contentBoxOf(layer);
     if (!cb) return;
     const s = fv.zoom / visual.zoom;
-    const flat = state.projection === "flat";
-    let ox = 0, oy = 0;
-    if (flat) {
-      // the flat chart pans by translation: offset of the visual
-      // center from the frame's center, in displayed content px
-      const kx = Math.max(0.05, Math.cos(visual.lat * Math.PI / 180));
-      const ppg = cb.w / (2 * fv.zoom); // px per ground degree
-      ox = (visual.lon - fv.lon) * kx * ppg;
-      oy = (fv.lat - visual.lat) * ppg;
-    }
+    // both charts obey the camera law (width = 2×zoom ground degrees),
+    // so the pan component of the ease is the same translation — exact
+    // on flat, first-order at the center on the globe, and the settled
+    // frame always lands exactly
+    const kx = Math.max(0.05, Math.cos(visual.lat * Math.PI / 180));
+    const ppg = cb.w / (2 * fv.zoom); // px per ground degree
+    const ox = (visual.lon - fv.lon) * kx * ppg;
+    const oy = (fv.lat - visual.lat) * ppg;
     // transform x -> t + s·x (origin 0 0), require the ground point at
     // content offset o from the frame center to sit at the box center
     const tx = cb.cx - s * (cb.cx + ox);
@@ -483,6 +534,10 @@ function setupPlateNav() {
     svg.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
   }
   state.applyViewTransform = applyViewTransform;
+  state.moving = () => animating || !!drag;
+  state.syncVisualToFrame = fv => {
+    if (drag && visual.zoom !== null) { visual.lat = fv.lat; visual.lon = fv.lon; }
+  };
 
   let animating = false, lastT = 0;
   function tick(ts) {
@@ -502,14 +557,64 @@ function setupPlateNav() {
       visual.zoom = state.view.zoom; visual.lat = state.view.lat; visual.lon = state.view.lon;
       applyViewTransform();
       animating = false; lastT = 0;
-      render(); // the settled frame: same view, transform -> identity
+      settleSharp(); // cheap frame now, the sharpen when the eye rests
     } else {
+      // far from home: freshen with a coalesced drag-quality frame.
+      // It lands seamlessly via its stamp — and, as important, a
+      // DRAG frame is cheap to transform: scaling a full-quality
+      // frame re-rasterizes megabytes of vectors every tick.
+      const fv = state.frameView;
+      if (fv && Math.abs(fv.zoom / state.view.zoom - 1) > 0.35) render("drag");
       requestAnimationFrame(tick);
     }
   }
   function animate() {
     ensureVisual();
-    if (!animating) { animating = true; lastT = 0; requestAnimationFrame(tick); }
+    if (!animating) {
+      animating = true; lastT = 0;
+      // a gesture begins: the frame on screen is the SHARP one, and
+      // scaling it re-rasterizes its vectors every tick. Show a
+      // drag-quality frame instead — the retained one re-attaches
+      // with NO parse; a fresh one is requested either way.
+      const mf = state.motionFrame;
+      if (mf && mf.key !== motionKey()) state.motionFrame = null; // stale scene
+      if (mf && mf.key === motionKey()) {
+        const layers = plate.querySelectorAll(".layer");
+        const layer = layers[layers.length - 1];
+        if (layer) {
+          layer.replaceChildren(mf.node);
+          state.resolved = { ...mf.view };
+          state.frameView = { ...mf.view };
+          state.frameQuality = "drag";
+        }
+        state.motionFrame = null;
+      }
+      render("drag");
+      requestAnimationFrame(tick);
+    }
+  }
+
+  // THE TWO-STEP SETTLE: a drag-quality frame lands immediately (a
+  // ~20 ms parse, seamless via its stamp), and the full-quality
+  // sharpen waits for the eye to rest — a heavy parse never lands
+  // while anything is moving.
+  let sharpen = null;
+  function settleSharp() {
+    render("drag");
+    clearTimeout(sharpen);
+    sharpen = setTimeout(() => {
+      if (animating || drag) return;
+      // RETAIN the parsed drag frame the sharpen is about to replace:
+      // the next gesture re-attaches it instead of re-parsing — the
+      // one main-thread stall motion had left is gone
+      const layers = plate.querySelectorAll(".layer");
+      const layer = layers[layers.length - 1];
+      const svg = layer?.querySelector("svg");
+      if (svg && state.frameView && state.frameQuality === "drag") {
+        state.motionFrame = { node: svg, view: { ...state.frameView }, key: motionKey() };
+      }
+      render();
+    }, 320);
   }
 
   function groundPerPx() {
@@ -548,8 +653,9 @@ function setupPlateNav() {
       visual.lat = state.view.lat; visual.lon = state.view.lon;
       applyViewTransform();
     } else {
-      // the globe's pan is a rotation: live drag-quality frames
-      visual.lat = state.view.lat; visual.lon = state.view.lon;
+      // the globe's pan is a rotation: live drag-quality frames. The
+      // visual view rides the FRAME's view (set on arrival), not the
+      // hand — a sphere never slides.
       render("drag");
     }
   });
@@ -560,7 +666,7 @@ function setupPlateNav() {
     drag = null;
     plate.classList.remove("dragging");
     suppressClick = moved;
-    if (moved) render(); // settle at full quality
+    if (moved) settleSharp();
   };
   plate.addEventListener("pointerup", finish);
   plate.addEventListener("pointercancel", finish);
@@ -572,7 +678,11 @@ function setupPlateNav() {
     ensureVisual();
     const gp = groundPerPx();
     if (!gp) return;
-    const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+    // proportional zoom: the wheel's delta is a RATE, not a notch —
+    // a clicky mouse (|dy|~100) gives ~18% per click, a trackpad's
+    // stream of small deltas integrates to the same smooth curve
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; // lines -> px
+    const factor = Math.exp(Math.max(-160, Math.min(160, dy)) * 0.00165);
     const oldZoom = state.view.zoom;
     state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
     const f = oldZoom / state.view.zoom;
