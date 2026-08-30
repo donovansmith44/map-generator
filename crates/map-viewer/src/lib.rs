@@ -214,16 +214,23 @@ fn canaan() -> Style {
             newest: Paint { fill: Rgba(0xC9, 0xB4, 0x90, 255) },
             oldest: Paint { fill: Rgba(0xEA, 0xE0, 0xC8, 255) },
         },
-        // The reference's own muted region tones, sampled from the plate.
+        // The categorical eight, VALIDATED all-pairs on this style's own
+        // cream surface (dataviz validate_palette.js: lightness band,
+        // chroma floor, CVD >= 9.3, normal-vision >= 16.9 — no pair
+        // confusable even under protan/deutan). Warm-anchored to echo
+        // the plate; the plate's own dusty tones fail distinctness
+        // (worst pair dE 0.6) and relied on ink borders instead. The
+        // sub-3:1 surface contrast is the relief rule, discharged by
+        // the always-on region labels.
         Some([
-            Paint { fill: Rgba(0x8F, 0xA0, 0x83, 255) }, // sage (Canaanites)
-            Paint { fill: Rgba(0x8E, 0x8C, 0x9E, 255) }, // slate (Amorites)
-            Paint { fill: Rgba(0xDD, 0x9A, 0x57, 255) }, // orange (Phoenicia)
-            Paint { fill: Rgba(0xE9, 0xBE, 0x6B, 255) }, // gold (Ammon)
-            Paint { fill: Rgba(0xC4, 0x9A, 0x6F, 255) }, // tan (Moab)
-            Paint { fill: Rgba(0xA4, 0x69, 0x6B, 255) }, // brick (Edom)
-            Paint { fill: Rgba(0xA9, 0xA8, 0x73, 255) }, // olive
-            Paint { fill: Rgba(0x7F, 0x9A, 0x94, 255) }, // sea-green
+            Paint { fill: Rgba(0xCA, 0x61, 0x69, 255) }, // dusty rose
+            Paint { fill: Rgba(0xD6, 0x9A, 0x32, 255) }, // ochre gold
+            Paint { fill: Rgba(0x8A, 0x33, 0x02, 255) }, // deep rust
+            Paint { fill: Rgba(0x70, 0x78, 0x14, 255) }, // olive
+            Paint { fill: Rgba(0x5F, 0xCC, 0x8F, 255) }, // spring green
+            Paint { fill: Rgba(0x00, 0x9A, 0xA1, 255) }, // sea teal
+            Paint { fill: Rgba(0x85, 0x4D, 0x9C, 255) }, // plum
+            Paint { fill: Rgba(0xB2, 0x9A, 0xEB, 255) }, // lavender
         ]),
         AgeRamp {
             newest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 220) },
