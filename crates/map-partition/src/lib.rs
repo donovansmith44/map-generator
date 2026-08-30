@@ -280,6 +280,101 @@ impl RiverSystem {
         }
         Ok(RiverSystem { id, paths })
     }
+
+    /// Classify this system by WHERE IT DRAINS. Only the Draining
+    /// variant can become map geometry, so an endorheic network in
+    /// the canon is unrepresentable — it is not silently dropped, it
+    /// is a NAMED classification carrying the measurement that made
+    /// it. Reaching is a point enclosed by a water ring (whichever
+    /// way the ring turns — orientation is the data's business, not
+    /// the river's) or a path ENDPOINT — a mouth is an endpoint —
+    /// within `mouth_gap` of a ring's boundary (the caller's declared
+    /// mouth-truncation allowance for its data).
+    pub fn classify(self, waters: &[Vec<UnitVec>], mouth_gap: f64) -> Watershed {
+        let boxes: Vec<(f64, f64, f64, f64)> = waters
+            .iter()
+            .map(|ring| {
+                let mut b = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+                for p in ring {
+                    let (la, lo) = p.to_lat_lon_deg();
+                    b = (b.0.min(la), b.1.min(lo), b.2.max(la), b.3.max(lo));
+                }
+                b
+            })
+            .collect();
+        let seg_dist = |p: &UnitVec, ring: &[UnitVec]| -> f64 {
+            let m = ring.len();
+            let mut best = f64::INFINITY;
+            for s in 0..m {
+                let (a, b) = (&ring[s], &ring[(s + 1) % m]);
+                let (nx, ny, nz) = a.cross_raw(b);
+                let nn = (nx * nx + ny * ny + nz * nz).sqrt();
+                if nn < 1e-12 {
+                    continue;
+                }
+                let d0 = ((p.x() * nx + p.y() * ny + p.z() * nz) / nn).asin().abs();
+                let within = p.angle_to(a).max(p.angle_to(b)) <= a.angle_to(b) + mouth_gap;
+                let d = if within { d0 } else { p.angle_to(a).min(p.angle_to(b)) };
+                best = best.min(d);
+            }
+            best
+        };
+        let margin = mouth_gap.to_degrees() + 0.01;
+        let mut nearest = f64::INFINITY;
+        for path in &self.paths {
+            let last = path.len().saturating_sub(1);
+            for (i, p) in path.iter().enumerate() {
+                let (la, lo) = p.to_lat_lon_deg();
+                let is_end = i == 0 || i == last;
+                for (ring, b) in waters.iter().zip(&boxes) {
+                    if la < b.0 - margin
+                        || lo < b.1 - margin
+                        || la > b.2 + margin
+                        || lo > b.3 + margin
+                    {
+                        continue;
+                    }
+                    if winding(ring, p) != 0 {
+                        return Watershed::Draining(self);
+                    }
+                    if is_end {
+                        let d = seg_dist(p, ring);
+                        nearest = nearest.min(d);
+                        if d <= mouth_gap {
+                            return Watershed::Draining(self);
+                        }
+                    }
+                }
+            }
+        }
+        // outside every bbox: measure the honest distance for the
+        // report (endpoints to ring vertices — cheap and sufficient
+        // for a network that is far away by construction)
+        if nearest.is_infinite() {
+            for path in &self.paths {
+                for p in [path.first(), path.last()].into_iter().flatten() {
+                    for ring in waters {
+                        for q in ring {
+                            nearest = nearest.min(p.angle_to(q));
+                        }
+                    }
+                }
+            }
+        }
+        Watershed::Endorheic { id: self.id, nearest_water_km: nearest * 6371.0 }
+    }
+}
+
+/// Where a river system drains — the TYPE that keeps desert scribbles
+/// off the map: witnesses are built from Draining systems only, and
+/// an Endorheic verdict names the network and how far from the map's
+/// water it died.
+#[derive(Debug)]
+pub enum Watershed {
+    /// reaches the given waters: this map's river.
+    Draining(RiverSystem),
+    /// drains into sand elsewhere, `nearest_water_km` from the map.
+    Endorheic { id: String, nearest_water_km: f64 },
 }
 
 /// A river path in the overlay: noded into the partition's vertex

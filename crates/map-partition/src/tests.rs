@@ -6,7 +6,7 @@ use std::f64::consts::PI;
 use map_types::UnitVec;
 
 use crate::build::{build, build_with, WitnessBorder, WitnessPolyline, WitnessRegion, WitnessSeed};
-use crate::{cycle_area, tri_area, winding, FaceKind, Partition, PartitionConfig};
+use crate::{cycle_area, tri_area, winding, FaceKind, Partition, PartitionConfig, RiverSystem, Watershed};
 
 fn uv(lat: f64, lon: f64) -> UnitVec {
     UnitVec::from_lat_lon_deg(lat, lon)
@@ -529,3 +529,47 @@ fn smaller_witness_names_the_shared_face() {
     );
     assert!(p.area_residual() < 1e-10);
 }
+
+/// Where a river drains is a TYPE, not a filter: a network ending in
+/// (or measurably at) the water classifies Draining; one draining
+/// into sand classifies Endorheic, named with its distance — and only
+/// Draining can become map geometry. Ring orientation is the data's
+/// business; a mouth cut short of the shoreline (within the declared
+/// allowance) still drains.
+#[test]
+fn watershed_classification_is_typed_and_measured() {
+    let pt = |la: f64, lo: f64| UnitVec::from_lat_lon_deg(la, lo);
+    let lake: Vec<UnitVec> =
+        [(32.0, 35.0), (32.0, 35.2), (32.2, 35.2), (32.2, 35.0)].map(|(a, o)| pt(a, o)).into();
+    let mouth_gap = 5.0 / 6371.0;
+    let sys = |pts: Vec<UnitVec>| RiverSystem::new("r".into(), vec![pts], 2.4e-5).unwrap();
+
+    // ends inside the lake: draining
+    assert!(matches!(
+        sys(vec![pt(31.5, 35.1), pt(31.8, 35.1), pt(32.1, 35.1)]).classify(&[lake.clone()], mouth_gap),
+        Watershed::Draining(_)
+    ));
+    // the same lake wound the other way: still draining
+    let lake_cw: Vec<UnitVec> = lake.iter().rev().cloned().collect();
+    assert!(matches!(
+        sys(vec![pt(31.5, 35.1), pt(32.1, 35.1)]).classify(&[lake_cw], mouth_gap),
+        Watershed::Draining(_)
+    ));
+    // a mouth ~3 km shy of the shore: within the declared allowance
+    assert!(matches!(
+        sys(vec![pt(31.5, 35.1), pt(31.97, 35.1)]).classify(&[lake.clone()], mouth_gap),
+        Watershed::Draining(_)
+    ));
+    // draining into sand far east: Endorheic, with the distance named
+    match sys(vec![pt(31.5, 36.5), pt(31.8, 36.6), pt(32.1, 36.7)]).classify(&[lake], mouth_gap) {
+        Watershed::Endorheic { id, nearest_water_km } => {
+            assert_eq!(id, "r");
+            assert!(
+                nearest_water_km > 100.0,
+                "the verdict carries its measurement: {nearest_water_km:.0} km"
+            );
+        }
+        Watershed::Draining(_) => panic!("a desert network never drains here"),
+    }
+}
+
