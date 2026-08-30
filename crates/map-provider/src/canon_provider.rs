@@ -46,6 +46,11 @@ pub struct CanonProvider {
     /// relief band position 0..1 by measured area order (largest =
     /// lowest = 0), computed once at load.
     relief_pos: BTreeMap<EntityId, f64>,
+    /// label anchor per Area feature, computed ONCE at load: the pole
+    /// of inaccessibility is a pure function of content-addressed
+    /// geometry, so recomputing it per render was pure waste (it was
+    /// 96% of a world render's time, measured).
+    label_anchor: BTreeMap<FeatureId, UnitVec>,
 }
 
 fn hash64(s: &str) -> u64 {
@@ -112,6 +117,7 @@ impl CanonProvider {
         let events = derive_events(&store);
         let palette_slot = palette_slots(&store);
         let relief_pos = relief_positions(&store);
+        let label_anchor = label_anchors(&store);
         CanonProvider {
             store,
             styles,
@@ -121,6 +127,7 @@ impl CanonProvider {
             events,
             palette_slot,
             relief_pos,
+            label_anchor,
         }
     }
 
@@ -281,7 +288,8 @@ impl CanonProvider {
             }
         }
         if q.layers.contains(LayerSet::LABELS) && layer != LayerKind::Relief {
-            if let Some(at) = pole_of_inaccessibility(&outer, &holes).or_else(|| centroid(&outer)) {
+            if let Some(at) =
+                self.label_anchor.get(&fid).copied().or_else(|| centroid(&outer)) {
                 let labeling = style.labeling();
                 let face = if layer == LayerKind::Water {
                     map_types::scene::LabelFace::Water
@@ -939,6 +947,28 @@ pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
         }
     }
     color_shared_border_graph(&ids, &adj)
+}
+
+/// Label anchors, computed once per canon: every Area feature's pole
+/// of inaccessibility. Geometry is content-addressed, so the anchor
+/// can never go stale — a changed ring is a new feature id.
+fn label_anchors(store: &CanonStore) -> BTreeMap<FeatureId, UnitVec> {
+    let mut out = BTreeMap::new();
+    for (fid, f) in store.features() {
+        let Feature::Area(a) = f else { continue };
+        let resolve = |ids: &BTreeSet<map_canon::BorderId>| -> Vec<Ring> {
+            ids.iter()
+                .filter_map(|bid| store.borders().get(bid))
+                .filter_map(|b| Ring::new(b.0.clone()).ok())
+                .collect()
+        };
+        let outer = resolve(&a.rings);
+        let holes = resolve(&a.holes);
+        if let Some(at) = pole_of_inaccessibility(&outer, &holes) {
+            out.insert(*fid, at);
+        }
+    }
+    out
 }
 
 /// Relief band order by MEASUREMENT: each Relief-layer entity's total

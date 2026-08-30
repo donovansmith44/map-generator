@@ -34,6 +34,11 @@ const DEFAULT_PORT: u16 = 8090;
 
 pub struct App {
     pub provider: Arc<dyn MapProvider + Send + Sync>,
+    /// One token for the served world: a hash of the canon bytes and
+    /// every style template, taken at load. Every response is a pure
+    /// function of (this world, the URL), so the pair IS the ETag —
+    /// browsers revalidate for free and a recompile rolls the token.
+    world_etag: u64,
     styles: Vec<(&'static str, StyleId)>,
     /// Each visible style's ghost twin — the faded dress the rest of
     /// the world wears when one subject is the realized thing.
@@ -160,6 +165,21 @@ fn load_canon(canon_path: &std::path::Path) -> App {
     // name). Ghost and tint dresses derive from each loaded base.
     let tpl_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates");
     let loaded = templates::load_templates(&tpl_dir);
+    let world_etag = {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        use std::hash::{Hash, Hasher};
+        std::fs::read(canon_path).expect("canon bytes").hash(&mut h);
+        if let Ok(dir) = std::fs::read_dir(&tpl_dir) {
+            let mut paths: Vec<_> = dir.filter_map(Result::ok).map(|e| e.path()).collect();
+            paths.sort();
+            for p in paths {
+                if let Ok(b) = std::fs::read(&p) {
+                    b.hash(&mut h);
+                }
+            }
+        }
+        h.finish()
+    };
     let styles: Vec<(&'static str, StyleId)> =
         loaded.iter().map(|(name, s)| (*name, s.id())).collect();
     let mut ghosts = BTreeMap::new();
@@ -222,6 +242,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
     }
     App {
         provider,
+        world_etag,
         styles,
         ghosts,
         stops,
@@ -962,14 +983,43 @@ fn handle(app: &App, mut stream: TcpStream) {
         return;
     }
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    // every response is a pure function of (world, URL): the pair is
+    // the ETag, so a browser revisiting a scrub year revalidates in
+    // one cheap round-trip instead of re-downloading megabytes
+    let etag = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        app.world_etag.hash(&mut h);
+        target.hash(&mut h);
+        format!("\"{:016x}\"", h.finish())
+    };
+    let revalidated = request
+        .lines()
+        .find(|l| l.to_ascii_lowercase().starts_with("if-none-match:"))
+        .map(|l| l.split_once(':').map(|(_, v)| v.trim() == etag).unwrap_or(false))
+        .unwrap_or(false);
+    if revalidated {
+        let _ = stream.write_all(
+            format!(
+                "HTTP/1.1 304 Not Modified\r\nETag: {etag}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        return;
+    }
     let (status, ctype, body, extra) = route(app, path, query);
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
         _ => "Not Found",
     };
+    let cache = if status == 200 {
+        format!("ETag: {etag}\r\nCache-Control: no-cache\r\n")
+    } else {
+        "Cache-Control: no-store\r\n".to_string()
+    };
     let mut head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {ctype}; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n",
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {ctype}; charset=utf-8\r\nContent-Length: {}\r\n{cache}Connection: close\r\n",
         body.len()
     );
     for (k, v) in extra {
