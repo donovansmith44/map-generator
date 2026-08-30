@@ -69,5 +69,6 @@ pub use timeline::{
 };
 pub use transition::{TransitionScript, TransitionStep};
 
+pub mod chart;
 #[cfg(test)]
 mod tests;

@@ -230,7 +230,7 @@ fn unnamed_features_are_counted_not_silently_dropped() {
 #[test]
 fn plate_water_is_water_classed_and_closed() {
     let tl = crate::plate_water::plate_water_timeline(tp(-4004));
-    assert_eq!(tl.regions.len(), 2, "the Great Sea and the waters of the Jordan");
+    assert_eq!(tl.regions.len(), 3, "the Great Sea, the Jordan's waters, the rivers");
     assert!(tl.regions.values().all(|r| r.class == map_types::RegionClass::Water));
     for hist in tl.boundaries.values() {
         for (_, b) in &hist.versions {
@@ -239,13 +239,18 @@ fn plate_water_is_water_classed_and_closed() {
             assert!(b.provenance.contains("plate-trace"), "tracing disclosed");
         }
     }
-    // the Jordan's waters span Chinnereth to the Salt Sea
-    let jordan = tl
-        .regions
-        .values()
-        .find(|r| r.label_at(&tp(-1000)).unwrap().contains("Jordan"))
-        .expect("the Jordan's waters");
-    assert_eq!(jordan.geom_history[0].1.parts.len(), 2, "river system + Hermon streams");
+    // the chart's law, on real calibration data: Jerusalem's detected
+    // dot and Jerusalem's coordinates agree through the chart, both
+    // ways (the bijection is the contract, the residual the honesty).
+    let chart = crate::plate_water::plate_chart();
+    let jerusalem = map_types::UnitVec::from_lat_lon_deg(31.778, 35.229);
+    let there = chart.to_sphere(2297.0, 3474.0).expect("the dot is on the plate");
+    assert!(
+        there.angle_to(&jerusalem).to_degrees() * 111.0 < 3.0,
+        "the dot lands within the calibration residual"
+    );
+    let (x, y) = chart.from_sphere(&jerusalem).expect("Jerusalem is on the plate");
+    assert!((x - 2297.0).abs() < 45.0 && (y - 3474.0).abs() < 45.0, "and back");
 }
 
 #[test]

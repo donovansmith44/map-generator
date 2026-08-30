@@ -55,6 +55,13 @@ impl UnitVec {
         UnitVec { x: la.cos() * lo.cos(), y: la.cos() * lo.sin(), z: la.sin() }
     }
 
+    /// Back to geographic degrees — the inverse of `from_lat_lon_deg`
+    /// (total: every unit vector has a latitude and, off the poles, a
+    /// longitude; at the poles longitude collapses to 0).
+    pub fn to_lat_lon_deg(&self) -> (f64, f64) {
+        (self.z.clamp(-1.0, 1.0).asin().to_degrees(), self.y.atan2(self.x).to_degrees())
+    }
+
     pub fn x(&self) -> f64 {
         self.x
     }
