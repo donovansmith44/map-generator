@@ -422,6 +422,52 @@ fn plate_partition_face_census() {
             eprintln!("STEM face {i} {:?} claims={:?} xs={:?}", f.kind, f.claims, xs4);
         }
     }
+    {
+        use std::collections::BTreeMap;
+        let mut firsts: BTreeMap<String, usize> = BTreeMap::new();
+        let mut anywhere: BTreeMap<String, usize> = BTreeMap::new();
+        for f in &p.faces {
+            if let Some(w) = f.claims.first() {
+                *firsts.entry(w.clone()).or_insert(0) += 1;
+            }
+            for w in &f.claims {
+                *anywhere.entry(w.clone()).or_insert(0) += 1;
+            }
+        }
+        eprintln!("CLAIMS first: {firsts:?}");
+        let probe = map_types::UnitVec::from_lat_lon_deg(32.1, 35.15);
+        for (i, f) in p.faces.iter().enumerate() {
+            let rings = p.face_rings(i);
+            let signed: f64 = rings.iter().map(|r| map_partition::cycle_area(r)).sum();
+            let wnum: i32 = rings.iter().map(|r| map_partition::winding(r, &probe)).sum();
+            let target = if signed <= 1e-12 { 0 } else { 1 };
+            if wnum == target {
+                eprintln!("EPHRAIM-PROBE face {i} {:?} claims={:?}", f.kind, f.claims);
+            }
+        }
+        for r in &regions {
+            if ["ephraim", "simeon", "benjamin"].contains(&r.id.as_str()) {
+                let probe = match r.id.as_str() {
+                    "ephraim" => map_types::UnitVec::from_lat_lon_deg(32.1, 35.15),
+                    "simeon" => map_types::UnitVec::from_lat_lon_deg(31.2, 34.75),
+                    _ => map_types::UnitVec::from_lat_lon_deg(31.9, 35.2),
+                };
+                eprintln!(
+                    "RING {}: {} pts, winding at interior probe = {}",
+                    r.id,
+                    r.rings[0].len(),
+                    map_partition::winding(&r.rings[0], &probe)
+                );
+            }
+        }
+        for w in ["ephraim", "simeon"] {
+            eprintln!(
+                "CLAIMS {w}: first={} anywhere={}",
+                firsts.get(w).copied().unwrap_or(0),
+                anywhere.get(w).copied().unwrap_or(0)
+            );
+        }
+    }
     let backgrounds =
         p.faces.iter().filter(|f| f.kind == map_partition::FaceKind::Background).count();
     assert_eq!(backgrounds, 1, "one Background face: every other cell is claimed — no wedges");

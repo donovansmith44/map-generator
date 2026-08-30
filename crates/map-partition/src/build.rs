@@ -24,6 +24,9 @@ pub struct WitnessRegion {
     pub kind: FaceKind,
     /// outer rings (and hole rings; orientation is normalized away).
     pub rings: Vec<Vec<UnitVec>>,
+    /// subdivision: this claim counts only where the parent claims —
+    /// a tribe exists within its land, never beyond it.
+    pub parent: Option<String>,
 }
 
 pub struct WitnessPolyline {
@@ -126,7 +129,7 @@ pub fn build_with(
 
     // ---- 1. normalize witness rings into segments
     let mut segs: Vec<Seg> = Vec::new();
-    let mut rings_norm: Vec<(String, FaceKind, Vec<UnitVec>)> = Vec::new();
+    let mut rings_norm: Vec<(String, FaceKind, Vec<UnitVec>, Option<String>)> = Vec::new();
     for w in regions {
         for ring in &w.rings {
             let mut pts: Vec<UnitVec> = Vec::with_capacity(ring.len());
@@ -159,7 +162,7 @@ pub fn build_with(
                 }
                 segs.push(Seg { a, b, witness: w.id.clone() });
             }
-            rings_norm.push((w.id.clone(), w.kind.clone(), pts));
+            rings_norm.push((w.id.clone(), w.kind.clone(), pts, w.parent.clone()));
         }
     }
     for w in borders {
@@ -181,6 +184,27 @@ pub fn build_with(
             segs.push(Seg { a, b, witness: w.id.clone() });
         }
     }
+    // parent-chain depth per witness (most specific = deepest)
+    let wit_depth: BTreeMap<String, usize> = {
+        let par: BTreeMap<&String, &Option<String>> =
+            rings_norm.iter().map(|(w, _, _, p)| (w, p)).collect();
+        rings_norm
+            .iter()
+            .map(|(w, _, _, _)| {
+                let mut d = 0usize;
+                let mut cur = par.get(w).copied();
+                while let Some(Some(pid)) = cur {
+                    d += 1;
+                    cur = par.get(pid).copied();
+                    if d > 8 {
+                        break;
+                    }
+                }
+                (w.clone(), d)
+            })
+            .collect()
+    };
+
     // deterministic processing order regardless of caller order
     segs.sort_by(|s, t| key_of(&s.a).cmp(&key_of(&t.a)).then(key_of(&s.b).cmp(&key_of(&t.b))));
 
@@ -478,18 +502,30 @@ pub fn build_with(
     // ---- 9. classify faces against witness rings
     for (fi, face) in faces.iter_mut().enumerate() {
         let p = face_rep[fi];
-        let mut kinds: Vec<(String, FaceKind)> = Vec::new();
-        for (wid, kind, ring) in &rings_norm {
-            if winding(ring, &p) == 1 && !kinds.iter().any(|(w, _)| w == wid) {
-                kinds.push((wid.clone(), kind.clone()));
+        let mut kinds: Vec<(String, FaceKind, Option<String>)> = Vec::new();
+        for (wid, kind, ring, par) in &rings_norm {
+            if winding(ring, &p) == 1 && !kinds.iter().any(|(w, _, _)| w == wid) {
+                kinds.push((wid.clone(), kind.clone(), par.clone()));
+            }
+        }
+        // SUBDIVISION RULE: a claim with a parent counts only where
+        // the parent also claims — iterate to fixpoint so grandchild
+        // chains resolve too.
+        loop {
+            let present: std::collections::BTreeSet<String> =
+                kinds.iter().map(|(w, _, _)| w.clone()).collect();
+            let before = kinds.len();
+            kinds.retain(|(_, _, par)| par.as_ref().map_or(true, |p| present.contains(p)));
+            if kinds.len() == before {
+                break;
             }
         }
         if kinds.is_empty() {
             face.kind = FaceKind::Background;
             continue;
         }
-        // deterministic precedence: water over land (a lake witness
-        // inside a land witness is the lake), then witness id order.
+        // precedence: water over land; among land, the MOST SPECIFIC
+        // claim first (deeper in the parent chain); then id order.
         kinds.sort_by(|a, b| {
             let rank = |k: &FaceKind| match k {
                 FaceKind::Lake => 0,
@@ -497,15 +533,17 @@ pub fn build_with(
                 FaceKind::LandClaim => 2,
                 FaceKind::Background => 3,
             };
-            rank(&a.1).cmp(&rank(&b.1)).then(a.0.cmp(&b.0))
+            let da = wit_depth.get(&a.0).copied().unwrap_or(0);
+            let db = wit_depth.get(&b.0).copied().unwrap_or(0);
+            rank(&a.1).cmp(&rank(&b.1)).then(db.cmp(&da)).then(a.0.cmp(&b.0))
         });
         face.kind = kinds[0].1.clone();
-        face.claims = kinds.iter().map(|(w, _)| w.clone()).collect();
+        face.claims = kinds.iter().map(|(w, _, _)| w.clone()).collect();
         let winner_kind = kinds[0].1.clone();
         face.conflicts = kinds
             .iter()
-            .filter(|(_, k)| *k != winner_kind && *k != FaceKind::LandClaim)
-            .map(|(w, _)| w.clone())
+            .filter(|(_, k, _)| *k != winner_kind && *k != FaceKind::LandClaim)
+            .map(|(w, _, _)| w.clone())
             .collect();
     }
 
@@ -576,17 +614,13 @@ pub fn build_with(
                 }
             }
         }
-        // prefer a non-background neighbor: a sliver between land
-        // and water belongs to one of them, never to the void
+        // pure longest-shared-boundary: whoever drew most of the
+        // pocket's boundary owns the disagreement. If that is the
+        // outside world, the bg-bg artifact-ink pass then erases the
+        // orphaned ring and merges the pocket into the wrap properly.
         let pick = shared
             .iter()
-            .filter(|(&nb, _)| faces[nb].kind != FaceKind::Background)
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap().then(b.0.cmp(a.0)))
-            .or_else(|| {
-                shared
-                    .iter()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap().then(b.0.cmp(a.0)))
-            });
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap().then(b.0.cmp(a.0)));
         if let Some((&nb, _)) = pick {
             let (kind, claims) = (faces[nb].kind.clone(), faces[nb].claims.clone());
             diagnostics.push(format!(

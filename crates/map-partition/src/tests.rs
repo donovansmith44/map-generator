@@ -17,7 +17,7 @@ fn square(lat0: f64, lon0: f64, lat1: f64, lon1: f64) -> Vec<UnitVec> {
 }
 
 fn region(id: &str, kind: FaceKind, rings: Vec<Vec<UnitVec>>) -> WitnessRegion {
-    WitnessRegion { id: id.to_string(), kind, rings }
+    WitnessRegion { id: id.to_string(), kind, rings, parent: None }
 }
 
 fn cfg() -> PartitionConfig {
@@ -467,4 +467,40 @@ fn river_system_must_connect() {
         }
         other => panic!("a split river must refuse to construct, got {other:?}"),
     }
+}
+
+/// A subdivision claims only where its parent claims: a tribe's
+/// overhang beyond the land (or into the water) is dropped, and the
+/// most specific claim names the face.
+#[test]
+fn subdivision_claims_only_within_parent() {
+    let land = region("land", FaceKind::LandClaim, vec![square(10.0, 10.0, 20.0, 20.0)]);
+    let mut tribe = region("tribe", FaceKind::LandClaim, vec![square(12.0, 15.0, 18.0, 25.0)]);
+    tribe.parent = Some("land".into());
+    let lake = region("lake", FaceKind::Lake, vec![square(13.0, 16.0, 15.0, 18.0)]);
+    let p = build(&[land, tribe, lake], &[], &cfg()).unwrap();
+    ok(&p);
+    // the tribe face exists and is named first (most specific)
+    let tribe_face = p
+        .faces
+        .iter()
+        .find(|f| f.claims.first().map(String::as_str) == Some("tribe"))
+        .expect("tribe claims a face");
+    assert_eq!(tribe_face.kind, FaceKind::LandClaim);
+    assert!(tribe_face.claims.contains(&"land".to_string()), "parent rides along");
+    // the tribe's overhang beyond the land (lon 20..25) is NOT tribe
+    for (i, f) in p.faces.iter().enumerate() {
+        if f.claims.first().map(String::as_str) == Some("tribe") {
+            for ring in p.face_rings(i) {
+                for pt in ring {
+                    let (_, lon) = pt.to_lat_lon_deg();
+                    assert!(lon <= 20.0 + 1e-6, "tribe never exceeds its parent");
+                }
+            }
+        }
+    }
+    // the lake inside the tribe still wins
+    let lake_face = p.faces.iter().find(|f| f.kind == FaceKind::Lake).expect("lake");
+    assert_eq!(lake_face.claims.first().map(String::as_str), Some("lake"));
+    assert!(p.area_residual() < 1e-10);
 }

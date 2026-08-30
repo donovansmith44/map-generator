@@ -667,6 +667,30 @@ pub fn plate_canaan_ring() -> Vec<UnitVec> {
         .collect()
 }
 
+/// The thirteen tribal circuits as sphere rings for the partition:
+/// (slug, parent-slug, ring). Simeon nests in Judah; the east-bank
+/// tribes stand without the canaan parent (the plate's gray side).
+pub fn tribal_rings() -> Vec<(&'static str, Option<&'static str>, Vec<UnitVec>)> {
+    let ring = |c: &[Waypoint]| -> Vec<UnitVec> {
+        c.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect()
+    };
+    vec![
+        ("judah", Some("canaan"), ring(JOS_15_CIRCUIT)),
+        ("benjamin", Some("canaan"), ring(JOS_18_BENJAMIN)),
+        ("ephraim", Some("canaan"), ring(JOS_16_EPHRAIM)),
+        ("manasseh-west", Some("canaan"), ring(JOS_17_MANASSEH_WEST)),
+        ("simeon", Some("canaan"), ring(JOS_19_SIMEON)), // beside Judah, not inside: the lattice tiles them
+        ("zebulun", Some("canaan"), ring(JOS_19_ZEBULUN)),
+        ("issachar", Some("canaan"), ring(JOS_19_ISSACHAR)),
+        ("asher", Some("canaan"), ring(JOS_19_ASHER)),
+        ("naphtali", Some("canaan"), ring(JOS_19_NAPHTALI)),
+        ("dan", Some("canaan"), ring(JOS_19_DAN)),
+        ("reuben", None, ring(JOS_13_REUBEN)),
+        ("gad", None, ring(JOS_13_GAD)),
+        ("manasseh-east", None, ring(JOS_13_MANASSEH_EAST)),
+    ]
+}
+
 // --------------------------------- the table of nations (GEN 10)
 //
 // The ancestral homelands after the scattering (GEN 11:8-9), placed by

@@ -101,16 +101,18 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
         id: "canaan".into(),
         kind: FaceKind::LandClaim,
         rings: vec![canaan],
+        parent: None,
     });
     for (i, ring) in seas.into_iter().enumerate() {
         regions.push(WitnessRegion {
             id: if i == 0 { "great-sea".into() } else { format!("great-sea-{i}") },
             kind: FaceKind::Sea,
             rings: vec![ring],
+            parent: None,
         });
     }
     for (name, ring) in lakes {
-        regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring] });
+        regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring], parent: None });
     }
     for ring in corridors {
         if ring.len() >= 3 {
@@ -118,6 +120,41 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
                 id: "jordan".into(),
                 kind: FaceKind::Lake,
                 rings: vec![ring],
+                parent: None,
+            });
+        }
+    }
+    // THE TRIBES: subdivision claims, rings snapped onto the shared
+    // water and parent arcs so the arrangement receives one polyline
+    // where witnesses agree — knife-edge parallels cannot form.
+    let canaan_final = regions
+        .iter()
+        .find(|r| r.id == "canaan")
+        .map(|r| r.rings[0].clone())
+        .unwrap_or_default();
+    // targets: shorelines and the canaan border as closed rings, the
+    // Jordan as its open CENTERLINE — never the corridor ribbon,
+    // whose two banks make projection ambiguous
+    let mut snap_targets: Vec<(Vec<UnitVec>, bool)> = Vec::new();
+    snap_targets.extend(
+        regions
+            .iter()
+            .filter(|r| r.id != "canaan" && r.id != "jordan")
+            .flat_map(|r| r.rings.iter().cloned().map(|rr| (rr, true))),
+    );
+    snap_targets.push((canaan_final, true));
+    for pl in polylines.iter().filter(|p| p.id.starts_with("jordan")) {
+        snap_targets.push((pl.pts.clone(), false));
+    }
+    let budget = 3.0 / 6371.0; // the lattice witness's declared accuracy
+    for (slug, parent, ring) in map_adapters::tribal_rings() {
+        let snapped = snap_ring_to(&ring, &snap_targets, budget);
+        if snapped.len() >= 3 {
+            regions.push(WitnessRegion {
+                id: slug.to_string(),
+                kind: FaceKind::LandClaim,
+                rings: vec![snapped],
+                parent: parent.map(|s| s.to_string()),
             });
         }
     }
@@ -335,7 +372,17 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
             w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
             w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
             w if w.starts_with("great-sea") => "the Great Sea".to_string(),
-            w => w.to_string(),
+            w => w
+                .split('-')
+                .map(|part| {
+                    let mut cs = part.chars();
+                    match cs.next() {
+                        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
+                        None => String::new(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
         };
         let fid = store.insert_feature(Feature::Area(Area {
             entity,
@@ -392,6 +439,118 @@ fn data_path(rel: &str) -> std::path::PathBuf {
         return direct;
     }
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
+}
+
+/// Snap a ring onto shared water/parent arcs: points within `budget`
+/// of a target project onto it, and the target's own vertices splice
+/// in between consecutive same-target snaps — the shared line exists
+/// once, so knife-edge parallels cannot form.
+fn snap_ring_to(ring: &[UnitVec], targets: &[(Vec<UnitVec>, bool)], budget: f64) -> Vec<UnitVec> {
+    let project = |p: &UnitVec| -> Option<(usize, f64, UnitVec, f64)> {
+        let mut best: Option<(usize, f64, UnitVec, f64)> = None;
+        for (ti, (tgt, closed)) in targets.iter().enumerate() {
+            let m = tgt.len();
+            let segs = if *closed { m } else { m - 1 };
+            for s in 0..segs {
+                let a = tgt[s];
+                let b = tgt[(s + 1) % m];
+                let (nx, ny, nz) = a.cross_raw(&b);
+                let nn = (nx * nx + ny * ny + nz * nz).sqrt();
+                if nn < 1e-12 {
+                    continue;
+                }
+                let d0 = (p.x() * nx + p.y() * ny + p.z() * nz) / nn;
+                let q = match UnitVec::normalize(
+                    p.x() - d0 * nx / nn,
+                    p.y() - d0 * ny / nn,
+                    p.z() - d0 * nz / nn,
+                ) {
+                    Ok(pr) => {
+                        let full = a.angle_to(&b);
+                        if (pr.angle_to(&a) + pr.angle_to(&b) - full).abs()
+                            < full * 0.02 + 1e-9
+                        {
+                            pr
+                        } else if p.angle_to(&a) <= p.angle_to(&b) {
+                            a
+                        } else {
+                            b
+                        }
+                    }
+                    Err(_) => continue,
+                };
+                let tt = {
+                    let full = a.angle_to(&b);
+                    if full > 0.0 { q.angle_to(&a) / full } else { 0.0 }
+                };
+                let dist = p.angle_to(&q);
+                if best.as_ref().map_or(true, |(_, _, _, bd)| dist < *bd) {
+                    best = Some((ti, s as f64 + tt, q, dist));
+                }
+            }
+        }
+        best
+    };
+    #[derive(Clone)]
+    enum P {
+        Free(UnitVec),
+        On { target: usize, s: f64, at: UnitVec },
+    }
+    let snapped: Vec<P> = ring
+        .iter()
+        .map(|p| match project(p) {
+            Some((ti, s, q, d)) if d <= budget => P::On { target: ti, s, at: q },
+            _ => P::Free(*p),
+        })
+        .collect();
+    let n = snapped.len();
+    let mut out: Vec<UnitVec> = Vec::new();
+    for i in 0..n {
+        match &snapped[i] {
+            P::Free(p) => out.push(*p),
+            P::On { target, s, at } => {
+                out.push(*at);
+                if let P::On { target: t2, s: s2, .. } = &snapped[(i + 1) % n] {
+                    if target == t2 {
+                        let (tgt, closed) = &targets[*target];
+                        let m = tgt.len() as f64;
+                        let span = if *closed {
+                            let fwd = (s2 - s).rem_euclid(m);
+                            let back = (s - s2).rem_euclid(m);
+                            // closed rings: the short way, capped so a
+                            // near-antipodal pair cannot walk half the
+                            // world the wrong way
+                            let sp = if fwd <= back { fwd } else { -back };
+                            if sp.abs() > 60.0 { 0.0 } else { sp }
+                        } else {
+                            // open centerlines: direction is unambiguous
+                            s2 - s
+                        };
+                        if span.abs() > 1e-9 {
+                            let step: f64 = if span > 0.0 { 1.0 } else { -1.0 };
+                            let mut k =
+                                if step > 0.0 { s.floor() + 1.0 } else { s.ceil() - 1.0 };
+                            while (k - s) * step > 0.0 && (k - s) * step < span.abs() {
+                                let idx = (k.rem_euclid(m)) as usize % tgt.len();
+                                out.push(tgt[idx]);
+                                k += step;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut clean: Vec<UnitVec> = Vec::new();
+    for p in out {
+        if clean.last().map_or(true, |q: &UnitVec| q.angle_to(&p) > 1e-9) {
+            clean.push(p);
+        }
+    }
+    while clean.len() > 1 && clean[0].angle_to(clean.last().unwrap()) <= 1e-9 {
+        clean.pop();
+    }
+    clean
 }
 
 /// The real Mediterranean (vendored NE land complement).
