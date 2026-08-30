@@ -83,6 +83,9 @@ pub enum LabelFace {
     /// A settlement or station.
     #[default]
     Place,
+    /// A place that no longer stands, remembered at its traditional
+    /// site: an inscription, not a dot.
+    Memory,
 }
 
 /// Everything the layout and the glyphs need, declared: family stack,
@@ -125,6 +128,7 @@ pub struct Labeling {
     pub territory: TypeVoice,
     pub water: TypeVoice,
     pub place: TypeVoice,
+    pub memory: TypeVoice,
     pub scale: LabelScale,
 }
 
@@ -134,6 +138,7 @@ impl Labeling {
             LabelFace::Territory => self.territory,
             LabelFace::Water => self.water,
             LabelFace::Place => self.place,
+            LabelFace::Memory => self.memory,
         }
     }
 }

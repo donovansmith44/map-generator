@@ -75,6 +75,7 @@ struct TLabeling {
     territory: TVoice,
     water: TVoice,
     place: TVoice,
+    memory: TVoice,
     scale: TScale,
 }
 
@@ -178,6 +179,7 @@ fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
             territory: voice(t.labeling.territory),
             water: voice(t.labeling.water),
             place: voice(t.labeling.place),
+            memory: voice(t.labeling.memory),
             scale: LabelScale {
                 unit_area_sr: t.labeling.scale.unit_area_sr,
                 min: t.labeling.scale.min,

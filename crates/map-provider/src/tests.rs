@@ -4,6 +4,32 @@
 
 use map_types::style::*;
 
+pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
+    let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
+    map_types::Style::new(
+        BoundaryStrokes {
+            line: s(Rgba(1, 1, 1, 255), 1.0, StrokePattern::Solid),
+            frontier: s(Rgba(2, 2, 2, 255), 1.0, StrokePattern::Zonal),
+            disputed: s(Rgba(3, 3, 3, 255), 1.0, StrokePattern::Hatched),
+            unknown: s(Rgba(4, 4, 4, 255), 1.0, StrokePattern::Dashed),
+            way: s(Rgba(5, 5, 5, 255), 1.0, StrokePattern::Dashed),
+        },
+        Paint { fill: Rgba(10, 10, 10, 255) },
+        Paint { fill: Rgba(20, 20, 20, 255) },
+        AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
+        None,
+        AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
+        test_labeling(LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 255), size: 12.0 }),
+        MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
+        DeltaEmphasis {
+            before: s(Rgba(6, 6, 6, 255), 1.0, StrokePattern::Dashed),
+            after: s(Rgba(7, 7, 7, 255), 1.0, StrokePattern::Solid),
+            seam: s(Rgba(8, 8, 8, 255), 1.0, StrokePattern::Solid),
+        },
+    )
+    .unwrap()
+}
+
 fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
     const TV: map_types::style::TypeVoice = map_types::style::TypeVoice {
         family: "sans-serif",
@@ -13,11 +39,20 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
         tracking_em: 0.0,
         advance_em: 0.62,
     };
+    const MEM: map_types::style::TypeVoice = map_types::style::TypeVoice {
+        family: "serif",
+        weight: 400,
+        italic: true,
+        uppercase: false,
+        tracking_em: 0.1,
+        advance_em: 0.56,
+    };
     map_types::style::Labeling {
         base,
         territory: TV,
         water: TV,
         place: TV,
+        memory: MEM,
         scale: map_types::style::LabelScale {
             unit_area_sr: 3.6e-5,
             min: 0.85,
@@ -403,5 +438,55 @@ mod palette_coloring_laws {
         for id in &ids {
             assert!(full.contains_key(id));
         }
+    }
+}
+
+// ==================== memory: a place that no longer stands
+
+mod memory_laws {
+    use std::collections::BTreeMap;
+
+    use atlas_graph_types::covenant::{TimePoint, Year};
+    use map_canon::{CanonStore, EntityId, Feature, LayerKind, Memory, World};
+    use map_types::style::*;
+    use map_types::{LayerSet, Lod, MapProvider, RenderQuery, RenderSubject, StyleId, TimeSelector, UnitVec};
+
+    use crate::canon_provider::CanonProvider;
+
+    /// A Memory renders as an INSCRIPTION: its label wears the memory
+    /// voice, and no marker stands at the site — a drowned city can
+    /// never look alive.
+    #[test]
+    fn a_memory_is_an_inscription_never_a_dot() {
+        let mut store = CanonStore::default();
+        let fid = store.insert_feature(Feature::Memory(Memory {
+            entity: EntityId("place:sodom".into()),
+            name: "Sodom".into(),
+            at: UnitVec::from_lat_lon_deg(31.1, 35.44),
+        }));
+        let t0 = TimePoint::year_only(Year::new(-4004).unwrap());
+        let sid = store.insert_snapshot(map_canon::Snapshot { features: [fid].into() });
+        let mut world = World::default();
+        world.insert(t0, sid).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, world);
+
+        let style = crate::tests::honest_style_for_memory_law();
+        let style_id = style.id();
+        let provider =
+            CanonProvider::new(store, BTreeMap::from([(style_id, style)]), None);
+        let scene = provider
+            .render(&RenderQuery {
+                subject: RenderSubject::World,
+                time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
+                viewport: None,
+                lod: Lod(0.0),
+                layers: LayerSet::GEOMETRY.with(LayerSet::LABELS),
+                style: style_id,
+            })
+            .unwrap();
+        assert!(scene.markers.is_empty(), "nothing stands at a memory");
+        let l = scene.labels.iter().find(|l| l.text == "Sodom").expect("the inscription");
+        assert_eq!(l.face, map_types::scene::LabelFace::Memory);
+        assert!(l.voice.italic, "a memory speaks in italic");
     }
 }

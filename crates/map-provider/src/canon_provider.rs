@@ -488,6 +488,26 @@ impl CanonProvider {
                             });
                         }
                     }
+                    Feature::Memory(m) => {
+                        // an inscription at the traditional site: the
+                        // memory voice, no marker — nothing "stands"
+                        let sources = self.sources_of(fid);
+                        scene.attribution.extend(sources.iter().cloned());
+                        if q.layers.contains(LayerSet::LABELS) {
+                            let mut label = style.label_style();
+                            label.size *= 0.85;
+                            scene.labels.push(PlacedLabel {
+                                text: m.name.clone(),
+                                at: m.at,
+                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(
+                                    PlaceId::new(m.entity.0.clone()),
+                                )),
+                                style: label,
+                                face: map_types::scene::LabelFace::Memory,
+                                voice: style.labeling().memory,
+                            });
+                        }
+                    }
                     Feature::Point(p) => {
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());

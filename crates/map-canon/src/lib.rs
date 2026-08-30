@@ -89,6 +89,17 @@ pub struct Landmark {
     pub at: UnitVec,
 }
 
+/// A MEMORY: a place that no longer stands — a drowned or destroyed
+/// site remembered at its traditional location (Sodom beneath the
+/// south basin). Its own kind, so the whole pipeline can address it:
+/// it renders as an inscription, never as a living city's dot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Memory {
+    pub entity: EntityId,
+    pub name: String,
+    pub at: UnitVec,
+}
+
 /// A stroked path feature (rivers): the partition's overlay polylines
 /// and river-attributed border edges enter the canon as Lines.
 #[derive(Clone, Debug, PartialEq)]
@@ -106,6 +117,7 @@ pub enum Feature {
     /// An attributed line: a river (or any stroked path) whose
     /// geometry is one border — never a face, never a filled area.
     Line(PathLine),
+    Memory(Memory),
 }
 
 impl Feature {
@@ -115,6 +127,7 @@ impl Feature {
             Feature::Way(r) => &r.entity,
             Feature::Point(p) => &p.entity,
             Feature::Line(l) => &l.entity,
+            Feature::Memory(m) => &m.entity,
         }
     }
     pub fn name(&self) -> &str {
@@ -123,6 +136,7 @@ impl Feature {
             Feature::Way(r) => &r.name,
             Feature::Point(p) => &p.name,
             Feature::Line(l) => &l.name,
+            Feature::Memory(m) => &m.name,
         }
     }
 }
@@ -222,6 +236,11 @@ fn feature_bytes(f: &Feature) -> Vec<u8> {
             c.tag("canon-line");
             c.str_(&l.entity.0).str_(&l.name);
             c.u64_(l.border.0 .0);
+        }
+        Feature::Memory(m) => {
+            c.tag("canon-memory");
+            c.str_(&m.entity.0).str_(&m.name);
+            c.f64_(m.at.x()).f64_(m.at.y()).f64_(m.at.z());
         }
     }
     c.done()
@@ -444,7 +463,7 @@ fn feature_border_refs(f: &Feature) -> Vec<BorderId> {
     match f {
         Feature::Area(a) => a.rings.iter().chain(a.holes.iter()).copied().collect(),
         Feature::Way(r) => r.legs.iter().map(|l| l.border).collect(),
-        Feature::Point(_) => Vec::new(),
+        Feature::Point(_) | Feature::Memory(_) => Vec::new(),
         Feature::Line(l) => vec![l.border],
     }
 }

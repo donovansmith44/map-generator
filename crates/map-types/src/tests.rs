@@ -43,6 +43,7 @@ fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
         territory: TV,
         water: TV,
         place: TV,
+        memory: TV,
         scale: crate::style::LabelScale {
             unit_area_sr: 3.6e-5,
             min: 0.85,
@@ -791,9 +792,11 @@ fn labeling_voice_follows_face() {
         territory: v("serif-t"),
         water: v("serif-w"),
         place: v("sans-p"),
+        memory: v("serif-m"),
         scale: LabelScale { unit_area_sr: 1.0, min: 1.0, max: 1.0, water_shrink: 1.0, water_ink: 0.5 },
     };
     assert_eq!(l.voice(LabelFace::Territory).family, "serif-t");
     assert_eq!(l.voice(LabelFace::Water).family, "serif-w");
     assert_eq!(l.voice(LabelFace::Place).family, "sans-p");
+    assert_eq!(l.voice(LabelFace::Memory).family, "serif-m");
 }

@@ -407,6 +407,9 @@ fn plate_partition_face_census() {
         .map(|(p, _, _, _)| p.as_str())
         .collect();
     assert!(drowned.contains(&"sodom"), "the roster's known drowned site is caught");
+    // and a drowned site is not erased — it becomes a MEMORY feature
+    // (asserted at the type level: the bridge emits Feature::Memory
+    // for it; see the canon provider law for its inscription dress)
     let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
     let mut jer_face = None;
     for (i, _f) in p.faces.iter().enumerate() {

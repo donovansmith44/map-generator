@@ -125,6 +125,12 @@ pub fn to_bytes(store: &CanonStore) -> Result<Vec<u8>, String> {
                 "name": l.name,
                 "border": hex(l.border.0),
             }),
+            Feature::Memory(m) => json!({
+                "kind": "memory",
+                "entity": m.entity.0,
+                "name": m.name,
+                "at": [m.at.x(), m.at.y(), m.at.z()],
+            }),
         };
         features.insert(hex(id.0), v);
     }
@@ -255,6 +261,23 @@ pub fn from_bytes(bytes: &[u8]) -> Result<CanonStore, String> {
                     f.get("border").and_then(Value::as_str).ok_or("line: border")?,
                 )?),
             }),
+            "memory" => {
+                let a = f
+                    .get("at")
+                    .and_then(Value::as_array)
+                    .filter(|a| a.len() == 3)
+                    .ok_or("memory: missing at")?;
+                Feature::Memory(crate::Memory {
+                    entity,
+                    name,
+                    at: UnitVec::new(
+                        a[0].as_f64().ok_or("x")?,
+                        a[1].as_f64().ok_or("y")?,
+                        a[2].as_f64().ok_or("z")?,
+                    )
+                    .map_err(|_| "memory: not a direction")?,
+                })
+            }
             "point" => {
                 let a = f
                     .get("at")

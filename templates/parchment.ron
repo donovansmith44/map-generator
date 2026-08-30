@@ -35,6 +35,8 @@
                     italic: true, uppercase: false, tracking_em: 0.04, advance_em: 0.54),
         place:     (family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif", weight: 600,
                     italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
+        memory:    (family: "Georgia, 'Times New Roman', serif", weight: 400,
+                    italic: true, uppercase: false, tracking_em: 0.10, advance_em: 0.56),
         scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
     ),
     marker: (color: (56, 40, 26, 255), size: 3.5),

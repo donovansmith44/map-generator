@@ -421,6 +421,22 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     for (place, name, lat, lon) in load_settlements()? {
         let at = UnitVec::from_lat_lon_deg(lat, lon);
         if water_rings_all.iter().any(|ring| winding(ring, &at) != 0) {
+            // beneath the waters: the site becomes a MEMORY — its own
+            // canon kind, rendered as an inscription, never a dot
+            let fid = store.insert_feature(Feature::Memory(map_canon::Memory {
+                entity: EntityId(format!("place:{place}")),
+                name: name.clone(),
+                at,
+            }));
+            store.set_provenance(
+                fid,
+                Provenance {
+                    witness: Witness::Atlas,
+                    verses: Vec::new(),
+                    note: "traditional site beneath the waters (GEN 14:3)".into(),
+                },
+            );
+            claim_fids.insert(fid);
             drowned.push(name);
             continue;
         }
@@ -445,7 +461,7 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     overlay_features(store, LayerKind::Water, &water_fids, t0)?;
 
     Ok(format!(
-        "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr;          {n_cities} cities stand, {} beneath the waters ({})",
+        "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr;          {n_cities} cities stand, {} remembered beneath the waters ({})",
         drowned.len(),
         drowned.join(", ")
     ))
