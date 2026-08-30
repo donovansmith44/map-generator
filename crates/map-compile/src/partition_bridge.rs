@@ -185,6 +185,85 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
 const MOUTH_GAP: f64 = 5.0 / 6371.0;
 
 
+/// ONE Area per entity: all of an entity's faces fill as a single
+/// path, so same-paint interior seams cannot render. The entity's
+/// kind is its largest face's kind. `absent` names entities not yet
+/// standing in the era being bundled — a face falls to its first
+/// claimant that IS present.
+struct Bundle {
+    kind: FaceKind,
+    biggest: f64,
+    rings: BTreeSet<map_canon::BorderId>,
+    holes: BTreeSet<map_canon::BorderId>,
+    note: String,
+}
+
+fn bundle_faces(
+    store: &mut CanonStore,
+    part: &map_partition::Partition,
+    absent: &BTreeSet<String>,
+) -> std::collections::BTreeMap<String, Bundle> {
+    let mut bundles: std::collections::BTreeMap<String, Bundle> =
+        std::collections::BTreeMap::new();
+    for (fi, face) in part.faces.iter().enumerate() {
+        if face.kind == FaceKind::Background {
+            continue;
+        }
+        let Some(who) = face.claims.iter().find(|c| !absent.contains(*c)).cloned() else {
+            continue; // every claimant is yet to come: unnamed ground
+        };
+        let rings_pts = part.face_rings(fi);
+        let entry = bundles.entry(who).or_insert_with(|| Bundle {
+            kind: face.kind.clone(),
+            biggest: face.area,
+            rings: BTreeSet::new(),
+            holes: BTreeSet::new(),
+            note: String::new(),
+        });
+        if face.area > entry.biggest {
+            entry.biggest = face.area;
+            entry.kind = face.kind.clone();
+        }
+        for ring in &rings_pts {
+            if ring.len() < 3 {
+                continue;
+            }
+            let bid = store.insert_border(Border(ring.clone()));
+            if cycle_area(ring) > 0.0 {
+                entry.rings.insert(bid);
+            } else {
+                entry.holes.insert(bid);
+            }
+        }
+        entry.note.push_str(&format!(
+            "face {fi}: claims {:?} conflicts {:?} area {:.3e} sr; ",
+            face.claims, face.conflicts, face.area
+        ));
+    }
+    bundles
+}
+
+fn pretty_name(who: &str) -> String {
+    match who {
+        "canaan" => "Canaan".to_string(),
+        "jordan" => "the Jordan".to_string(),
+        w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
+        w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
+        w if w.starts_with("great-sea") => "the Great Sea".to_string(),
+        w => w
+            .split('-')
+            .map(|part| {
+                let mut cs = part.chars();
+                match cs.next() {
+                    Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
 /// The vendored settlement roster: (place id, display name, lat, lon).
 pub(crate) fn load_settlements() -> Result<Vec<(String, String, f64, f64)>, String> {
     let text = std::fs::read_to_string(data_path("data/openbible/settlements.geojson"))
@@ -307,90 +386,41 @@ pub fn bridge_partition(
     let tribal_slugs: BTreeSet<String> =
         load_tribal_rings()?.into_iter().map(|(slug, _, _)| slug).collect();
     let mut allotment_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    // ONE Area per entity: all of an entity's faces fill as a single
-    // path, so same-paint interior seams cannot render. The entity's
-    // kind is its largest face's kind.
-    struct Bundle {
-        kind: FaceKind,
-        biggest: f64,
-        rings: BTreeSet<map_canon::BorderId>,
-        holes: BTreeSet<map_canon::BorderId>,
-        note: String,
-    }
-    let mut bundles: std::collections::BTreeMap<String, Bundle> =
-        std::collections::BTreeMap::new();
-    for (fi, face) in part.faces.iter().enumerate() {
-        if face.kind == FaceKind::Background {
-            continue;
-        }
-        let who = face.claims.first().cloned().unwrap_or_else(|| format!("face-{fi}"));
-        let rings_pts = part.face_rings(fi);
-        let entry = bundles.entry(who).or_insert_with(|| Bundle {
-            kind: face.kind.clone(),
-            biggest: face.area,
-            rings: BTreeSet::new(),
-            holes: BTreeSet::new(),
-            note: String::new(),
-        });
-        if face.area > entry.biggest {
-            entry.biggest = face.area;
-            entry.kind = face.kind.clone();
-        }
-        for ring in &rings_pts {
-            if ring.len() < 3 {
+    // ONE Area per entity, PER ERA: a face is named by its first
+    // claimant PRESENT in the era — with the tribes absent, their
+    // ground falls to the next claimant (Canaan whole, as the
+    // pre-conquest plate names itself). Canaan stays one entity whose
+    // geometry changes at the boundary, so the transition machinery
+    // morphs it shrinking as the tribes rise. Content addressing
+    // dedups everything an era does not change (water, neighbors).
+    let eras: [(&BTreeSet<String>, bool); 2] =
+        [(&tribal_slugs, false), (&BTreeSet::new(), true)];
+    let mut before_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+    for (absent, is_allotment_era) in eras {
+        for (who, bundle) in bundle_faces(store, &part, absent) {
+            if bundle.rings.is_empty() {
                 continue;
             }
-            let bid = store.insert_border(Border(ring.clone()));
-            if cycle_area(ring) > 0.0 {
-                entry.rings.insert(bid);
-            } else {
-                entry.holes.insert(bid);
-            }
-        }
-        entry.note.push_str(&format!(
-            "face {fi}: claims {:?} conflicts {:?} area {:.3e} sr; ",
-            face.claims, face.conflicts, face.area
-        ));
-    }
-    for (who, bundle) in bundles {
-        if bundle.rings.is_empty() {
-            continue;
-        }
-        let entity = EntityId(format!("partition:{who}"));
-        let name = match who.as_str() {
-            "canaan" => "Canaan".to_string(),
-            "jordan" => "the Jordan".to_string(),
-            w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
-            w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
-            w if w.starts_with("great-sea") => "the Great Sea".to_string(),
-            w => w
-                .split('-')
-                .map(|part| {
-                    let mut cs = part.chars();
-                    match cs.next() {
-                        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
-                        None => String::new(),
+            let entity = EntityId(format!("partition:{who}"));
+            let name = pretty_name(&who);
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity,
+                name,
+                rings: bundle.rings,
+                holes: bundle.holes,
+            }));
+            store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
+            match bundle.kind {
+                FaceKind::LandClaim => {
+                    if is_allotment_era {
+                        allotment_fids.insert(fid);
+                    } else {
+                        before_fids.insert(fid);
                     }
-                })
-                .collect::<Vec<_>>()
-                .join(" "),
-        };
-        let fid = store.insert_feature(Feature::Area(Area {
-            entity,
-            name,
-            rings: bundle.rings,
-            holes: bundle.holes,
-        }));
-        store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
-        match bundle.kind {
-            FaceKind::LandClaim if tribal_slugs.contains(&who) => {
-                allotment_fids.insert(fid);
-            }
-            FaceKind::LandClaim => {
-                claim_fids.insert(fid);
-            }
-            _ => {
-                water_fids.insert(fid);
+                }
+                _ => {
+                    water_fids.insert(fid);
+                }
             }
         }
     }
@@ -471,9 +501,16 @@ pub fn bridge_partition(
         n_cities += 1;
     }
 
-    overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0)?;
-    overlay_features(store, LayerKind::ScriptureClaims, &allotment_fids, allotment_from)?;
-    overlay_features(store, LayerKind::Water, &water_fids, t0)?;
+    overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0, None)?;
+    overlay_features(
+        store,
+        LayerKind::ScriptureClaims,
+        &before_fids,
+        t0,
+        Some(allotment_from),
+    )?;
+    overlay_features(store, LayerKind::ScriptureClaims, &allotment_fids, allotment_from, None)?;
+    overlay_features(store, LayerKind::Water, &water_fids, t0, None)?;
 
     Ok(format!(
         "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr;          {n_cities} cities stand, {} remembered beneath the waters ({})",
@@ -826,6 +863,7 @@ fn overlay_features(
     layer: LayerKind,
     fids: &BTreeSet<map_canon::FeatureId>,
     from: Timestamp,
+    until: Option<Timestamp>,
 ) -> Result<(), String> {
     if fids.is_empty() {
         return Ok(());
@@ -836,17 +874,21 @@ fn overlay_features(
         .iter()
         .map(|(t, sid)| (*t, store.snapshots()[sid].features.clone()))
         .collect();
-    if !moments.iter().any(|(t, _)| *t == from) {
-        // the rising moment: the state already in effect at `from`
-        let inherited = world
-            .state_at(&from)
-            .map(|sid| store.snapshots()[&sid].features.clone())
-            .unwrap_or_default();
-        moments.push((from, inherited));
+    let mut edges = vec![from];
+    edges.extend(until);
+    for edge in edges {
+        if !moments.iter().any(|(t, _)| *t == edge) {
+            // a turning moment: the state already in effect there
+            let inherited = world
+                .state_at(&edge)
+                .map(|sid| store.snapshots()[&sid].features.clone())
+                .unwrap_or_default();
+            moments.push((edge, inherited));
+        }
     }
     let mut merged = World::default();
     for (t, mut feats) in moments {
-        if t >= from {
+        if t >= from && until.map_or(true, |u| t < u) {
             feats.extend(fids.iter().copied());
         }
         let sid = store.insert_snapshot(Snapshot { features: feats });
@@ -868,5 +910,5 @@ pub(crate) fn overlay_features_for_law(
     fids: &BTreeSet<map_canon::FeatureId>,
     from: Timestamp,
 ) -> Result<(), String> {
-    overlay_features(store, layer, fids, from)
+    overlay_features(store, layer, fids, from, None)
 }
