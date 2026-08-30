@@ -70,7 +70,35 @@ for f in rj['features']:
 blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
 sea_m = cv2.morphologyEx(blue_m.astype(np.uint8) * 255, cv2.MORPH_OPEN, disk(8))
 
-water_real = np.maximum(np.maximum(lakes_m, corr_m), sea_m) > 0
+# drawn rivers (networks >= 30 km, the same set the map renders) are
+# water too: the border wadis south of the Dead Sea must attract the
+# region exactly like the Jordan does
+rivers_m = np.zeros((H, W), np.uint8)
+net_len = {}
+def _len_km(cs):
+    s = 0.0
+    import math as _m
+    for (lo1, la1), (lo2, la2) in zip(cs, cs[1:]):
+        a1, b1, a2, b2 = map(_m.radians, (la1, lo1, la2, lo2))
+        s += 6371.0 * _m.acos(max(-1, min(1,
+            _m.sin(a1)*_m.sin(a2) + _m.cos(a1)*_m.cos(a2)*_m.cos(b2-b1))))
+    return s
+for f in rj['features']:
+    if f['properties'].get('corridor'):
+        continue
+    cs = [(c[0], c[1]) for c in f['geometry']['coordinates']]
+    net = f['properties'].get('network', '')
+    net_len[net] = net_len.get(net, 0.0) + _len_km(cs)
+for f in rj['features']:
+    if f['properties'].get('corridor'):
+        continue
+    if net_len.get(f['properties'].get('network', ''), 0.0) < 30.0:
+        continue
+    pts = [[int(round(x)), int(round(y))] for x, y in
+           (to_px(c[0], c[1]) for c in f['geometry']['coordinates'])]
+    if len(pts) >= 2:
+        cv2.polylines(rivers_m, [np.array(pts, np.int32)], False, 255, thickness=7)
+water_real = np.maximum(np.maximum(np.maximum(lakes_m, corr_m), sea_m), rivers_m) > 0
 region_u8 = region.astype(np.uint8) * 255
 bridge = (cv2.dilate(region_u8, disk(40)) > 0) & (cv2.dilate(water_real.astype(np.uint8) * 255, disk(40)) > 0)
 # the bridge may not cross a water body: keep the in-water part, and

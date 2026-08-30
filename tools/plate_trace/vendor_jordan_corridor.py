@@ -31,7 +31,7 @@ for w in jordan:
         x, y = to_px(g['lon'], g['lat'])
         pts.append([int(round(x)), int(round(y))])
     if len(pts) >= 2:
-        cv2.polylines(corridor, [np.array(pts, np.int32)], False, 255, thickness=12)
+        cv2.polylines(corridor, [np.array(pts, np.int32)], False, 255, thickness=7)
 
 # NE lakes (Galilee + Dead Sea) rasterized
 lakes = np.zeros((H, W), np.uint8)
@@ -52,7 +52,7 @@ for f in lj['features']:
 # closing across the cap gaps, then remove the lakes themselves
 combined = cv2.morphologyEx(
     np.maximum(corridor, lakes), cv2.MORPH_CLOSE,
-    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
+    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
 corridor_final = combined & ~lakes
 
 cnts, _ = cv2.findContours(corridor_final, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)

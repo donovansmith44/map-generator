@@ -256,65 +256,72 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     let prov = |note: String| Provenance { witness: Witness::Authored, verses: Vec::new(), note };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    // only the LARGEST face of an entity wears the name — fragment
-    // faces stay anonymous so the map is not wallpapered with labels
-    let mut biggest: std::collections::BTreeMap<String, (usize, f64)> =
+    // ONE Area per entity: all of an entity's faces fill as a single
+    // path, so same-paint interior seams cannot render. The entity's
+    // kind is its largest face's kind.
+    struct Bundle {
+        kind: FaceKind,
+        biggest: f64,
+        rings: BTreeSet<map_canon::BorderId>,
+        holes: BTreeSet<map_canon::BorderId>,
+        note: String,
+    }
+    let mut bundles: std::collections::BTreeMap<String, Bundle> =
         std::collections::BTreeMap::new();
     for (fi, face) in part.faces.iter().enumerate() {
         if face.kind == FaceKind::Background {
             continue;
         }
         let who = face.claims.first().cloned().unwrap_or_else(|| format!("face-{fi}"));
-        let e = biggest.entry(who).or_insert((fi, face.area));
-        if face.area > e.1 {
-            *e = (fi, face.area);
-        }
-    }
-    for (fi, face) in part.faces.iter().enumerate() {
-        if face.kind == FaceKind::Background {
-            continue;
-        }
         let rings_pts = part.face_rings(fi);
-        let mut rings = BTreeSet::new();
-        let mut holes = BTreeSet::new();
+        let entry = bundles.entry(who).or_insert_with(|| Bundle {
+            kind: face.kind.clone(),
+            biggest: face.area,
+            rings: BTreeSet::new(),
+            holes: BTreeSet::new(),
+            note: String::new(),
+        });
+        if face.area > entry.biggest {
+            entry.biggest = face.area;
+            entry.kind = face.kind.clone();
+        }
         for ring in &rings_pts {
             if ring.len() < 3 {
                 continue;
             }
             let bid = store.insert_border(Border(ring.clone()));
             if cycle_area(ring) > 0.0 {
-                rings.insert(bid);
+                entry.rings.insert(bid);
             } else {
-                holes.insert(bid);
+                entry.holes.insert(bid);
             }
         }
-        if rings.is_empty() {
+        entry.note.push_str(&format!(
+            "face {fi}: claims {:?} conflicts {:?} area {:.3e} sr; ",
+            face.claims, face.conflicts, face.area
+        ));
+    }
+    for (who, bundle) in bundles {
+        if bundle.rings.is_empty() {
             continue;
         }
-        let who = face.claims.first().cloned().unwrap_or_else(|| format!("face-{fi}"));
         let entity = EntityId(format!("partition:{who}"));
-        let is_winner = biggest.get(&who).map_or(false, |&(w, _)| w == fi);
-        let name = if !is_winner {
-            String::new()
-        } else {
-            match who.as_str() {
-                "canaan" => "Canaan".to_string(),
-                "jordan" => "the Jordan".to_string(),
-                w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
-                w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
-                w if w.starts_with("great-sea") => "the Great Sea".to_string(),
-                w => w.to_string(),
-            }
+        let name = match who.as_str() {
+            "canaan" => "Canaan".to_string(),
+            "jordan" => "the Jordan".to_string(),
+            w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
+            w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
+            w if w.starts_with("great-sea") => "the Great Sea".to_string(),
+            w => w.to_string(),
         };
-        let fid = store.insert_feature(Feature::Area(Area { entity, name, rings, holes }));
-        store.set_provenance(
-            fid,
-            prov(format!(
-                "sphere-partition face (claims: {:?}; conflicts: {:?}; area {:.3e} sr)",
-                face.claims, face.conflicts, face.area
-            )),
-        );
-        match face.kind {
+        let fid = store.insert_feature(Feature::Area(Area {
+            entity,
+            name,
+            rings: bundle.rings,
+            holes: bundle.holes,
+        }));
+        store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
+        match bundle.kind {
             FaceKind::LandClaim => {
                 claim_fids.insert(fid);
             }
