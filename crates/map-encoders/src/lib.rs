@@ -430,16 +430,28 @@ fn emit_labels(
         let char_w = v.advance_em;
         let chars = text.chars().count().max(1) as f64;
         let mut size = l.style.size;
-        // Water names may overflow their shores — a lake narrower than
-        // its own name still deserves one (cartographic convention);
-        // only land labels shrink to fit their territory.
-        if l.face != LabelFace::Water {
-            if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
-                if let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) {
-                    let fit_w = (x1 - x0) * 0.92 / (chars * char_w);
-                    let fit_h = (y1 - y0) * 0.8;
-                    size = size.min(fit_w).min(fit_h);
-                }
+        if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
+            // NOTHING UNSEEN SPEAKS: a name only appears once the
+            // reader can resolve the thing it names — a subject that
+            // never made it onto the page, or spans less than the
+            // legibility floor, has no business being labeled at
+            // this camera. (This is what keeps a world view from
+            // drowning in the name of every pond; each name returns
+            // as its lake resolves.)
+            let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) else {
+                continue;
+            };
+            if (x1 - x0).max(y1 - y0) < min_size {
+                continue;
+            }
+            // Water names may overflow their shores — a lake narrower
+            // than its own name still deserves one (cartographic
+            // convention); only land labels shrink to fit their
+            // territory.
+            if l.face != LabelFace::Water {
+                let fit_w = (x1 - x0) * 0.92 / (chars * char_w);
+                let fit_h = (y1 - y0) * 0.8;
+                size = size.min(fit_w).min(fit_h);
             }
         }
         if size < min_size {

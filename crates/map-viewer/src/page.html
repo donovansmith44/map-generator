@@ -115,6 +115,17 @@
     contain: layout paint; /* a landing frame's work stays inside */
 
   }
+  /* THE PORTRAIT: the bitmap the zoom ease scales. Same cell, same
+     letterboxing as the vector frame it portrays; above the layers
+     whenever it is visible. */
+  #plate .portrait {
+    grid-area: 1 / 1;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    z-index: 2;
+    pointer-events: none;
+    will-change: transform;
+  }
   #plate > pre { place-self: center; }
   /* The fade runs on insert and ENDS at full opacity — no class
      choreography that a skipped animation frame could strand. */
@@ -314,67 +325,139 @@ function currentParams(quality) {
   p.set("bible", state.bible ? "1" : "0");
   if (state.view.lat !== null) p.set("center", state.view.lat.toFixed(3) + "," + state.view.lon.toFixed(3));
   if (state.view.zoom !== null) p.set("zoom", state.view.zoom.toFixed(3));
+  // A MOTION FRAME DIFFERS IN FIDELITY, NEVER IN CONTENT: the same
+  // labels, features, and relief ship at every quality — otherwise
+  // they visibly pop in and out with each gesture. The ONLY quality
+  // difference is the page itself: a motion frame is a smaller page
+  // (and straight lines, invisible at sub-pixel tolerance). Detail
+  // follows from the page by the server's one law — half an
+  // on-screen pixel at the camera's zoom — for both qualities.
   if (quality === "drag") {
-    // Coarse but camera-aware: ~4px tolerance at the current zoom
-    // (in the radians lod speaks), so deep-zoom drags aren't
-    // flattened to nothing.
-    const z = state.view.zoom;
-    p.set("lod", z ? String(Math.min(0.008, (z * 8 / 1200) * Math.PI / 180)) : "0.008");
-    p.set("labels", "0");
     p.set("width", "900");
-    p.set("smooth", "0"); // curves double the bytes; drag frames go straight
+    p.set("smooth", "0");
   } else {
-    p.set("lod", $("lod").value);
-    p.set("labels", $("labels").checked ? "1" : "0");
     p.set("width", $("res").value);
     p.set("smooth", $("smooth").checked ? "1" : "0");
   }
+  p.set("lod", $("lod").value);
+  p.set("labels", $("labels").checked ? "1" : "0");
   p.set("topo", $("topo").checked ? "1" : "0");
-  // relief triples the terrain bytes; drag frames skip it, release restores it
-  p.set("relief", quality !== "drag" && $("relief").checked ? "1" : "0");
+  p.set("relief", $("relief").checked ? "1" : "0");
   p.set("journeys", $("journeys").checked ? "1" : "0");
   return p;
 }
 
 let inFlight = false, queued = null;
-// The SCENE identity of a motion frame: everything about the request
-// except the camera (center/zoom and the zoom-derived lod). A retained
-// motion frame may be reused only while this key matches — any change
-// of year, subject, style, chart, or toggles invalidates it.
-function motionKey() {
-  const p = currentParams("drag");
-  p.delete("center"); p.delete("zoom"); p.delete("lod");
-  return p.toString();
+// THE PORTRAIT: a bitmap of the frame on display, stamped with that
+// frame's view. A zoom ease scales THIS — stretching a texture is
+// compositor work at any content weight — while vector frames absorb
+// hidden beneath it, and the document returns, sharp, at rest.
+// Refreshed off the hot path after every absorb, so a gesture never
+// pays for its own snapshot.
+// `cover`: the portrait owns the screen. Every transition of cover is
+// scheduled AT REST (right after the portrait sits, over an identical
+// document, or when a document lands at rest) — never at gesture
+// start, where the style flip's paint cost (measured 150 ms on a
+// hemisphere) would land mid-motion. A gesture therefore begins with
+// ZERO style changes: the canvas is already what is on screen.
+const portrait = { el: null, view: null, ready: false, timer: null, cover: false };
+
+// Re-sit the portrait STRAIGHT FROM THE WIRE, mid-ease: fetched
+// bytes become pixels (blob → image → canvas) without ever touching
+// the live DOM — the one main-thread parse motion still paid is
+// gone. The frame's stamp rides the svg root's data attributes and
+// a string scan reads it; the vector document itself waits for rest.
+let freshing = false;
+async function freshenPortrait() {
+  if (freshing) return;
+  freshing = true;
+  try {
+    const res = await fetch("/api/render?" + currentParams("drag").toString());
+    if (!res.ok) return;
+    const body = await res.text();
+    const head = body.slice(0, 2000);
+    const attr = n => {
+      const m = head.match(new RegExp(`data-${n}="([-\\d.]+)"`));
+      return m ? parseFloat(m[1]) : NaN;
+    };
+    const view = { lat: attr("clat"), lon: attr("clon"), zoom: attr("zoom") };
+    if (!isFinite(view.zoom)) return;
+    const vb = head.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+    if (!vb) return;
+    const url = URL.createObjectURL(new Blob([body], { type: "image/svg+xml" }));
+    const probe = new Image();
+    probe.src = url;
+    try { await probe.decode(); } catch { URL.revokeObjectURL(url); return; }
+    await sitPortrait(probe, view, parseFloat(vb[1]), parseFloat(vb[2]));
+    URL.revokeObjectURL(url);
+  } finally {
+    freshing = false;
+  }
 }
 
-// Fetch and parse a drag-quality frame OFF the hot path, while the
-// screen rests, and retain it for the next gesture start. If motion
-// begins meanwhile, the gesture's own render takes over — bail.
-let prewarmT = null;
-function schedulePrewarm() {
-  clearTimeout(prewarmT);
-  prewarmT = setTimeout(async () => {
-    const key = motionKey();
-    // a stash for THIS scene is already warm; a stale one is replaced
-    if (state.motionFrame && state.motionFrame.key === key) return;
-    if (state.moving && state.moving()) return;
-    try {
-      const res = await fetch("/api/render?" + currentParams("drag").toString());
-      const body = await res.text();
-      if (key !== motionKey()) return; // scene moved on
-      if (state.moving && state.moving()) return;           // motion owns renders now
-      const doc = new DOMParser().parseFromString(body, "image/svg+xml");
-      const svg = doc.documentElement;
-      if (!svg || svg.nodeName !== "svg" || svg.dataset.clat === undefined) return;
-      const view = {
-        lat: parseFloat(svg.dataset.clat),
-        lon: parseFloat(svg.dataset.clon),
-        zoom: parseFloat(svg.dataset.zoom),
-      };
-      if (!isFinite(view.zoom)) return;
-      state.motionFrame = { node: document.adoptNode(svg), view, key };
-    } catch {}
-  }, 500);
+// Pixels onto the canvas. The svg root carries no width/height, so
+// the image's own natural size is the replaced-element DEFAULT (a
+// 150 px thumbnail!) — the raster size must come from the document's
+// viewBox, at the device's pixel ratio so the resting map is as
+// crisp as the vector it portrays. drawImage renders SVG images at
+// the destination size, vector-sharp.
+async function sitPortrait(probe, view, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
+  const c = portraitEl();
+  if (c.width !== cw || c.height !== ch) {
+    c.width = cw;
+    c.height = ch;
+  }
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.drawImage(probe, 0, 0, cw, ch);
+  portrait.view = view;
+  portrait.ready = true;
+  // the portrait now shows exactly what the document shows: take the
+  // cover here, at rest, where the flip's paint cost is invisible
+  portrait.cover = true;
+  if (state.applyViewTransform) state.applyViewTransform();
+}
+function portraitEl() {
+  if (!portrait.el) {
+    // a CANVAS, not an <img>: an SVG-backed image re-renders its
+    // vectors whenever the compositor re-rasters at a new scale —
+    // the very cost the portrait exists to remove. A canvas holds
+    // pixels; scaling pixels is free at any content weight.
+    const c = document.createElement("canvas");
+    c.className = "portrait";
+    c.style.visibility = "hidden";
+    portrait.el = c;
+  }
+  const plate = $("plate");
+  if (portrait.el.parentNode !== plate) plate.appendChild(portrait.el);
+  return portrait.el;
+}
+function schedulePortrait(delay) {
+  clearTimeout(portrait.timer);
+  portrait.timer = setTimeout(takePortrait, delay);
+}
+async function takePortrait() {
+  const svg = $("plate").querySelector(".layer svg");
+  if (!svg || !state.frameView) return;
+  // serializing the full document costs a frame's worth of main
+  // thread — that price is paid only at rest. A drag frame's
+  // serialize is small and may run mid-motion (it is how the
+  // portrait stays fresh through a long ease).
+  if (state.moving && state.moving() && state.frameQuality !== "drag") {
+    schedulePortrait(250);
+    return;
+  }
+  const view = { ...state.frameView };
+  const url = URL.createObjectURL(new Blob([svg.outerHTML], { type: "image/svg+xml" }));
+  const probe = new Image();
+  probe.src = url;
+  try { await probe.decode(); } catch { URL.revokeObjectURL(url); return; }
+  const vb = svg.viewBox?.baseVal;
+  if (!vb || vb.width <= 0) { URL.revokeObjectURL(url); return; }
+  await sitPortrait(probe, view, vb.width, vb.height);
+  URL.revokeObjectURL(url);
 }
 
 async function render(quality) {
@@ -386,10 +469,6 @@ async function render(quality) {
     const body = await res.text();
     showPlate(res, body, p.get("encoder"));
     state.frameQuality = quality === "drag" ? "drag" : "full";
-    // a sharp frame at rest: warm the NEXT gesture's motion frame in
-    // the idle, so even the first gesture on a fresh scene starts
-    // with a parsed drag frame in hand
-    if (quality !== "drag") schedulePrewarm();
   } finally {
     inFlight = false;
     if (queued) { const q = queued === "full" ? undefined : queued; queued = null; render(q); }
@@ -414,7 +493,20 @@ function absorbSvg(layer, body) {
       state.syncVisualToFrame(state.frameView);
     }
   }
+  // A document landing at rest shows itself — the reader never sees
+  // a stale portrait of the old scene. A live globe drag owns the
+  // screen too: rotation is re-rendering, not a transform. Only
+  // frames landing under a moving eased camera stay covered (the
+  // canvas is mid-gesture; the fresh portrait follows).
+  if ((state.liveDrag && state.liveDrag()) || !(state.moving && state.moving())) {
+    portrait.cover = false;
+  }
+  if (!(state.moving && state.moving()) && state.adoptResolved) {
+    state.adoptResolved();
+  }
   if (state.applyViewTransform) state.applyViewTransform();
+  // every absorbed frame sits for a fresh portrait, off the hot path
+  schedulePortrait(150);
 }
 
 function frameStatus(res, body) {
@@ -426,17 +518,33 @@ function frameStatus(res, body) {
   });
 }
 
+// Clear the plate of frames while the PORTRAIT (a plate-level
+// sibling that must survive every frame swap) stays put.
+function clearPlateFrames() {
+  const plate = $("plate");
+  for (const c of [...plate.childNodes]) {
+    if (!(c.nodeType === 1 && c.classList.contains("portrait"))) c.remove();
+  }
+}
+
 function showPlate(res, body, encoder) {
   const plate = $("plate");
-  if (!res.ok) { plate.innerHTML = ""; plate.textContent = body; setStatus({error: body}); return; }
+  if (!res.ok) {
+    clearPlateFrames();
+    if (portrait.el) portrait.el.style.visibility = "hidden";
+    plate.appendChild(document.createTextNode(body));
+    setStatus({error: body});
+    return;
+  }
   if (encoder === "svg") {
-    plate.innerHTML = "";
+    clearPlateFrames();
     const layer = document.createElement("div");
     layer.className = "layer";
-    absorbSvg(layer, body);
     plate.appendChild(layer);
+    absorbSvg(layer, body);
   } else {
-    plate.innerHTML = "";
+    clearPlateFrames();
+    if (portrait.el) portrait.el.style.visibility = "hidden";
     const pre = document.createElement("pre");
     pre.textContent = body;
     plate.appendChild(pre);
@@ -447,14 +555,18 @@ function showPlate(res, body, encoder) {
 /// The time-lapse frame swap: the new state fades in over the old.
 function crossfadeTo(res, body) {
   const plate = $("plate");
+  // the fade is documents talking to documents: lift the portrait's
+  // cover and un-dim the old frame so the new one fades in OVER it
+  portrait.cover = false;
+  for (const l of plate.querySelectorAll(".layer")) l.style.opacity = "";
   const layer = document.createElement("div");
   layer.className = "layer entering";
-  absorbSvg(layer, body);
   plate.appendChild(layer);
+  absorbSvg(layer, body);
   setTimeout(() => {
-    while (plate.children.length > 1 && plate.lastChild !== plate.firstChild) {
-      plate.firstChild.remove();
-    }
+    // the fade is over: only the newest layer (and the portrait) stay
+    const layers = plate.querySelectorAll(".layer");
+    for (let i = 0; i < layers.length - 1; i++) layers[i].remove();
   }, 520);
   frameStatus(res, body);
 }
@@ -513,8 +625,21 @@ function setupPlateNav() {
     const layer = layers[layers.length - 1];
     const svg = layer?.querySelector("svg");
     if (!layer || !svg) return;
-    const fv = state.frameView;
-    if (!fv || visual.zoom === null) { svg.style.transform = ""; return; }
+    // during an ease the PORTRAIT (a bitmap) is what moves — scaling
+    // it is pure compositor work; the vector document hides beneath
+    // and returns at rest. Each artifact is transformed by its OWN
+    // stamped view, so the switch between them is always seamless.
+    // The document dims via LAYER OPACITY, never svg visibility: a
+    // visibility flip is an inherited-property recalc over the whole
+    // subtree (measured: 133 ms on a hemisphere), opacity is a group
+    // effect on one element.
+    const usePortrait = portrait.ready && portrait.el && portrait.cover;
+    if (portrait.el) portrait.el.style.visibility = usePortrait ? "" : "hidden";
+    const dim = usePortrait ? "0" : "";
+    if (layer.style.opacity !== dim) layer.style.opacity = dim;
+    const el = usePortrait ? portrait.el : svg;
+    const fv = usePortrait ? portrait.view : state.frameView;
+    if (!fv || visual.zoom === null) { el.style.transform = ""; return; }
     const cb = contentBoxOf(layer);
     if (!cb) return;
     const s = fv.zoom / visual.zoom;
@@ -530,11 +655,26 @@ function setupPlateNav() {
     // content offset o from the frame center to sit at the box center
     const tx = cb.cx - s * (cb.cx + ox);
     const ty = cb.cy - s * (cb.cy + oy);
-    svg.style.transformOrigin = "0 0";
-    svg.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+    el.style.transformOrigin = "0 0";
+    el.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
   }
   state.applyViewTransform = applyViewTransform;
   state.moving = () => animating || !!drag;
+  state.liveDrag = () => !!drag && state.projection !== "flat";
+  // A frame landing AT REST is the server's answer to where the
+  // camera is — a chart may clamp or resolve the request, and the
+  // client adopts the resolved view rather than holding a transform
+  // against it forever (a stale offset displaced the whole map after
+  // a projection switch).
+  state.adoptResolved = () => {
+    if (!state.frameView) return;
+    if (state.view.lat !== null) state.view = { ...state.frameView };
+    if (visual.zoom !== null) {
+      visual.lat = state.frameView.lat;
+      visual.lon = state.frameView.lon;
+      visual.zoom = state.frameView.zoom;
+    }
+  };
   state.syncVisualToFrame = fv => {
     if (drag && visual.zoom !== null) { visual.lat = fv.lat; visual.lon = fv.lon; }
   };
@@ -559,12 +699,12 @@ function setupPlateNav() {
       animating = false; lastT = 0;
       settleSharp(); // cheap frame now, the sharpen when the eye rests
     } else {
-      // far from home: freshen with a coalesced drag-quality frame.
-      // It lands seamlessly via its stamp — and, as important, a
-      // DRAG frame is cheap to transform: scaling a full-quality
-      // frame re-rasterizes megabytes of vectors every tick.
-      const fv = state.frameView;
-      if (fv && Math.abs(fv.zoom / state.view.zoom - 1) > 0.35) render("drag");
+      // far from home: re-sit the portrait straight from the wire —
+      // blur and gutters stay bounded on deep zooms, and the live
+      // DOM stays untouched until rest
+      if (portrait.ready && Math.abs(portrait.view.zoom / state.view.zoom - 1) > 0.35) {
+        freshenPortrait();
+      }
       requestAnimationFrame(tick);
     }
   }
@@ -572,24 +712,9 @@ function setupPlateNav() {
     ensureVisual();
     if (!animating) {
       animating = true; lastT = 0;
-      // a gesture begins: the frame on screen is the SHARP one, and
-      // scaling it re-rasterizes its vectors every tick. Show a
-      // drag-quality frame instead — the retained one re-attaches
-      // with NO parse; a fresh one is requested either way.
-      const mf = state.motionFrame;
-      if (mf && mf.key !== motionKey()) state.motionFrame = null; // stale scene
-      if (mf && mf.key === motionKey()) {
-        const layers = plate.querySelectorAll(".layer");
-        const layer = layers[layers.length - 1];
-        if (layer) {
-          layer.replaceChildren(mf.node);
-          state.resolved = { ...mf.view };
-          state.frameView = { ...mf.view };
-          state.frameQuality = "drag";
-        }
-        state.motionFrame = null;
-      }
-      render("drag");
+      // cold start only: with no portrait covering, the ease would
+      // scale the vector document — sit one straight from the wire
+      if (!portrait.cover) freshenPortrait();
       requestAnimationFrame(tick);
     }
   }
@@ -602,19 +727,7 @@ function setupPlateNav() {
   function settleSharp() {
     render("drag");
     clearTimeout(sharpen);
-    sharpen = setTimeout(() => {
-      if (animating || drag) return;
-      // RETAIN the parsed drag frame the sharpen is about to replace:
-      // the next gesture re-attaches it instead of re-parsing — the
-      // one main-thread stall motion had left is gone
-      const layers = plate.querySelectorAll(".layer");
-      const layer = layers[layers.length - 1];
-      const svg = layer?.querySelector("svg");
-      if (svg && state.frameView && state.frameQuality === "drag") {
-        state.motionFrame = { node: svg, view: { ...state.frameView }, key: motionKey() };
-      }
-      render();
-    }, 320);
+    sharpen = setTimeout(() => { if (!animating && !drag) render(); }, 320);
   }
 
   function groundPerPx() {

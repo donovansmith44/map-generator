@@ -226,7 +226,13 @@ impl CanonProvider {
             return None;
         }
         let b = self.store.borders().get(&id)?;
-        Ring::new(map_types::simplify_polyline(&b.0, q.lod)).ok()
+        // fidelity may thin a ring, never erase it: a ring the
+        // tolerance would collapse ships unsimplified instead, so a
+        // small territory is present at every level of detail
+        match Ring::new(map_types::simplify_polyline(&b.0, q.lod)) {
+            Ok(r) => Some(r),
+            Err(_) => Ring::new(b.0.clone()).ok(),
+        }
     }
 
     fn border_culled(&self, id: map_canon::BorderId, q: &RenderQuery) -> bool {

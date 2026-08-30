@@ -106,6 +106,66 @@ fn globe_clips_the_far_hemisphere() {
 }
 
 #[test]
+fn nothing_unseen_speaks() {
+    // A name appears only once the reader can resolve the thing it
+    // names: a pond spanning less than the legibility floor stays
+    // silent at a wide camera and speaks when the camera closes in.
+    fn lake(id: u64, lat: f64, lon: f64, r: f64) -> StyledRegion {
+        let ring = Ring::new(vec![
+            uv(lat - r, lon - r),
+            uv(lat - r, lon + r),
+            uv(lat + r, lon + r),
+            uv(lat + r, lon - r),
+        ])
+        .unwrap();
+        StyledRegion {
+            region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(id)),
+            entity: None,
+            outer: vec![ring],
+            holes: vec![],
+            paint: Paint { fill: Rgba(120, 150, 200, 255) },
+            sources: Default::default(),
+        }
+    }
+    fn name(id: u64, text: &str, lat: f64, lon: f64) -> PlacedLabel {
+        PlacedLabel {
+            text: text.to_string(),
+            at: uv(lat, lon),
+            subject: LabelSubject::Region(map_types::RegionId(
+                atlas_graph_types::covenant::ContentHash(id),
+            )),
+            style: LabelStyle {
+                color: Rgba(10, 10, 10, 255),
+                halo: Rgba(245, 240, 225, 220),
+                size: 12.0,
+            },
+            face: map_types::scene::LabelFace::Water,
+            voice: test_voice(),
+        }
+    }
+    let mut scene = Snapshot::empty();
+    scene.regions.push(lake(11, 0.0, 0.0, 5.0)); // spans ~10 degrees
+    scene.regions.push(lake(12, 8.0, 8.0, 0.02)); // a speck
+    scene.labels.push(name(11, "GREATWATER", 0.0, 0.0));
+    scene.labels.push(name(12, "SPECKPOND", 8.0, 8.0));
+    let wide = SvgEncoder {
+        projection: Projection::Globe { center: Some((4.0, 4.0)), zoom: Some(45.0) },
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    assert!(wide.contains("GREATWATER"), "a resolvable subject speaks");
+    assert!(!wide.contains("SPECKPOND"), "a sub-pixel subject stays silent");
+    let close = SvgEncoder {
+        projection: Projection::Globe { center: Some((8.0, 8.0)), zoom: Some(0.5) },
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    assert!(close.contains("SPECKPOND"), "the name returns as its subject resolves");
+}
+
+#[test]
 fn explicit_view_overrides_autofit_deterministically() {
     let scene = sample_scene();
     let enc = SvgEncoder {

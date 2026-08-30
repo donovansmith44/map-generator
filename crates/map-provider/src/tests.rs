@@ -614,4 +614,21 @@ mod scaling_laws {
             "the backdrop survives"
         );
     }
+
+    /// Fidelity may thin a ring, never erase it: a territory smaller
+    /// than the simplify tolerance still ships (unsimplified), so
+    /// nothing pops out of the map when a coarse frame renders.
+    #[test]
+    fn simplification_never_erases_a_feature() {
+        let p = provider(store_with(&[
+            ("land", dense_ring(30.0, 30.0, 4.0, 64)),
+            ("speck", dense_ring(31.0, 31.0, 0.05, 16)),
+        ]));
+        let coarse = p.render(&q(0.05, None)).unwrap();
+        let names: Vec<_> = coarse.regions.iter().filter_map(|r| r.entity.clone()).collect();
+        assert!(
+            names.contains(&"speck".to_string()),
+            "a sub-tolerance territory survives a coarse query (got {names:?})"
+        );
+    }
 }
