@@ -332,7 +332,20 @@ impl CanonProvider {
             _ => None,
         };
         let only: Option<&BTreeSet<EntityId>> = pieces.or(subject_only.as_ref());
+        // Paint rank per region: the stage under everything, claims
+        // over it, water above every claim (a lake is never buried),
+        // recorded at push time because the scene type carries no
+        // layer.
+        let mut paint_rank: BTreeMap<map_types::RegionId, u8> = BTreeMap::new();
         for layer in layers_wanted(q.layers) {
+            let rank = match layer {
+                LayerKind::Background => 0u8,
+                LayerKind::Relief => 1,
+                LayerKind::Territory => 2,
+                LayerKind::ScriptureClaims => 3,
+                LayerKind::Water => 4,
+                LayerKind::Journeys => 5,
+            };
             for (fid, f) in self.active(layer, t) {
                 if let Some(set) = only {
                     if !set.contains(f.entity()) {
@@ -340,7 +353,10 @@ impl CanonProvider {
                     }
                 }
                 match f {
-                    Feature::Area(a) => self.push_area(&mut scene, layer, fid, a, t, q, style),
+                    Feature::Area(a) => {
+                        paint_rank.insert(rid_of(&a.entity), rank);
+                        self.push_area(&mut scene, layer, fid, a, t, q, style)
+                    }
                     Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style),
                     Feature::Point(p) => {
                         let sources = self.sources_of(fid);
@@ -359,11 +375,14 @@ impl CanonProvider {
         // areas never share a color when a free slot exists (stable:
         // deterministic order, hash-seeded start).
         recolor_adjacent(&mut scene, self.style(q.style)?);
-        // Largest areas first: an empire never buries its vassals.
+        // Layer rank first (water above every claim — a lake is never
+        // buried), then largest areas first within a rank: an empire
+        // never buries its vassals.
         scene.regions.sort_by_cached_key(|r| {
             let pts: usize = r.outer.iter().map(|ring| ring.len()).sum();
             let radius = area_radius(r);
-            (std::cmp::Reverse((radius * 1e9) as u64), pts, r.region.0 .0)
+            let rank = paint_rank.get(&r.region).copied().unwrap_or(2);
+            (rank, std::cmp::Reverse((radius * 1e9) as u64), pts, r.region.0 .0)
         });
         // Point subjects (gazetteer places) ride on top of the world.
         if let RenderSubject::Point(place) = &q.subject {

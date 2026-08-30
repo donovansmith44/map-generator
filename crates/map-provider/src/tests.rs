@@ -1326,6 +1326,30 @@ mod canon_provider_laws {
         assert_eq!(a.canonical_bytes(), b.canonical_bytes());
     }
 
+    /// A lake is never buried by a claim: water areas paint after
+    /// every land-claim area regardless of size, so a territory that
+    /// overhangs a shoreline is clipped by the sea, never the other
+    /// way round. (The fixture's sea is LARGER than Assyria, so a
+    /// pure size-sort would paint it first and bury it.)
+    #[test]
+    fn water_is_never_buried_by_a_claim() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, -1000)).unwrap();
+        let idx_of = |witness: &str| {
+            scene
+                .regions
+                .iter()
+                .position(|r| r.sources.contains(&SourceId::new(witness)))
+                .unwrap_or_else(|| panic!("{witness} region present"))
+        };
+        let land = idx_of("witness:atlas");
+        let water = idx_of("witness:natural-earth");
+        assert!(
+            water > land,
+            "water (idx {water}) must paint after the land claim (idx {land})"
+        );
+    }
+
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
     /// stations appear as reached, named from the gazetteer; outside
     /// the span, no way at all.
