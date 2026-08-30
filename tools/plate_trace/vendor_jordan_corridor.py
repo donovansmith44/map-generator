@@ -31,7 +31,7 @@ for w in jordan:
         x, y = to_px(g['lon'], g['lat'])
         pts.append([int(round(x)), int(round(y))])
     if len(pts) >= 2:
-        cv2.polylines(corridor, [np.array(pts, np.int32)], False, 255, thickness=5)
+        cv2.polylines(corridor, [np.array(pts, np.int32)], False, 255, thickness=8)  # RIVER DISPLAY WIDTH ~600m; paired with the 1.9 stroke in canon_provider
 
 # NE lakes (Galilee + Dead Sea) rasterized
 lakes = np.zeros((H, W), np.uint8)

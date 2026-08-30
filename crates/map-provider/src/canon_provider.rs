@@ -374,7 +374,13 @@ impl CanonProvider {
                                 pts,
                                 stroke: map_types::style::Stroke {
                                     color: style.water_paint().fill,
-                                    width: 1.3,
+                                    // RIVER DISPLAY WIDTH ~600 m: paired
+                                    // with the 8 px corridor raster in
+                                    // tools/plate_trace — one quantity,
+                                    // two representations; the stroke on
+                                    // the centerline also covers the
+                                    // fill-abutment antialiasing seam.
+                                    width: 1.9,
                                     pattern: map_types::style::StrokePattern::Solid,
                                 },
                                 sources,
