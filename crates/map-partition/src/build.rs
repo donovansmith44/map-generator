@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use map_types::UnitVec;
 
 use crate::{
-    bearing, cycle_area, winding, FaceId, FaceKind, Fnv, PEdge, PFace, PHalf, Partition,
+    bearing, cycle_area, winding, FaceKind, Fnv, PEdge, PFace, PHalf, Partition,
     PartitionConfig, RiverPath,
 };
 

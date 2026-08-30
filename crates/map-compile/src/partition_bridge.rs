@@ -18,7 +18,7 @@ use map_canon::{
     Timestamp, Witness, World,
 };
 use map_partition::{
-    build, cycle_area, winding, FaceKind, Partition, PartitionConfig, WitnessPolyline,
+    build, cycle_area, winding, FaceKind, PartitionConfig, WitnessPolyline,
     WitnessRegion,
 };
 use map_types::UnitVec;
@@ -285,20 +285,6 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
         );
         water_fids.insert(fid);
     }
-    for chain in river_edge_chains(&part) {
-        if chain.len() < 2 {
-            continue;
-        }
-        let bid = store.insert_border(Border(chain));
-        let fid = store.insert_feature(Feature::Line(PathLine {
-            entity: EntityId("partition:jordan".into()),
-            name: "river on the border (partition)".into(),
-            border: bid,
-        }));
-        store.set_provenance(fid, prov("sphere-partition border river".into()));
-        water_fids.insert(fid);
-    }
-
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0)?;
     overlay_features(store, LayerKind::Water, &water_fids, t0)?;
 
@@ -418,12 +404,18 @@ fn clip_outside_water(pts: &[UnitVec], water: &[Vec<UnitVec>]) -> Vec<Vec<UnitVe
     for i in 0..pts.len() {
         if !flags[i] {
             if cur.is_empty() && i > 0 && flags[i - 1] {
-                cur.push(pts[i - 1]); // reach back to touch the shore
+                // the mouth touches the TRUE shoreline crossing — an
+                // interior lake point would cut the corner over land
+                if let Some(x) = shoreline_crossing(&pts[i], &pts[i - 1], water) {
+                    cur.push(x);
+                }
             }
             cur.push(pts[i]);
         } else {
             if !cur.is_empty() {
-                cur.push(pts[i]); // reach forward to touch the shore
+                if let Some(x) = shoreline_crossing(&pts[i - 1], &pts[i], water) {
+                    cur.push(x);
+                }
                 runs.push(std::mem::take(&mut cur));
             }
         }
@@ -434,43 +426,40 @@ fn clip_outside_water(pts: &[UnitVec], water: &[Vec<UnitVec>]) -> Vec<Vec<UnitVe
     runs
 }
 
-/// Maximal chains of river-attributed border edges, as point paths.
-fn river_edge_chains(p: &Partition) -> Vec<Vec<UnitVec>> {
-    use std::collections::BTreeMap;
-    let mut adj: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    let river_edges: Vec<usize> = (0..p.edges.len()).filter(|&e| p.edges[e].river).collect();
-    for &e in &river_edges {
-        adj.entry(p.edges[e].a).or_default().push(e);
-        adj.entry(p.edges[e].b).or_default().push(e);
-    }
-    let mut used = vec![false; p.edges.len()];
-    let mut chains = Vec::new();
-    let mut starts: Vec<usize> =
-        adj.iter().filter(|(_, es)| es.len() == 1).map(|(&v, _)| v).collect();
-    starts.extend(adj.keys().copied());
-    for s in starts {
-        let Some(es) = adj.get(&s) else { continue };
-        for &e0 in es {
-            if used[e0] {
+/// Where the arc from `out` (on land) to `inw` (in water) crosses a
+/// water ring: the crossing nearest to `out`.
+fn shoreline_crossing(out: &UnitVec, inw: &UnitVec, water: &[Vec<UnitVec>]) -> Option<UnitVec> {
+    let (n1x, n1y, n1z) = out.cross_raw(inw);
+    let full = out.angle_to(inw);
+    let mut best: Option<(f64, UnitVec)> = None;
+    for ring in water {
+        let n = ring.len();
+        for s in 0..n {
+            let a = ring[s];
+            let b = ring[(s + 1) % n];
+            let (n2x, n2y, n2z) = a.cross_raw(&b);
+            let px = n1y * n2z - n1z * n2y;
+            let py = n1z * n2x - n1x * n2z;
+            let pz = n1x * n2y - n1y * n2x;
+            if (px * px + py * py + pz * pz).sqrt() < 1e-14 {
                 continue;
             }
-            let mut chain = vec![s];
-            let mut v = s;
-            let mut e = e0;
-            loop {
-                used[e] = true;
-                let w = if p.edges[e].a == v { p.edges[e].b } else { p.edges[e].a };
-                chain.push(w);
-                v = w;
-                match adj.get(&v).and_then(|es| es.iter().find(|&&x| !used[x])) {
-                    Some(&nxt) => e = nxt,
-                    None => break,
+            for sign in [1.0f64, -1.0] {
+                let Ok(c) = UnitVec::normalize(sign * px, sign * py, sign * pz) else { continue };
+                let on_seg = |p: &UnitVec, u: &UnitVec, v: &UnitVec| {
+                    let f = u.angle_to(v);
+                    (p.angle_to(u) + p.angle_to(v) - f).abs() < 1e-9 + f * 1e-6
+                };
+                if on_seg(&c, out, inw) && on_seg(&c, &a, &b) {
+                    let d = c.angle_to(out);
+                    if d <= full + 1e-12 && best.as_ref().map_or(true, |(bd, _)| d < *bd) {
+                        best = Some((d, c));
+                    }
                 }
             }
-            chains.push(chain.into_iter().map(|vi| p.vertices[vi]).collect());
         }
     }
-    chains
+    best.map(|(_, c)| c)
 }
 
 /// Add features to EVERY moment of a layer (partition features are
