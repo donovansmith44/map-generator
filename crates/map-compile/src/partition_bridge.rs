@@ -30,9 +30,23 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
 
+    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — the border
+    // river (the Jordan) becomes a thin CORRIDOR FACE so it can win
+    // overlaps exactly like a lake. The corridor is raster-buffered at
+    // vendor time (a meandering centerline buffered on the sphere
+    // self-intersects; a raster union cannot).
+    let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
+
     // rivers: OSM's connected network, clipped at the water witnesses
     let mut water_rings: Vec<Vec<UnitVec>> = seas.clone();
     water_rings.extend(lakes.iter().map(|(_, r)| r.clone()));
+    // A RIVER BELONGS TO THE MAP WHEN IT REACHES THE MAP'S WATER: the
+    // sea, a lake, or the Jordan corridor. Endorheic desert networks —
+    // wadis draining into sand beyond the map's subject — never enter.
+    // The criterion is drainage, measured on the data, not a curated
+    // list of names.
+    let mut reach_rings: Vec<Vec<UnitVec>> = water_rings.clone();
+    reach_rings.extend(corridors.iter().cloned());
     // THE TYPE GATE: every network passes through RiverSystem, whose
     // constructor refuses a disconnected system — the dam-split class
     // (one river arriving as separate collinear pieces) cannot reach
@@ -58,6 +72,9 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
             PartitionConfig::default().tau_edge,
         )
         .map_err(|e| format!("river system integrity: {e:?}"))?;
+        if !network_reaches_water(&system.paths, &reach_rings) {
+            continue; // drains into sand: not this map's river
+        }
         for pts in system.paths {
             for run in clip_outside_water(&pts, &water_rings) {
                 if run.len() < 2 {
@@ -74,13 +91,6 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
             }
         }
     }
-
-    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — the border
-    // river (the Jordan) becomes a thin CORRIDOR FACE so it can win
-    // overlaps exactly like a lake. The corridor is raster-buffered at
-    // vendor time (a meandering centerline buffered on the sphere
-    // self-intersects; a raster union cannot).
-    let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
 
     // (region-to-water overlap is prepared in raster space at
     // vendor time — see tools/plate_trace/trace_green.py)
@@ -162,6 +172,76 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
         }
     }
     Ok((regions, polylines))
+}
+
+/// The MOUTH-TRUNCATION ALLOWANCE, a measured witness-accuracy
+/// property: OSM river lines can end where urban channels take over,
+/// short of the Natural Earth shoreline — the largest observed gap
+/// for a sea-reaching river in the vendored data is the Yarkon's
+/// 4.25 km, while the nearest endorheic desert network sits more than
+/// 20 km from any water ring. 5 km separates the two classes with
+/// margin on both sides.
+const MOUTH_GAP: f64 = 5.0 / 6371.0;
+
+/// Does the network REACH one of the water rings? Reaching is either
+/// a point enclosed by the ring (whichever way the ring turns), or a
+/// path ENDPOINT — a mouth is an endpoint — within the declared
+/// mouth-truncation allowance of the ring's boundary. A network that
+/// does neither drains elsewhere and is not this map's river. Bbox
+/// prefilter keeps the scan cheap for far-away networks.
+pub(crate) fn network_reaches_water(paths: &[Vec<UnitVec>], rings: &[Vec<UnitVec>]) -> bool {
+    let boxes: Vec<(f64, f64, f64, f64)> = rings
+        .iter()
+        .map(|ring| {
+            let mut b = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+            for p in ring {
+                let (la, lo) = p.to_lat_lon_deg();
+                b = (b.0.min(la), b.1.min(lo), b.2.max(la), b.3.max(lo));
+            }
+            b
+        })
+        .collect();
+    let margin = MOUTH_GAP.to_degrees() + 0.01;
+    let near = |p: &UnitVec, ring: &[UnitVec]| -> bool {
+        let m = ring.len();
+        for s in 0..m {
+            let (a, b) = (&ring[s], &ring[(s + 1) % m]);
+            let (nx, ny, nz) = a.cross_raw(b);
+            let nn = (nx * nx + ny * ny + nz * nz).sqrt();
+            if nn < 1e-12 {
+                continue;
+            }
+            // distance to the segment's great circle, valid when the
+            // projection falls between the endpoints; else endpoints
+            let d0 = ((p.x() * nx + p.y() * ny + p.z() * nz) / nn).asin().abs();
+            let within = p.angle_to(a).max(p.angle_to(b)) <= a.angle_to(b) + MOUTH_GAP;
+            let d = if within { d0 } else { p.angle_to(a).min(p.angle_to(b)) };
+            if d <= MOUTH_GAP {
+                return true;
+            }
+        }
+        false
+    };
+    for path in paths {
+        let ends = [path.first(), path.last()];
+        for p in path {
+            let (la, lo) = p.to_lat_lon_deg();
+            let is_end = ends.iter().any(|e| e.map_or(false, |q| std::ptr::eq(q, p)));
+            for (ring, b) in rings.iter().zip(&boxes) {
+                if la < b.0 - margin || lo < b.1 - margin || la > b.2 + margin || lo > b.3 + margin
+                {
+                    continue;
+                }
+                if winding(ring, p) != 0 {
+                    return true; // enclosed, whichever way the ring turns
+                }
+                if is_end && near(p, ring) {
+                    return true; // a mouth cut short of the shoreline
+                }
+            }
+        }
+    }
+    false
 }
 
 /// The attested neighbor regions: Philistia, Phoenicia, Geshur,

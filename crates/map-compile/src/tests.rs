@@ -502,3 +502,38 @@ fn plate_partition_face_census() {
         }
     }
 }
+
+/// A river belongs to the map when it reaches the map's water: a
+/// network ending inside a lake stays, a network draining into sand
+/// is refused — drainage measured on the data, never a name list.
+#[test]
+fn endorheic_networks_never_enter() {
+    let lake: Vec<map_types::UnitVec> = [
+        (32.0, 35.0), (32.0, 35.2), (32.2, 35.2), (32.2, 35.0),
+    ]
+    .iter()
+    .map(|(la, lo)| map_types::UnitVec::from_lat_lon_deg(*la, *lo))
+    .collect();
+    let into_lake = vec![vec![
+        map_types::UnitVec::from_lat_lon_deg(31.5, 35.1),
+        map_types::UnitVec::from_lat_lon_deg(31.8, 35.1),
+        map_types::UnitVec::from_lat_lon_deg(32.1, 35.1),
+    ]];
+    let into_sand = vec![vec![
+        map_types::UnitVec::from_lat_lon_deg(31.5, 36.5),
+        map_types::UnitVec::from_lat_lon_deg(31.8, 36.6),
+        map_types::UnitVec::from_lat_lon_deg(32.1, 36.7),
+    ]];
+    assert!(crate::partition_bridge::network_reaches_water(&into_lake, &[lake.clone()]));
+    assert!(!crate::partition_bridge::network_reaches_water(&into_sand, &[lake.clone()]));
+    // the data's ring orientation is not the river's problem
+    let lake_cw: Vec<map_types::UnitVec> = lake.iter().rev().cloned().collect();
+    assert!(crate::partition_bridge::network_reaches_water(&into_lake, &[lake_cw]));
+    // a mouth cut short of the shoreline (the measured OSM truncation,
+    // <= 5 km) still reaches; a network 20+ km away never does
+    let short_of_shore = vec![vec![
+        map_types::UnitVec::from_lat_lon_deg(31.5, 35.1),
+        map_types::UnitVec::from_lat_lon_deg(31.97, 35.1), // ~3 km shy
+    ]];
+    assert!(crate::partition_bridge::network_reaches_water(&short_of_shore, &[lake]));
+}
