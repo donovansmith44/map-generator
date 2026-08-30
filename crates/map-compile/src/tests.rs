@@ -387,6 +387,26 @@ fn plate_partition_face_census() {
     let cities = crate::partition_bridge::load_settlements_for_law().expect("settlements load");
     assert!(cities.len() >= 12, "a plate's worth of cities");
     assert!(cities.iter().any(|(p, n, _, _)| p == "jerusalem" && n == "Jerusalem"));
+    // A CITY STANDS ON LAND: any rostered settlement whose site lies
+    // beneath a water witness never becomes a canon point. Sodom's
+    // traditional site is under the Dead Sea's south basin — the law
+    // holds for whoever is drowned, by measurement, not by name.
+    let waters: Vec<&Vec<map_types::UnitVec>> = regions
+        .iter()
+        .filter(|r| {
+            matches!(r.kind, map_partition::FaceKind::Sea | map_partition::FaceKind::Lake)
+        })
+        .flat_map(|r| r.rings.iter())
+        .collect();
+    let drowned: Vec<&str> = cities
+        .iter()
+        .filter(|(_, _, lat, lon)| {
+            let at = map_types::UnitVec::from_lat_lon_deg(*lat, *lon);
+            waters.iter().any(|ring| map_partition::winding(ring, &at) != 0)
+        })
+        .map(|(p, _, _, _)| p.as_str())
+        .collect();
+    assert!(drowned.contains(&"sodom"), "the roster's known drowned site is caught");
     let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
     let mut jer_face = None;
     for (i, _f) in p.faces.iter().enumerate() {

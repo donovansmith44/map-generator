@@ -407,12 +407,27 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     // gazetteer (coordinates, verse attestations) with OpenBible's
     // place typing — only dominant-sense settlements, thresholds
     // measured and declared in tools/plate_trace/vendor_settlements.py.
+    // A CITY STANDS ON LAND: a settlement whose traditional site lies
+    // beneath the map's waters (Sodom under the Dead Sea's south
+    // basin) cannot stand on this map — refused here, by name,
+    // against the same water rings the partition itself is built on.
+    let water_rings_all: Vec<&Vec<UnitVec>> = regions
+        .iter()
+        .filter(|r| matches!(r.kind, FaceKind::Sea | FaceKind::Lake))
+        .flat_map(|r| r.rings.iter())
+        .collect();
     let mut n_cities = 0usize;
+    let mut drowned: Vec<String> = Vec::new();
     for (place, name, lat, lon) in load_settlements()? {
+        let at = UnitVec::from_lat_lon_deg(lat, lon);
+        if water_rings_all.iter().any(|ring| winding(ring, &at) != 0) {
+            drowned.push(name);
+            continue;
+        }
         let fid = store.insert_feature(Feature::Point(map_canon::Landmark {
             entity: EntityId(format!("place:{place}")),
             name,
-            at: UnitVec::from_lat_lon_deg(lat, lon),
+            at,
         }));
         store.set_provenance(
             fid,
@@ -430,7 +445,9 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     overlay_features(store, LayerKind::Water, &water_fids, t0)?;
 
     Ok(format!(
-        "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr"
+        "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr;          {n_cities} cities stand, {} beneath the waters ({})",
+        drowned.len(),
+        drowned.join(", ")
     ))
 }
 
