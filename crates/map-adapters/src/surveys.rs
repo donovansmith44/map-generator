@@ -785,8 +785,6 @@ struct SurveySpec {
 const CITY_NOTE: &str = "The text lists cities, not a border line; this circuit is a \
     disclosed hull through the named places (rendered as Unknown). Coordinates are \
     approximate traditional identifications (stand-in, see provenance).";
-const BORDER_NOTE: &str = "The text walks this border; waypoint coordinates are \
-    approximate traditional identifications (stand-in, see provenance).";
 
 /// The division of the land, Ussher's traditional year.
 

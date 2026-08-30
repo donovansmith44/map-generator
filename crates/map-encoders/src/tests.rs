@@ -33,6 +33,7 @@ fn sample_scene() -> Snapshot {
     let sources: BTreeSet<SourceId> = [SourceId::new("historical-basemaps")].into();
     s.regions.push(StyledRegion {
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(1)),
+        entity: None,
         outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
@@ -158,6 +159,7 @@ fn flat_zooms_to_a_window() {
     use map_types::RegionId;
     let region = |n: u64, lat: f64, lon: f64| StyledRegion {
         region: RegionId(ContentHash(n)),
+        entity: None,
         outer: vec![Ring::new(vec![
             uv(lat, lon),
             uv(lat, lon + 2.0),
@@ -239,6 +241,7 @@ fn labels_fit_their_territory_and_never_collide() {
     let tiny = map_types::RegionId(atlas_graph_types::covenant::ContentHash(7));
     scene.regions.push(StyledRegion {
         region: tiny,
+        entity: None,
         outer: vec![Ring::new(vec![uv(20.0, 20.0), uv(20.0, 20.1), uv(20.1, 20.05)]).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
@@ -344,6 +347,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
 
     let region = |n: u64, ring: Vec<UnitVec>| StyledRegion {
         region: RegionId(ContentHash(n)),
+        entity: None,
         outer: vec![Ring::new(ring).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(10 + n as u8, 20, 30, 200) },
@@ -415,6 +419,7 @@ fn swallowing_geometry_ships_thin() {
     let scene = Snapshot {
         regions: vec![StyledRegion {
             region: RegionId(ContentHash(1)),
+            entity: None,
             outer: vec![Ring::new(circle.clone()).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(10, 20, 30, 200) },
@@ -499,4 +504,54 @@ fn label_wears_its_declared_voice() {
     assert!(svg.contains("font-weight=\"512\""), "weight comes from the voice");
     assert!(svg.contains("font-style=\"italic\""), "posture comes from the voice");
     assert!(svg.contains("letter-spacing=\"4.00\""), "tracking = size x tracking_em");
+}
+
+/// THE COMPOSABILITY LAW: for a fixed (camera, width), every artifact
+/// — scaffold, piece, whole scene — shares the same projection frame:
+/// identical viewBox and identical data-clat/clon/zoom stamps, so
+/// stacked piece-SVGs align geometrically by construction. And every
+/// region keeps its addressability: the entity string the API speaks
+/// rides the path as data-entity.
+#[test]
+fn fixed_camera_frames_identically_and_pieces_stay_addressable() {
+    let camera = Projection::Globe { center: Some((32.0, 35.3)), zoom: Some(1.5) };
+    let enc = || SvgEncoder { projection: camera, width: 900.0, ..SvgEncoder::default() };
+    let region = |name: &str, lat: f64| StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(lat as u64 + 7)),
+        entity: Some(name.to_string()),
+        outer: vec![Ring::new(vec![
+            UnitVec::from_lat_lon_deg(lat, 35.0),
+            UnitVec::from_lat_lon_deg(lat, 35.6),
+            UnitVec::from_lat_lon_deg(lat + 0.4, 35.6),
+            UnitVec::from_lat_lon_deg(lat + 0.4, 35.0),
+        ])
+        .unwrap()],
+        holes: Vec::new(),
+        paint: map_types::style::Paint { fill: map_types::style::Rgba(10, 120, 30, 255) },
+        sources: Default::default(),
+    };
+    let mut whole = Snapshot::empty();
+    whole.regions.push(region("partition:judah", 31.6));
+    whole.regions.push(region("partition:ephraim", 32.1));
+    let mut piece = Snapshot::empty();
+    piece.regions.push(region("partition:judah", 31.6));
+    let empty = Snapshot::empty();
+
+    let frame = |svg: &str| {
+        let grab = |attr: &str| {
+            let i = svg.find(attr).unwrap_or_else(|| panic!("{attr} stamped"));
+            svg[i..].split('"').nth(1).unwrap().to_string()
+        };
+        (grab("viewBox="), grab("data-clat="), grab("data-clon="), grab("data-zoom="))
+    };
+    let a = enc().encode(&whole).unwrap();
+    let b = enc().encode(&piece).unwrap();
+    let c = enc().encode(&empty).unwrap();
+    assert_eq!(frame(&a), frame(&b), "a piece frames exactly like the whole");
+    assert_eq!(frame(&a), frame(&c), "even an empty scaffold frames identically");
+    assert!(b.contains("data-entity=\"partition:judah\""), "the piece stays addressable");
+    assert!(
+        a.contains("data-entity=\"partition:ephraim\""),
+        "every region carries the name the API speaks"
+    );
 }

@@ -58,194 +58,9 @@ pub struct App {
     canon: Option<Arc<map_provider::canon_provider::CanonProvider>>,
 }
 
+mod templates;
+
 // ------------------------------------------------------------- styles
-
-/// The house typography, shared by the built-in styles and free for
-/// any style to override wholesale: territories in letterspaced serif
-/// capitals, water in italic serif, places in the plain sans hand.
-/// `advance_em` is the mean glyph advance INCLUDING tracking — the
-/// measure layout uses, declared beside the dress it measures.
-fn house_labeling(base: LabelStyle) -> map_types::style::Labeling {
-    use map_types::style::{LabelScale, Labeling, TypeVoice};
-    Labeling {
-        base,
-        territory: TypeVoice {
-            family: "Georgia, 'Times New Roman', serif",
-            weight: 600,
-            italic: false,
-            uppercase: true,
-            tracking_em: 0.18,
-            advance_em: 0.92,
-        },
-        water: TypeVoice {
-            family: "Georgia, 'Times New Roman', serif",
-            weight: 400,
-            italic: true,
-            uppercase: false,
-            tracking_em: 0.04,
-            advance_em: 0.54,
-        },
-        place: TypeVoice {
-            family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
-            weight: 600,
-            italic: false,
-            uppercase: false,
-            tracking_em: 0.0,
-            advance_em: 0.62,
-        },
-        scale: LabelScale {
-            unit_area_sr: 3.6e-5, // a Judah-sized ring wears ~1.7x base
-            min: 0.85,
-            max: 2.1,
-            water_shrink: 0.8,
-            water_ink: 0.45,
-        },
-    }
-}
-
-fn parchment() -> Style {
-    let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
-    Style::new(
-        BoundaryStrokes {
-            line: s(Rgba(74, 52, 34, 255), 1.2, StrokePattern::Solid),
-            frontier: s(Rgba(150, 110, 60, 255), 1.2, StrokePattern::Zonal),
-            disputed: s(Rgba(140, 50, 40, 255), 1.2, StrokePattern::Hatched),
-            unknown: s(Rgba(120, 116, 105, 255), 1.1, StrokePattern::Dashed),
-            // A journey reads as a WAY, never a border: warm road-red,
-            // dashed (the stations are the text's, the road between is
-            // interpolation), heavier than any territorial stroke.
-            way: s(Rgba(168, 54, 32, 255), 2.0, StrokePattern::Dashed),
-        },
-        Paint { fill: Rgba(221, 204, 161, 235) },
-        Paint { fill: Rgba(148, 175, 178, 235) },
-        // Hypsometric: pale lowland sand rising to warm summit brown.
-        AgeRamp {
-            newest: Paint { fill: Rgba(151, 112, 80, 210) },
-            oldest: Paint { fill: Rgba(226, 215, 183, 210) },
-        },
-        // The atlas look: the dataviz-validated categorical eight,
-        // softened by fill alpha over the plate. Touching territories
-        // never share a slot (provider graph coloring).
-        Some([
-            Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
-            Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
-            Paint { fill: Rgba(0x19, 0x9e, 0x70, 205) },
-            Paint { fill: Rgba(0xc9, 0x85, 0x00, 205) },
-            Paint { fill: Rgba(0xd5, 0x51, 0x81, 205) },
-            Paint { fill: Rgba(0x00, 0x83, 0x00, 205) },
-            Paint { fill: Rgba(0x90, 0x85, 0xe9, 205) },
-            Paint { fill: Rgba(0xe6, 0x67, 0x67, 205) },
-        ]),
-        AgeRamp {
-            newest: Paint { fill: Rgba(174, 60, 40, 220) },
-            oldest: Paint { fill: Rgba(174, 60, 40, 40) },
-        },
-        house_labeling(LabelStyle { color: Rgba(56, 40, 26, 255), halo: Rgba(243, 233, 209, 235), size: 11.0 }),
-        MarkerStyle { color: Rgba(56, 40, 26, 255), size: 3.5 },
-        DeltaEmphasis {
-            before: s(Rgba(120, 116, 105, 255), 1.6, StrokePattern::Dashed),
-            after: s(Rgba(174, 60, 40, 255), 1.8, StrokePattern::Solid),
-            seam: s(Rgba(220, 90, 40, 255), 2.2, StrokePattern::Solid),
-        },
-    )
-    .expect("parchment style is honest")
-}
-
-fn slate() -> Style {
-    let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
-    Style::new(
-        BoundaryStrokes {
-            line: s(Rgba(214, 211, 200, 255), 1.1, StrokePattern::Solid),
-            frontier: s(Rgba(150, 140, 110, 255), 1.1, StrokePattern::Zonal),
-            disputed: s(Rgba(196, 90, 70, 255), 1.1, StrokePattern::Hatched),
-            unknown: s(Rgba(120, 125, 135, 255), 1.0, StrokePattern::Dashed),
-            way: s(Rgba(235, 160, 90, 255), 2.0, StrokePattern::Dashed),
-        },
-        Paint { fill: Rgba(58, 66, 80, 235) },
-        Paint { fill: Rgba(33, 42, 56, 245) },
-        AgeRamp {
-            newest: Paint { fill: Rgba(108, 96, 84, 220) },
-            oldest: Paint { fill: Rgba(52, 60, 68, 220) },
-        },
-        Some([
-            Paint { fill: Rgba(0x39, 0x87, 0xe5, 205) },
-            Paint { fill: Rgba(0xd9, 0x59, 0x26, 205) },
-            Paint { fill: Rgba(0x19, 0x9e, 0x70, 205) },
-            Paint { fill: Rgba(0xc9, 0x85, 0x00, 205) },
-            Paint { fill: Rgba(0xd5, 0x51, 0x81, 205) },
-            Paint { fill: Rgba(0x00, 0x83, 0x00, 205) },
-            Paint { fill: Rgba(0x90, 0x85, 0xe9, 205) },
-            Paint { fill: Rgba(0xe6, 0x67, 0x67, 205) },
-        ]),
-        AgeRamp {
-            newest: Paint { fill: Rgba(196, 90, 70, 220) },
-            oldest: Paint { fill: Rgba(196, 90, 70, 40) },
-        },
-        house_labeling(LabelStyle { color: Rgba(214, 211, 200, 255), halo: Rgba(22, 25, 31, 235), size: 11.0 }),
-        MarkerStyle { color: Rgba(214, 211, 200, 255), size: 3.5 },
-        DeltaEmphasis {
-            before: s(Rgba(120, 125, 135, 255), 1.6, StrokePattern::Dashed),
-            after: s(Rgba(196, 90, 70, 255), 1.8, StrokePattern::Solid),
-            seam: s(Rgba(240, 140, 80, 255), 2.2, StrokePattern::Solid),
-        },
-    )
-    .expect("slate style is honest")
-}
-
-
-/// The "canaan" dress: matched to the owner's reference plate
-/// (Knowing the Bible, "Canaan Before the Conquest of Joshua").
-/// Flat OPAQUE muted fills, no border strokes, solid blue water,
-/// bold dark labels on cream. Same data, different clothes.
-fn canaan() -> Style {
-    let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
-    let invisible = |w| Stroke { color: Rgba(0, 0, 0, 0), width: w, pattern: StrokePattern::Solid };
-    Style::new(
-        BoundaryStrokes {
-            line: invisible(0.8),
-            frontier: s(Rgba(0, 0, 0, 0), 0.8, StrokePattern::Zonal),
-            disputed: invisible(0.9),
-            unknown: Stroke { color: Rgba(0, 0, 0, 0), width: 0.7, pattern: StrokePattern::Dashed },
-            way: s(Rgba(139, 46, 32, 255), 2.0, StrokePattern::Dashed),
-        },
-        Paint { fill: Rgba(0xED, 0xE3, 0xCD, 255) },   // cream land
-        Paint { fill: Rgba(0x7C, 0x9D, 0xC9, 255) },   // reference sea blue
-        AgeRamp {
-            newest: Paint { fill: Rgba(0xC9, 0xB4, 0x90, 255) },
-            oldest: Paint { fill: Rgba(0xEA, 0xE0, 0xC8, 255) },
-        },
-        // The categorical eight, VALIDATED all-pairs on this style's own
-        // cream surface (dataviz validate_palette.js: lightness band,
-        // chroma floor, CVD >= 9.3, normal-vision >= 16.9 — no pair
-        // confusable even under protan/deutan). Warm-anchored to echo
-        // the plate; the plate's own dusty tones fail distinctness
-        // (worst pair dE 0.6) and relied on ink borders instead. The
-        // sub-3:1 surface contrast is the relief rule, discharged by
-        // the always-on region labels.
-        Some([
-            Paint { fill: Rgba(0xCA, 0x61, 0x69, 255) }, // dusty rose
-            Paint { fill: Rgba(0xD6, 0x9A, 0x32, 255) }, // ochre gold
-            Paint { fill: Rgba(0x8A, 0x33, 0x02, 255) }, // deep rust
-            Paint { fill: Rgba(0x70, 0x78, 0x14, 255) }, // olive
-            Paint { fill: Rgba(0x5F, 0xCC, 0x8F, 255) }, // spring green
-            Paint { fill: Rgba(0x00, 0x9A, 0xA1, 255) }, // sea teal
-            Paint { fill: Rgba(0x85, 0x4D, 0x9C, 255) }, // plum
-            Paint { fill: Rgba(0xB2, 0x9A, 0xEB, 255) }, // lavender
-        ]),
-        AgeRamp {
-            newest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 220) },
-            oldest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 40) },
-        },
-        house_labeling(LabelStyle { color: Rgba(0x20, 0x24, 0x2B, 255), halo: Rgba(0xF2, 0xEC, 0xDC, 210), size: 14.0 }),
-        MarkerStyle { color: Rgba(0x20, 0x24, 0x2B, 255), size: 3.2 },
-        DeltaEmphasis {
-            before: s(Rgba(120, 116, 105, 255), 1.4, StrokePattern::Dashed),
-            after: s(Rgba(164, 105, 107, 255), 1.6, StrokePattern::Solid),
-            seam: s(Rgba(139, 46, 32, 255), 2.0, StrokePattern::Solid),
-        },
-    )
-    .expect("the canaan style is honest")
-}
 
 /// Derive a style's ghost: same bones, faded flesh. Patterns survive
 /// (honesty renders even in the background), colors thin out.
@@ -340,24 +155,23 @@ pub fn load() -> App {
 /// The canon-backed composition root: same styles, same App shape,
 /// same routes — a different truth store underneath.
 fn load_canon(canon_path: &std::path::Path) -> App {
-    let p_style = parchment();
-    let s_style = slate();
-    let c_style = canaan();
-    let styles: Vec<(&'static str, StyleId)> = vec![
-        ("parchment", p_style.id()),
-        ("slate", s_style.id()),
-        ("canaan", c_style.id()),
-    ];
+    // PLUG-AND-CHUG: the style book IS templates/*.ron, loaded and
+    // validated at startup (a dishonest file refuses to serve, by
+    // name). Ghost and tint dresses derive from each loaded base.
+    let tpl_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates");
+    let loaded = templates::load_templates(&tpl_dir);
+    let styles: Vec<(&'static str, StyleId)> =
+        loaded.iter().map(|(name, s)| (*name, s.id())).collect();
     let mut ghosts = BTreeMap::new();
     let mut style_table = BTreeMap::new();
-    for base in [&p_style, &s_style, &c_style] {
+    for (_, base) in &loaded {
         let ghost = ghosted(base);
         ghosts.insert(base.id(), ghost.id());
         style_table.insert(ghost.id(), ghost);
         style_table.insert(base.id(), *base);
     }
     let mut overlay_tints = BTreeMap::new();
-    for base in [&p_style, &s_style, &c_style] {
+    for (_, base) in &loaded {
         let ramp = base.age_ramp();
         let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
         overlay_tints.insert(base.id(), (held.id(), current.id()));
@@ -1233,6 +1047,7 @@ mod tests {
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64, src: &str| StyledRegion {
             region: RegionId(ContentHash(n)),
+            entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(1, 2, 3, 200) },
@@ -1282,6 +1097,7 @@ mod tests {
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64| StyledRegion {
             region: RegionId(ContentHash(n)),
+            entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(210, 190, 150, 255) },

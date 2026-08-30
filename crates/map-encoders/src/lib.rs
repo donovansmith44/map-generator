@@ -314,8 +314,12 @@ fn emit_scene(
         }
         let _ = write!(
             s,
-            "<path data-region=\"{:016x}\" d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
+            "<path data-region=\"{:016x}\"{} d=\"{}\" fill=\"{}\" fill-opacity=\"{:.3}\" fill-rule=\"evenodd\"/>",
             r.region.0 .0,
+            r.entity
+                .as_deref()
+                .map(|e| format!(" data-entity=\"{}\"", esc(e)))
+                .unwrap_or_default(),
             content_path(&chunks, true, smooth),
             rgb(r.paint.fill),
             alpha(r.paint.fill)
@@ -911,6 +915,7 @@ impl SceneEncoder for GeoJsonEncoder {
                 "properties": {
                     "kind": "region",
                     "id": format!("{:016x}", r.region.0 .0),
+                    "entity": r.entity,
                     "fill": format!("#{:02x}{:02x}{:02x}", r.paint.fill.0, r.paint.fill.1, r.paint.fill.2),
                 },
                 "geometry": { "type": "MultiPolygon", "coordinates": polys }

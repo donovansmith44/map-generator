@@ -1,0 +1,52 @@
+// The "canaan" dress: matched to the reference plate ("Canaan Before
+// the Conquest of Joshua"). Flat OPAQUE muted fills, no border
+// strokes, solid blue water, bold dark labels on cream.
+// Colors are [r, g, b, a].
+(
+    boundaries: (
+        // invisible territorial strokes: the fills abut, plate-style
+        line:     (color: (0, 0, 0, 0), width: 0.8, pattern: solid),
+        frontier: (color: (0, 0, 0, 0), width: 0.8, pattern: zonal),
+        disputed: (color: (0, 0, 0, 0), width: 0.9, pattern: solid),
+        unknown:  (color: (0, 0, 0, 0), width: 0.7, pattern: dashed),
+        way:      (color: (139, 46, 32, 255), width: 2.0, pattern: dashed),
+    ),
+    region: (237, 227, 205, 255),   // cream land
+    water:  (124, 157, 201, 255),   // reference sea blue
+    topo: (newest: (201, 180, 144, 255), oldest: (234, 224, 200, 255)),
+    // The categorical eight, VALIDATED all-pairs on this style's own
+    // cream surface (dataviz validate_palette.js: lightness band,
+    // chroma floor, CVD >= 9.3, normal-vision >= 16.9 — no pair
+    // confusable even under protan/deutan). Warm-anchored to echo the
+    // plate; the plate's own dusty tones fail distinctness (worst
+    // pair dE 0.6) and relied on ink borders instead. The sub-3:1
+    // surface contrast is the relief rule, discharged by the
+    // always-on region labels.
+    palette: Some((
+        (202, 97, 105, 255),   // dusty rose
+        (214, 154, 50, 255),   // ochre gold
+        (138, 51, 2, 255),     // deep rust
+        (112, 120, 20, 255),   // olive
+        (95, 204, 143, 255),   // spring green
+        (0, 154, 161, 255),    // sea teal
+        (133, 77, 156, 255),   // plum
+        (178, 154, 235, 255),  // lavender
+    )),
+    age: (newest: (164, 105, 107, 220), oldest: (164, 105, 107, 40)),
+    labeling: (
+        base: (color: (32, 36, 43, 255), halo: (242, 236, 220, 210), size: 14.0),
+        territory: (family: "Georgia, 'Times New Roman', serif", weight: 600,
+                    italic: false, uppercase: true, tracking_em: 0.18, advance_em: 0.92),
+        water:     (family: "Georgia, 'Times New Roman', serif", weight: 400,
+                    italic: true, uppercase: false, tracking_em: 0.04, advance_em: 0.54),
+        place:     (family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif", weight: 600,
+                    italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
+        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
+    ),
+    marker: (color: (32, 36, 43, 255), size: 3.2),
+    delta: (
+        before: (color: (120, 116, 105, 255), width: 1.4, pattern: dashed),
+        after:  (color: (164, 105, 107, 255), width: 1.6, pattern: solid),
+        seam:   (color: (139, 46, 32, 255),   width: 2.0, pattern: solid),
+    ),
+)

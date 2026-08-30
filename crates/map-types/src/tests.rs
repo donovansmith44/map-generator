@@ -600,6 +600,7 @@ fn law10_selection_coherence() {
         let mut sc = Snapshot::empty();
         sc.regions.push(StyledRegion {
             region: id,
+            entity: None,
             outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
             holes: vec![],
             paint: style.region_paint(),

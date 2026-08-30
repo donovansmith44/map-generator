@@ -1,0 +1,40 @@
+// The dark slate dress. Colors are [r, g, b, a].
+(
+    boundaries: (
+        line:     (color: (214, 211, 200, 255), width: 1.1, pattern: solid),
+        frontier: (color: (150, 140, 110, 255), width: 1.1, pattern: zonal),
+        disputed: (color: (196, 90, 70, 255),   width: 1.1, pattern: hatched),
+        unknown:  (color: (120, 125, 135, 255), width: 1.0, pattern: dashed),
+        way:      (color: (235, 160, 90, 255),  width: 2.0, pattern: dashed),
+    ),
+    region: (58, 66, 80, 235),
+    water:  (33, 42, 56, 245),
+    topo: (newest: (108, 96, 84, 220), oldest: (52, 60, 68, 220)),
+    palette: Some((
+        (57, 135, 229, 205),
+        (217, 89, 38, 205),
+        (25, 158, 112, 205),
+        (201, 133, 0, 205),
+        (213, 81, 129, 205),
+        (0, 131, 0, 205),
+        (144, 133, 233, 205),
+        (230, 103, 103, 205),
+    )),
+    age: (newest: (196, 90, 70, 220), oldest: (196, 90, 70, 40)),
+    labeling: (
+        base: (color: (214, 211, 200, 255), halo: (22, 25, 31, 235), size: 11.0),
+        territory: (family: "Georgia, 'Times New Roman', serif", weight: 600,
+                    italic: false, uppercase: true, tracking_em: 0.18, advance_em: 0.92),
+        water:     (family: "Georgia, 'Times New Roman', serif", weight: 400,
+                    italic: true, uppercase: false, tracking_em: 0.04, advance_em: 0.54),
+        place:     (family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif", weight: 600,
+                    italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
+        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
+    ),
+    marker: (color: (214, 211, 200, 255), size: 3.5),
+    delta: (
+        before: (color: (120, 125, 135, 255), width: 1.6, pattern: dashed),
+        after:  (color: (196, 90, 70, 255),   width: 1.8, pattern: solid),
+        seam:   (color: (240, 140, 80, 255),  width: 2.2, pattern: solid),
+    ),
+)

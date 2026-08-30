@@ -31,6 +31,10 @@ use crate::timeline::{ChangeEvent, Interval};
 #[derive(Clone, Debug, PartialEq)]
 pub struct StyledRegion {
     pub region: RegionId,
+    /// The entity string the composable API speaks (`pieces=…`) —
+    /// stamped as `data-entity` so a composed artifact stays
+    /// addressable by the same names the caller requested.
+    pub entity: Option<String>,
     pub outer: Vec<Ring>,
     pub holes: Vec<Ring>,
     pub paint: Paint,
@@ -121,6 +125,7 @@ impl MapAddressed for Snapshot {
         c.tag("scene");
         c.seq(&self.regions, |c, r| {
             c.u64_(r.region.0 .0);
+            c.str_(r.entity.as_deref().unwrap_or(""));
             c.seq(&r.outer, |c, ring| ring.canon(c));
             c.seq(&r.holes, |c, ring| ring.canon(c));
             r.paint.canon(c);

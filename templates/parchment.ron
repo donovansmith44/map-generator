@@ -1,0 +1,46 @@
+// The parchment atlas dress. Colors are [r, g, b, a].
+(
+    boundaries: (
+        line:     (color: (74, 52, 34, 255),    width: 1.2, pattern: solid),
+        frontier: (color: (150, 110, 60, 255),  width: 1.2, pattern: zonal),
+        disputed: (color: (140, 50, 40, 255),   width: 1.2, pattern: hatched),
+        unknown:  (color: (120, 116, 105, 255), width: 1.1, pattern: dashed),
+        // A journey reads as a WAY, never a border: warm road-red,
+        // dashed, heavier than any territorial stroke.
+        way:      (color: (168, 54, 32, 255),   width: 2.0, pattern: dashed),
+    ),
+    region: (221, 204, 161, 235),
+    water:  (148, 175, 178, 235),
+    // Hypsometric: pale lowland sand rising to warm summit brown.
+    topo: (newest: (151, 112, 80, 210), oldest: (226, 215, 183, 210)),
+    // The dataviz-validated categorical eight, softened by fill alpha
+    // over the plate. Touching territories never share a slot
+    // (provider graph coloring).
+    palette: Some((
+        (57, 135, 229, 205),
+        (217, 89, 38, 205),
+        (25, 158, 112, 205),
+        (201, 133, 0, 205),
+        (213, 81, 129, 205),
+        (0, 131, 0, 205),
+        (144, 133, 233, 205),
+        (230, 103, 103, 205),
+    )),
+    age: (newest: (174, 60, 40, 220), oldest: (174, 60, 40, 40)),
+    labeling: (
+        base: (color: (56, 40, 26, 255), halo: (243, 233, 209, 235), size: 11.0),
+        territory: (family: "Georgia, 'Times New Roman', serif", weight: 600,
+                    italic: false, uppercase: true, tracking_em: 0.18, advance_em: 0.92),
+        water:     (family: "Georgia, 'Times New Roman', serif", weight: 400,
+                    italic: true, uppercase: false, tracking_em: 0.04, advance_em: 0.54),
+        place:     (family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif", weight: 600,
+                    italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
+        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
+    ),
+    marker: (color: (56, 40, 26, 255), size: 3.5),
+    delta: (
+        before: (color: (120, 116, 105, 255), width: 1.6, pattern: dashed),
+        after:  (color: (174, 60, 40, 255),   width: 1.8, pattern: solid),
+        seam:   (color: (220, 90, 40, 255),   width: 2.2, pattern: solid),
+    ),
+)

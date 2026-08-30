@@ -301,6 +301,7 @@ impl CanonProvider {
         scene.attribution.extend(sources.iter().cloned());
         scene.regions.push(StyledRegion {
             region: rid_of(&a.entity),
+            entity: Some(a.entity.0.clone()),
             outer,
             holes,
             paint: self.area_paint(layer, &a.entity, style),
