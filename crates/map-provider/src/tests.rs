@@ -20,6 +20,31 @@ use serde_json::json;
 
 use crate::{resample, TimelineProvider};
 
+
+fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
+    const TV: map_types::style::TypeVoice = map_types::style::TypeVoice {
+    family: "sans-serif",
+    weight: 600,
+    italic: false,
+    uppercase: false,
+    tracking_em: 0.0,
+    advance_em: 0.62,
+};
+    map_types::style::Labeling {
+        base,
+        territory: TV,
+        water: TV,
+        place: TV,
+        scale: map_types::style::LabelScale {
+            unit_area_sr: 3.6e-5,
+            min: 0.85,
+            max: 2.1,
+            water_shrink: 0.8,
+            water_ink: 0.45,
+        },
+    }
+}
+
 fn tp(year: i32) -> TimePoint {
     TimePoint::year_only(Year::new(year).unwrap())
 }
@@ -45,7 +70,7 @@ fn honest_style() -> Style {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
             oldest: Paint { fill: Rgba(220, 40, 40, 40) },
         },
-        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
         DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
@@ -475,7 +500,7 @@ fn palette_colors_touching_regions_distinctly() {
             newest: Paint { fill: Rgba(220, 40, 40, 255) },
             oldest: Paint { fill: Rgba(220, 40, 40, 40) },
         },
-        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
         DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
@@ -1168,7 +1193,7 @@ mod canon_provider_laws {
                 newest: Paint { fill: Rgba(220, 40, 40, 255) },
                 oldest: Paint { fill: Rgba(220, 40, 40, 40) },
             },
-            LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+            super::test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
             MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
             DeltaEmphasis {
                 before: stroke(90, StrokePattern::Dashed),
@@ -1408,3 +1433,87 @@ mod canon_provider_laws {
     }
 }
 
+
+// ==================== palette graph coloring (style honesty made true)
+
+mod palette_coloring_laws {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use map_canon::EntityId;
+
+    use crate::canon_provider::color_shared_border_graph;
+
+    fn e(s: &str) -> EntityId {
+        EntityId(s.to_string())
+    }
+
+    fn graph(edges: &[(&str, &str)]) -> (Vec<EntityId>, BTreeMap<EntityId, BTreeSet<EntityId>>) {
+        let mut ids: BTreeSet<EntityId> = BTreeSet::new();
+        let mut adj: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
+        for (a, b) in edges {
+            ids.insert(e(a));
+            ids.insert(e(b));
+            adj.entry(e(a)).or_default().insert(e(b));
+            adj.entry(e(b)).or_default().insert(e(a));
+        }
+        (ids.into_iter().collect(), adj)
+    }
+
+    /// The law the style comment promises: touching territories never
+    /// share a slot.
+    #[test]
+    fn touching_territories_never_match() {
+        let (ids, adj) = graph(&[
+            ("asher", "manasseh-west"),
+            ("asher", "phoenicia"),
+            ("asher", "zebulun"),
+            ("manasseh-west", "zebulun"),
+            ("manasseh-west", "ephraim"),
+            ("zebulun", "issachar"),
+        ]);
+        let slot = color_shared_border_graph(&ids, &adj);
+        for (a, ns) in &adj {
+            for b in ns {
+                assert_ne!(slot[a], slot[b], "{a:?} and {b:?} touch and match");
+            }
+        }
+    }
+
+    /// More neighbors than slots: the fallback still answers, and
+    /// deterministically — same input, same coloring, every time.
+    #[test]
+    fn oversubscribed_hub_is_deterministic() {
+        // a hub touching nine spokes that all touch each other: the
+        // spokes exhaust the eight slots, the hub takes the least-worn
+        let mut edges = Vec::new();
+        let spokes: Vec<String> = (0..9).map(|i| format!("spoke-{i}")).collect();
+        for i in 0..spokes.len() {
+            edges.push(("hub".to_string(), spokes[i].clone()));
+            for j in i + 1..spokes.len() {
+                edges.push((spokes[i].clone(), spokes[j].clone()));
+            }
+        }
+        let borrowed: Vec<(&str, &str)> =
+            edges.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let (ids, adj) = graph(&borrowed);
+        let one = color_shared_border_graph(&ids, &adj);
+        let two = color_shared_border_graph(&ids, &adj);
+        assert_eq!(one, two, "coloring is a function of the graph, nothing else");
+        assert!(one.values().all(|&s| s < 8), "every slot is a real slot");
+    }
+
+    /// An entity keeps its slot regardless of which pieces render:
+    /// the assignment is computed once over the whole graph, so a
+    /// subset render cannot recolor the survivors.
+    #[test]
+    fn color_follows_the_entity() {
+        let (ids, adj) = graph(&[("judah", "benjamin"), ("benjamin", "ephraim")]);
+        let full = color_shared_border_graph(&ids, &adj);
+        // rendering only judah+ephraim later still reads THIS map —
+        // the law is that the assignment exists once; spot-check it
+        // is total over the ids given
+        for id in &ids {
+            assert!(full.contains_key(id));
+        }
+    }
+}

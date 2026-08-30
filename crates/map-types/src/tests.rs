@@ -28,6 +28,31 @@ use crate::transition::*;
 
 // ---------------------------------------------------------------- fixtures
 
+
+fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
+    const TV: crate::style::TypeVoice = crate::style::TypeVoice {
+    family: "sans-serif",
+    weight: 600,
+    italic: false,
+    uppercase: false,
+    tracking_em: 0.0,
+    advance_em: 0.62,
+};
+    crate::style::Labeling {
+        base,
+        territory: TV,
+        water: TV,
+        place: TV,
+        scale: crate::style::LabelScale {
+            unit_area_sr: 3.6e-5,
+            min: 0.85,
+            max: 2.1,
+            water_shrink: 0.8,
+            water_ink: 0.45,
+        },
+    }
+}
+
 fn y(i: i32) -> Year {
     Year::new(i).unwrap()
 }
@@ -130,7 +155,7 @@ fn honest_style() -> Style {
             newest: Paint { fill: Rgba(255, 0, 0, 255) },
             oldest: Paint { fill: Rgba(255, 0, 0, 40) },
         },
-        LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
         DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
@@ -455,7 +480,7 @@ fn law06_provenance_totality_and_honesty() {
         AgeRamp { newest: Paint { fill: Rgba(9, 9, 9, 9) }, oldest: Paint { fill: Rgba(3, 3, 3, 3) } },
         None,
         AgeRamp { newest: Paint { fill: Rgba(0, 0, 0, 0) }, oldest: Paint { fill: Rgba(0, 0, 0, 0) } },
-        LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 },
+        test_labeling(LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 }),
         MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
         DeltaEmphasis { before: line, after: line, seam: line },
     );
@@ -586,6 +611,14 @@ fn law10_selection_coherence() {
             subject: LabelSubject::Region(id),
             style: style.label_style(),
             face: crate::scene::LabelFace::Place,
+            voice: crate::style::TypeVoice {
+                family: "sans-serif",
+                weight: 600,
+                italic: false,
+                uppercase: false,
+                tracking_em: 0.0,
+                advance_em: 0.62,
+            },
         });
         sc.attribution.insert(SourceId::new("historical-source"));
         sc
@@ -737,4 +770,29 @@ fn contract_c6_stale_pin_fails_loud() {
     let pin = AtlasPin { version_root: ContentHash(555) };
     assert!(!pin.is_stale(ContentHash(555)));
     assert!(pin.is_stale(ContentHash(556)));
+}
+
+/// Each label face maps to its declared voice — the style is the only
+/// authority on how a kind of label dresses.
+#[test]
+fn labeling_voice_follows_face() {
+    use crate::style::{LabelFace, LabelScale, Labeling, TypeVoice};
+    let v = |family: &'static str| TypeVoice {
+        family,
+        weight: 400,
+        italic: false,
+        uppercase: false,
+        tracking_em: 0.0,
+        advance_em: 0.6,
+    };
+    let l = Labeling {
+        base: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 255), size: 10.0 },
+        territory: v("serif-t"),
+        water: v("serif-w"),
+        place: v("sans-p"),
+        scale: LabelScale { unit_area_sr: 1.0, min: 1.0, max: 1.0, water_shrink: 1.0, water_ink: 0.5 },
+    };
+    assert_eq!(l.voice(LabelFace::Territory).family, "serif-t");
+    assert_eq!(l.voice(LabelFace::Water).family, "serif-w");
+    assert_eq!(l.voice(LabelFace::Place).family, "sans-p");
 }

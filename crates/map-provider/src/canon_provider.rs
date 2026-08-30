@@ -37,6 +37,11 @@ pub struct CanonProvider {
     gazetteer: Option<GazetteerExport>,
     entity_by_rid: BTreeMap<RegionId, EntityId>,
     events: Vec<ChangeEvent>,
+    /// palette slot per area entity, assigned ONCE at load by graph
+    /// coloring over the shared-border graph — the style's promise
+    /// that touching territories never match is made true here, and
+    /// an entity keeps its slot no matter which pieces are rendered.
+    palette_slot: BTreeMap<EntityId, usize>,
 }
 
 fn hash64(s: &str) -> u64 {
@@ -99,7 +104,8 @@ impl CanonProvider {
             entity_by_rid.insert(rid_of(f.entity()), f.entity().clone());
         }
         let events = derive_events(&store);
-        CanonProvider { store, styles, gazetteer, entity_by_rid, events }
+        let palette_slot = palette_slots(&store);
+        CanonProvider { store, styles, gazetteer, entity_by_rid, events, palette_slot }
     }
 
     pub fn from_canon_file(
@@ -155,7 +161,14 @@ impl CanonProvider {
                 mix(ramp.oldest, ramp.newest, t)
             }
             _ => match style.palette() {
-                Some(slots) => slots[(hash64(&entity.0) % 8) as usize],
+                Some(slots) => {
+                    let i = self
+                        .palette_slot
+                        .get(entity)
+                        .copied()
+                        .unwrap_or_else(|| (hash64(&entity.0) % 8) as usize);
+                    slots[i]
+                }
                 None => style.region_paint(),
             },
         }
@@ -206,30 +219,33 @@ impl CanonProvider {
         }
         if q.layers.contains(LayerSet::LABELS) && layer != LayerKind::Relief {
             if let Some(at) = pole_of_inaccessibility(&outer, &holes).or_else(|| centroid(&outer)) {
-                let is_water = layer == LayerKind::Water;
-                let mut label = style.label_style();
-                // the label grows with the ground it names: sqrt of
-                // the largest ring's area, clamped to stay readable
+                let labeling = style.labeling();
+                let face = if layer == LayerKind::Water {
+                    map_types::scene::LabelFace::Water
+                } else {
+                    map_types::scene::LabelFace::Territory
+                };
+                let mut label = labeling.base;
+                // the label grows with the ground it names, by the
+                // style's own declared scaling law
+                let scale = labeling.scale;
                 let sr = outer.iter().map(|r| ring_area_sr(r).abs()).fold(0.0, f64::max);
-                label.size *= (sr.sqrt() / 0.006).clamp(0.85, 2.1);
-                if is_water {
+                label.size *= (sr / scale.unit_area_sr).sqrt().clamp(scale.min, scale.max);
+                if face == map_types::scene::LabelFace::Water {
                     // water speaks in its own deep color
                     let map_types::style::Rgba(r, g, b, _) =
                         self.area_paint(layer, &a.entity, style).fill;
-                    let dim = |v: u8| (f64::from(v) * 0.45) as u8;
+                    let dim = |v: u8| (f64::from(v) * scale.water_ink) as u8;
                     label.color = map_types::style::Rgba(dim(r), dim(g), dim(b), 255);
-                    label.size *= 0.8;
+                    label.size *= scale.water_shrink;
                 }
                 scene.labels.push(PlacedLabel {
                     text: a.name.clone(),
                     at,
                     subject: LabelSubject::Region(rid_of(&a.entity)),
                     style: label,
-                    face: if is_water {
-                        map_types::scene::LabelFace::Water
-                    } else {
-                        map_types::scene::LabelFace::Territory
-                    },
+                    face,
+                    voice: labeling.voice(face),
                 });
             }
         }
@@ -330,6 +346,7 @@ impl CanonProvider {
                     subject: LabelSubject::Place(map_types::AtlasPlaceRef(pid.clone())),
                     style: label,
                     face: map_types::scene::LabelFace::Place,
+                    voice: style.labeling().place,
                 });
             }
         }
@@ -458,6 +475,7 @@ impl CanonProvider {
                     subject: LabelSubject::Place(place.clone()),
                     style: style.label_style(),
                     face: map_types::scene::LabelFace::Place,
+                    voice: style.labeling().place,
                 });
             }
         }
@@ -662,6 +680,110 @@ impl MapProvider for CanonProvider {
 }
 
 // ------------------------------------------------------ pure helpers
+
+/// Palette slots by GRAPH COLORING over the shared-border graph,
+/// computed once per canon: two areas that share a border stretch
+/// (two or more identical ring vertices — spliced borders carry the
+/// same points on both sides) never wear the same slot. Welsh-Powell
+/// order (highest degree first, then id) keeps the greedy pass
+/// honest; if all eight slots are worn nearby, the least-worn wins
+/// deterministically. Water and relief never enter — they wear their
+/// own paint.
+pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
+    use map_canon::{Feature, LayerKind};
+    // features living in palette-wearing layers
+    let mut wearers: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+    for (layer, world) in store.layers() {
+        if matches!(layer, LayerKind::Water | LayerKind::Relief) {
+            continue;
+        }
+        for sid in world.moments().values() {
+            if let Some(snap) = store.snapshots().get(sid) {
+                wearers.extend(snap.features.iter().copied());
+            }
+        }
+    }
+    // entity -> quantized ring-vertex keys (quantization only guards
+    // serialization round-trips; shared borders are identical points)
+    let key = |p: &UnitVec| -> (i64, i64, i64) {
+        (
+            (p.x() * 1e7).round() as i64,
+            (p.y() * 1e7).round() as i64,
+            (p.z() * 1e7).round() as i64,
+        )
+    };
+    let mut keys_of: BTreeMap<EntityId, BTreeSet<(i64, i64, i64)>> = BTreeMap::new();
+    for fid in &wearers {
+        let Some(Feature::Area(a)) = store.features().get(fid) else { continue };
+        let e = keys_of.entry(a.entity.clone()).or_default();
+        for bid in a.rings.iter().chain(a.holes.iter()) {
+            if let Some(b) = store.borders().get(bid) {
+                for p in &b.0 {
+                    e.insert(key(p));
+                }
+            }
+        }
+    }
+    // adjacency: entities sharing >= 2 vertex keys
+    let ids: Vec<EntityId> = keys_of.keys().cloned().collect();
+    let mut at_vertex: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
+    for (i, id) in ids.iter().enumerate() {
+        for k in &keys_of[id] {
+            at_vertex.entry(*k).or_default().push(i);
+        }
+    }
+    let mut shared: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    for owners in at_vertex.values() {
+        for x in 0..owners.len() {
+            for y in x + 1..owners.len() {
+                *shared.entry((owners[x], owners[y])).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut adj: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
+    for (&(x, y), &n) in &shared {
+        if n >= 2 {
+            adj.entry(ids[x].clone()).or_default().insert(ids[y].clone());
+            adj.entry(ids[y].clone()).or_default().insert(ids[x].clone());
+        }
+    }
+    color_shared_border_graph(&ids, &adj)
+}
+
+/// The greedy pass, separated so the law can test it directly.
+pub(crate) fn color_shared_border_graph(
+    ids: &[EntityId],
+    adj: &BTreeMap<EntityId, BTreeSet<EntityId>>,
+) -> BTreeMap<EntityId, usize> {
+    let mut order: Vec<&EntityId> = ids.iter().collect();
+    order.sort_by_key(|id| {
+        (std::cmp::Reverse(adj.get(*id).map_or(0, BTreeSet::len)), (*id).clone())
+    });
+    let mut slot: BTreeMap<EntityId, usize> = BTreeMap::new();
+    let mut used = [0usize; 8]; // global wear, so all eight slots serve
+    for id in order {
+        let worn: Vec<usize> = adj
+            .get(id)
+            .into_iter()
+            .flatten()
+            .filter_map(|n| slot.get(n).copied())
+            .collect();
+        // among slots no neighbor wears, the least worn globally —
+        // the palette spreads instead of leaning on its first colors;
+        // if neighbors wear all eight, the least worn among them
+        let free = (0..8usize).filter(|s| !worn.contains(s));
+        let pick = free.min_by_key(|&s| (used[s], s)).unwrap_or_else(|| {
+            let mut counts = [0usize; 8];
+            for &u in &worn {
+                counts[u] += 1;
+            }
+            (0..8).min_by_key(|&s| (counts[s], s)).expect("eight slots exist")
+        });
+        used[pick] += 1;
+        slot.insert(id.clone(), pick);
+    }
+    slot
+}
 
 fn mix(a: Paint, b: Paint, t: f64) -> Paint {
     let c = |x: u8, y: u8| -> u8 {

@@ -69,6 +69,75 @@ pub struct LabelStyle {
     pub size: f64,
 }
 
+/// The cartographic voice of a label: territories speak in spaced
+/// capitals, water in italic, places in the plain hand. A voice is
+/// STYLE DATA — the encoder renders exactly what the voice declares
+/// and invents nothing, so changing type is editing a style, never
+/// hunting constants in rendering code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, PartialOrd, Ord)]
+pub enum LabelFace {
+    /// A named land region.
+    Territory,
+    /// A sea, lake, or river.
+    Water,
+    /// A settlement or station.
+    #[default]
+    Place,
+}
+
+/// Everything the layout and the glyphs need, declared: family stack,
+/// weight, posture, case, tracking — and the mean glyph advance the
+/// layout uses for fitting and collision boxes, so the measure always
+/// matches the dress it measures.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TypeVoice {
+    pub family: &'static str,
+    pub weight: u16,
+    pub italic: bool,
+    pub uppercase: bool,
+    /// extra tracking between letters, in em
+    pub tracking_em: f64,
+    /// mean glyph advance INCLUDING tracking, in em
+    pub advance_em: f64,
+}
+
+/// How an area label scales with the ground it names — declared, so a
+/// style may choose quiet uniform labels or loud hierarchical ones.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LabelScale {
+    /// ring area (steradians) whose label renders at exactly base size
+    pub unit_area_sr: f64,
+    /// clamp on the scale factor derived from area
+    pub min: f64,
+    pub max: f64,
+    /// extra factor applied to water labels
+    pub water_shrink: f64,
+    /// water label ink = the water fill dimmed by this factor (0..1)
+    pub water_ink: f64,
+}
+
+/// The complete labeling dress: base ink plus the three voices plus
+/// the scaling law. One value per style; every label decision reads
+/// from here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Labeling {
+    pub base: LabelStyle,
+    pub territory: TypeVoice,
+    pub water: TypeVoice,
+    pub place: TypeVoice,
+    pub scale: LabelScale,
+}
+
+impl Labeling {
+    pub fn voice(&self, face: LabelFace) -> TypeVoice {
+        match face {
+            LabelFace::Territory => self.territory,
+            LabelFace::Water => self.water,
+            LabelFace::Place => self.place,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MarkerStyle {
     pub color: Rgba,
@@ -122,7 +191,7 @@ pub struct Style {
     /// touching territories never match (the provider's coloring).
     palette: Option<[Paint; 8]>,
     age: AgeRamp,
-    label: LabelStyle,
+    labeling: Labeling,
     marker: MarkerStyle,
     delta: DeltaEmphasis,
 }
@@ -136,7 +205,7 @@ impl Style {
         topo: AgeRamp,
         palette: Option<[Paint; 8]>,
         age: AgeRamp,
-        label: LabelStyle,
+        labeling: Labeling,
         marker: MarkerStyle,
         delta: DeltaEmphasis,
     ) -> Result<Self, StyleError> {
@@ -146,7 +215,7 @@ impl Style {
         if boundaries.frontier.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
-        Ok(Style { boundaries, region, water, topo, palette, age, label, marker, delta })
+        Ok(Style { boundaries, region, water, topo, palette, age, labeling, marker, delta })
     }
 
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
@@ -175,7 +244,10 @@ impl Style {
         self.age
     }
     pub fn label_style(&self) -> LabelStyle {
-        self.label
+        self.labeling.base
+    }
+    pub fn labeling(&self) -> Labeling {
+        self.labeling
     }
     pub fn marker_style(&self) -> MarkerStyle {
         self.marker
@@ -201,10 +273,10 @@ impl Style {
         });
         self.age.newest.canon(c);
         self.age.oldest.canon(c);
-        let Rgba(r, g, b, a) = self.label.color;
+        let Rgba(r, g, b, a) = self.labeling.base.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a);
-        let Rgba(r, g, b, a) = self.label.halo;
-        c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.label.size);
+        let Rgba(r, g, b, a) = self.labeling.base.halo;
+        c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.labeling.base.size);
         let Rgba(r, g, b, a) = self.marker.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.marker.size);
         self.delta.before.canon(c);

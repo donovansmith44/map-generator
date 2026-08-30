@@ -316,6 +316,7 @@ impl TimelineProvider {
                     subject: LabelSubject::Place(wp.clone()),
                     style: label,
                     face: map_types::scene::LabelFace::Place,
+                    voice: style.labeling().place,
                 });
             }
         }
@@ -364,6 +365,7 @@ impl TimelineProvider {
                 subject: LabelSubject::Region(id),
                 style: style.label_style(),
                 face: map_types::scene::LabelFace::Territory,
+                voice: style.labeling().territory,
             })
         });
         Ok(Some((StyledRegion { region: id, outer, holes, paint, sources }, label)))
@@ -627,6 +629,7 @@ impl TimelineProvider {
                             subject: LabelSubject::Place(place.clone()),
                             style: style.label_style(),
                             face: map_types::scene::LabelFace::Place,
+                            voice: style.labeling().place,
                         });
                     }
                 }

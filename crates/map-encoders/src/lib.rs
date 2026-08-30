@@ -404,6 +404,8 @@ fn emit_labels(
     page_width: f64,
     page: &Option<Bounds>,
 ) {
+    // LEGIBILITY FLOOR: below ~1/260 of the page (never under 4 px)
+    // text is noise, not signal — the label yields instead.
     let min_size = (page_width / 260.0).max(4.0);
     let mut placed: Vec<Bounds> = Vec::new();
     let collides = |b: &Bounds, placed: &[Bounds]| {
@@ -415,36 +417,13 @@ fn emit_labels(
             continue; // anchored off the page: unreadable by definition
         }
         use map_types::scene::LabelFace;
-        // The cartographic voice: territories in letterspaced serif
-        // capitals, water in italic serif, places in the plain hand.
-        // char_w is the em fraction INCLUDING the letterspacing, so
-        // fitting and collision boxes stay honest per voice.
-        let (family, weight, style_attr, spacing_em, char_w, text) = match l.face {
-            LabelFace::Territory => (
-                "Georgia, 'Times New Roman', serif",
-                "600",
-                "",
-                0.18,
-                0.74 + 0.18,
-                l.text.to_uppercase(),
-            ),
-            LabelFace::Water => (
-                "Georgia, 'Times New Roman', serif",
-                "400",
-                " font-style=\"italic\"",
-                0.04,
-                0.50 + 0.04,
-                l.text.clone(),
-            ),
-            LabelFace::Place => (
-                "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
-                "600",
-                "",
-                0.0,
-                0.62,
-                l.text.clone(),
-            ),
-        };
+        // The typographic dress rides ON the label, resolved by the
+        // provider from the style — the encoder invents nothing and
+        // measures with the voice's own declared advance, so fitting
+        // and collision boxes always match the glyphs they box.
+        let v = l.voice;
+        let text = if v.uppercase { l.text.to_uppercase() } else { l.text.clone() };
+        let char_w = v.advance_em;
         let chars = text.chars().count().max(1) as f64;
         let mut size = l.style.size;
         // Water names may overflow their shores — a lake narrower than
@@ -490,10 +469,10 @@ fn emit_labels(
             rgb(l.style.halo),
             alpha(l.style.halo),
             size * 0.24,
-            family,
-            weight,
-            size * spacing_em,
-            style_attr,
+            v.family,
+            v.weight,
+            size * v.tracking_em,
+            if v.italic { " font-style=\"italic\"" } else { "" },
             subject_attr,
             esc(&text)
         );

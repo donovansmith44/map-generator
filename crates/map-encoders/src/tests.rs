@@ -6,6 +6,17 @@ use std::collections::BTreeSet;
 
 use atlas_graph_types::covenant::SourceId;
 use map_types::scene::{LabelSubject, StyledMarker};
+
+fn test_voice() -> map_types::style::TypeVoice {
+    map_types::style::TypeVoice {
+        family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+        weight: 600,
+        italic: false,
+        uppercase: false,
+        tracking_em: 0.0,
+        advance_em: 0.62,
+    }
+}
 use map_types::style::*;
 use map_types::{
     Monoid, PlacedLabel, Ring, SceneEncoder, Snapshot, StyledBoundary, StyledRegion, UnitVec,
@@ -45,6 +56,7 @@ fn sample_scene() -> Snapshot {
         subject: LabelSubject::Free,
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
         face: map_types::scene::LabelFace::Place,
+        voice: test_voice(),
     });
     s.attribution = sources;
     s
@@ -77,6 +89,7 @@ fn globe_clips_the_far_hemisphere() {
         subject: LabelSubject::Free,
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
         face: map_types::scene::LabelFace::Place,
+        voice: test_voice(),
     });
     let enc = SvgEncoder {
         projection: Projection::Globe { center: Some((3.0, 5.0)), zoom: None },
@@ -237,6 +250,7 @@ fn labels_fit_their_territory_and_never_collide() {
         subject: LabelSubject::Region(tiny),
         style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0 },
         face: map_types::scene::LabelFace::Place,
+        voice: test_voice(),
     });
     let out = SvgEncoder::default().encode(&scene).unwrap();
     assert!(!out.contains("IMPOSSIBLY"), "a label that cannot fit is dropped");
@@ -453,4 +467,36 @@ fn markers_with_places_are_clickable() {
     .unwrap();
     assert!(svg.contains("data-place=\"place:Ephesus\""), "place id rides the marker");
     assert!(svg.contains("fill=\"transparent\""), "a finger-sized hit target wraps the dot");
+}
+
+/// The encoder renders EXACTLY the voice the label carries — family,
+/// weight, posture, case, tracking all come from style data, so
+/// restyling type never touches rendering code.
+#[test]
+fn label_wears_its_declared_voice() {
+    use map_types::PlacedLabel;
+    use map_types::style::{LabelStyle, Rgba};
+    let mut scene = Snapshot::empty();
+    scene.labels.push(PlacedLabel {
+        text: "philistia".to_string(),
+        at: UnitVec::from_lat_lon_deg(31.5, 34.6),
+        subject: LabelSubject::Free,
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(240, 240, 240, 220), size: 16.0 },
+        face: map_types::scene::LabelFace::Territory,
+        voice: map_types::style::TypeVoice {
+            family: "TestFace, serif",
+            weight: 512,
+            italic: true,
+            uppercase: true,
+            tracking_em: 0.25,
+            advance_em: 0.9,
+        },
+    });
+    let svg = SvgEncoder::default().encode(&scene).unwrap();
+    assert!(svg.contains("PHILISTIA"), "uppercase comes from the voice");
+    assert!(!svg.contains(">philistia<"), "the lowercase text never leaks");
+    assert!(svg.contains("TestFace, serif"), "family comes from the voice");
+    assert!(svg.contains("font-weight=\"512\""), "weight comes from the voice");
+    assert!(svg.contains("font-style=\"italic\""), "posture comes from the voice");
+    assert!(svg.contains("letter-spacing=\"4.00\""), "tracking = size x tracking_em");
 }

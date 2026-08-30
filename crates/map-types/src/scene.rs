@@ -71,20 +71,7 @@ pub enum LabelSubject {
     Free,
 }
 
-/// The cartographic voice of a label: territories speak in spaced
-/// capitals, water in italic, places in the plain hand. The encoder
-/// picks type from the face, so a label can never dress as the wrong
-/// kind of thing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum LabelFace {
-    /// A named land region: letterspaced capitals, serif.
-    Territory,
-    /// A sea, lake, or river: italic serif.
-    Water,
-    /// A settlement or station: the plain sans hand.
-    #[default]
-    Place,
-}
+pub use crate::style::LabelFace;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacedLabel {
@@ -92,7 +79,11 @@ pub struct PlacedLabel {
     pub at: UnitVec,
     pub subject: LabelSubject,
     pub style: LabelStyle,
+    /// what KIND of thing this names (drives layout semantics, e.g.
+    /// water may overflow its shores)
     pub face: LabelFace,
+    /// the fully resolved typographic dress, straight from the style
+    pub voice: crate::style::TypeVoice,
 }
 
 /// The scene. Later entries paint over earlier ones — overlay order is

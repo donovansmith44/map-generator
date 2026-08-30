@@ -60,6 +60,49 @@ pub struct App {
 
 // ------------------------------------------------------------- styles
 
+/// The house typography, shared by the built-in styles and free for
+/// any style to override wholesale: territories in letterspaced serif
+/// capitals, water in italic serif, places in the plain sans hand.
+/// `advance_em` is the mean glyph advance INCLUDING tracking — the
+/// measure layout uses, declared beside the dress it measures.
+fn house_labeling(base: LabelStyle) -> map_types::style::Labeling {
+    use map_types::style::{LabelScale, Labeling, TypeVoice};
+    Labeling {
+        base,
+        territory: TypeVoice {
+            family: "Georgia, 'Times New Roman', serif",
+            weight: 600,
+            italic: false,
+            uppercase: true,
+            tracking_em: 0.18,
+            advance_em: 0.92,
+        },
+        water: TypeVoice {
+            family: "Georgia, 'Times New Roman', serif",
+            weight: 400,
+            italic: true,
+            uppercase: false,
+            tracking_em: 0.04,
+            advance_em: 0.54,
+        },
+        place: TypeVoice {
+            family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+            weight: 600,
+            italic: false,
+            uppercase: false,
+            tracking_em: 0.0,
+            advance_em: 0.62,
+        },
+        scale: LabelScale {
+            unit_area_sr: 3.6e-5, // a Judah-sized ring wears ~1.7x base
+            min: 0.85,
+            max: 2.1,
+            water_shrink: 0.8,
+            water_ink: 0.45,
+        },
+    }
+}
+
 fn parchment() -> Style {
     let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
     Style::new(
@@ -97,7 +140,7 @@ fn parchment() -> Style {
             newest: Paint { fill: Rgba(174, 60, 40, 220) },
             oldest: Paint { fill: Rgba(174, 60, 40, 40) },
         },
-        LabelStyle { color: Rgba(56, 40, 26, 255), halo: Rgba(243, 233, 209, 235), size: 11.0 },
+        house_labeling(LabelStyle { color: Rgba(56, 40, 26, 255), halo: Rgba(243, 233, 209, 235), size: 11.0 }),
         MarkerStyle { color: Rgba(56, 40, 26, 255), size: 3.5 },
         DeltaEmphasis {
             before: s(Rgba(120, 116, 105, 255), 1.6, StrokePattern::Dashed),
@@ -138,7 +181,7 @@ fn slate() -> Style {
             newest: Paint { fill: Rgba(196, 90, 70, 220) },
             oldest: Paint { fill: Rgba(196, 90, 70, 40) },
         },
-        LabelStyle { color: Rgba(214, 211, 200, 255), halo: Rgba(22, 25, 31, 235), size: 11.0 },
+        house_labeling(LabelStyle { color: Rgba(214, 211, 200, 255), halo: Rgba(22, 25, 31, 235), size: 11.0 }),
         MarkerStyle { color: Rgba(214, 211, 200, 255), size: 3.5 },
         DeltaEmphasis {
             before: s(Rgba(120, 125, 135, 255), 1.6, StrokePattern::Dashed),
@@ -186,7 +229,7 @@ fn canaan() -> Style {
             newest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 220) },
             oldest: Paint { fill: Rgba(0xA4, 0x69, 0x6B, 40) },
         },
-        LabelStyle { color: Rgba(0x20, 0x24, 0x2B, 255), halo: Rgba(0xF2, 0xEC, 0xDC, 210), size: 14.0 },
+        house_labeling(LabelStyle { color: Rgba(0x20, 0x24, 0x2B, 255), halo: Rgba(0xF2, 0xEC, 0xDC, 210), size: 14.0 }),
         MarkerStyle { color: Rgba(0x20, 0x24, 0x2B, 255), size: 3.2 },
         DeltaEmphasis {
             before: s(Rgba(120, 116, 105, 255), 1.4, StrokePattern::Dashed),
@@ -226,7 +269,7 @@ fn ghosted(base: &Style) -> Style {
         },
         None, // the ghost is a uniform disclosure, never colorful
         base.age_ramp(),
-        base.label_style(),
+        base.labeling(),
         base.marker_style(),
         DeltaEmphasis { before: fade(&d.before), after: fade(&d.after), seam: fade(&d.seam) },
     )
@@ -244,8 +287,8 @@ fn tinted(base: &Style, paint: Paint) -> Style {
     };
     use map_types::EdgeCharacter as E;
     let d = base.delta_emphasis();
-    let mut label = base.label_style();
-    label.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
+    let mut labeling = base.labeling();
+    labeling.base.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
     Style::new(
         BoundaryStrokes {
             line: tint(base.stroke_for(&E::Line)),
@@ -259,7 +302,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
         base.topo_ramp(),
         None, // a comparison layer is ONE tint, that is its meaning
         base.age_ramp(),
-        label,
+        labeling,
         base.marker_style(),
         DeltaEmphasis { before: tint(&d.before), after: tint(&d.after), seam: tint(&d.seam) },
     )
