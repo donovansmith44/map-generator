@@ -213,6 +213,13 @@ pub fn ingest_ocean(
         }
     }
     let rid = RegionId(hash_id("natural-earth/water/the sea"));
+    // THE DRY LAND (GEN 1:10), worldwide: the very same coastline
+    // borders the sea holds as holes, standing as land cycles —
+    // content addressing makes coast and stage one line on every
+    // shore of the earth, and the whole Biblical world gets its
+    // parchment at every era and every zoom.
+    let land_parts: Vec<RegionPart> =
+        holes.iter().map(|cycle| RegionPart { cycle: cycle.clone(), holes: vec![] }).collect();
     tl.regions.insert(
         rid,
         RegionHistory {
@@ -222,6 +229,15 @@ pub fn ingest_ocean(
                 valid,
                 RegionGeom { parts: vec![RegionPart { cycle: Vec::new(), holes }] },
             )],
+        },
+    );
+    let land_rid = RegionId(hash_id("natural-earth/land/the dry land"));
+    tl.regions.insert(
+        land_rid,
+        RegionHistory {
+            class: RegionClass::Terrain(0),
+            label_history: vec![(valid, "the dry land".to_string())],
+            geom_history: vec![(valid, RegionGeom { parts: land_parts })],
         },
     );
     Ok(tl)

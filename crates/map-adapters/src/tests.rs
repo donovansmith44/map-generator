@@ -623,7 +623,7 @@ fn terrain_contours_close_and_ingest_lawfully() {
     }
     assert_eq!(rings, contour_rings(&grid, 200.0), "law 1: identical runs");
 
-    let tl = ingest_terrain(&grid, &[], tp(-4004));
+    let tl = ingest_terrain(&grid, tp(-4004));
     assert_eq!(tl.regions.len(), 1, "only the 200 m band exists on a 300 m hill");
     let r = tl.regions.values().next().unwrap();
     assert_eq!(r.class, map_types::RegionClass::Terrain(0));
@@ -644,7 +644,7 @@ fn terrain_real_grid_smoke() {
         .join("../../data/terrain/etopo_15min.bin");
     let bytes = std::fs::read(path).expect("vendored terrain grid");
     let grid = ElevationGrid::from_etopo_bin(&bytes).expect("shape 721x1441");
-    let tl = ingest_terrain(&grid, &[], tp(-4004));
+    let tl = ingest_terrain(&grid, tp(-4004));
     assert_eq!(tl.regions.len(), BANDS.len(), "every band is inhabited on the real earth");
     for r in tl.regions.values() {
         assert!(matches!(r.class, map_types::RegionClass::Terrain(_)));

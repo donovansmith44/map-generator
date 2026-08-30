@@ -667,6 +667,69 @@ fn graticule() -> Vec<Vec<UnitVec>> {
     lines
 }
 
+/// THE CHART: everything a projection must provide, as one value —
+/// the correspondence contract between the globe and the flat plate.
+/// ONE encode path consumes a Chart, so the conventions (the
+/// whole-sphere sentinel's dress, page culling, the view stamp, label
+/// layout) are owned once and the two projections can never drift.
+/// The camera law both must honor: the page WIDTH spans 2×zoom
+/// great-circle degrees at the view center — the same zoom shows the
+/// same ground on either chart.
+struct Chart<'a> {
+    /// page width and height in px.
+    width: f64,
+    height: f64,
+    /// the resolved view stamped on the svg root (lat, lon, zoom°).
+    stamp: (f64, f64, f64),
+    /// backdrop chrome (the globe's limb + graticule; may be empty).
+    chrome: String,
+    /// the whole-sphere sentinel's dress: limb disc / page rectangle.
+    whole_world: Vec<(f64, f64)>,
+    /// a closed ring, clipped topology-preserving, projected. Empty =
+    /// culled entirely.
+    clip_ring: Box<dyn Fn(&[UnitVec]) -> Vec<(f64, f64)> + 'a>,
+    /// an open line, clipped into visible runs, projected.
+    clip_line: Box<dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>> + 'a>,
+    /// a single point, or None when the chart cannot show it.
+    place: Box<dyn Fn(&UnitVec) -> Option<(f64, f64)> + 'a>,
+    /// the page bounds used for culling and label placement.
+    page: Option<Bounds>,
+}
+
+/// The whole-sphere sentinel (RegionPart's empty-cycle convention): a
+/// ring of at most four points containing a near-antipodal pair.
+fn covers_sphere(pts: &[UnitVec]) -> bool {
+    pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
+}
+
+fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
+    let mut s = svg_head(chart.width, chart.height, scene).replace(
+        "<svg ",
+        &format!(
+            "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
+            chart.stamp.0, chart.stamp.1, chart.stamp.2
+        ),
+    );
+    s.push_str(&chart.chrome);
+    let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
+        if covers_sphere(ring.points()) {
+            return vec![chart.whole_world.clone()];
+        }
+        let px = (chart.clip_ring)(ring.points());
+        if px.len() < 3 {
+            Vec::new()
+        } else {
+            vec![px]
+        }
+    };
+    let line_of = |pts: &[UnitVec]| (chart.clip_line)(pts);
+    let point_of = |p: &UnitVec| (chart.place)(p);
+    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &chart.page);
+    emit_labels(&mut s, scene, &extents, &point_of, chart.width, &chart.page);
+    s.push_str("</svg>");
+    s
+}
+
 fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Option<f64>) -> String {
     // Basis on the sphere at the view center.
     let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
@@ -701,24 +764,12 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     globe.cx = enc.width / 2.0;
     globe.cy = enc.width / 2.0;
 
-    // Report the resolved view on the root, so interactive consumers
-    // can pick up navigation exactly where this artifact stands.
-    let (clat, clon) = lat_lon(&center);
-    let mut s = svg_head(enc.width, enc.width, scene).replace(
-        "<svg ",
-        &format!(
-            "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
-            clat,
-            clon,
-            r_view.clamp(-1.0, 1.0).asin().to_degrees()
-        ),
-    );
-
+    let mut chrome = String::new();
     // The sphere itself: limb circle when the full hemisphere is in
     // view, and the graticule always — the curve is the point.
     if r_view >= 1.0 {
         let _ = write!(
-            s,
+            chrome,
             "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"rgb(128,128,128)\" fill-opacity=\"0.06\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.5\" stroke-width=\"1\"/>",
             globe.cx, globe.cy, globe.scale
         );
@@ -726,7 +777,6 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     // Chord error stays under ~0.75px at this scale: precision follows
     // resolution, so a wider plate is genuinely finer.
     let max_step = (6.0 / globe.scale).sqrt().clamp(0.0015, 0.05);
-
     let mut grat = String::new();
     for line in graticule() {
         for run in clip_line_front(&densify(&line, max_step, false), &center) {
@@ -735,49 +785,40 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
         }
     }
     let _ = write!(
-        s,
+        chrome,
         "<path d=\"{}\" fill=\"none\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.22\" stroke-width=\"0.6\"/>",
         grat
     );
 
-    // The whole-sphere sentinel (a ring with near-antipodal points —
-    // see RegionPart's empty-cycle convention) projects as the LIMB
-    // DISC: everything in view; its holes cut the land out (evenodd).
-    let covers_sphere = |pts: &[UnitVec]| -> bool {
-        pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
-    };
     let disc: Vec<(f64, f64)> = (0..=127)
         .map(|i| {
             let a = std::f64::consts::TAU * f64::from(i) / 128.0;
             (globe.cx + globe.scale * a.cos(), globe.cy + globe.scale * a.sin())
         })
         .collect();
-    let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
-        if covers_sphere(ring.points()) {
-            return vec![disc.clone()];
-        }
-        let clipped = clip_ring_front(&densify(ring.points(), max_step, true), &center);
-        if clipped.len() < 3 {
-            return Vec::new();
-        }
-        vec![clipped.iter().map(|p| globe.place_unclipped(p)).collect()]
-    };
-    let line_of = |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> {
-        clip_line_front(&densify(pts, max_step, false), &center)
-            .into_iter()
-            .map(|run| run.iter().map(|p| globe.place_unclipped(p)).collect())
-            .collect()
-    };
-    let point_of = |p: &UnitVec| globe.place(p);
-    // Cull to the page plus a stroke-and-label margin: zoomed views
-    // stop paying (in bytes and in the consumer's parse time) for the
-    // rest of the hemisphere.
     let pad = (enc.width * 0.05).max(24.0);
-    let page = Some((-pad, -pad, enc.width + pad, enc.width + pad));
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &page);
-    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &page);
-    s.push_str("</svg>");
-    s
+    let (clat, clon) = lat_lon(&center);
+    let g = &globe;
+    let chart = Chart {
+        width: enc.width,
+        height: enc.width,
+        stamp: (clat, clon, r_view.clamp(-1.0, 1.0).asin().to_degrees()),
+        chrome,
+        whole_world: disc,
+        clip_ring: Box::new(move |pts: &[UnitVec]| {
+            let clipped = clip_ring_front(&densify(pts, max_step, true), &center);
+            clipped.iter().map(|p| g.place_unclipped(p)).collect()
+        }),
+        clip_line: Box::new(move |pts: &[UnitVec]| {
+            clip_line_front(&densify(pts, max_step, false), &center)
+                .into_iter()
+                .map(|run| run.iter().map(|p| g.place_unclipped(p)).collect())
+                .collect()
+        }),
+        place: Box::new(move |p: &UnitVec| g.place(p)),
+        page: Some((-pad, -pad, enc.width + pad, enc.width + pad)),
+    };
+    encode_chart(enc, scene, chart)
 }
 
 // ------------------------------------------------------------ flat plate
@@ -851,68 +892,67 @@ fn encode_flat(
     if inner <= 0.0 {
         return Err(EncodeError("width smaller than padding".to_string()));
     }
-    // The window in map degrees: an explicit camera crops (half-height
-    // = zoom, 2:1 aspect at the STANDARD PARALLEL — the equirect
-    // x-scale carries cos(center lat), so a square league renders
-    // square instead of ~18% too wide at Canaan's latitude); otherwise
-    // fit the whole content.
-    let (x0, y1, span_x, span_y, kx, page) = match zoom {
+    // THE CAMERA LAW (shared with the globe): the page width spans
+    // 2×zoom great-circle degrees at the view center. The equirect
+    // carries a STANDARD PARALLEL — x scales by cos(center lat) — so
+    // a square league renders square, and switching projections keeps
+    // the same ground across the page. Without a camera, fit the
+    // whole content (the world diagnostic).
+    let (x0, y1, scale_x, scale_y, kx, span_y, page, clip_window, stamp) = match zoom {
         Some(z) => {
             let z = z.clamp(0.05, 90.0);
             let (clat, clon) = center.unwrap_or((0.0, 0.0));
             let kx = clat.to_radians().cos().max(0.05);
+            let scale_g = inner / (2.0 * z); // px per ground degree
+            let span_x = 2.0 * z / kx; // lon degrees across
+            let span_y = (enc.width / 2.0) / scale_g; // lat degrees down
             let pad = (enc.width * 0.05).max(24.0);
             let height = enc.width / 2.0;
+            let m = 0.2 * z;
             (
-                clon - 2.0 * z / kx,
-                clat + z,
-                4.0 * z / kx,
-                2.0 * z,
+                clon - span_x / 2.0,
+                clat + span_y / 2.0,
+                scale_g * kx,
+                scale_g,
                 kx,
+                span_y,
                 Some((-pad, -pad, enc.width + pad, height + pad)),
+                Some((
+                    clon - span_x / 2.0 - m,
+                    clat - span_y / 2.0 - m,
+                    clon + span_x / 2.0 + m,
+                    clat + span_y / 2.0 + m,
+                )),
+                (clat, clon, z),
             )
         }
         None => {
-            let (x0, y0, x1, y1) = flat_bounds(scene);
-            (x0, y1, (x1 - x0).max(1e-6), (y1 - y0).max(1e-6), 1.0, None)
+            let (bx0, by0, bx1, by1) = flat_bounds(scene);
+            let span_x = (bx1 - bx0).max(1e-6);
+            let span_y = (by1 - by0).max(1e-6);
+            let scale = inner / span_x;
+            (
+                bx0,
+                by1,
+                scale,
+                scale,
+                1.0,
+                span_y,
+                None,
+                None,
+                (by1 - span_y / 2.0, bx0 + span_x / 2.0, span_y / 2.0),
+            )
         }
     };
-    let scale = inner / span_x;
-    let height = span_y * (scale / kx) + 2.0 * enc.padding;
+    let height = span_y * scale_y + 2.0 * enc.padding;
     let place = move |p: &UnitVec| -> (f64, f64) {
         let (lat, lon) = lat_lon(p);
-        (enc.padding + (lon - x0) * scale, enc.padding + (y1 - lat) * (scale / kx))
+        (enc.padding + (lon - x0) * scale_x, enc.padding + (y1 - lat) * scale_y)
     };
-    // CLIP CLOSED RINGS TO THE WINDOW before projecting: culling
-    // chunks of a ring would break even-odd topology (a world ocean
-    // whose land holes fall off-window floods the page). Clipping
-    // keeps every ring closed and every hole a hole.
-    let clip_window = zoom.map(|z| {
-        let z = z.clamp(0.05, 90.0);
-        let (clat, clon) = center.unwrap_or((0.0, 0.0));
-        let m = 0.2 * z; // margin so strokes at the edge stay honest
-        (clon - 2.0 * z / kx - m, clat - z - m, clon + 2.0 * z / kx + m, clat + z + m)
-    });
+    let _ = kx;
 
-    // The resolved view rides the root either way, so the workbench
-    // can pan and zoom the flat plate exactly like the globe.
-    let (clat, clon) = (y1 - span_y / 2.0, x0 + span_x / 2.0);
-    let mut s = svg_head(enc.width, height, scene).replace(
-        "<svg ",
-        &format!(
-            "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
-            clat,
-            clon,
-            span_y / 2.0
-        ),
-    );
-    // The whole-sphere sentinel (RegionPart's empty-cycle convention,
-    // same as the globe's limb disc): on a flat page, the whole world
-    // IS the page — the sentinel becomes the page rectangle and the
-    // region's holes cut the land out (evenodd).
-    let covers_sphere = |pts: &[UnitVec]| -> bool {
-        pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
-    };
+    // The whole-sphere sentinel: on a flat page, the whole world IS
+    // the page — the page rectangle, holes cutting the land out.
     let page_rect: Vec<(f64, f64)> = {
         let pad = (enc.width * 0.05).max(24.0);
         vec![
@@ -922,33 +962,31 @@ fn encode_flat(
             (-pad, height + pad),
         ]
     };
-    let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
-        if covers_sphere(ring.points()) {
-            return vec![page_rect.clone()];
-        }
-        let ll: Vec<(f64, f64)> =
-            ring.points().iter().map(|p| { let (la, lo) = lat_lon(p); (lo, la) }).collect();
-        let clipped = match clip_window {
-            Some(w) => clip_ring_to_window(&ll, w),
-            None => ll,
-        };
-        if clipped.len() < 3 {
-            return Vec::new();
-        }
-        vec![clipped
-            .into_iter()
-            .map(|(lo, la)| {
-                (enc.padding + (lo - x0) * scale, enc.padding + (y1 - la) * (scale / kx))
-            })
-            .collect()]
+    let chart = Chart {
+        width: enc.width,
+        height,
+        stamp,
+        chrome: String::new(),
+        whole_world: page_rect,
+        clip_ring: Box::new(move |pts: &[UnitVec]| {
+            let ll: Vec<(f64, f64)> =
+                pts.iter().map(|p| { let (la, lo) = lat_lon(p); (lo, la) }).collect();
+            let clipped = match clip_window {
+                Some(w) => clip_ring_to_window(&ll, w),
+                None => ll,
+            };
+            clipped
+                .into_iter()
+                .map(|(lo, la)| {
+                    (enc.padding + (lo - x0) * scale_x, enc.padding + (y1 - la) * scale_y)
+                })
+                .collect()
+        }),
+        clip_line: Box::new(move |pts: &[UnitVec]| vec![pts.iter().map(place).collect()]),
+        place: Box::new(move |p: &UnitVec| Some(place(p))),
+        page,
     };
-    let line_of =
-        |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };
-    let point_of = |p: &UnitVec| Some(place(p));
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &page);
-    emit_labels(&mut s, scene, &extents, &point_of, enc.width, &page);
-    s.push_str("</svg>");
-    Ok(s)
+    Ok(encode_chart(enc, scene, chart))
 }
 
 impl SceneEncoder for SvgEncoder {

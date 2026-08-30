@@ -208,6 +208,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
     let anchor = atlas
         .creation_anchor()
         .map(|(y, _)| ("biblical (Ussher tradition)".to_string(), y));
+    let t_boot = std::time::Instant::now();
     let canon_provider = Arc::new(
         map_provider::canon_provider::CanonProvider::from_canon_file(
             canon_path,
@@ -217,7 +218,11 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         .expect("the compiled canon loads"),
     );
     let provider: Arc<dyn MapProvider + Send + Sync> = canon_provider.clone();
-    eprintln!("serving the CANON ({})", canon_path.display());
+    eprintln!(
+        "serving the CANON ({}) — loaded in {:.1}s",
+        canon_path.display(),
+        t_boot.elapsed().as_secs_f64()
+    );
 
     let (lo, hi) = (tp(-4004).unwrap(), tp(1900).unwrap());
     let mut stops: Vec<i32> = provider.changes_between(lo, hi).iter().map(|e| e.at.year.get()).collect();
@@ -225,6 +230,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
     if let Some(&first) = stops.first() {
         stops.insert(0, first - 100);
     }
+    let t_presence = std::time::Instant::now();
     let mut presence: BTreeMap<String, (String, Vec<i32>)> = BTreeMap::new();
     for &year in &stops {
         if let Some(at) = tp(year) {
@@ -240,6 +246,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
             }
         }
     }
+    eprintln!("presence probed in {:.1}s", t_presence.elapsed().as_secs_f64());
     App {
         provider,
         world_etag,

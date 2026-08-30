@@ -348,6 +348,7 @@ async function render(quality) {
 function absorbSvg(layer, body) {
   layer.style.transform = "";
   layer.style.transformOrigin = "";
+  if (window.__resetPreview) window.__resetPreview();
   layer.innerHTML = body;
   const svg = layer.querySelector("svg");
   if (svg && svg.dataset.clat !== undefined) {
@@ -428,26 +429,47 @@ function pinView() {
 function setupPlateNav() {
   const plate = $("plate");
   let drag = null;
+  // THE PREVIEW: a single cumulative transform (origin 0 0) over the
+  // current frame — translate t, scale s. Pan adds to t; a wheel at
+  // cursor c keeps the content point under c fixed:
+  // t' = c - (s'/s)(c - t). The compositor does all the work; the
+  // real frame arrives on release/settle and resets it.
+  const preview = { s: 1, tx: 0, ty: 0 };
+  function applyPreview() {
+    const layer = plate.querySelector(".layer");
+    if (!layer) return;
+    layer.style.transformOrigin = "0 0";
+    layer.style.transform =
+      `translate(${preview.tx}px, ${preview.ty}px) scale(${preview.s})`;
+  }
+  function resetPreview() { preview.s = 1; preview.tx = 0; preview.ty = 0; }
+  window.__resetPreview = resetPreview;
+  // degrees of ground per pixel — THE CAMERA LAW: the page width
+  // spans 2*zoom great-circle degrees on either projection.
+  function groundPerPx() {
+    const rect = plate.querySelector("svg")?.getBoundingClientRect();
+    if (!rect) return null;
+    return { g: (2 * state.view.zoom) / rect.width, rect };
+  }
   plate.addEventListener("pointerdown", e => {
     stopPlayback();
     if (state.encoder !== "svg") return;
     if (!pinView()) return;
     // No pointer capture yet: capturing here would retarget the
     // eventual click away from the region path under the cursor.
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false, ptx: preview.tx, pty: preview.ty };
   });
   plate.addEventListener("pointermove", e => {
     if (!drag) return;
-    const rect = plate.querySelector("svg")?.getBoundingClientRect();
-    if (!rect) return;
-    // The globe shows 2*zoom degrees across its width; flat shows
-    // 2*zoom degrees of LATITUDE over its half-width height, and
-    // 4*zoom/cos(lat) degrees of longitude across (the standard
-    // parallel keeps a square league square).
+    const gp = groundPerPx();
+    if (!gp) return;
+    // The camera law holds on both charts: ground degrees per px is
+    // 2*zoom/width; longitude divides by cos(lat) on flat (the
+    // standard parallel keeps a square league square).
     const flat = state.projection === "flat";
     const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
-    const lonPerPx = (flat ? 4 * state.view.zoom / kx : 2 * state.view.zoom) / rect.width;
-    const latPerPx = (flat ? 4 * state.view.zoom : 2 * state.view.zoom) / rect.width;
+    const lonPerPx = gp.g / (flat ? kx : 1);
+    const latPerPx = gp.g;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
       drag.moved = true;
@@ -459,8 +481,9 @@ function setupPlateNav() {
     state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * latPerPx));
     // GPU preview: slide the existing frame; the real frame comes on
     // release. No fetch, no SVG re-parse, no layout per mouse event.
-    const layer = plate.querySelector(".layer");
-    if (layer) layer.style.transform = `translate(${dx}px, ${dy}px)`;
+    preview.tx = drag.ptx + dx;
+    preview.ty = drag.pty + dy;
+    applyPreview();
   });
   let suppressClick = false;
   const finish = () => {
@@ -475,25 +498,41 @@ function setupPlateNav() {
   plate.addEventListener("pointercancel", finish);
 
   let settle = null;
-  let wheelScale = 1;
   plate.addEventListener("wheel", e => {
     if (state.encoder !== "svg") return;
     e.preventDefault();
     if (!pinView()) return;
+    const gp = groundPerPx();
+    if (!gp) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
+    const oldZoom = state.view.zoom;
     state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
-    // GPU preview: scale the existing frame about the cursor; the
-    // real frame renders when the wheel settles.
+    const f = oldZoom / state.view.zoom; // on-screen magnification
+    // CURSOR-ANCHORED both in the preview and in the CAMERA: the
+    // ground under the cursor stays under the cursor, so the settled
+    // frame lands exactly where the preview promised.
+    const flat = state.projection === "flat";
+    const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
+    const cx = e.clientX - gp.rect.left - gp.rect.width / 2;
+    const cy = e.clientY - gp.rect.top - gp.rect.height / 2;
+    // the geo point under the cursor moves toward/away from center as
+    // zoom changes; recenter so it stays put
+    state.view.lon += cx * (gp.g / (flat ? kx : 1)) * (1 - 1 / f);
+    state.view.lat = Math.max(-89, Math.min(89,
+      state.view.lat - cy * gp.g * (1 - 1 / f)));
+    // preview transform about the cursor (page coordinates)
     const layer = plate.querySelector(".layer");
     if (layer) {
-      const rect = layer.getBoundingClientRect();
-      wheelScale /= factor;
-      layer.style.transformOrigin =
-        `${e.clientX - rect.left + (rect.left - layer.offsetLeft)}px ${e.clientY - rect.top}px`;
-      layer.style.transform = `scale(${wheelScale})`;
+      const lrect = layer.getBoundingClientRect();
+      const px = e.clientX - (lrect.left - preview.tx);
+      const py = e.clientY - (lrect.top - preview.ty);
+      preview.tx = px - f * (px - preview.tx);
+      preview.ty = py - f * (py - preview.ty);
+      preview.s *= f;
+      applyPreview();
     }
     clearTimeout(settle);
-    settle = setTimeout(() => { wheelScale = 1; render(); }, 180);
+    settle = setTimeout(() => render(), 180);
   }, { passive: false });
 
   plate.addEventListener("dblclick", () => { resetView(); render(); });

@@ -114,10 +114,18 @@ impl CanonProvider {
             entity_by_rid.insert(rid_of(f.entity()), f.entity().clone());
             entity_by_bid.insert(bid_of(f.entity()), f.entity().clone());
         }
+        let t0 = std::time::Instant::now();
         let events = derive_events(&store);
+        eprintln!("  events {:.1}s", t0.elapsed().as_secs_f64());
+        let t0 = std::time::Instant::now();
         let palette_slot = palette_slots(&store);
+        eprintln!("  palette {:.1}s", t0.elapsed().as_secs_f64());
+        let t0 = std::time::Instant::now();
         let relief_pos = relief_positions(&store);
+        eprintln!("  relief rank {:.1}s", t0.elapsed().as_secs_f64());
+        let t0 = std::time::Instant::now();
         let label_anchor = label_anchors(&store);
+        eprintln!("  label anchors {:.1}s", t0.elapsed().as_secs_f64());
         CanonProvider {
             store,
             styles,
@@ -136,8 +144,10 @@ impl CanonProvider {
         styles: BTreeMap<StyleId, Style>,
         gazetteer: Option<GazetteerExport>,
     ) -> Result<Self, String> {
+        let t0 = std::time::Instant::now();
         let bytes = std::fs::read(path).map_err(|e| format!("canon: {e}"))?;
         let store = map_canon::persist::from_bytes(&bytes)?;
+        eprintln!("  canon parse {:.1}s", t0.elapsed().as_secs_f64());
         Ok(Self::new(store, styles, gazetteer))
     }
 
@@ -956,6 +966,19 @@ fn label_anchors(store: &CanonStore) -> BTreeMap<FeatureId, UnitVec> {
     let mut out = BTreeMap::new();
     for (fid, f) in store.features() {
         let Feature::Area(a) = f else { continue };
+        // a whole-sphere region (the sentinel convention) has no
+        // meaningful pole — the world ocean's would be Point Nemo —
+        // and searching the planet for it is pure startup cost; it
+        // falls back to the centroid like any anchorless area
+        let is_sentinel = a.rings.iter().any(|bid| {
+            store.borders().get(bid).is_some_and(|b| {
+                b.0.len() <= 5
+                    && b.0.iter().any(|p| b.0.iter().any(|q| p.dot(q) < -0.99))
+            })
+        });
+        if is_sentinel {
+            continue;
+        }
         let resolve = |ids: &BTreeSet<map_canon::BorderId>| -> Vec<Ring> {
             ids.iter()
                 .filter_map(|bid| store.borders().get(bid))
@@ -964,8 +987,20 @@ fn label_anchors(store: &CanonStore) -> BTreeMap<FeatureId, UnitVec> {
         };
         let outer = resolve(&a.rings);
         let holes = resolve(&a.holes);
+        let t0 = std::time::Instant::now();
         if let Some(at) = pole_of_inaccessibility(&outer, &holes) {
             out.insert(*fid, at);
+        }
+        let dt = t0.elapsed().as_secs_f64();
+        if dt > 0.3 {
+            eprintln!(
+                "    SLOW anchor {:.1}s: {} rings={} holes={} pts={}",
+                dt,
+                a.entity.0,
+                outer.len(),
+                holes.len(),
+                outer.iter().chain(holes.iter()).map(Ring::len).sum::<usize>()
+            );
         }
     }
     out
@@ -1077,13 +1112,21 @@ fn ring_area_sr(ring: &Ring) -> f64 {
 /// edge. Deterministic grid search with local refinement, in a local
 /// lon/lat tangent frame.
 fn pole_of_inaccessibility(outer: &[Ring], holes: &[Ring]) -> Option<UnitVec> {
-    let big = outer.iter().max_by(|a, b| {
-        ring_area_sr(a)
-            .abs()
-            .partial_cmp(&ring_area_sr(b).abs())
-            .unwrap_or(std::cmp::Ordering::Equal)
-    })?;
-    let ring: Vec<(f64, f64)> = big.points().iter().map(|p| p.to_lat_lon_deg()).collect();
+    // areas computed ONCE per ring: max_by re-evaluates its key per
+    // comparison, which re-measured a 150k-point continent thousands
+    // of times (20 s of it, measured)
+    let big = outer
+        .iter()
+        .map(|r| (ring_area_sr(r).abs(), r))
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(_, r)| r)?;
+    // a label anchor needs the ring's shape, not its every vertex:
+    // stride-decimate huge rings so the search stays cheap (the
+    // worldwide coastline has ~1e5 points; 512 keep its pose)
+    let pts_all = big.points();
+    let stride = (pts_all.len() / 512).max(1);
+    let ring: Vec<(f64, f64)> =
+        pts_all.iter().step_by(stride).map(|p| p.to_lat_lon_deg()).collect();
     if ring.len() < 3 {
         return None;
     }
@@ -1094,8 +1137,10 @@ fn pole_of_inaccessibility(outer: &[Ring], holes: &[Ring]) -> Option<UnitVec> {
     let hole_polys: Vec<Vec<(f64, f64)>> = holes
         .iter()
         .map(|h| {
-            h.points()
-                .iter()
+            let pts = h.points();
+            let stride = (pts.len() / 256).max(1);
+            pts.iter()
+                .step_by(stride)
                 .map(|p| {
                     let (la, lo) = p.to_lat_lon_deg();
                     (lo * k, la)

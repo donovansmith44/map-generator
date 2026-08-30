@@ -656,3 +656,97 @@ fn flat_projection_holds_its_standard_parallel() {
         "a square league is square: lat step {d_lat:.1}px vs lon step {d_lon:.1}px"
     );
 }
+
+/// THE CORRESPONDENCE LAW: the same camera shows the same ground on
+/// either chart. Both projections stamp the same resolved view, and a
+/// step of one ground-degree eastward lands the same pixel distance
+/// on the flat plate as on the globe (to first order at the center).
+#[test]
+fn flat_and_globe_correspond_under_one_camera()  {
+    let camera = ((32.0, 35.0), 2.0);
+    let probe = |projection: Projection| -> (String, f64) {
+        let mut scene = Snapshot::empty();
+        let kx = 32f64.to_radians().cos();
+        for (la, lo) in [(32.0, 35.0), (32.0, 35.0 + 1.0 / kx)] {
+            scene.markers.push(map_types::scene::StyledMarker {
+                at: UnitVec::from_lat_lon_deg(la, lo),
+                style: map_types::style::MarkerStyle {
+                    color: map_types::style::Rgba(0, 0, 0, 255),
+                    size: 2.0,
+                },
+                sources: Default::default(),
+                place: None,
+            });
+        }
+        let svg = SvgEncoder { projection, width: 800.0, smooth: false, ..SvgEncoder::default() }
+            .encode(&scene)
+            .unwrap();
+        let stamps: Vec<String> = ["data-clat=", "data-clon=", "data-zoom="]
+            .iter()
+            .map(|a| svg.split(a).nth(1).unwrap().split('"').nth(1).unwrap().to_string())
+            .collect();
+        let pts: Vec<(f64, f64)> = svg
+            .match_indices("<circle")
+            .take(2)
+            .map(|(i, _)| {
+                let seg = &svg[i..];
+                let g = |a: &str| -> f64 {
+                    seg.split(a).nth(1).unwrap().split('"').nth(1).unwrap().parse().unwrap()
+                };
+                (g("cx="), g("cy="))
+            })
+            .collect();
+        let d = ((pts[0].0 - pts[1].0).powi(2) + (pts[0].1 - pts[1].1).powi(2)).sqrt();
+        (stamps.join("|"), d)
+    };
+    let (gs, gd) = probe(Projection::Globe { center: Some(camera.0), zoom: Some(camera.1) });
+    let (fs, fd) = probe(Projection::Flat { center: Some(camera.0), zoom: Some(camera.1) });
+    assert_eq!(gs, fs, "both charts stamp the same resolved view");
+    assert!(
+        (gd - fd).abs() / gd < 0.02,
+        "one ground-degree east: globe {gd:.1}px vs flat {fd:.1}px"
+    );
+}
+
+/// The sentinel's dress is a shared convention: on EITHER chart, a
+/// whole-sphere region keeps its land hole — the world ocean can
+/// never flood a page again, in any projection.
+#[test]
+fn the_sentinel_keeps_its_holes_on_both_charts() {
+    let sentinel = Ring::new(vec![
+        UnitVec::from_lat_lon_deg(0.0, 0.0),
+        UnitVec::from_lat_lon_deg(0.0, 179.5),
+        UnitVec::from_lat_lon_deg(1.0, -90.0),
+    ])
+    .unwrap();
+    let island = Ring::new(vec![
+        UnitVec::from_lat_lon_deg(31.0, 34.0),
+        UnitVec::from_lat_lon_deg(31.0, 36.0),
+        UnitVec::from_lat_lon_deg(33.0, 36.0),
+        UnitVec::from_lat_lon_deg(33.0, 34.0),
+    ])
+    .unwrap();
+    for projection in [
+        Projection::Globe { center: Some((32.0, 35.0)), zoom: Some(3.0) },
+        Projection::Flat { center: Some((32.0, 35.0)), zoom: Some(3.0) },
+    ] {
+        let mut scene = Snapshot::empty();
+        scene.regions.push(StyledRegion {
+            region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(11)),
+            entity: Some("sea".into()),
+            outer: vec![sentinel.clone()],
+            holes: vec![island.clone()],
+            paint: map_types::style::Paint { fill: map_types::style::Rgba(1, 2, 200, 255) },
+            sources: Default::default(),
+        });
+        let svg = SvgEncoder { projection, width: 800.0, smooth: false, ..SvgEncoder::default() }
+            .encode(&scene)
+            .unwrap();
+        let d = svg.split("d=\"").nth(1).unwrap().split('"').next().unwrap();
+        assert!(
+            d.matches('M').count() >= 2,
+            "{projection:?}: the hole survives ({} subpaths)",
+            d.matches('M').count()
+        );
+    }
+}
