@@ -324,7 +324,26 @@ fn build(args: &[String]) {
         .unwrap_or_else(|e| die(&format!("terrain: {e}")));
     let grid = map_adapters::ElevationGrid::from_etopo_bin(&terrain_bytes)
         .unwrap_or_else(|| die("terrain grid: wrong shape"));
-    let terrain_tl = map_adapters::ingest_terrain(&grid, tp0);
+    let land_rings: Vec<Vec<(f64, f64)>> = {
+        let text = std::fs::read_to_string("data/natural-earth/land_clip.geojson")
+            .unwrap_or_else(|e| die(&format!("land_clip: {e}")));
+        let v: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or_else(|e| die(&format!("land_clip: {e}")));
+        v["features"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|f| f["geometry"]["coordinates"].as_array()?.first().cloned())
+            .map(|ring| {
+                ring.as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| Some((c[1].as_f64()?, c[0].as_f64()?)))
+                    .collect()
+            })
+            .collect()
+    };
+    let terrain_tl = map_adapters::ingest_terrain(&grid, &land_rings, tp0);
     bridge_filtered(
         &mut store,
         &terrain_tl,

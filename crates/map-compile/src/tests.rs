@@ -383,6 +383,10 @@ fn plate_partition_face_census() {
             "tribe {tribe} names no face"
         );
     }
+    // the settlement roster made it through the bridge
+    let cities = crate::partition_bridge::load_settlements_for_law().expect("settlements load");
+    assert!(cities.len() >= 12, "a plate's worth of cities");
+    assert!(cities.iter().any(|(p, n, _, _)| p == "jerusalem" && n == "Jerusalem"));
     let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
     let mut jer_face = None;
     for (i, _f) in p.faces.iter().enumerate() {

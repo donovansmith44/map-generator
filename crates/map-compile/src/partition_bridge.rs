@@ -185,6 +185,29 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
 const MOUTH_GAP: f64 = 5.0 / 6371.0;
 
 
+/// The vendored settlement roster: (place id, display name, lat, lon).
+pub(crate) fn load_settlements() -> Result<Vec<(String, String, f64, f64)>, String> {
+    let text = std::fs::read_to_string(data_path("data/openbible/settlements.geojson"))
+        .map_err(|e| format!("settlements: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("settlements: {e}"))?;
+    let mut out = Vec::new();
+    for f in v["features"].as_array().into_iter().flatten() {
+        let (Some(place), Some(name)) =
+            (f["properties"]["place"].as_str(), f["properties"]["name"].as_str())
+        else {
+            continue;
+        };
+        let c = &f["geometry"]["coordinates"];
+        let (Some(lon), Some(lat)) = (c[0].as_f64(), c[1].as_f64()) else { continue };
+        out.push((place.to_string(), name.to_string(), lat, lon));
+    }
+    if out.len() < 12 {
+        return Err(format!("settlements: expected a plate's worth, found {}", out.len()));
+    }
+    Ok(out)
+}
+
 /// The attested neighbor regions: Philistia, Phoenicia, Geshur,
 /// Ammon, Moab, Edom — OpenBible.info's 50% confidence isobands
 /// (data/openbible/LICENSE.md), vendored with shared borders spliced
@@ -378,6 +401,29 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
             prov("river from OpenStreetMap (ODbL), noded into the partition".into()),
         );
         water_fids.insert(fid);
+    }
+
+    // THE SETTLEMENTS: city dots from the vendored join of the atlas
+    // gazetteer (coordinates, verse attestations) with OpenBible's
+    // place typing — only dominant-sense settlements, thresholds
+    // measured and declared in tools/plate_trace/vendor_settlements.py.
+    let mut n_cities = 0usize;
+    for (place, name, lat, lon) in load_settlements()? {
+        let fid = store.insert_feature(Feature::Point(map_canon::Landmark {
+            entity: EntityId(format!("place:{place}")),
+            name,
+            at: UnitVec::from_lat_lon_deg(lat, lon),
+        }));
+        store.set_provenance(
+            fid,
+            Provenance {
+                witness: Witness::Atlas,
+                verses: Vec::new(),
+                note: "gazetteer settlement (OpenBible-typed, see data/openbible)".into(),
+            },
+        );
+        claim_fids.insert(fid);
+        n_cities += 1;
     }
 
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0)?;
@@ -749,4 +795,9 @@ fn overlay_features(
     }
     store.set_layer(layer, merged);
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn load_settlements_for_law() -> Result<Vec<(String, String, f64, f64)>, String> {
+    load_settlements()
 }

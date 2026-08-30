@@ -13,7 +13,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
-use atlas_graph_types::covenant::{ContentHash, SourceId, TimePoint};
+use atlas_graph_types::covenant::{ContentHash, PlaceId, SourceId, TimePoint};
 use map_canon::{
     Area, CanonStore, EntityId, Feature, FeatureId, LayerKind, Route, Timestamp, Witness,
 };
@@ -43,6 +43,9 @@ pub struct CanonProvider {
     /// that touching territories never match is made true here, and
     /// an entity keeps its slot no matter which pieces are rendered.
     palette_slot: BTreeMap<EntityId, usize>,
+    /// relief band position 0..1 by measured area order (largest =
+    /// lowest = 0), computed once at load.
+    relief_pos: BTreeMap<EntityId, f64>,
 }
 
 fn hash64(s: &str) -> u64 {
@@ -108,7 +111,17 @@ impl CanonProvider {
         }
         let events = derive_events(&store);
         let palette_slot = palette_slots(&store);
-        CanonProvider { store, styles, gazetteer, entity_by_rid, entity_by_bid, events, palette_slot }
+        let relief_pos = relief_positions(&store);
+        CanonProvider {
+            store,
+            styles,
+            gazetteer,
+            entity_by_rid,
+            entity_by_bid,
+            events,
+            palette_slot,
+            relief_pos,
+        }
     }
 
     pub fn from_canon_file(
@@ -202,11 +215,12 @@ impl CanonProvider {
         match layer {
             LayerKind::Water => style.water_paint(),
             LayerKind::Relief => {
-                // Bands mix along the topo ramp by a stable per-entity
-                // position (band identity survives the bridge as the
-                // entity slug).
+                // Bands tint along the topo ramp by MEASURED order: a
+                // lower band always encloses more area than the band
+                // above it, so area rank IS elevation rank — no name
+                // parsing, no hashing.
                 let ramp = style.topo_ramp();
-                let t = (hash64(&entity.0) % 1000) as f64 / 1000.0;
+                let t = self.relief_pos.get(entity).copied().unwrap_or(0.0);
                 mix(ramp.oldest, ramp.newest, t)
             }
             _ => match style.palette() {
@@ -481,16 +495,26 @@ impl CanonProvider {
                             at: p.at,
                             style: style.marker_style(),
                             sources,
-                            place: None,
+                            place: Some(map_types::AtlasPlaceRef(PlaceId::new(p.entity.0.clone()))),
                         });
+                        if q.layers.contains(LayerSet::LABELS) {
+                            let mut label = style.label_style();
+                            label.size *= 0.85; // a city is a note, not a shout
+                            scene.labels.push(PlacedLabel {
+                                text: p.name.clone(),
+                                at: p.at,
+                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(
+                                    PlaceId::new(p.entity.0.clone()),
+                                )),
+                                style: label,
+                                face: map_types::scene::LabelFace::Place,
+                                voice: style.labeling().place,
+                            });
+                        }
                     }
                 }
             }
         }
-        // Neighbor-aware palette: greedy slot assignment so touching
-        // areas never share a color when a free slot exists (stable:
-        // deterministic order, hash-seeded start).
-        recolor_adjacent(&mut scene, self.style(q.style)?);
         // Layer rank first (water above every claim — a lake is never
         // buried), then largest areas first within a rank: an empire
         // never buries its vassals.
@@ -893,6 +917,43 @@ pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
     color_shared_border_graph(&ids, &adj)
 }
 
+/// Relief band order by MEASUREMENT: each Relief-layer entity's total
+/// ring area (planar shoelace suffices — bands nest), largest first.
+/// Position 0 = the lowest, widest band; 1 = the highest peak band.
+fn relief_positions(store: &CanonStore) -> BTreeMap<EntityId, f64> {
+    use map_canon::{Feature, LayerKind};
+    let mut area_of: BTreeMap<EntityId, f64> = BTreeMap::new();
+    let Some(world) = store.layers().get(&LayerKind::Relief) else { return BTreeMap::new() };
+    for sid in world.moments().values() {
+        let Some(snap) = store.snapshots().get(sid) else { continue };
+        for fid in &snap.features {
+            let Some(Feature::Area(a)) = store.features().get(fid) else { continue };
+            let e = area_of.entry(a.entity.clone()).or_insert(0.0);
+            *e = 0.0; // recompute per latest snapshot mention
+            for bid in &a.rings {
+                if let Some(b) = store.borders().get(bid) {
+                    let ll: Vec<(f64, f64)> = b.0.iter().map(|p| p.to_lat_lon_deg()).collect();
+                    let mut s = 0.0;
+                    for i in 0..ll.len() {
+                        let (la1, lo1) = ll[i];
+                        let (la2, lo2) = ll[(i + 1) % ll.len()];
+                        s += lo1 * la2 - lo2 * la1;
+                    }
+                    *e += (s / 2.0).abs();
+                }
+            }
+        }
+    }
+    let mut order: Vec<(EntityId, f64)> = area_of.into_iter().collect();
+    order.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let n = order.len().max(2) as f64 - 1.0;
+    order
+        .into_iter()
+        .enumerate()
+        .map(|(i, (e, _))| (e, i as f64 / n))
+        .collect()
+}
+
 /// The greedy pass, separated so the law can test it directly.
 pub(crate) fn color_shared_border_graph(
     ids: &[EntityId],
@@ -1182,47 +1243,3 @@ fn derive_events(store: &CanonStore) -> Vec<ChangeEvent> {
     out
 }
 
-/// Greedy adjacent-color avoidance over the scene's palette-painted
-/// areas: keep each area's hash-seeded slot unless a bbox-overlapping,
-/// already-colored area wears it — then take the next free slot.
-fn recolor_adjacent(scene: &mut Snapshot, style: &Style) {
-    let Some(slots) = style.palette() else { return };
-    let slot_of = |p: &Paint| slots.iter().position(|s| s == p);
-    let bbox = |r: &StyledRegion| -> (f64, f64, f64, f64) {
-        let (mut a, mut b, mut c, mut d) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-        for ring in &r.outer {
-            for p in ring.points() {
-                let lat = p.z().asin();
-                let lon = p.y().atan2(p.x());
-                a = a.min(lat);
-                b = b.min(lon);
-                c = c.max(lat);
-                d = d.max(lon);
-            }
-        }
-        (a, b, c, d)
-    };
-    let overlaps = |x: &(f64, f64, f64, f64), y: &(f64, f64, f64, f64)| {
-        x.0 <= y.2 && y.0 <= x.2 && x.1 <= y.3 && y.1 <= x.3
-    };
-    let mut placed: Vec<((f64, f64, f64, f64), usize)> = Vec::new();
-    for r in scene.regions.iter_mut() {
-        let Some(seed) = slot_of(&r.paint) else { continue };
-        let b = bbox(r);
-        let used: BTreeSet<usize> = placed
-            .iter()
-            .filter(|(pb, _)| overlaps(pb, &b))
-            .map(|(_, s)| *s)
-            .collect();
-        let mut pick = seed;
-        for step in 0..slots.len() {
-            let cand = (seed + step) % slots.len();
-            if !used.contains(&cand) {
-                pick = cand;
-                break;
-            }
-        }
-        r.paint = slots[pick];
-        placed.push((b, pick));
-    }
-}

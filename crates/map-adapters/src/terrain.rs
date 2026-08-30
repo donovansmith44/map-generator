@@ -176,7 +176,11 @@ fn hash_id(tag: &str) -> ContentHash {
 /// Build the relief timeline: one Terrain-class region per band, its
 /// parts the contour rings (even-odd nesting makes valleys holes for
 /// free), valid from `from` to the open edge of knowledge.
-pub fn ingest_terrain(grid: &ElevationGrid, from: TimePoint) -> WorldTimeline {
+pub fn ingest_terrain(
+    grid: &ElevationGrid,
+    land: &[Vec<(f64, f64)>],
+    from: TimePoint,
+) -> WorldTimeline {
     let gen_1_9 = || {
         let v = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 9 });
         LocusRange::new(v.clone(), v).expect("a verse is a range")
@@ -196,6 +200,50 @@ pub fn ingest_terrain(grid: &ElevationGrid, from: TimePoint) -> WorldTimeline {
     let valid = Interval { from, to: None };
 
     let mut tl = WorldTimeline::default();
+    // THE DRY LAND (GEN 1:10): the base of the relief stack — Natural
+    // Earth land clipped to the working frame, the same derivation as
+    // the sea witness, so coast and stage agree by construction. The
+    // elevation bands rise from it.
+    {
+        let mut parts = Vec::new();
+        for (ri, ring) in land.iter().enumerate() {
+            let mut pts: Vec<UnitVec> =
+                ring.iter().map(|(la, lo)| UnitVec::from_lat_lon_deg(*la, *lo)).collect();
+            if pts.len() >= 3 {
+                pts.push(pts[0]);
+                let bid = BoundaryId(hash_id(&format!("terrain/land/ring{ri}")));
+                tl.boundaries.insert(
+                    bid,
+                    BoundaryHistory {
+                        versions: vec![(
+                            valid,
+                            Boundary {
+                                pts,
+                                character: EdgeCharacter::Line,
+                                source: BoundarySource::Imported {
+                                    source: SourceId::new("natural-earth"),
+                                },
+                                justification: justification.clone(),
+                                provenance: TERRAIN_PROVENANCE.to_string(),
+                            },
+                        )],
+                    },
+                );
+                parts.push(RegionPart { cycle: vec![(bid, Orientation::Forward)], holes: vec![] });
+            }
+        }
+        if !parts.is_empty() {
+            let rid = RegionId(hash_id("terrain/land"));
+            tl.regions.insert(
+                rid,
+                RegionHistory {
+                    class: RegionClass::Terrain(0),
+                    label_history: vec![(valid, "the dry land".to_string())],
+                    geom_history: vec![(valid, RegionGeom { parts })],
+                },
+            );
+        }
+    }
     for (band, (threshold, label)) in BANDS.iter().enumerate() {
         let rings = contour_rings(grid, f64::from(*threshold));
         let mut parts = Vec::new();
