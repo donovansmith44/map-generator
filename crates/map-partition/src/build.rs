@@ -121,7 +121,13 @@ pub fn build(
                 let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
                 let (cx, cy, cz) = a.cross_raw(&b);
                 if (cx * cx + cy * cy + cz * cz).sqrt() < 1e-12 {
-                    return Err(BuildError::AntipodalArc { witness: w.id.clone() });
+                    // a vanishing cross product is either a duplicate
+                    // point (skip: clustering merges it) or a true
+                    // antipode (reject: no unique minor arc)
+                    if a.angle_to(&b) > 1.0 {
+                        return Err(BuildError::AntipodalArc { witness: w.id.clone() });
+                    }
+                    continue;
                 }
                 segs.push(Seg { a, b, witness: w.id.clone() });
             }

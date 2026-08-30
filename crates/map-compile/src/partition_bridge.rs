@@ -53,19 +53,23 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
     }
 
     // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN: the canaan
-    // ring snaps onto the real lake rings and the Jordan's own
-    // meanders (splicing their intermediate points in), so the
-    // partition merges region and water into shared edges — flush is
-    // structural, and the plate-vs-reality offset dies here.
-    let mut targets: Vec<SnapTarget> = lakes
-        .iter()
-        .map(|(_, r)| SnapTarget { pts: r.clone(), closed: true })
-        .collect();
-    for pl in polylines.iter().filter(|p| p.id.starts_with("jordan")) {
-        targets.push(SnapTarget { pts: pl.pts.clone(), closed: false });
+    // ring densifies to ~1 km spacing, then snaps onto every water
+    // line — sea, lakes, and EVERY river, nearest target first —
+    // splicing the targets' own vertices in, so the border follows
+    // shorelines and river meanders exactly and the partition merges
+    // them into shared edges. Flush is structural.
+    let mut targets: Vec<SnapTarget> = Vec::new();
+    for (_, r) in &lakes {
+        targets.push(SnapTarget { pts: r.clone(), closed: true, budget: 4.0 / 6371.0 });
     }
-    let budget = 4.0 / 6371.0; // 4 km shoreline budget
-    let canaan = snap_ring_to_targets(&canaan, &targets, budget);
+    for r in &seas {
+        targets.push(SnapTarget { pts: r.clone(), closed: true, budget: 4.0 / 6371.0 });
+    }
+    for pl in &polylines {
+        targets.push(SnapTarget { pts: pl.pts.clone(), closed: false, budget: 3.0 / 6371.0 });
+    }
+    let canaan = densify_ring(&canaan, 1.2 / 6371.0);
+    let canaan = snap_ring_to_targets(&canaan, &targets);
 
     let mut regions: Vec<WitnessRegion> = Vec::new();
     regions.push(WitnessRegion {
@@ -89,6 +93,33 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
 struct SnapTarget {
     pts: Vec<UnitVec>,
     closed: bool,
+    /// how far this target reaches for ring points (radians)
+    budget: f64,
+}
+
+/// Subdivide ring segments so no chord exceeds `max_step` radians —
+/// a dense ring snaps continuously instead of chording past meanders.
+fn densify_ring(ring: &[UnitVec], max_step: f64) -> Vec<UnitVec> {
+    let mut out = Vec::with_capacity(ring.len() * 2);
+    let n = ring.len();
+    for i in 0..n {
+        let a = ring[i];
+        let b = ring[(i + 1) % n];
+        out.push(a);
+        let d = a.angle_to(&b);
+        let steps = (d / max_step).ceil() as usize;
+        for k in 1..steps {
+            let f = k as f64 / steps as f64;
+            if let Ok(m) = UnitVec::normalize(
+                a.x() * (1.0 - f) + b.x() * f,
+                a.y() * (1.0 - f) + b.y() * f,
+                a.z() * (1.0 - f) + b.z() * f,
+            ) {
+                out.push(m);
+            }
+        }
+    }
+    out
 }
 
 /// Nearest point on a target polyline to `p`: (segment index, param
@@ -132,7 +163,7 @@ fn nearest_on_target(p: &UnitVec, t: &SnapTarget) -> Option<(usize, f64, UnitVec
 /// Snap ring vertices onto nearby targets and splice the targets'
 /// own intermediate vertices between consecutive snapped points, so
 /// the ring FOLLOWS the water line exactly.
-fn snap_ring_to_targets(ring: &[UnitVec], targets: &[SnapTarget], budget: f64) -> Vec<UnitVec> {
+fn snap_ring_to_targets(ring: &[UnitVec], targets: &[SnapTarget]) -> Vec<UnitVec> {
     #[derive(Clone)]
     enum P {
         Free(UnitVec),
@@ -144,7 +175,7 @@ fn snap_ring_to_targets(ring: &[UnitVec], targets: &[SnapTarget], budget: f64) -
             let mut best: Option<(usize, f64, UnitVec, f64)> = None;
             for (ti, t) in targets.iter().enumerate() {
                 if let Some((s, tt, q, d)) = nearest_on_target(p, t) {
-                    if d <= budget && best.as_ref().map_or(true, |(_, _, _, bd)| d < *bd) {
+                    if d <= t.budget && best.as_ref().map_or(true, |(_, _, _, bd)| d < *bd) {
                         best = Some((ti, s as f64 + tt, q, d));
                     }
                 }
