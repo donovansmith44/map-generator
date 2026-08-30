@@ -530,3 +530,46 @@ fn plate_partition_face_census() {
     }
 }
 
+
+/// A COHORT ENTERS TIME: features overlaid from a moment join every
+/// state at or after it — a rising moment is created if none stands
+/// there, inheriting what was already in effect — and every earlier
+/// moment is left exactly as it was. The tribes begin at the
+/// conquest; before it, the world stands without them.
+#[test]
+fn a_cohort_enters_time_at_its_moment() {
+    use atlas_graph_types::covenant::{TimePoint, Year};
+    use map_canon::{CanonStore, EntityId, Feature, LayerKind, Memory, Snapshot, World};
+    let ts = |y: i32| TimePoint::year_only(Year::new(y).unwrap());
+    let mut store = CanonStore::default();
+    let mk = |store: &mut CanonStore, id: &str| {
+        store.insert_feature(Feature::Memory(Memory {
+            entity: EntityId(id.into()),
+            name: id.into(),
+            at: map_types::UnitVec::from_lat_lon_deg(31.0, 35.0),
+        }))
+    };
+    // the world before: one feature standing from -4004
+    let old = mk(&mut store, "old");
+    let sid = store.insert_snapshot(Snapshot { features: [old].into() });
+    let mut world = World::default();
+    world.insert(ts(-4004), sid).unwrap();
+    store.set_layer(LayerKind::ScriptureClaims, world);
+
+    // the cohort rises at -1406
+    let tribe = mk(&mut store, "tribe");
+    crate::partition_bridge::overlay_features_for_law(
+        &mut store,
+        LayerKind::ScriptureClaims,
+        &[tribe].into(),
+        ts(-1406),
+    )
+    .unwrap();
+
+    let world = &store.layers()[&LayerKind::ScriptureClaims];
+    let at = |y: i32| store.snapshots()[&world.state_at(&ts(y)).unwrap()].features.clone();
+    assert!(at(-2000).contains(&old) && !at(-2000).contains(&tribe), "before: no tribes");
+    assert!(at(-1406).contains(&old) && at(-1406).contains(&tribe), "the rising moment inherits");
+    assert!(at(-1000).contains(&tribe), "after: the tribes stand");
+    assert_eq!(world.moments().len(), 2, "one world before, one from the rising");
+}

@@ -284,7 +284,11 @@ fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, St
 
 /// Build the partition and bridge it into the store. Returns a
 /// human-readable summary line.
-pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String, String> {
+pub fn bridge_partition(
+    store: &mut CanonStore,
+    t0: Timestamp,
+    allotment_from: Timestamp,
+) -> Result<String, String> {
     let (regions, polylines) = gather_witnesses()?;
     let part = build(&regions, &polylines, &PartitionConfig::default())
         .map_err(|e| format!("partition build: {e:?}"))?;
@@ -296,6 +300,13 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     let prov = |note: String| Provenance { witness: Witness::Authored, verses: Vec::new(), note };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+    // THE ALLOTMENT COHORT: the tribes begin at the conquest, not at
+    // creation — their identity comes from the same vendored data
+    // their rings do, and their features join the world at
+    // `allotment_from` while everything else stands from t0.
+    let tribal_slugs: BTreeSet<String> =
+        load_tribal_rings()?.into_iter().map(|(slug, _, _)| slug).collect();
+    let mut allotment_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     // ONE Area per entity: all of an entity's faces fill as a single
     // path, so same-paint interior seams cannot render. The entity's
     // kind is its largest face's kind.
@@ -372,6 +383,9 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
         }));
         store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
         match bundle.kind {
+            FaceKind::LandClaim if tribal_slugs.contains(&who) => {
+                allotment_fids.insert(fid);
+            }
             FaceKind::LandClaim => {
                 claim_fids.insert(fid);
             }
@@ -458,6 +472,7 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     }
 
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0)?;
+    overlay_features(store, LayerKind::ScriptureClaims, &allotment_fids, allotment_from)?;
     overlay_features(store, LayerKind::Water, &water_fids, t0)?;
 
     Ok(format!(
@@ -801,12 +816,16 @@ fn shoreline_crossing(out: &UnitVec, inw: &UnitVec, water: &[Vec<UnitVec>]) -> O
 }
 
 /// Add features to EVERY moment of a layer (partition features are
-/// timeless); create the layer's first moment at t0 if it is empty.
+/// timeless within their span); the features join the world FROM
+/// `from` onward: a moment is created at `from` if none stands there
+/// (carrying forward whatever was already in effect), every moment at
+/// or after `from` gains the features, and every earlier moment is
+/// left exactly as it was — this is how a cohort ENTERS TIME.
 fn overlay_features(
     store: &mut CanonStore,
     layer: LayerKind,
     fids: &BTreeSet<map_canon::FeatureId>,
-    t0: Timestamp,
+    from: Timestamp,
 ) -> Result<(), String> {
     if fids.is_empty() {
         return Ok(());
@@ -817,12 +836,19 @@ fn overlay_features(
         .iter()
         .map(|(t, sid)| (*t, store.snapshots()[sid].features.clone()))
         .collect();
-    if moments.is_empty() {
-        moments.push((t0, BTreeSet::new()));
+    if !moments.iter().any(|(t, _)| *t == from) {
+        // the rising moment: the state already in effect at `from`
+        let inherited = world
+            .state_at(&from)
+            .map(|sid| store.snapshots()[&sid].features.clone())
+            .unwrap_or_default();
+        moments.push((from, inherited));
     }
     let mut merged = World::default();
     for (t, mut feats) in moments {
-        feats.extend(fids.iter().copied());
+        if t >= from {
+            feats.extend(fids.iter().copied());
+        }
         let sid = store.insert_snapshot(Snapshot { features: feats });
         merged.insert(t, sid).map_err(|_| format!("{layer:?}: moment contradiction"))?;
     }
@@ -833,4 +859,14 @@ fn overlay_features(
 #[cfg(test)]
 pub(crate) fn load_settlements_for_law() -> Result<Vec<(String, String, f64, f64)>, String> {
     load_settlements()
+}
+
+#[cfg(test)]
+pub(crate) fn overlay_features_for_law(
+    store: &mut CanonStore,
+    layer: LayerKind,
+    fids: &BTreeSet<map_canon::FeatureId>,
+    from: Timestamp,
+) -> Result<(), String> {
+    overlay_features(store, layer, fids, from)
 }
