@@ -205,12 +205,31 @@ impl CanonProvider {
             }
         }
         if q.layers.contains(LayerSet::LABELS) && layer != LayerKind::Relief {
-            if let Some(at) = centroid(&outer) {
+            if let Some(at) = pole_of_inaccessibility(&outer, &holes).or_else(|| centroid(&outer)) {
+                let is_water = layer == LayerKind::Water;
+                let mut label = style.label_style();
+                // the label grows with the ground it names: sqrt of
+                // the largest ring's area, clamped to stay readable
+                let sr = outer.iter().map(|r| ring_area_sr(r).abs()).fold(0.0, f64::max);
+                label.size *= (sr.sqrt() / 0.006).clamp(0.85, 2.1);
+                if is_water {
+                    // water speaks in its own deep color
+                    let map_types::style::Rgba(r, g, b, _) =
+                        self.area_paint(layer, &a.entity, style).fill;
+                    let dim = |v: u8| (f64::from(v) * 0.45) as u8;
+                    label.color = map_types::style::Rgba(dim(r), dim(g), dim(b), 255);
+                    label.size *= 0.8;
+                }
                 scene.labels.push(PlacedLabel {
                     text: a.name.clone(),
                     at,
                     subject: LabelSubject::Region(rid_of(&a.entity)),
-                    style: style.label_style(),
+                    style: label,
+                    face: if is_water {
+                        map_types::scene::LabelFace::Water
+                    } else {
+                        map_types::scene::LabelFace::Territory
+                    },
                 });
             }
         }
@@ -310,6 +329,7 @@ impl CanonProvider {
                     at: entry.position,
                     subject: LabelSubject::Place(map_types::AtlasPlaceRef(pid.clone())),
                     style: label,
+                    face: map_types::scene::LabelFace::Place,
                 });
             }
         }
@@ -437,6 +457,7 @@ impl CanonProvider {
                     at: entry.position,
                     subject: LabelSubject::Place(place.clone()),
                     style: style.label_style(),
+                    face: map_types::scene::LabelFace::Place,
                 });
             }
         }
@@ -649,6 +670,138 @@ fn mix(a: Paint, b: Paint, t: f64) -> Paint {
     let (map_types::style::Rgba(ar, ag, ab, aa), map_types::style::Rgba(br, bg, bb, ba)) =
         (a.fill, b.fill);
     Paint { fill: map_types::style::Rgba(c(ar, br), c(ag, bg), c(ab, bb), c(aa, ba)) }
+}
+
+/// Planar shoelace area of a ring in steradians (lon/lat tangent
+/// approximation -- regions here are small; used only to scale labels).
+fn ring_area_sr(ring: &Ring) -> f64 {
+    let pts = ring.points();
+    if pts.len() < 3 {
+        return 0.0;
+    }
+    let ll: Vec<(f64, f64)> = pts.iter().map(|p| p.to_lat_lon_deg()).collect();
+    let latc = ll.iter().map(|(la, _)| la).sum::<f64>() / ll.len() as f64;
+    let k = latc.to_radians().cos();
+    let mut a = 0.0;
+    for i in 0..ll.len() {
+        let (la1, lo1) = ll[i];
+        let (la2, lo2) = ll[(i + 1) % ll.len()];
+        a += (lo1 * k) * la2 - (lo2 * k) * la1;
+    }
+    (a / 2.0) * (std::f64::consts::PI / 180.0).powi(2)
+}
+
+/// The POLE OF INACCESSIBILITY of the largest outer ring: the interior
+/// point farthest from any border (holes included) -- a label anchored
+/// here is inside its region by construction, never straddling an
+/// edge. Deterministic grid search with local refinement, in a local
+/// lon/lat tangent frame.
+fn pole_of_inaccessibility(outer: &[Ring], holes: &[Ring]) -> Option<UnitVec> {
+    let big = outer.iter().max_by(|a, b| {
+        ring_area_sr(a)
+            .abs()
+            .partial_cmp(&ring_area_sr(b).abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
+    let ring: Vec<(f64, f64)> = big.points().iter().map(|p| p.to_lat_lon_deg()).collect();
+    if ring.len() < 3 {
+        return None;
+    }
+    let latc = ring.iter().map(|(la, _)| la).sum::<f64>() / ring.len() as f64;
+    let k = latc.to_radians().cos().max(0.05);
+    // x = lon * k, y = lat
+    let poly: Vec<(f64, f64)> = ring.iter().map(|&(la, lo)| (lo * k, la)).collect();
+    let hole_polys: Vec<Vec<(f64, f64)>> = holes
+        .iter()
+        .map(|h| {
+            h.points()
+                .iter()
+                .map(|p| {
+                    let (la, lo) = p.to_lat_lon_deg();
+                    (lo * k, la)
+                })
+                .collect()
+        })
+        .collect();
+    fn inside(p: (f64, f64), poly: &[(f64, f64)]) -> bool {
+        let (x, y) = p;
+        let mut in_ = false;
+        let n = poly.len();
+        let mut j = n - 1;
+        for i in 0..n {
+            let (xi, yi) = poly[i];
+            let (xj, yj) = poly[j];
+            if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+                in_ = !in_;
+            }
+            j = i;
+        }
+        in_
+    }
+    fn seg_dist(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+        let (px, py) = p;
+        let (ax, ay) = a;
+        let (bx, by) = b;
+        let (dx, dy) = (bx - ax, by - ay);
+        let l2 = dx * dx + dy * dy;
+        let t = if l2 <= 0.0 { 0.0 } else { ((px - ax) * dx + (py - ay) * dy) / l2 };
+        let t = t.clamp(0.0, 1.0);
+        let (qx, qy) = (ax + t * dx, ay + t * dy);
+        ((px - qx).powi(2) + (py - qy).powi(2)).sqrt()
+    }
+    let clearance = |p: (f64, f64)| -> f64 {
+        if !inside(p, &poly) || hole_polys.iter().any(|h| inside(p, h)) {
+            return f64::NEG_INFINITY;
+        }
+        let mut d = f64::INFINITY;
+        for ring in std::iter::once(&poly).chain(hole_polys.iter()) {
+            let n = ring.len();
+            for i in 0..n {
+                d = d.min(seg_dist(p, ring[i], ring[(i + 1) % n]));
+            }
+        }
+        d
+    };
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for &(x, y) in &poly {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    const N: usize = 24;
+    let mut best = (f64::NEG_INFINITY, (0.0, 0.0));
+    for i in 0..N {
+        for j in 0..N {
+            let p = (
+                x0 + (x1 - x0) * (i as f64 + 0.5) / N as f64,
+                y0 + (y1 - y0) * (j as f64 + 0.5) / N as f64,
+            );
+            let c = clearance(p);
+            if c > best.0 {
+                best = (c, p);
+            }
+        }
+    }
+    if !best.0.is_finite() {
+        return None;
+    }
+    let mut step = ((x1 - x0) / N as f64).max((y1 - y0) / N as f64);
+    for _ in 0..5 {
+        step /= 2.0;
+        let center = best.1;
+        for di in -2i32..=2 {
+            for dj in -2i32..=2 {
+                let p = (center.0 + f64::from(di) * step, center.1 + f64::from(dj) * step);
+                let c = clearance(p);
+                if c > best.0 {
+                    best = (c, p);
+                }
+            }
+        }
+    }
+    let (x, y) = best.1;
+    Some(UnitVec::from_lat_lon_deg(y, x / k))
 }
 
 fn centroid(rings: &[Ring]) -> Option<UnitVec> {

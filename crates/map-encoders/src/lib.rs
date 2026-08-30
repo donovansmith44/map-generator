@@ -404,7 +404,6 @@ fn emit_labels(
     page_width: f64,
     page: &Option<Bounds>,
 ) {
-    const CHAR_WIDTH: f64 = 0.62; // monospace em fraction
     let min_size = (page_width / 260.0).max(4.0);
     let mut placed: Vec<Bounds> = Vec::new();
     let collides = |b: &Bounds, placed: &[Bounds]| {
@@ -415,19 +414,55 @@ fn emit_labels(
         if !chunk_matters(&(x, y, x, y), page) {
             continue; // anchored off the page: unreadable by definition
         }
-        let chars = l.text.chars().count().max(1) as f64;
+        use map_types::scene::LabelFace;
+        // The cartographic voice: territories in letterspaced serif
+        // capitals, water in italic serif, places in the plain hand.
+        // char_w is the em fraction INCLUDING the letterspacing, so
+        // fitting and collision boxes stay honest per voice.
+        let (family, weight, style_attr, spacing_em, char_w, text) = match l.face {
+            LabelFace::Territory => (
+                "Georgia, 'Times New Roman', serif",
+                "600",
+                "",
+                0.18,
+                0.74 + 0.18,
+                l.text.to_uppercase(),
+            ),
+            LabelFace::Water => (
+                "Georgia, 'Times New Roman', serif",
+                "400",
+                " font-style=\"italic\"",
+                0.04,
+                0.50 + 0.04,
+                l.text.clone(),
+            ),
+            LabelFace::Place => (
+                "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+                "600",
+                "",
+                0.0,
+                0.62,
+                l.text.clone(),
+            ),
+        };
+        let chars = text.chars().count().max(1) as f64;
         let mut size = l.style.size;
-        if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
-            if let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) {
-                let fit_w = (x1 - x0) * 0.92 / (chars * CHAR_WIDTH);
-                let fit_h = (y1 - y0) * 0.8;
-                size = size.min(fit_w).min(fit_h);
+        // Water names may overflow their shores — a lake narrower than
+        // its own name still deserves one (cartographic convention);
+        // only land labels shrink to fit their territory.
+        if l.face != LabelFace::Water {
+            if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
+                if let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) {
+                    let fit_w = (x1 - x0) * 0.92 / (chars * char_w);
+                    let fit_h = (y1 - y0) * 0.8;
+                    size = size.min(fit_w).min(fit_h);
+                }
             }
         }
         if size < min_size {
             continue; // the territory cannot hold a readable label
         }
-        let (w, h) = (chars * CHAR_WIDTH * size, size * 1.25);
+        let (w, h) = (chars * char_w * size, size * 1.25);
         let mut spot = None;
         for dy in [0.0, -h, h, -2.0 * h, 2.0 * h] {
             let b = (x - w / 2.0, y + dy - h * 0.75, x + w / 2.0, y + dy + h * 0.35);
@@ -446,7 +481,7 @@ fn emit_labels(
         };
         let _ = write!(
             s,
-            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"'Segoe UI', ui-sans-serif, system-ui, sans-serif\" font-weight=\"600\"{}>{}</text>",
+            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"{}\" font-weight=\"{}\" letter-spacing=\"{:.2}\"{}{}>{}</text>",
             x,
             y,
             size,
@@ -454,9 +489,13 @@ fn emit_labels(
             alpha(l.style.color),
             rgb(l.style.halo),
             alpha(l.style.halo),
-            size * 0.28,
+            size * 0.24,
+            family,
+            weight,
+            size * spacing_em,
+            style_attr,
             subject_attr,
-            esc(&l.text)
+            esc(&text)
         );
     }
 }

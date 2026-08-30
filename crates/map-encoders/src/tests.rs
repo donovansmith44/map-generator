@@ -44,6 +44,7 @@ fn sample_scene() -> Snapshot {
         at: uv(3.0, 5.0),
         subject: LabelSubject::Free,
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        face: map_types::scene::LabelFace::Place,
     });
     s.attribution = sources;
     s
@@ -75,6 +76,7 @@ fn globe_clips_the_far_hemisphere() {
         at: uv(-3.0, -175.0),
         subject: LabelSubject::Free,
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        face: map_types::scene::LabelFace::Place,
     });
     let enc = SvgEncoder {
         projection: Projection::Globe { center: Some((3.0, 5.0)), zoom: None },
@@ -234,6 +236,7 @@ fn labels_fit_their_territory_and_never_collide() {
         at: uv(20.03, 20.05),
         subject: LabelSubject::Region(tiny),
         style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0 },
+        face: map_types::scene::LabelFace::Place,
     });
     let out = SvgEncoder::default().encode(&scene).unwrap();
     assert!(!out.contains("IMPOSSIBLY"), "a label that cannot fit is dropped");

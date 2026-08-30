@@ -375,6 +375,8 @@ fn plate_partition_face_census() {
     for tribe in [
         "judah", "simeon", "benjamin", "ephraim", "manasseh-west", "dan", "issachar",
         "zebulun", "asher", "naphtali", "reuben", "gad", "manasseh-east",
+        // the attested neighbors ride the same guarantee
+        "philistia", "phoenicia", "geshur", "ammon", "moab", "edom",
     ] {
         assert!(
             p.faces.iter().any(|f| f.claims.first().map(String::as_str) == Some(tribe)),

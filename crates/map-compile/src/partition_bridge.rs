@@ -158,7 +158,57 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
             });
         }
     }
+    // THE NEIGHBORS: attested regions (OpenBible, CC BY 4.0) already
+    // spliced onto the tribal rings and the real water at vendor
+    // time; the smaller-witness law settles any remaining overlap.
+    for (slug, ring) in load_openbible_regions()? {
+        let snapped = snap_ring_to(&ring, &snap_targets, budget);
+        if snapped.len() >= 3 {
+            regions.push(WitnessRegion {
+                id: slug,
+                kind: FaceKind::LandClaim,
+                rings: vec![snapped],
+                parent: None,
+            });
+        }
+    }
     Ok((regions, polylines))
+}
+
+/// The attested neighbor regions: Philistia, Phoenicia, Geshur,
+/// Ammon, Moab, Edom — OpenBible.info's 50% confidence isobands
+/// (data/openbible/LICENSE.md), vendored with shared borders spliced
+/// onto the tribes and the real water.
+fn load_openbible_regions() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
+    let text = std::fs::read_to_string(data_path("data/openbible/regions.geojson"))
+        .map_err(|e| format!("openbible regions: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("openbible regions: {e}"))?;
+    let mut out = Vec::new();
+    for f in v["features"].as_array().into_iter().flatten() {
+        let Some(slug) = f["properties"]["region"].as_str() else { continue };
+        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
+        else {
+            continue;
+        };
+        let ring: Vec<UnitVec> = outer
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                let lon = c[0].as_f64()?;
+                let lat = c[1].as_f64()?;
+                Some(UnitVec::from_lat_lon_deg(lat, lon))
+            })
+            .collect();
+        if ring.len() >= 3 {
+            out.push((slug.to_string(), ring));
+        }
+    }
+    if out.len() != 6 {
+        return Err(format!("openbible: expected 6 neighbor regions, found {}", out.len()));
+    }
+    Ok(out)
 }
 
 /// The tribal allotments: open data traced from the Wikimedia Commons

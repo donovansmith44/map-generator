@@ -585,6 +585,7 @@ fn law10_selection_coherence() {
             at: uv(lat + 2.0, 2.5),
             subject: LabelSubject::Region(id),
             style: style.label_style(),
+            face: crate::scene::LabelFace::Place,
         });
         sc.attribution.insert(SourceId::new("historical-source"));
         sc
