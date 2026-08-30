@@ -198,7 +198,20 @@ for ch in chains:
         continue
     ls, rs = side_of(ap, +1), side_of(ap, -1)
     pair = {ls, rs}
-    if 'orange' in pair or 'cream' in pair or 'off' in pair:
+    # the ink itself is the last word: real rivers are saturated blue,
+    # border strokes are grayer — a desert river (cream sides) survives
+    # and border ink dies regardless of neighbors.
+    idxs = np.linspace(0, len(ap) - 1, min(15, len(ap))).astype(int)
+    ink = []
+    for i2 in idxs:
+        xi, yi = int(round(ap[i2][0])), int(round(ap[i2][1]))
+        if 0 <= yi < H and 0 <= xi < W:
+            ink.append(int(im[yi, xi, 2]) - int(im[yi, xi, 0]))
+    saturated = len(ink) > 0 and float(np.median(ink)) > 55
+    if 'off' in pair:
+        dropped += 1
+        continue
+    if ('orange' in pair or 'cream' in pair) and not saturated:
         dropped += 1
         continue
     if pair == {'green', 'gray'}:

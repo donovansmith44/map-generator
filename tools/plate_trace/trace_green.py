@@ -20,6 +20,17 @@ lab, n = ndi.label(mask)
 sizes = ndi.sum(mask, lab, index=range(1, n + 1))
 big = 1 + int(np.argmax(sizes))
 region = ndi.binary_fill_holes(lab == big)
+# LAP TOWARD WATER: the plate paints a dark shoreline stroke between a
+# fill and its water; that strip belongs to neither mask and renders
+# as background. Extend the region across it wherever water is near —
+# water paints on top, so the lap is invisible and gaps are impossible.
+import cv2
+blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
+def disk(rr):
+    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*rr+1, 2*rr+1))
+lap = (cv2.dilate(region.astype(np.uint8), disk(14)) > 0)     & (cv2.dilate(blue_m.astype(np.uint8), disk(10)) > 0)
+region = region | lap
+region = ndi.binary_closing(region, structure=np.ones((7, 7)))
 print("green component px:", int(sizes.max()), "of", int(mask.sum()))
 
 # outer contour via OpenCV border following

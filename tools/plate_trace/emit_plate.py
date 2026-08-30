@@ -23,8 +23,13 @@ block = "\n".join(lines)
 
 t = io.open(SRC, encoding='utf8').read()
 anchor = "// --------------------------------- the table of nations"
-assert block not in t
-t = t.replace(anchor, block + "\n" + anchor, 1)
+marker = "// ------------------------- the traced plate contour"
+if marker in t:
+    i = t.index(marker)
+    j = t.index("];", t.index("const PLATE_CANAAN_CONTOUR")) + 2
+    t = t[:i] + block.rstrip() + t[j:]
+else:
+    t = t.replace(anchor, block + chr(10) + anchor, 1)
 
 spec_anchor = """const SURVEYS: &[SurveySpec] = &[
     SurveySpec {
@@ -43,7 +48,7 @@ spec_new = """const SURVEYS: &[SurveySpec] = &[
     },
     SurveySpec {
         tag: "NUM34","""
-assert spec_anchor in t
-t = t.replace(spec_anchor, spec_new, 1)
+if 'tag: "PLATE-CANAAN"' not in t:
+    t = t.replace(spec_anchor, spec_new, 1)
 io.open(SRC, 'w', encoding='utf8', newline='').write(t)
 print("emitted", len(LL), "waypoints + spec")
