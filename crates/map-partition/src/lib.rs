@@ -19,7 +19,7 @@ mod build;
 #[cfg(test)]
 mod tests;
 
-pub use build::{build, BuildError, WitnessPolyline, WitnessRegion};
+pub use build::{build, build_with, BuildError, WitnessBorder, WitnessPolyline, WitnessRegion, WitnessSeed};
 
 use map_types::UnitVec;
 
@@ -261,6 +261,11 @@ impl Partition {
             if f.area <= 0.0 {
                 out.push(format!("face {i}: non-positive area {}", f.area));
             }
+        }
+        // the outside world exists: a seed claim that leaked through
+        // a dangling border swallows the wrap face — loud, not subtle
+        if !self.faces.iter().any(|f| f.kind == FaceKind::Background) {
+            out.push("no Background face: a claim leaked through its borders".into());
         }
         // completeness
         let residual = self.area_residual();

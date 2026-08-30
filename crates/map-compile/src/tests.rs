@@ -383,6 +383,23 @@ fn plate_partition_face_census() {
         }
     }
     assert_eq!(jer_face, Some(map_partition::FaceKind::LandClaim), "Jerusalem is on land");
+    for (i, f) in p.faces.iter().enumerate() {
+        if f.kind == map_partition::FaceKind::Background && f.area < 1.0 {
+            let r0 = &p.face_rings(i)[0];
+            let (la, lo) = r0[0].to_lat_lon_deg();
+            let mut nbs: Vec<String> = Vec::new();
+            for cy in &f.cycles {
+                for &h in cy {
+                    let nb = p.halves[p.halves[h].twin].face;
+                    let s = format!("{}:{:?}{:?}", nb, p.faces[nb].kind, p.faces[nb].claims);
+                    if !nbs.contains(&s) {
+                        nbs.push(s);
+                    }
+                }
+            }
+            eprintln!("POCKET {i} {:.1e} sr at ({la:.3},{lo:.3}) nbs={nbs:?}", f.area);
+        }
+    }
     let backgrounds =
         p.faces.iter().filter(|f| f.kind == map_partition::FaceKind::Background).count();
     assert_eq!(backgrounds, 1, "one Background face: every other cell is claimed — no wedges");

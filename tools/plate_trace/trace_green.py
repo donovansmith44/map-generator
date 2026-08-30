@@ -68,7 +68,16 @@ for f in rj['features']:
 
 # plate sea (wide blue only: opening kills the drawn rivers)
 blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
-sea_m = cv2.morphologyEx(blue_m.astype(np.uint8) * 255, cv2.MORPH_OPEN, disk(8))
+sea_m_all = cv2.morphologyEx(blue_m.astype(np.uint8) * 255, cv2.MORPH_OPEN, disk(8))
+# the SEA is the largest wide-water component only; the plate's
+# stylized lakes are NOT real water — they carry the plate's intent
+# and are attributed below, not treated as geography
+sl, sc = ndi.label(sea_m_all > 0)
+if sc > 0:
+    sizes_s = ndi.sum(sea_m_all > 0, sl, index=range(1, sc + 1))
+    sea_m = ((sl == (1 + int(np.argmax(sizes_s)))) * 255).astype(np.uint8)
+else:
+    sea_m = sea_m_all
 
 # drawn rivers (networks >= 30 km, the same set the map renders) are
 # water too: the border wadis south of the Dead Sea must attract the
@@ -99,6 +108,18 @@ for f in rj['features']:
     if len(pts) >= 2:
         cv2.polylines(rivers_m, [np.array(pts, np.int32)], False, 255, thickness=7)
 water_real = np.maximum(np.maximum(np.maximum(lakes_m, corr_m), sea_m), rivers_m) > 0
+# THE PLATE'S INTENT: where the plate drew water that reality moved
+# (its stylized Dead Sea vs the real basins), the difference area
+# belongs to whichever side the plate's drawing adjoins. Real water
+# (corridor, wadis) severs the difference into per-side components,
+# so component-touches-region attribution is exact — no distances.
+plate_wide = sea_m_all > 0
+strip = plate_wide & ~water_real
+slab, sn = ndi.label(strip)
+touch_ids = set(np.unique(slab[(cv2.dilate(region.astype(np.uint8), disk(2)) > 0) & (slab > 0)]))
+keep_strip = np.isin(slab, [i for i in touch_ids if i > 0])
+print("strip px:", int(strip.sum()), "components:", sn, "kept px:", int(keep_strip.sum()))
+region = region | keep_strip
 region_u8 = region.astype(np.uint8) * 255
 bridge = (cv2.dilate(region_u8, disk(40)) > 0) & (cv2.dilate(water_real.astype(np.uint8) * 255, disk(40)) > 0)
 # the bridge may not cross a water body: keep the in-water part, and

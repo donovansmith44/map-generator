@@ -31,6 +31,24 @@ pub struct WitnessPolyline {
     pub pts: Vec<UnitVec>,
 }
 
+/// An OPEN border curve: part of the arrangement (it bounds cells)
+/// without claiming anything itself. A region's land border.
+pub struct WitnessBorder {
+    pub id: String,
+    pub pts: Vec<UnitVec>,
+}
+
+/// A claim by SEED: the face containing the seed point IS the region.
+/// Its water-side boundary is therefore the water's own edge by
+/// construction — flush cannot fail, it can only refuse to build
+/// (a dangling border leaks the cell, the Background face vanishes,
+/// and validation fails loud).
+pub struct WitnessSeed {
+    pub id: String,
+    pub kind: FaceKind,
+    pub seed: UnitVec,
+}
+
 #[derive(Debug)]
 pub enum BuildError {
     /// arc endpoints too close to antipodal for a unique minor arc.
@@ -94,6 +112,16 @@ pub fn build(
     polylines: &[WitnessPolyline],
     cfg: &PartitionConfig,
 ) -> Result<Partition, BuildError> {
+    build_with(regions, &[], &[], polylines, cfg)
+}
+
+pub fn build_with(
+    regions: &[WitnessRegion],
+    borders: &[WitnessBorder],
+    seeds: &[WitnessSeed],
+    polylines: &[WitnessPolyline],
+    cfg: &PartitionConfig,
+) -> Result<Partition, BuildError> {
     let mut diagnostics = Vec::new();
 
     // ---- 1. normalize witness rings into segments
@@ -132,6 +160,25 @@ pub fn build(
                 segs.push(Seg { a, b, witness: w.id.clone() });
             }
             rings_norm.push((w.id.clone(), w.kind.clone(), pts));
+        }
+    }
+    for w in borders {
+        let mut pts: Vec<UnitVec> = Vec::with_capacity(w.pts.len());
+        for p in &w.pts {
+            if pts.last().map_or(true, |q| dist(q, p) > 1e-12) {
+                pts.push(*p);
+            }
+        }
+        for pair in pts.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            let (cx, cy, cz) = a.cross_raw(&b);
+            if (cx * cx + cy * cy + cz * cz).sqrt() < 1e-12 {
+                if a.angle_to(&b) > 1.0 {
+                    return Err(BuildError::AntipodalArc { witness: w.id.clone() });
+                }
+                continue;
+            }
+            segs.push(Seg { a, b, witness: w.id.clone() });
         }
     }
     // deterministic processing order regardless of caller order
@@ -246,7 +293,8 @@ pub fn build(
     // edge that ends with the same face on both sides bounds nothing
     // (an antenna stub or a bridge left by partial witness merges) —
     // it is removed deterministically and the arrangement reassembled.
-    let (vertices, mut edges, mut halves, mut faces, face_rep) = loop {
+    let (vertices, mut edges, halves, faces) = 'outer: loop {
+        let (vertices, mut edges, halves, mut faces, face_rep, wrap_face, edge_keys) = loop {
         // canonical vertices = reps used by atomic arcs
         let mut used: Vec<usize> = atomic.keys().flat_map(|&(a, b)| [a, b]).collect();
         used.sort();
@@ -263,7 +311,9 @@ pub fn build(
         // half-edge assembly
         let mut edges: Vec<PEdge> = Vec::new();
         let mut halves: Vec<PHalf> = Vec::new();
+        let mut edge_keys: Vec<(usize, usize)> = Vec::new();
         for (&(ra, rb), witnesses) in &atomic {
+            edge_keys.push((ra.min(rb), ra.max(rb)));
             let (a, b) = (vid_of_rep[&ra], vid_of_rep[&rb]);
             let e = edges.len();
             let h_ab = halves.len();
@@ -406,8 +456,14 @@ pub fn build(
         for i in 0..nc {
             *sig_area.entry(cycle_face[i]).or_insert(0.0) += cycle_signed[i];
         }
+        let mut wrap_face = usize::MAX;
         for (f, area) in sig_area {
-            faces[f].area = if area > 1e-12 { area } else { area + tau };
+            faces[f].area = if area > 1e-12 {
+                area
+            } else {
+                wrap_face = f;
+                area + tau
+            };
         }
         // per-face representative point (first cycle's rep)
         let face_rep: Vec<UnitVec> = (0..faces.len())
@@ -416,7 +472,7 @@ pub fn build(
                 cycle_rep[ci]
             })
             .collect();
-        break (vertices, edges, halves, faces, face_rep);
+        break (vertices, edges, halves, faces, face_rep, wrap_face, edge_keys);
     };
 
     // ---- 9. classify faces against witness rings
@@ -453,6 +509,37 @@ pub fn build(
             .collect();
     }
 
+    // ---- 9b. seed claims: the face containing the seed IS the
+    // region — its boundary is whatever curves enclose it, water
+    // included, so flush is definitional.
+    for sd in seeds {
+        for (fi, face) in faces.iter_mut().enumerate() {
+            let rings: Vec<Vec<UnitVec>> = {
+                let cy_pts: Vec<Vec<UnitVec>> = {
+                    let mut v = Vec::new();
+                    for cy in &face.cycles {
+                        v.push(
+                            cy.iter().map(|&h| vertices[halves[h].origin]).collect::<Vec<_>>(),
+                        );
+                    }
+                    v
+                };
+                cy_pts
+            };
+            let signed: f64 = rings.iter().map(|r| cycle_area(r)).sum();
+            let w: i32 = rings.iter().map(|r| winding(r, &sd.seed)).sum();
+            let target = if signed <= 1e-12 { 0 } else { 1 };
+            if w == target {
+                face.kind = sd.kind.clone();
+                if !face.claims.contains(&sd.id) {
+                    face.claims.push(sd.id.clone());
+                }
+                let _ = fi;
+                break;
+            }
+        }
+    }
+
     // ---- 10. sliver absorption (semantic, deterministic)
     let face_len: Vec<f64> = (0..faces.len())
         .map(|fi| {
@@ -469,7 +556,13 @@ pub fn build(
         .collect();
     let _ = face_len;
     for fi in 0..faces.len() {
-        if faces[fi].area >= cfg.sliver_area {
+        // On a sphere exactly ONE unclaimed face is legitimate: the
+        // wrap (the outside world). Any other background cell is an
+        // enclosed pocket — a witness disagreement — and is absorbed
+        // structurally, no size threshold involved. Claimed fragments
+        // below the sliver floor absorb as before.
+        let pocket = faces[fi].kind == FaceKind::Background && fi != wrap_face;
+        if !pocket && faces[fi].area >= cfg.sliver_area {
             continue;
         }
         // neighbor with the longest shared boundary
@@ -504,6 +597,30 @@ pub fn build(
             faces[fi].claims = claims;
         }
     }
+
+        // ---- 10b. structural: an edge with unclaimed cells on BOTH
+        // sides bounds nothing anyone claims — floating artifact ink.
+        // Remove it and reassemble; the bubbles merge into the wrap.
+        let bad2: Vec<(usize, usize)> = (0..edges.len())
+            .filter(|&e| {
+                let f1 = halves[edges[e].half_ab].face;
+                let f2 = halves[edges[e].half_ba].face;
+                faces[f1].kind == FaceKind::Background && faces[f2].kind == FaceKind::Background
+            })
+            .map(|e| edge_keys[e])
+            .collect();
+        if bad2.is_empty() {
+            let _ = (face_rep, wrap_face);
+            break 'outer (vertices, edges, halves, faces);
+        }
+        diagnostics.push(format!(
+            "removed {} edge(s) bounding only unclaimed cells (artifact ink)",
+            bad2.len()
+        ));
+        for k in bad2 {
+            atomic.remove(&k);
+        }
+    };
 
     // ---- 11. rivers: node the overlay into the same vertex pool
     let mut rivers = Vec::new();
@@ -551,10 +668,12 @@ pub fn build(
     }
 
     let part = Partition { vertices, edges, halves, faces, rivers, diagnostics };
-    let violations = part.validate();
+    let mut violations = part.validate();
     if violations.is_empty() {
         Ok(part)
     } else {
+        // a refused build carries its own story out
+        violations.extend(part.diagnostics.iter().cloned());
         Err(BuildError::TopologyFailure(violations))
     }
 }

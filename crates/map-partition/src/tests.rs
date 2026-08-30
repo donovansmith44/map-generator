@@ -5,7 +5,7 @@ use std::f64::consts::PI;
 
 use map_types::UnitVec;
 
-use crate::build::{build, WitnessPolyline, WitnessRegion};
+use crate::build::{build, build_with, WitnessBorder, WitnessPolyline, WitnessRegion, WitnessSeed};
 use crate::{cycle_area, tri_area, winding, FaceKind, Partition, PartitionConfig};
 
 fn uv(lat: f64, lon: f64) -> UnitVec {
@@ -365,4 +365,72 @@ fn sampled_points_have_one_home() {
         }
         assert_eq!(homes, 1, "point ({lat:.2},{lon:.2}) has exactly one face");
     }
+}
+
+/// A seed claims exactly the cell its borders and the water enclose;
+/// the cell's water-side boundary IS the water's edge — flush is
+/// definitional, not approximate.
+#[test]
+fn seed_claims_its_cell() {
+    // a lake ring, plus three open land borders that END ON the lake:
+    // together they enclose a cell west of the lake
+    let lake = region("lake", FaceKind::Lake, vec![square(10.0, 14.0, 14.0, 18.0)]);
+    let borders = vec![
+        WitnessBorder {
+            id: "south".into(),
+            pts: vec![uv(10.0, 8.0), uv(10.0, 14.0)], // ends on lake SW corner
+        },
+        WitnessBorder { id: "west".into(), pts: vec![uv(10.0, 8.0), uv(14.0, 8.0)] },
+        WitnessBorder {
+            id: "north".into(),
+            pts: vec![uv(14.0, 8.0), uv(14.0, 14.0)], // ends on lake NW corner
+        },
+    ];
+    let seeds = vec![WitnessSeed {
+        id: "landia".into(),
+        kind: FaceKind::LandClaim,
+        seed: uv(12.0, 11.0),
+    }];
+    let p = build_with(&[lake], &borders, &seeds, &[], &cfg()).unwrap();
+    ok(&p);
+    let land = p
+        .faces
+        .iter()
+        .find(|f| f.kind == FaceKind::LandClaim)
+        .expect("the seed claimed a cell");
+    assert!(land.claims.contains(&"landia".to_string()));
+    // the land cell borders the lake through a SHARED edge
+    let shared = p.edges.iter().any(|e| {
+        let (f1, f2) = (p.halves[e.half_ab].face, p.halves[e.half_ba].face);
+        let kinds = (p.faces[f1].kind.clone(), p.faces[f2].kind.clone());
+        matches!(
+            kinds,
+            (FaceKind::LandClaim, FaceKind::Lake) | (FaceKind::Lake, FaceKind::LandClaim)
+        )
+    });
+    assert!(shared, "land meets lake on the lake's own edge");
+    assert!(p.area_residual() < 1e-10);
+}
+
+/// A dangling border cannot silently leak a claim into the world:
+/// the seed floods the wrap face, the Background vanishes, and the
+/// build REFUSES.
+#[test]
+fn dangling_border_refuses_to_build() {
+    let lake = region("lake", FaceKind::Lake, vec![square(10.0, 14.0, 14.0, 18.0)]);
+    let borders = vec![
+        // south border stops 2 degrees short of the lake: a leak
+        WitnessBorder { id: "south".into(), pts: vec![uv(10.0, 8.0), uv(10.0, 12.0)] },
+        WitnessBorder { id: "west".into(), pts: vec![uv(10.0, 8.0), uv(14.0, 8.0)] },
+        WitnessBorder { id: "north".into(), pts: vec![uv(14.0, 8.0), uv(14.0, 14.0)] },
+    ];
+    let seeds = vec![WitnessSeed {
+        id: "landia".into(),
+        kind: FaceKind::LandClaim,
+        seed: uv(12.0, 11.0),
+    }];
+    assert!(
+        build_with(&[lake], &borders, &seeds, &[], &cfg()).is_err(),
+        "a leaked claim is a build failure, never a rendered gap"
+    );
 }

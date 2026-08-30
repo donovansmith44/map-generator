@@ -374,7 +374,7 @@ impl CanonProvider {
                                 pts,
                                 stroke: map_types::style::Stroke {
                                     color: style.water_paint().fill,
-                                    width: 2.0,
+                                    width: 1.3,
                                     pattern: map_types::style::StrokePattern::Solid,
                                 },
                                 sources,
