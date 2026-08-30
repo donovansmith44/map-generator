@@ -51,6 +51,10 @@ pub struct CanonProvider {
     /// geometry, so recomputing it per render was pure waste (it was
     /// 96% of a world render's time, measured).
     label_anchor: BTreeMap<FeatureId, UnitVec>,
+    /// each border's spherical cap (centroid direction, angular
+    /// radius), computed once — culling a render to its viewport is
+    /// one angle test per border instead of a walk of the world.
+    border_cap: BTreeMap<map_canon::BorderId, (UnitVec, f64)>,
 }
 
 fn hash64(s: &str) -> u64 {
@@ -126,6 +130,7 @@ impl CanonProvider {
         let t0 = std::time::Instant::now();
         let label_anchor = label_anchors(&store);
         eprintln!("  label anchors {:.1}s", t0.elapsed().as_secs_f64());
+        let border_cap = border_caps(&store);
         CanonProvider {
             store,
             styles,
@@ -136,6 +141,7 @@ impl CanonProvider {
             palette_slot,
             relief_pos,
             label_anchor,
+            border_cap,
         }
     }
 
@@ -212,9 +218,29 @@ impl CanonProvider {
         out
     }
 
-    fn ring_points(&self, id: map_canon::BorderId) -> Option<Ring> {
+    /// select ∘ SIMPLIFY ∘ style — the stage the canon provider had
+    /// dropped: geometry leaves here at the query's level of detail,
+    /// and a border whose cap misses the viewport never leaves at all.
+    fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Ring> {
+        if self.border_culled(id, q) {
+            return None;
+        }
         let b = self.store.borders().get(&id)?;
-        Ring::new(b.0.clone()).ok()
+        Ring::new(map_types::simplify_polyline(&b.0, q.lod)).ok()
+    }
+
+    fn border_culled(&self, id: map_canon::BorderId, q: &RenderQuery) -> bool {
+        let Some(view) = &q.viewport else { return false };
+        let Some((center, radius)) = self.border_cap.get(&id) else { return false };
+        center.angle_to(&view.center) > view.radius + radius
+    }
+
+    fn line_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Vec<UnitVec>> {
+        if self.border_culled(id, q) {
+            return None;
+        }
+        let b = self.store.borders().get(&id)?;
+        Some(map_types::simplify_polyline(&b.0, q.lod))
     }
 
     /// The features active at `t` in one layer, in deterministic order.
@@ -269,12 +295,12 @@ impl CanonProvider {
         let mut outer = Vec::new();
         let mut holes = Vec::new();
         for r in &a.rings {
-            if let Some(ring) = self.ring_points(*r) {
+            if let Some(ring) = self.ring_points(*r, q) {
                 outer.push(ring);
             }
         }
         for h in &a.holes {
-            if let Some(ring) = self.ring_points(*h) {
+            if let Some(ring) = self.ring_points(*h, q) {
                 holes.push(ring);
             }
         }
@@ -486,10 +512,9 @@ impl CanonProvider {
                     // neither gap nor balloon.
                     Feature::Line(l) => {
                         // read the border directly: a line is an OPEN
-                        // path and may be as short as two points.
-                        if let Some(pts) =
-                            self.store.borders().get(&l.border).map(|b| b.0.clone())
-                        {
+                        // path and may be as short as two points —
+                        // simplified and viewport-culled like any ring.
+                        if let Some(pts) = self.line_points(l.border, q) {
                             let sources = self.sources_of(fid);
                             scene.attribution.extend(sources.iter().cloned());
                             scene.boundaries.push(map_types::StyledBoundary {
@@ -511,6 +536,11 @@ impl CanonProvider {
                         }
                     }
                     Feature::Memory(m) => {
+                        if let Some(view) = &q.viewport {
+                            if m.at.angle_to(&view.center) > view.radius {
+                                continue;
+                            }
+                        }
                         // an inscription at the traditional site: the
                         // memory voice, no marker — nothing "stands"
                         let sources = self.sources_of(fid);
@@ -531,6 +561,11 @@ impl CanonProvider {
                         }
                     }
                     Feature::Point(p) => {
+                        if let Some(view) = &q.viewport {
+                            if p.at.angle_to(&view.center) > view.radius {
+                                continue;
+                            }
+                        }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
                         scene.markers.push(StyledMarker {
@@ -733,7 +768,7 @@ impl MapProvider for CanonProvider {
                             if let Feature::Area(a) = f {
                                 let tint = mix(ramp.oldest, ramp.newest, toward);
                                 for r in &a.rings {
-                                    if let Some(ring) = self.ring_points(*r) {
+                                    if let Some(ring) = self.ring_points(*r, q) {
                                         scene.boundaries.push(StyledBoundary {
                                             boundary: bid_of(&a.entity),
                                             pts: ring.points().to_vec(),
@@ -970,12 +1005,10 @@ fn label_anchors(store: &CanonStore) -> BTreeMap<FeatureId, UnitVec> {
         // meaningful pole — the world ocean's would be Point Nemo —
         // and searching the planet for it is pure startup cost; it
         // falls back to the centroid like any anchorless area
-        let is_sentinel = a.rings.iter().any(|bid| {
-            store.borders().get(bid).is_some_and(|b| {
-                b.0.len() <= 5
-                    && b.0.iter().any(|p| b.0.iter().any(|q| p.dot(q) < -0.99))
-            })
-        });
+        let is_sentinel = a
+            .rings
+            .iter()
+            .any(|bid| store.borders().get(bid).is_some_and(|b| map_types::covers_sphere(&b.0)));
         if is_sentinel {
             continue;
         }
@@ -1002,6 +1035,35 @@ fn label_anchors(store: &CanonStore) -> BTreeMap<FeatureId, UnitVec> {
                 outer.iter().chain(holes.iter()).map(Ring::len).sum::<usize>()
             );
         }
+    }
+    out
+}
+
+/// Each border's spherical cap, once per canon: centroid direction
+/// and the farthest point's angle from it.
+fn border_caps(store: &CanonStore) -> BTreeMap<map_canon::BorderId, (UnitVec, f64)> {
+    let mut out = BTreeMap::new();
+    for (bid, b) in store.borders() {
+        if map_types::covers_sphere(&b.0) {
+            // the sentinel's interior is everything: no viewport may
+            // cull it, whatever its stored points say
+            out.insert(*bid, (b.0[0], std::f64::consts::PI));
+            continue;
+        }
+        let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+        for p in &b.0 {
+            x += p.x();
+            y += p.y();
+            z += p.z();
+        }
+        let Ok(c) = UnitVec::normalize(x, y, z) else {
+            // a degenerate centroid (ring straddling the sphere):
+            // never cull it
+            out.insert(*bid, (b.0[0], std::f64::consts::PI));
+            continue;
+        };
+        let r = b.0.iter().map(|p| c.angle_to(p)).fold(0.0, f64::max);
+        out.insert(*bid, (c, r));
     }
     out
 }

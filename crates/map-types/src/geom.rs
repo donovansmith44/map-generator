@@ -226,6 +226,14 @@ fn arc_distance(p: &UnitVec, a: &UnitVec, b: &UnitVec) -> f64 {
 /// Douglas–Peucker on the sphere for an open polyline. Endpoints are
 /// always kept. The kept set at a larger tolerance is a subset of the
 /// kept set at a smaller one — which is exactly law 7.
+/// The WHOLE-SPHERE SENTINEL (RegionPart's empty-cycle convention): a
+/// ring of at most five stored points containing a near-antipodal
+/// pair. Its interior is everything — encoders dress it as the page
+/// or the limb, and no viewport may cull it.
+pub fn covers_sphere(pts: &[UnitVec]) -> bool {
+    pts.len() <= 5 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
+}
+
 pub fn simplify_polyline(pts: &[UnitVec], lod: Lod) -> Vec<UnitVec> {
     if pts.len() <= 2 || lod.0 <= 0.0 {
         return pts.to_vec();

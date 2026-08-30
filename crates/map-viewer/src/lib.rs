@@ -529,7 +529,19 @@ fn build_query(
     if p.get("journeys") != Some("0") {
         layers = layers.with(LayerSet::JOURNEYS); // itineraries, on by default
     }
-    Some(RenderQuery { subject, time, viewport: None, lod, layers, style: parse_style(app, p.get("style"))? })
+    // THE VIEWPORT: when the caller pins a camera, the provider can
+    // cull the world to it — one spherical cap, generous margin, both
+    // charts (the camera law makes the ground span identical).
+    let viewport = p.get("center").and_then(|v| {
+        let (lat, lon) = v.split_once(',')?;
+        let (lat, lon) = (lat.parse::<f64>().ok()?, lon.parse::<f64>().ok()?);
+        let zoom = p.get("zoom").and_then(|z| z.parse::<f64>().ok())?;
+        Some(map_types::Bbox {
+            center: map_types::UnitVec::from_lat_lon_deg(lat.clamp(-89.9, 89.9), lon),
+            radius: (zoom.clamp(0.05, 90.0) * 1.8).to_radians().min(std::f64::consts::PI),
+        })
+    });
+    Some(RenderQuery { subject, time, viewport, lod, layers, style: parse_style(app, p.get("style"))? })
 }
 
 fn encode(
@@ -869,7 +881,7 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                         let ghost_q = RenderQuery {
                             subject: RenderSubject::World,
                             time: TimeSelector::At(backdrop_at),
-                            viewport: None,
+                            viewport: q.viewport.clone(),
                             lod: q.lod,
                             layers: LayerSet::GEOMETRY,
                             style,

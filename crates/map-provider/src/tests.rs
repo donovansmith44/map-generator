@@ -490,3 +490,128 @@ mod memory_laws {
         assert!(l.voice.italic, "a memory speaks in italic");
     }
 }
+
+// ==================== the scaling laws: simplify and cull
+
+mod scaling_laws {
+    use std::collections::BTreeMap;
+
+    use atlas_graph_types::covenant::{TimePoint, Year};
+    use map_canon::{Area, Border, CanonStore, EntityId, Feature, LayerKind, Snapshot, World};
+    use map_types::style::*;
+    use map_types::{Bbox, LayerSet, Lod, MapProvider, RenderQuery, RenderSubject, TimeSelector, UnitVec};
+
+    use crate::canon_provider::CanonProvider;
+
+    fn dense_ring(lat0: f64, lon0: f64, d: f64, n: usize) -> Vec<UnitVec> {
+        // a square ring with n points per side — detail to shed
+        let mut pts = Vec::new();
+        let corners =
+            [(lat0, lon0), (lat0, lon0 + d), (lat0 + d, lon0 + d), (lat0 + d, lon0), (lat0, lon0)];
+        for w in corners.windows(2) {
+            for i in 0..n {
+                let t = i as f64 / n as f64;
+                pts.push(UnitVec::from_lat_lon_deg(
+                    w[0].0 + t * (w[1].0 - w[0].0),
+                    w[0].1 + t * (w[1].1 - w[0].1),
+                ));
+            }
+        }
+        pts
+    }
+
+    fn store_with(areas: &[(&str, Vec<UnitVec>)]) -> CanonStore {
+        let mut store = CanonStore::default();
+        let mut feats = std::collections::BTreeSet::new();
+        for (id, ring) in areas {
+            let b = store.insert_border(Border(ring.clone()));
+            feats.insert(store.insert_feature(Feature::Area(Area {
+                entity: EntityId((*id).to_string()),
+                name: (*id).to_string(),
+                rings: [b].into(),
+                holes: Default::default(),
+            })));
+        }
+        let sid = store.insert_snapshot(Snapshot { features: feats });
+        let mut world = World::default();
+        world.insert(TimePoint::year_only(Year::new(-4004).unwrap()), sid).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, world);
+        store
+    }
+
+    fn q(lod: f64, viewport: Option<Bbox>) -> RenderQuery {
+        RenderQuery {
+            subject: RenderSubject::World,
+            time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
+            viewport,
+            lod: Lod(lod),
+            layers: LayerSet::GEOMETRY,
+            style: crate::tests::honest_style_for_memory_law().id(),
+        }
+    }
+
+    fn provider(store: CanonStore) -> CanonProvider {
+        let style = crate::tests::honest_style_for_memory_law();
+        CanonProvider::new(store, BTreeMap::from([(style.id(), style)]), None)
+    }
+
+    /// SELECT ∘ SIMPLIFY ∘ STYLE: geometry leaves the provider at the
+    /// query's level of detail — a coarse query ships fewer points
+    /// than a fine one, from the same canon.
+    #[test]
+    fn geometry_ships_at_the_query_lod() {
+        let p = provider(store_with(&[("land", dense_ring(30.0, 30.0, 4.0, 64))]));
+        let pts = |lod: f64| -> usize {
+            p.render(&q(lod, None)).unwrap().regions[0]
+                .outer
+                .iter()
+                .map(|r| r.points().len())
+                .sum()
+        };
+        let fine = pts(0.0);
+        let coarse = pts(0.01);
+        assert!(
+            coarse * 4 < fine,
+            "coarse ({coarse} pts) sheds detail fine ({fine} pts) keeps"
+        );
+    }
+
+    /// THE VIEWPORT CULL: an area whose every border cap misses the
+    /// camera never leaves the provider; one inside always does.
+    #[test]
+    fn the_world_beyond_the_camera_stays_home() {
+        let p = provider(store_with(&[
+            ("near", dense_ring(31.0, 34.0, 2.0, 8)),
+            ("far", dense_ring(-40.0, -120.0, 2.0, 8)),
+        ]));
+        let view = Bbox {
+            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
+            radius: 10f64.to_radians(),
+        };
+        let scene = p.render(&q(0.0, Some(view))).unwrap();
+        let names: Vec<_> = scene.regions.iter().filter_map(|r| r.entity.clone()).collect();
+        assert!(names.contains(&"near".to_string()), "the near area renders");
+        assert!(!names.contains(&"far".to_string()), "the far area stays home");
+    }
+
+    /// The whole-sphere sentinel is never culled: its cap covers the
+    /// sphere, so the world backdrop survives every viewport.
+    #[test]
+    fn the_sentinel_survives_every_viewport() {
+        let sentinel = vec![
+            UnitVec::from_lat_lon_deg(0.0, 0.0),
+            UnitVec::from_lat_lon_deg(0.0, 179.5),
+            UnitVec::from_lat_lon_deg(1.0, -90.0),
+        ];
+        let p = provider(store_with(&[("world", sentinel)]));
+        let view = Bbox {
+            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
+            radius: 5f64.to_radians(),
+        };
+        let scene = p.render(&q(0.0, Some(view))).unwrap();
+        assert!(
+            scene.regions.iter().any(|r| r.entity.as_deref() == Some("world")),
+            "the backdrop survives"
+        );
+    }
+}

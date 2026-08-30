@@ -696,11 +696,7 @@ struct Chart<'a> {
     page: Option<Bounds>,
 }
 
-/// The whole-sphere sentinel (RegionPart's empty-cycle convention): a
-/// ring of at most four points containing a near-antipodal pair.
-fn covers_sphere(pts: &[UnitVec]) -> bool {
-    pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
-}
+use map_types::covers_sphere;
 
 fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
     let mut s = svg_head(chart.width, chart.height, scene).replace(
