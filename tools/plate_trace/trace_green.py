@@ -28,9 +28,14 @@ import cv2
 blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
 def disk(rr):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*rr+1, 2*rr+1))
-lap = (cv2.dilate(region.astype(np.uint8), disk(14)) > 0)     & (cv2.dilate(blue_m.astype(np.uint8), disk(10)) > 0)
+# WIDE water only (sea, lakes): opening kills river strokes, so the
+# lap never chases a river. The lap runs DEEP (~2 km) into the water,
+# far beyond the partition's merge tolerance — crossings happen at
+# clean lens tips, never as tangles along the shoreline.
+wide_m = cv2.morphologyEx(blue_m.astype(np.uint8), cv2.MORPH_OPEN, disk(8)) > 0
+lap = (cv2.dilate(region.astype(np.uint8), disk(30)) > 0)     & (cv2.dilate(wide_m.astype(np.uint8), disk(26)) > 0)
 region = region | lap
-region = ndi.binary_closing(region, structure=np.ones((7, 7)))
+region = ndi.binary_closing(region, structure=np.ones((9, 9)))
 print("green component px:", int(sizes.max()), "of", int(mask.sum()))
 
 # outer contour via OpenCV border following

@@ -367,6 +367,196 @@ const PLATE_RIVER_36: &[(f64, f64)] = &[
     (2498.49, 1080.29), (2484.29, 1079.22), (2470.22, 1069.67),
 ];
 
+const PLATE_RIVER_PATH_0: &[(f64, f64)] = &[
+    (3382.00, 147.00), (3363.00, 178.00), (3303.00, 228.00), (3267.00, 267.00),
+];
+
+const PLATE_RIVER_PATH_1: &[(f64, f64)] = &[
+    (3261.00, 280.00), (3250.00, 298.00), (3221.00, 330.00), (3177.00, 368.00), (3122.00, 407.00),
+    (3113.00, 418.00),
+];
+
+const PLATE_RIVER_PATH_2: &[(f64, f64)] = &[
+    (2767.00, 1279.00), (2765.00, 1300.00), (2798.00, 1444.00),
+];
+
+const PLATE_RIVER_PATH_3: &[(f64, f64)] = &[
+    (3180.00, 1440.00), (3211.00, 1490.00), (3225.00, 1505.00), (3224.00, 1560.00), (3234.00, 1607.00),
+];
+
+const PLATE_RIVER_PATH_4: &[(f64, f64)] = &[
+    (2637.00, 1621.00), (2642.00, 1636.00), (2642.00, 1703.00),
+];
+
+const PLATE_RIVER_PATH_5: &[(f64, f64)] = &[
+    (3603.00, 1802.00), (3584.00, 1801.00), (3566.00, 1810.00), (3546.00, 1839.00), (3523.00, 1855.00),
+    (3480.00, 1861.00),
+];
+
+const PLATE_RIVER_PATH_6: &[(f64, f64)] = &[
+    (3618.00, 1807.00), (3638.00, 1808.00), (3666.00, 1800.00), (3682.00, 1802.00), (3691.00, 1811.00),
+    (3693.00, 1840.00),
+];
+
+const PLATE_RIVER_PATH_7: &[(f64, f64)] = &[
+    (3858.00, 1837.00), (3834.00, 1836.00), (3752.00, 1845.00),
+];
+
+const PLATE_RIVER_PATH_8: &[(f64, f64)] = &[
+    (3091.00, 1992.00), (3107.00, 2000.00), (3157.00, 1999.00), (3179.00, 2007.00),
+];
+
+const PLATE_RIVER_PATH_9: &[(f64, f64)] = &[
+    (3686.00, 2087.00), (3757.00, 2089.00), (3775.00, 2084.00), (3811.00, 2087.00),
+];
+
+const PLATE_RIVER_PATH_10: &[(f64, f64)] = &[
+    (3825.00, 2097.00), (3840.00, 2099.00), (3866.00, 2093.00), (3911.00, 2114.00),
+];
+
+const PLATE_RIVER_PATH_11: &[(f64, f64)] = &[
+    (3977.00, 2101.00), (4065.00, 2103.00),
+];
+
+const PLATE_RIVER_PATH_12: &[(f64, f64)] = &[
+    (3073.00, 535.00), (3031.00, 573.00), (2982.00, 600.00),
+];
+
+const PLATE_RIVER_PATH_13: &[(f64, f64)] = &[
+    (3256.00, 2150.00), (3262.00, 2152.00), (3269.00, 2162.00), (3271.00, 2206.00), (3266.00, 2230.00),
+];
+
+const PLATE_RIVER_PATH_14: &[(f64, f64)] = &[
+    (3486.00, 2203.00), (3488.00, 2212.00), (3494.00, 2215.00), (3531.00, 2206.00), (3562.00, 2219.00),
+];
+
+const PLATE_RIVER_PATH_15: &[(f64, f64)] = &[
+    (2372.00, 2243.00), (2378.00, 2258.00), (2377.00, 2311.00), (2383.00, 2346.00),
+];
+
+const PLATE_RIVER_PATH_16: &[(f64, f64)] = &[
+    (4073.00, 2277.00), (4013.00, 2291.00), (3959.00, 2290.00), (3864.00, 2277.00), (3847.00, 2280.00),
+];
+
+const PLATE_RIVER_PATH_17: &[(f64, f64)] = &[
+    (2799.00, 2297.00), (2873.00, 2302.00), (2914.00, 2298.00), (2937.00, 2306.00),
+];
+
+const PLATE_RIVER_PATH_18: &[(f64, f64)] = &[
+    (2726.00, 2339.00), (2696.00, 2349.00), (2653.00, 2348.00), (2638.00, 2344.00),
+];
+
+const PLATE_RIVER_PATH_19: &[(f64, f64)] = &[
+    (2512.00, 2376.00), (2468.00, 2385.00), (2437.00, 2385.00), (2420.00, 2380.00),
+];
+
+const PLATE_RIVER_PATH_20: &[(f64, f64)] = &[
+    (3047.00, 2842.00), (2986.00, 2849.00), (2918.00, 2847.00), (2910.00, 2843.00),
+];
+
+const PLATE_RIVER_PATH_21: &[(f64, f64)] = &[
+    (2130.00, 2888.00), (2149.00, 2886.00), (2187.00, 2897.00), (2210.00, 2896.00),
+];
+
+const PLATE_RIVER_PATH_22: &[(f64, f64)] = &[
+    (3071.00, 3985.00), (2968.00, 3983.00), (2946.00, 3989.00),
+];
+
+const PLATE_RIVER_PATH_23: &[(f64, f64)] = &[
+    (2907.00, 774.00), (2884.00, 799.00), (2885.00, 816.00), (2890.00, 826.00), (2887.00, 852.00),
+];
+
+const PLATE_RIVER_PATH_24: &[(f64, f64)] = &[
+    (1739.00, 4325.00), (1781.00, 4317.00), (1838.00, 4325.00),
+];
+
+const PLATE_RIVER_PATH_25: &[(f64, f64)] = &[
+    (1707.00, 4337.00), (1696.00, 4340.00), (1662.00, 4337.00), (1620.00, 4349.00),
+];
+
+const PLATE_RIVER_PATH_26: &[(f64, f64)] = &[
+    (2127.00, 4355.00), (2103.00, 4356.00), (2055.00, 4349.00), (2021.00, 4357.00), (1980.00, 4355.00),
+    (1951.00, 4359.00),
+];
+
+const PLATE_RIVER_PATH_27: &[(f64, f64)] = &[
+    (2573.00, 4620.00), (2562.00, 4671.00), (2562.00, 4738.00),
+];
+
+const PLATE_RIVER_PATH_28: &[(f64, f64)] = &[
+    (2775.00, 4689.00), (2824.00, 4700.00), (2868.00, 4700.00), (2889.00, 4705.00),
+];
+
+const PLATE_RIVER_PATH_29: &[(f64, f64)] = &[
+    (908.00, 5299.00), (908.00, 5344.00), (895.00, 5389.00),
+];
+
+const PLATE_RIVER_PATH_30: &[(f64, f64)] = &[
+    (1315.00, 5572.00), (1253.00, 5578.00), (1223.00, 5585.00), (1198.00, 5585.00), (1176.00, 5580.00),
+];
+
+const PLATE_RIVER_PATH_31: &[(f64, f64)] = &[
+    (3852.00, 973.00), (3871.00, 969.00), (3898.00, 980.00), (3941.00, 980.00),
+];
+
+const PLATE_RIVER_PATH_32: &[(f64, f64)] = &[
+    (3848.00, 975.00), (3832.00, 981.00), (3761.00, 984.00),
+];
+
+const PLATE_RIVER_PATH_33: &[(f64, f64)] = &[
+    (2734.00, 1012.00), (2722.00, 1095.00),
+];
+
+const PLATE_RIVER_PATH_34: &[(f64, f64)] = &[
+    (3539.00, 1019.00), (3443.00, 1054.00),
+];
+
+const PLATE_RIVER_PATH_35: &[(f64, f64)] = &[
+    (2358.00, 1061.00), (2376.00, 1066.00), (2407.00, 1063.00), (2432.00, 1067.00), (2457.00, 1065.00),
+    (2466.00, 1070.00),
+];
+
+const PLATE_RIVER_PATH_36: &[(f64, f64)] = &[
+    (2468.00, 1073.00), (2483.00, 1083.00), (2497.00, 1084.00), (2503.00, 1089.00), (2527.00, 1090.00),
+    (2542.00, 1095.00), (2553.00, 1094.00), (2572.00, 1085.00), (2648.00, 1090.00),
+];
+
+const PLATE_JORDAN_PATH_0: &[(f64, f64)] = &[
+    (2874.00, 886.00), (2861.00, 902.00), (2821.00, 934.00), (2796.00, 977.00), (2772.00, 978.00),
+];
+
+const PLATE_JORDAN_PATH_1: &[(f64, f64)] = &[
+    (2741.00, 3501.00), (2734.00, 3485.00), (2734.00, 3453.00), (2725.00, 3438.00), (2725.00, 3414.00),
+    (2731.00, 3408.00), (2726.00, 3381.00), (2730.00, 3338.00), (2722.00, 3320.00), (2714.00, 3318.00),
+    (2714.00, 3305.00), (2706.00, 3288.00), (2707.00, 3260.00), (2715.00, 3250.00), (2721.00, 3250.00),
+    (2724.00, 3182.00), (2719.00, 3158.00), (2704.00, 3122.00), (2696.00, 3083.00), (2696.00, 3057.00),
+    (2708.00, 3051.00), (2725.00, 3006.00), (2721.00, 2962.00), (2734.00, 2946.00), (2732.00, 2913.00),
+    (2748.00, 2903.00), (2743.00, 2889.00), (2743.00, 2864.00), (2748.00, 2846.00), (2760.00, 2835.00),
+    (2762.00, 2799.00), (2756.00, 2783.00), (2756.00, 2759.00), (2761.00, 2749.00), (2753.00, 2742.00),
+    (2751.00, 2709.00), (2757.00, 2694.00), (2748.00, 2682.00), (2751.00, 2651.00), (2743.00, 2640.00),
+    (2744.00, 2565.00), (2753.00, 2561.00), (2742.00, 2531.00), (2742.00, 2507.00), (2748.00, 2505.00),
+    (2748.00, 2466.00),
+];
+
+const PLATE_JORDAN_PATH_2: &[(f64, f64)] = &[
+    (2760.00, 2437.00), (2759.00, 2392.00), (2772.00, 2371.00), (2751.00, 2355.00), (2750.00, 2290.00),
+    (2755.00, 2284.00), (2763.00, 2284.00), (2770.00, 2274.00), (2772.00, 2216.00), (2764.00, 2208.00),
+    (2765.00, 2181.00), (2757.00, 2171.00), (2757.00, 2122.00), (2761.00, 2114.00), (2748.00, 2095.00),
+    (2748.00, 2069.00), (2760.00, 2058.00), (2758.00, 2031.00),
+];
+
+const PLATE_JORDAN_PATH_3: &[(f64, f64)] = &[
+    (2822.00, 1735.00), (2830.00, 1711.00), (2838.00, 1517.00),
+];
+
+const PLATE_JORDAN_PATH_4: &[(f64, f64)] = &[
+    (2829.00, 1427.00), (2837.00, 1374.00), (2836.00, 1349.00), (2831.00, 1336.00), (2817.00, 1319.00),
+    (2817.00, 1294.00), (2823.00, 1277.00), (2813.00, 1257.00), (2813.00, 1226.00), (2834.00, 1195.00),
+    (2834.00, 1179.00), (2826.00, 1155.00), (2826.00, 1131.00), (2852.00, 1085.00), (2844.00, 1047.00),
+    (2844.00, 1023.00), (2858.00, 984.00), (2879.00, 944.00), (2893.00, 928.00), (2921.00, 914.00),
+    (2908.00, 903.00), (2875.00, 886.00),
+];
+
 fn hash_id(tag: &str) -> ContentHash {
     let mut h = DefaultHasher::new();
     tag.hash(&mut h);
@@ -438,4 +628,43 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
     region(&mut tl, "jordan-waters", "the waters of the Jordan (plate)", &[PLATE_AREA_CHINNERETH_2, PLATE_AREA_CHINNERETH_3, PLATE_AREA_SALT_SEA_1, PLATE_JORDAN_0, PLATE_JORDAN_1, PLATE_JORDAN_2, PLATE_JORDAN_3]);
     region(&mut tl, "rivers", "the rivers of the land (plate)", &[PLATE_RIVER_0, PLATE_RIVER_1, PLATE_RIVER_2, PLATE_RIVER_3, PLATE_RIVER_4, PLATE_RIVER_5, PLATE_RIVER_6, PLATE_RIVER_7, PLATE_RIVER_8, PLATE_RIVER_9, PLATE_RIVER_10, PLATE_RIVER_11, PLATE_RIVER_12, PLATE_RIVER_13, PLATE_RIVER_14, PLATE_RIVER_15, PLATE_RIVER_16, PLATE_RIVER_17, PLATE_RIVER_18, PLATE_RIVER_19, PLATE_RIVER_20, PLATE_RIVER_21, PLATE_RIVER_22, PLATE_RIVER_23, PLATE_RIVER_24, PLATE_RIVER_25, PLATE_RIVER_26, PLATE_RIVER_27, PLATE_RIVER_28, PLATE_RIVER_29, PLATE_RIVER_30, PLATE_RIVER_31, PLATE_RIVER_32, PLATE_RIVER_33, PLATE_RIVER_34, PLATE_RIVER_35, PLATE_RIVER_36]);
     tl
+}
+
+
+/// One traced ring or path, derived to the sphere through the chart.
+fn to_sphere_path(chart: &Chart, xy: &[(f64, f64)]) -> Vec<UnitVec> {
+    xy.iter()
+        .map(|(x, y)| chart.to_sphere(*x, *y).expect("plate geometry lives on the plate"))
+        .collect()
+}
+
+/// The witness rings for the sphere partition, derived through the
+/// chart: (great sea rings, lake rings by name).
+pub fn plate_water_witnesses() -> (Vec<Vec<UnitVec>>, Vec<(String, Vec<UnitVec>)>) {
+    let chart = plate_chart();
+    let seas = vec![PLATE_AREA_GREAT_SEA_0]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    let lakes = vec![PLATE_AREA_CHINNERETH_2, PLATE_AREA_CHINNERETH_3, PLATE_AREA_SALT_SEA_1]
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (format!("lake-{i}"), to_sphere_path(&chart, r)))
+        .collect();
+    (seas, lakes)
+}
+
+/// River centerlines (interior rivers) and the Jordan's course, as
+/// sphere polylines for the partition's overlay.
+pub fn plate_river_paths() -> (Vec<Vec<UnitVec>>, Vec<Vec<UnitVec>>) {
+    let chart = plate_chart();
+    let rivers = vec![PLATE_RIVER_PATH_0, PLATE_RIVER_PATH_1, PLATE_RIVER_PATH_2, PLATE_RIVER_PATH_3, PLATE_RIVER_PATH_4, PLATE_RIVER_PATH_5, PLATE_RIVER_PATH_6, PLATE_RIVER_PATH_7, PLATE_RIVER_PATH_8, PLATE_RIVER_PATH_9, PLATE_RIVER_PATH_10, PLATE_RIVER_PATH_11, PLATE_RIVER_PATH_12, PLATE_RIVER_PATH_13, PLATE_RIVER_PATH_14, PLATE_RIVER_PATH_15, PLATE_RIVER_PATH_16, PLATE_RIVER_PATH_17, PLATE_RIVER_PATH_18, PLATE_RIVER_PATH_19, PLATE_RIVER_PATH_20, PLATE_RIVER_PATH_21, PLATE_RIVER_PATH_22, PLATE_RIVER_PATH_23, PLATE_RIVER_PATH_24, PLATE_RIVER_PATH_25, PLATE_RIVER_PATH_26, PLATE_RIVER_PATH_27, PLATE_RIVER_PATH_28, PLATE_RIVER_PATH_29, PLATE_RIVER_PATH_30, PLATE_RIVER_PATH_31, PLATE_RIVER_PATH_32, PLATE_RIVER_PATH_33, PLATE_RIVER_PATH_34, PLATE_RIVER_PATH_35, PLATE_RIVER_PATH_36]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    let jordan = vec![PLATE_JORDAN_PATH_0, PLATE_JORDAN_PATH_1, PLATE_JORDAN_PATH_2, PLATE_JORDAN_PATH_3, PLATE_JORDAN_PATH_4]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    (rivers, jordan)
 }

@@ -186,6 +186,27 @@ for k in np.argsort(bsz)[::-1]:
     if len(ap) >= 4:
         jordan_ribbons.append(ap)
 print("jordan ribbons:", len(jordan_ribbons))
+# jordan centerlines: the green edge portions inside the (dilated) band
+band_wide = cv2.dilate(band.astype(np.uint8), disk(4)) > 0
+gcnts, _ = cv2.findContours(green_m.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+gcnt = max(gcnts, key=cv2.contourArea).reshape(-1, 2)
+inb = [band_wide[y, x] if 0 <= y < H and 0 <= x < W else False for x, y in gcnt]
+jordan_paths = []
+runs, cur = [], []
+for i, ok_ in enumerate(inb):
+    if ok_:
+        cur.append(gcnt[i])
+    elif cur:
+        runs.append(np.array(cur, float)); cur = []
+if cur:
+    runs.append(np.array(cur, float))
+for run in runs:
+    if len(run) < 40:
+        continue
+    ap = cv2.approxPolyDP(run.astype(np.float32).reshape(-1, 1, 2), 2.5, False).reshape(-1, 2).astype(float)
+    if len(ap) >= 2:
+        jordan_paths.append(ap)
+print("jordan centerline paths:", len(jordan_paths))
 
 rivers = []
 dropped = 0
@@ -226,11 +247,13 @@ for ch in chains:
     wpx = 4.0
     left = ap + nv*wpx; right = ap - nv*wpx
     ring = np.vstack([left, right[::-1]])
-    rivers.append(ring)
+    rivers.append((ring, ap))
 print("rivers kept:", len(rivers), "jordan ribbons:", len(jordan_ribbons), "dropped border ink:", dropped)
 
 np.savez(f'{TMP}/plate_water2.npz',
          **{f'area_{nm}_{i}': ap for i, (nm, ap) in enumerate(areas)},
          **{f'jordan_{i}': rg for i, rg in enumerate(jordan_ribbons)},
-         **{f'river_{i}': rg for i, rg in enumerate(rivers)})
+         **{f'river_{i}': rg for i, (rg, _) in enumerate(rivers)},
+         **{f'cl_{i}': cl for i, (_, cl) in enumerate(rivers)},
+         **{f'jp_{i}': jp for i, jp in enumerate(jordan_paths)})
 print("saved")

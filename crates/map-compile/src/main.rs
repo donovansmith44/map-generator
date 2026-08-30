@@ -310,6 +310,15 @@ fn build(args: &[String]) {
     .unwrap_or_else(|e| die(&e));
     eprintln!("water: bridged (+ plate witness)");
 
+    // ---- THE SPHERE PARTITION: one closed arrangement from the plate
+    // witnesses; its faces and rivers enter the canon with shared
+    // borders, and the 4π completeness law is checked right here.
+    let summary = map_compile::partition_bridge::bridge_partition(&mut store, tp0)
+        .unwrap_or_else(|e| die(&format!("partition: {e}")));
+    eprintln!("{summary}");
+    report_md.push_str(&format!("- {summary}
+"));
+
     // ---- natural-earth witness: Relief
     let terrain_bytes = std::fs::read("data/terrain/etopo_15min.bin")
         .unwrap_or_else(|e| die(&format!("terrain: {e}")));

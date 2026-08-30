@@ -2,6 +2,7 @@
 
 pub mod compile;
 pub mod reconcile;
+pub mod partition_bridge;
 pub mod timeline_bridge;
 pub mod vendor;
 

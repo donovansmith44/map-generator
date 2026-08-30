@@ -358,6 +358,29 @@ impl CanonProvider {
                         self.push_area(&mut scene, layer, fid, a, t, q, style)
                     }
                     Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style),
+                    // A Line (a river): the border geometry stroked in
+                    // the water color — never a filled area, so it can
+                    // neither gap nor balloon.
+                    Feature::Line(l) => {
+                        // read the border directly: a line is an OPEN
+                        // path and may be as short as two points.
+                        if let Some(pts) =
+                            self.store.borders().get(&l.border).map(|b| b.0.clone())
+                        {
+                            let sources = self.sources_of(fid);
+                            scene.attribution.extend(sources.iter().cloned());
+                            scene.boundaries.push(map_types::StyledBoundary {
+                                boundary: bid_of(&l.entity),
+                                pts,
+                                stroke: map_types::style::Stroke {
+                                    color: style.water_paint().fill,
+                                    width: 2.0,
+                                    pattern: map_types::style::StrokePattern::Solid,
+                                },
+                                sources,
+                            });
+                        }
+                    }
                     Feature::Point(p) => {
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());

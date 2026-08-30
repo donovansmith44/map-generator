@@ -344,3 +344,80 @@ mod waiver_laws {
         assert!(!is_waived(&rec, "babylon", "elam"));
     }
 }
+
+/// The integration law (L50): the real plate witnesses build one
+/// lawful partition — Canaan is a face, Jerusalem is on land, and
+/// the world sums to 4π.
+#[test]
+fn plate_partition_face_census() {
+    let canaan = map_adapters::plate_canaan_ring();
+    let (seas, lakes) = map_adapters::plate_water_witnesses();
+    let (rivers, jordan) = map_adapters::plate_river_paths();
+    let mut regions = vec![map_partition::WitnessRegion {
+        id: "canaan".into(),
+        kind: map_partition::FaceKind::LandClaim,
+        rings: vec![canaan],
+    }];
+    for (i, ring) in seas.into_iter().enumerate() {
+        regions.push(map_partition::WitnessRegion {
+            id: format!("great-sea{}", if i == 0 { "".into() } else { format!("-{i}") }),
+            kind: map_partition::FaceKind::Sea,
+            rings: vec![ring],
+        });
+    }
+    for (name, ring) in lakes {
+        regions.push(map_partition::WitnessRegion {
+            id: name,
+            kind: map_partition::FaceKind::Lake,
+            rings: vec![ring],
+        });
+    }
+    let mut polylines = Vec::new();
+    for (i, pts) in jordan.into_iter().enumerate() {
+        polylines.push(map_partition::WitnessPolyline { id: format!("jordan-{i}"), pts });
+    }
+    for (i, pts) in rivers.into_iter().enumerate() {
+        polylines.push(map_partition::WitnessPolyline { id: format!("river-{i}"), pts });
+    }
+    let p = map_partition::build(&regions, &polylines, &map_partition::PartitionConfig::default())
+        .expect("plate partition builds");
+    for (i, f) in p.faces.iter().enumerate() {
+        eprintln!(
+            "face {i}: kind={:?} area={:.3e} cycles={} claims={:?} conflicts={:?}",
+            f.kind, f.area, f.cycles.len(), f.claims, f.conflicts
+        );
+    }
+    for d in &p.diagnostics {
+        eprintln!("diag: {d}");
+    }
+    eprintln!("residual: {:.2e}", p.area_residual());
+    assert!(p.area_residual() < 1e-10, "the 4π law on real data");
+    assert!(
+        p.faces.iter().any(|f| f.kind == map_partition::FaceKind::LandClaim
+            && f.claims == vec!["canaan".to_string()]),
+        "the pure Canaan face exists"
+    );
+    let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
+    let mut jer_face = None;
+    for (i, _f) in p.faces.iter().enumerate() {
+        let rings = p.face_rings(i);
+        let signed: f64 = rings.iter().map(|r| map_partition::cycle_area(r)).sum();
+        let w: i32 = rings.iter().map(|r| map_partition::winding(r, &jer)).sum();
+        let target = if signed <= 1e-12 { 0 } else { 1 };
+        if w == target {
+            eprintln!("JERUSALEM lives in face {i} ({:?})", p.faces[i].kind);
+            jer_face = Some(p.faces[i].kind.clone());
+        }
+    }
+    assert_eq!(jer_face, Some(map_partition::FaceKind::LandClaim), "Jerusalem is on land");
+    for (i, _f) in p.faces.iter().enumerate() {
+        for (ci, ring) in p.face_rings(i).iter().enumerate() {
+            let (la, lo) = ring[0].to_lat_lon_deg();
+            eprintln!(
+                "  face {i} ring {ci}: {} pts, starts ({la:.2},{lo:.2}), signed {:.3e}",
+                ring.len(),
+                map_partition::cycle_area(ring)
+            );
+        }
+    }
+}

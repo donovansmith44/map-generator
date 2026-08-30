@@ -2,6 +2,46 @@
 # sphere is DERIVED from the map through the chart, composably.
 import io
 import numpy as np
+EXTRA_TEMPLATE = r'''
+
+/// One traced ring or path, derived to the sphere through the chart.
+fn to_sphere_path(chart: &Chart, xy: &[(f64, f64)]) -> Vec<UnitVec> {
+    xy.iter()
+        .map(|(x, y)| chart.to_sphere(*x, *y).expect("plate geometry lives on the plate"))
+        .collect()
+}
+
+/// The witness rings for the sphere partition, derived through the
+/// chart: (great sea rings, lake rings by name).
+pub fn plate_water_witnesses() -> (Vec<Vec<UnitVec>>, Vec<(String, Vec<UnitVec>)>) {
+    let chart = plate_chart();
+    let seas = vec![SEA_LIST]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    let lakes = vec![LAKE_LIST]
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (format!("lake-{i}"), to_sphere_path(&chart, r)))
+        .collect();
+    (seas, lakes)
+}
+
+/// River centerlines (interior rivers) and the Jordan's course, as
+/// sphere polylines for the partition's overlay.
+pub fn plate_river_paths() -> (Vec<Vec<UnitVec>>, Vec<Vec<UnitVec>>) {
+    let chart = plate_chart();
+    let rivers = vec![CL_LIST]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    let jordan = vec![JP_LIST]
+        .into_iter()
+        .map(|r| to_sphere_path(&chart, r))
+        .collect();
+    (rivers, jordan)
+}
+'''
 
 TMP = r'C:/Users/donov/.claude/jobs/c6946bce/tmp'
 OUT = r'C:\Users\donov\Documents\the-best-maps-ever\crates\map-adapters\src\plate_water.rs'
@@ -9,8 +49,10 @@ z = np.load(f'{TMP}/plate_water2.npz')
 coef = np.load(f'{TMP}/affine.npy')  # (3,2): [x y 1] -> (lon, lat)
 
 areas = sorted(k for k in z.files if k.startswith('area'))
-jordans = sorted(k for k in z.files if k.startswith('jordan'))
+jordans = sorted(k for k in z.files if k.startswith('jordan_'))
 rivers = sorted(k for k in z.files if k.startswith('river'))
+cls = sorted(k for k in z.files if k.startswith('cl_'))
+jps = sorted(k for k in z.files if k.startswith('jp_'))
 
 def ring_const(name, xy):
     lines = [f"const {name}: &[(f64, f64)] = &["]
@@ -38,6 +80,16 @@ for i, k in enumerate(rivers):
     nm = f"PLATE_RIVER_{i}"
     consts.append(ring_const(nm, z[k]))
     names["river"].append(nm)
+names["cl"] = []
+for i, k in enumerate(cls):
+    nm = f"PLATE_RIVER_PATH_{i}"
+    consts.append(ring_const(nm, z[k]))
+    names["cl"].append(nm)
+names["jp"] = []
+for i, k in enumerate(jps):
+    nm = f"PLATE_JORDAN_PATH_{i}"
+    consts.append(ring_const(nm, z[k]))
+    names["jp"].append(nm)
 
 a00, a10, b0 = coef[0][0], coef[1][0], coef[2][0]
 a01, a11, b1 = coef[0][1], coef[1][1], coef[2][1]
@@ -166,6 +218,12 @@ tail = tail.replace("[SEA_PARTS]", "[" + parts_list(names["sea"]) + "]")
 tail = tail.replace("[JORDAN_PARTS]", "[" + parts_list(names["jordan"]) + "]")
 tail = tail.replace("[RIVER_PARTS]", "[" + parts_list(names["river"]) + "]")
 
-io.open(OUT, 'w', encoding='utf8', newline='').write(head + mid + tail)
+extra = EXTRA_TEMPLATE
+extra = extra.replace("SEA_LIST", ", ".join(names["sea"]))
+lake_names = [n for n in names["jordan"] if not n.startswith("PLATE_JORDAN_")]
+extra = extra.replace("LAKE_LIST", ", ".join(lake_names))
+extra = extra.replace("CL_LIST", ", ".join(names["cl"]))
+extra = extra.replace("JP_LIST", ", ".join(names["jp"]))
+io.open(OUT, 'w', encoding='utf8', newline='').write(head + mid + tail + extra)
 n = sum(len(z[k]) for k in z.files)
 print(f"wrote plate_water.rs v2: {len(areas)} areas, {len(jordans)} jordan parts, {len(rivers)} rivers, {n} ring points")

@@ -119,6 +119,12 @@ pub fn to_bytes(store: &CanonStore) -> Result<Vec<u8>, String> {
                 "name": p.name,
                 "at": [p.at.x(), p.at.y(), p.at.z()],
             }),
+            Feature::Line(l) => json!({
+                "kind": "line",
+                "entity": l.entity.0,
+                "name": l.name,
+                "border": hex(l.border.0),
+            }),
         };
         features.insert(hex(id.0), v);
     }
@@ -242,6 +248,13 @@ pub fn from_bytes(bytes: &[u8]) -> Result<CanonStore, String> {
                     .collect::<Result<Vec<_>, _>>()?;
                 Feature::Way(Route { entity, name, legs })
             }
+            "line" => Feature::Line(PathLine {
+                entity,
+                name,
+                border: BorderId(unhex(
+                    f.get("border").and_then(Value::as_str).ok_or("line: border")?,
+                )?),
+            }),
             "point" => {
                 let a = f
                     .get("at")

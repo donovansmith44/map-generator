@@ -1,0 +1,7 @@
+[package]
+name = "map-partition"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+map-types = { path = "../map-types" }

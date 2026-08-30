@@ -89,11 +89,23 @@ pub struct Landmark {
     pub at: UnitVec,
 }
 
+/// A stroked path feature (rivers): the partition's overlay polylines
+/// and river-attributed border edges enter the canon as Lines.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathLine {
+    pub entity: EntityId,
+    pub name: String,
+    pub border: BorderId,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Feature {
     Area(Area),
     Way(Route),
     Point(Landmark),
+    /// An attributed line: a river (or any stroked path) whose
+    /// geometry is one border — never a face, never a filled area.
+    Line(PathLine),
 }
 
 impl Feature {
@@ -102,6 +114,7 @@ impl Feature {
             Feature::Area(a) => &a.entity,
             Feature::Way(r) => &r.entity,
             Feature::Point(p) => &p.entity,
+            Feature::Line(l) => &l.entity,
         }
     }
     pub fn name(&self) -> &str {
@@ -109,6 +122,7 @@ impl Feature {
             Feature::Area(a) => &a.name,
             Feature::Way(r) => &r.name,
             Feature::Point(p) => &p.name,
+            Feature::Line(l) => &l.name,
         }
     }
 }
@@ -203,6 +217,11 @@ fn feature_bytes(f: &Feature) -> Vec<u8> {
             c.tag("canon-point");
             c.str_(&p.entity.0).str_(&p.name);
             c.f64_(p.at.x()).f64_(p.at.y()).f64_(p.at.z());
+        }
+        Feature::Line(l) => {
+            c.tag("canon-line");
+            c.str_(&l.entity.0).str_(&l.name);
+            c.u64_(l.border.0 .0);
         }
     }
     c.done()
@@ -426,6 +445,7 @@ fn feature_border_refs(f: &Feature) -> Vec<BorderId> {
         Feature::Area(a) => a.rings.iter().chain(a.holes.iter()).copied().collect(),
         Feature::Way(r) => r.legs.iter().map(|l| l.border).collect(),
         Feature::Point(_) => Vec::new(),
+        Feature::Line(l) => vec![l.border],
     }
 }
 
