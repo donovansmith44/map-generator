@@ -359,9 +359,10 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     // is lawful as a whole: every waypoint resolves, every rise,
     // border change, and fall narrated.
     let all = scripture_timeline();
-    // promise + 13 allotments + 17 nations + 2 vision + 4 tetrarchies
-    // + 4 kingdom eras = 41 regions; plus 5 journeys as open ways.
-    assert_eq!(all.regions.len(), 41, "the Scripture set");
+    // traced plate contour + promise + 13 allotments + 17 nations
+    // + 2 vision + 4 tetrarchies + 4 kingdom eras = 42 regions; plus
+    // 5 journeys as open ways.
+    assert_eq!(all.regions.len(), 42, "the Scripture set");
     let journeys = all
         .boundaries
         .values()
