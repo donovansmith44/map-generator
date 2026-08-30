@@ -400,6 +400,28 @@ fn plate_partition_face_census() {
             eprintln!("POCKET {i} {:.1e} sr at ({la:.3},{lo:.3}) nbs={nbs:?}", f.area);
         }
     }
+    // stem probe: which faces cross lat 32.0 in the stem window?
+    for (i, f) in p.faces.iter().enumerate() {
+        let mut xs: Vec<f64> = Vec::new();
+        for ring in p.face_rings(i) {
+            let n = ring.len();
+            for k in 0..n {
+                let (la1, lo1) = ring[k].to_lat_lon_deg();
+                let (la2, lo2) = ring[(k + 1) % n].to_lat_lon_deg();
+                if (la1 - 32.0) * (la2 - 32.0) <= 0.0 && la1 != la2 {
+                    let x = lo1 + (32.0 - la1) / (la2 - la1) * (lo2 - lo1);
+                    if x > 35.2 && x < 35.75 {
+                        xs.push(x);
+                    }
+                }
+            }
+        }
+        if !xs.is_empty() {
+            xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let xs4: Vec<String> = xs.iter().map(|x| format!("{x:.5}")).collect();
+            eprintln!("STEM face {i} {:?} claims={:?} xs={:?}", f.kind, f.claims, xs4);
+        }
+    }
     let backgrounds =
         p.faces.iter().filter(|f| f.kind == map_partition::FaceKind::Background).count();
     assert_eq!(backgrounds, 1, "one Background face: every other cell is claimed — no wedges");

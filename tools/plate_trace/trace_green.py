@@ -125,15 +125,22 @@ bridge = (cv2.dilate(region_u8, disk(40)) > 0) & (cv2.dilate(water_real.astype(n
 # the bridge may not cross a water body: keep the in-water part, and
 # of the dry part keep only what touches the region without crossing
 # water (the far bank stays the far bank)
-dry = bridge & ~water_real
-dlab, dn = ndi.label(dry)
+# Only BOUNDING water severs (sea, lakes, corridor): a tributary is
+# interior water, and treating it as a wall dropped every wedge at a
+# confluence, leaving holes that turned the corridor annex into a
+# thin finger the simplifier then collapsed.
+barriers = (np.maximum(np.maximum(lakes_m, corr_m), sea_m) > 0)
+conn = bridge & ~barriers
+dlab, dn = ndi.label(conn)
 touch = set(np.unique(dlab[region & (dlab > 0)]))
-keep_dry = np.isin(dlab, [i for i in touch if i > 0])
-region = region | (bridge & water_real) | keep_dry
+keep_conn = np.isin(dlab, [i for i in touch if i > 0])
+region = region | (bridge & water_real) | keep_conn
 region = ndi.binary_closing(region, structure=np.ones((9, 9)))
 region = ndi.binary_fill_holes(region)
 print("green component px:", int(sizes.max()), "of", int(mask.sum()))
 
+ov = int((region & (corr_m > 0)).sum())
+print("corridor px:", int((corr_m > 0).sum()), "covered by region:", ov)
 # outer contour via OpenCV border following
 import cv2
 cnts, _ = cv2.findContours(region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
