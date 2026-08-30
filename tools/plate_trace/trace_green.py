@@ -20,22 +20,69 @@ lab, n = ndi.label(mask)
 sizes = ndi.sum(mask, lab, index=range(1, n + 1))
 big = 1 + int(np.argmax(sizes))
 region = ndi.binary_fill_holes(lab == big)
-# LAP TOWARD WATER: the plate paints a dark shoreline stroke between a
-# fill and its water; that strip belongs to neither mask and renders
-# as background. Extend the region across it wherever water is near —
-# water paints on top, so the lap is invisible and gaps are impossible.
+# BRIDGE TOWARD REAL WATER: the region must overlap every water body
+# it borders so classification clips it back to the water's own line.
+# The water here is the REAL water — NE lakes, the OSM Jordan corridor,
+# and the plate sea — rasterized into the plate frame through the
+# chart. A symmetric dilate-intersect bridges every region-to-water
+# gap, wrapping lake tips with no directionality and no chords.
 import cv2
-blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
+import json
+import numpy as np2
+
 def disk(rr):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*rr+1, 2*rr+1))
-# WIDE water only (sea, lakes): opening kills river strokes, so the
-# lap never chases a river. The lap runs DEEP (~2 km) into the water,
-# far beyond the partition's merge tolerance — crossings happen at
-# clean lens tips, never as tangles along the shoreline.
-wide_m = cv2.morphologyEx(blue_m.astype(np.uint8), cv2.MORPH_OPEN, disk(8)) > 0
-lap = (cv2.dilate(region.astype(np.uint8), disk(30)) > 0)     & (cv2.dilate(wide_m.astype(np.uint8), disk(26)) > 0)
-region = region | lap
+
+coefA = np.load(r'C:/Users/donov/.claude/jobs/c6946bce/tmp/affine.npy')
+_A = coefA[:2, :].T
+_b = coefA[2, :]
+_Ainv = np.linalg.inv(_A)
+def to_px(lon, lat):
+    v = _Ainv @ (np.array([lon, lat]) - _b)
+    return float(v[0]), float(v[1])
+
+# real lakes
+lakes_m = np.zeros((H, W), np.uint8)
+lj = json.load(open(r'C:/Users/donov/Documents/the-best-maps-ever/data/natural-earth/ne_10m_lakes.geojson', encoding='utf8'))
+for f in lj['features']:
+    if f['properties'].get('name') not in ('Sea of Galilee', 'Dead Sea'):
+        continue
+    geom = f['geometry']
+    polys = geom['coordinates'] if geom['type'] == 'MultiPolygon' else [geom['coordinates']]
+    for poly in polys:
+        ring = [[int(round(x)), int(round(y))] for x, y in
+                (to_px(c[0], c[1]) for c in poly[0])]
+        if len(ring) >= 3:
+            cv2.fillPoly(lakes_m, [np.array(ring, np.int32)], 255)
+
+# jordan corridor (vendored polygons)
+corr_m = np.zeros((H, W), np.uint8)
+rj = json.load(open(r'C:/Users/donov/Documents/the-best-maps-ever/data/osm/rivers.geojson', encoding='utf8'))
+for f in rj['features']:
+    if not f['properties'].get('corridor'):
+        continue
+    ring = [[int(round(x)), int(round(y))] for x, y in
+            (to_px(c[0], c[1]) for c in f['geometry']['coordinates'][0])]
+    if len(ring) >= 3:
+        cv2.fillPoly(corr_m, [np.array(ring, np.int32)], 255)
+
+# plate sea (wide blue only: opening kills the drawn rivers)
+blue_m = (b > r + 25) & (b > g + 18) & (b > 130)
+sea_m = cv2.morphologyEx(blue_m.astype(np.uint8) * 255, cv2.MORPH_OPEN, disk(8))
+
+water_real = np.maximum(np.maximum(lakes_m, corr_m), sea_m) > 0
+region_u8 = region.astype(np.uint8) * 255
+bridge = (cv2.dilate(region_u8, disk(40)) > 0) & (cv2.dilate(water_real.astype(np.uint8) * 255, disk(40)) > 0)
+# the bridge may not cross a water body: keep the in-water part, and
+# of the dry part keep only what touches the region without crossing
+# water (the far bank stays the far bank)
+dry = bridge & ~water_real
+dlab, dn = ndi.label(dry)
+touch = set(np.unique(dlab[region & (dlab > 0)]))
+keep_dry = np.isin(dlab, [i for i in touch if i > 0])
+region = region | (bridge & water_real) | keep_dry
 region = ndi.binary_closing(region, structure=np.ones((9, 9)))
+region = ndi.binary_fill_holes(region)
 print("green component px:", int(sizes.max()), "of", int(mask.sum()))
 
 # outer contour via OpenCV border following

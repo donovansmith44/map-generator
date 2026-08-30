@@ -52,24 +52,26 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
         }
     }
 
-    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN: the canaan
-    // ring densifies to ~1 km spacing, then snaps onto every water
-    // line — sea, lakes, and EVERY river, nearest target first —
-    // splicing the targets' own vertices in, so the border follows
-    // shorelines and river meanders exactly and the partition merges
-    // them into shared edges. Flush is structural.
-    let mut targets: Vec<SnapTarget> = Vec::new();
-    for (_, r) in &lakes {
-        targets.push(SnapTarget { pts: r.clone(), closed: true, budget: 4.0 / 6371.0 });
-    }
-    for r in &seas {
-        targets.push(SnapTarget { pts: r.clone(), closed: true, budget: 4.0 / 6371.0 });
-    }
-    for pl in &polylines {
-        targets.push(SnapTarget { pts: pl.pts.clone(), closed: false, budget: 3.0 / 6371.0 });
-    }
-    let canaan = densify_ring(&canaan, 1.2 / 6371.0);
-    let canaan = snap_ring_to_targets(&canaan, &targets);
+    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — and it does
+    // not copy one either. The border river (the Jordan) becomes a
+    // thin CORRIDOR FACE (a ~400 m buffer of its centerline), so it
+    // can win overlaps exactly like a lake. The canaan ring then just
+    // pushes generously INTO every adjacent water body, and the
+    // classification clips it back to the water's own boundary:
+    // one mechanism for sea, lakes, and river — no snapping, no
+    // splices, no transition chords at the lake tips.
+    let jordan_paths: Vec<Vec<UnitVec>> = polylines
+        .iter()
+        .filter(|p| p.id.starts_with("jordan"))
+        .map(|p| p.pts.clone())
+        .collect();
+    // the corridor is raster-buffered at vendor time (a meandering
+    // centerline buffered on the sphere self-intersects; a raster
+    // union cannot)
+    let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
+
+    // (region-to-water overlap is prepared in raster space at
+    // vendor time — see tools/plate_trace/trace_green.py)
 
     let mut regions: Vec<WitnessRegion> = Vec::new();
     regions.push(WitnessRegion {
@@ -87,7 +89,87 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
     for (name, ring) in lakes {
         regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring] });
     }
+    for ring in corridors {
+        if ring.len() >= 3 {
+            regions.push(WitnessRegion {
+                id: "jordan".into(),
+                kind: FaceKind::Lake,
+                rings: vec![ring],
+            });
+        }
+    }
     Ok((regions, polylines))
+}
+
+/// Push ring points INTO adjacent water: through a lake/sea boundary
+/// to `depth` beyond it (points already inside stay), and just past a
+/// river centerline so the corridor face owns the crossing. The water
+/// then clips the region back to its own boundary — flush without
+/// copying anyone's line.
+#[allow(clippy::too_many_arguments)]
+fn push_into_water(
+    ring: &[UnitVec],
+    lakes: &[Vec<UnitVec>],
+    seas: &[Vec<UnitVec>],
+    rivers: &[Vec<UnitVec>],
+    shore_reach: f64,
+    shore_depth: f64,
+    river_reach: f64,
+    river_depth: f64,
+) -> Vec<UnitVec> {
+    let past = |p: &UnitVec, q: &UnitVec, extra: f64| -> Option<UnitVec> {
+        let d = p.angle_to(q);
+        if d < 1e-12 {
+            return None;
+        }
+        // walk from p through q, distance d + extra
+        let t = (d + extra) / d;
+        let (sa, sb) = (((1.0 - t) * d).sin() / d.sin(), (t * d).sin() / d.sin());
+        UnitVec::normalize(
+            sa * p.x() + sb * q.x(),
+            sa * p.y() + sb * q.y(),
+            sa * p.z() + sb * q.z(),
+        )
+        .ok()
+    };
+    let nearest_on_lines = |p: &UnitVec, lines: &[Vec<UnitVec>], closed: bool| -> Option<(UnitVec, f64)> {
+        let mut best: Option<(UnitVec, f64)> = None;
+        for line in lines {
+            let t = SnapTarget { pts: line.clone(), closed, budget: 0.0 };
+            if let Some((_, _, q, d)) = nearest_on_target(p, &t) {
+                if best.as_ref().map_or(true, |(_, bd)| d < *bd) {
+                    best = Some((q, d));
+                }
+            }
+        }
+        best
+    };
+    ring.iter()
+        .map(|p| {
+            // already inside a shoreline body: leave it (overlap done)
+            let in_shore = lakes.iter().chain(seas.iter()).any(|r| winding(r, p) == 1);
+            if in_shore {
+                return *p;
+            }
+            let shore = nearest_on_lines(p, lakes, true)
+                .into_iter()
+                .chain(nearest_on_lines(p, seas, true))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            let river = nearest_on_lines(p, rivers, false);
+            match (shore, river) {
+                (Some((q, ds)), r)
+                    if ds <= shore_reach
+                        && r.as_ref().map_or(true, |(_, dr)| ds <= *dr || *dr > river_reach) =>
+                {
+                    past(p, &q, shore_depth).unwrap_or(*p)
+                }
+                (_, Some((q, dr))) if dr <= river_reach => {
+                    past(p, &q, river_depth).unwrap_or(*p)
+                }
+                _ => *p,
+            }
+        })
+        .collect()
 }
 
 struct SnapTarget {
@@ -160,80 +242,6 @@ fn nearest_on_target(p: &UnitVec, t: &SnapTarget) -> Option<(usize, f64, UnitVec
     best
 }
 
-/// Snap ring vertices onto nearby targets and splice the targets'
-/// own intermediate vertices between consecutive snapped points, so
-/// the ring FOLLOWS the water line exactly.
-fn snap_ring_to_targets(ring: &[UnitVec], targets: &[SnapTarget]) -> Vec<UnitVec> {
-    #[derive(Clone)]
-    enum P {
-        Free(UnitVec),
-        Snapped { target: usize, s: f64, at: UnitVec },
-    }
-    let snapped: Vec<P> = ring
-        .iter()
-        .map(|p| {
-            let mut best: Option<(usize, f64, UnitVec, f64)> = None;
-            for (ti, t) in targets.iter().enumerate() {
-                if let Some((s, tt, q, d)) = nearest_on_target(p, t) {
-                    if d <= t.budget && best.as_ref().map_or(true, |(_, _, _, bd)| d < *bd) {
-                        best = Some((ti, s as f64 + tt, q, d));
-                    }
-                }
-            }
-            match best {
-                Some((ti, s, q, _)) => P::Snapped { target: ti, s, at: q },
-                None => P::Free(*p),
-            }
-        })
-        .collect();
-    let mut out: Vec<UnitVec> = Vec::new();
-    let n = snapped.len();
-    for i in 0..n {
-        let cur = &snapped[i];
-        let nxt = &snapped[(i + 1) % n];
-        match cur {
-            P::Free(p) => out.push(*p),
-            P::Snapped { target, s, at } => {
-                out.push(*at);
-                if let P::Snapped { target: t2, s: s2, .. } = nxt {
-                    if target == t2 {
-                        // walk the target between the two params, the
-                        // short way, splicing its vertices in
-                        let t = &targets[*target];
-                        let m = t.pts.len() as f64;
-                        let span = if t.closed {
-                            let fwd = (s2 - s).rem_euclid(m);
-                            if fwd <= m - fwd { fwd } else { -((s - s2).rem_euclid(m)) }
-                        } else {
-                            s2 - s
-                        };
-                        if span.abs() <= 60.0 && span.abs() > 1e-9 {
-                            let step: f64 = if span >= 0.0 { 1.0 } else { -1.0 };
-                            let mut k = if step > 0.0 { s.floor() + 1.0 } else { s.ceil() - 1.0 };
-                            while (k - s) * step > 0.0 && (k - s) * step < span.abs() {
-                                let idx = (k.rem_euclid(m)) as usize % t.pts.len();
-                                out.push(t.pts[idx]);
-                                k += step;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // clean: drop consecutive near-duplicates
-    let mut clean: Vec<UnitVec> = Vec::new();
-    for p in out {
-        if clean.last().map_or(true, |q: &UnitVec| q.angle_to(&p) > 1e-9) {
-            clean.push(p);
-        }
-    }
-    while clean.len() > 1 && clean[0].angle_to(clean.last().unwrap()) <= 1e-9 {
-        clean.pop();
-    }
-    clean
-}
-
 /// Build the partition and bridge it into the store. Returns a
 /// human-readable summary line.
 pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String, String> {
@@ -248,6 +256,20 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
     let prov = |note: String| Provenance { witness: Witness::Authored, verses: Vec::new(), note };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+    // only the LARGEST face of an entity wears the name — fragment
+    // faces stay anonymous so the map is not wallpapered with labels
+    let mut biggest: std::collections::BTreeMap<String, (usize, f64)> =
+        std::collections::BTreeMap::new();
+    for (fi, face) in part.faces.iter().enumerate() {
+        if face.kind == FaceKind::Background {
+            continue;
+        }
+        let who = face.claims.first().cloned().unwrap_or_else(|| format!("face-{fi}"));
+        let e = biggest.entry(who).or_insert((fi, face.area));
+        if face.area > e.1 {
+            *e = (fi, face.area);
+        }
+    }
     for (fi, face) in part.faces.iter().enumerate() {
         if face.kind == FaceKind::Background {
             continue;
@@ -271,11 +293,18 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
         }
         let who = face.claims.first().cloned().unwrap_or_else(|| format!("face-{fi}"));
         let entity = EntityId(format!("partition:{who}"));
-        let name = match face.kind {
-            FaceKind::LandClaim => format!("{who} (partition)"),
-            FaceKind::Sea => "the Great Sea (partition)".to_string(),
-            FaceKind::Lake => format!("{who} (partition)"),
-            FaceKind::Background => unreachable!(),
+        let is_winner = biggest.get(&who).map_or(false, |&(w, _)| w == fi);
+        let name = if !is_winner {
+            String::new()
+        } else {
+            match who.as_str() {
+                "canaan" => "Canaan".to_string(),
+                "jordan" => "the Jordan".to_string(),
+                w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
+                w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
+                w if w.starts_with("great-sea") => "the Great Sea".to_string(),
+                w => w.to_string(),
+            }
         };
         let fid = store.insert_feature(Feature::Area(Area { entity, name, rings, holes }));
         store.set_provenance(
@@ -316,6 +345,7 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
         );
         water_fids.insert(fid);
     }
+
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0)?;
     overlay_features(store, LayerKind::Water, &water_fids, t0)?;
 
@@ -323,7 +353,6 @@ pub fn bridge_partition(store: &mut CanonStore, t0: Timestamp) -> Result<String,
         "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr"
     ))
 }
-
 
 /// Repo-root-relative data path that works from both the compiled
 /// binary (run at the root) and the test harness (run in the crate).
@@ -420,6 +449,33 @@ fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, Vec<UnitVec>)>, String> {
         if pts.len() >= 2 {
             let name = f["properties"]["name"].as_str().unwrap_or("").to_string();
             out.push((name, pts));
+        }
+    }
+    Ok(out)
+}
+
+/// The vendored Jordan corridor polygons (raster-buffered).
+fn load_osm_corridors() -> Result<Vec<Vec<UnitVec>>, String> {
+    let text = std::fs::read_to_string(data_path("data/osm/rivers.geojson"))
+        .map_err(|e| format!("osm rivers: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("osm rivers: {e}"))?;
+    let mut out = Vec::new();
+    for f in v["features"].as_array().into_iter().flatten() {
+        if !f["properties"]["corridor"].as_bool().unwrap_or(false) {
+            continue;
+        }
+        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first()) else {
+            continue;
+        };
+        let ring: Vec<UnitVec> = outer
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| Some(UnitVec::from_lat_lon_deg(c[1].as_f64()?, c[0].as_f64()?)))
+            .collect();
+        if ring.len() >= 3 {
+            out.push(ring);
         }
     }
     Ok(out)
