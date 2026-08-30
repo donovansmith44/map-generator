@@ -434,3 +434,37 @@ fn dangling_border_refuses_to_build() {
         "a leaked claim is a build failure, never a rendered gap"
     );
 }
+
+/// The dam-split class is unrepresentable: a RiverSystem whose pieces
+/// do not touch refuses to construct, carrying the stray coordinates.
+#[test]
+fn river_system_must_connect() {
+    use crate::RiverSystem;
+    let tol = cfg().tau_vertex;
+    // connected: two paths sharing an endpoint
+    let ok = RiverSystem::new(
+        "arnon".into(),
+        vec![
+            vec![uv(31.4, 36.0), uv(31.43, 35.85)],
+            vec![uv(31.43, 35.85), uv(31.47, 35.6)],
+        ],
+        tol,
+    );
+    assert!(ok.is_ok(), "touching paths are one system");
+    // disconnected: a 5 km dam gap between collinear pieces
+    let bad = RiverSystem::new(
+        "arnon-split".into(),
+        vec![
+            vec![uv(31.4, 36.0), uv(31.43, 35.87)],
+            vec![uv(31.44, 35.82), uv(31.47, 35.6)],
+        ],
+        tol,
+    );
+    match bad {
+        Err(crate::RiverSystemError::Disconnected { pieces, at, .. }) => {
+            assert_eq!(pieces, 2);
+            assert!((at.0 - 31.44).abs() < 0.01, "the stray piece is named by location");
+        }
+        other => panic!("a split river must refuse to construct, got {other:?}"),
+    }
+}

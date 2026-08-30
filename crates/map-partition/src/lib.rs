@@ -190,6 +190,98 @@ pub struct PFace {
     pub area: f64,
 }
 
+/// A RIVER SYSTEM: one connected drainage, the TYPE that makes the
+/// dam-split class unrepresentable. Construction validates that every
+/// path touches the rest of the system (endpoints within `tol`), so
+/// "one river in two disconnected pieces" cannot exist as a value —
+/// it can only be a loud construction error carrying coordinates.
+#[derive(Clone, Debug)]
+pub struct RiverSystem {
+    pub id: String,
+    pub paths: Vec<Vec<UnitVec>>,
+}
+
+#[derive(Debug)]
+pub enum RiverSystemError {
+    /// paths that connect to nothing else in the system, with a
+    /// representative disconnected point (lat, lon)
+    Disconnected { id: String, pieces: usize, at: (f64, f64) },
+    Empty { id: String },
+}
+
+impl RiverSystem {
+    pub fn new(id: String, paths: Vec<Vec<UnitVec>>, tol: f64) -> Result<Self, RiverSystemError> {
+        let paths: Vec<Vec<UnitVec>> = paths.into_iter().filter(|p| p.len() >= 2).collect();
+        if paths.is_empty() {
+            return Err(RiverSystemError::Empty { id });
+        }
+        // union-find over paths: connected iff some vertex of one path
+        // lies within tol of some vertex of the other
+        let n = paths.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn find(parent: &mut Vec<usize>, mut x: usize) -> usize {
+            while parent[x] != x {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+            x
+        }
+        for i in 0..n {
+            for j in i + 1..n {
+                let (ri, rj) = (find(&mut parent, i), find(&mut parent, j));
+                if ri == rj {
+                    continue;
+                }
+                // vertex-to-SEGMENT: a tributary joins a trunk at an
+                // interior point, and simplification may have removed
+                // the exact junction vertex from the trunk
+                let touches = |a: &[UnitVec], b: &[UnitVec]| -> bool {
+                    for p in a {
+                        for seg in b.windows(2) {
+                            let (nx, ny, nz) = seg[0].cross_raw(&seg[1]);
+                            let nn = (nx * nx + ny * ny + nz * nz).sqrt();
+                            if nn < 1e-12 {
+                                continue;
+                            }
+                            let off =
+                                ((p.x() * nx + p.y() * ny + p.z() * nz) / nn).abs().asin();
+                            if off > tol {
+                                continue;
+                            }
+                            let full = seg[0].angle_to(&seg[1]);
+                            if (p.angle_to(&seg[0]) + p.angle_to(&seg[1]) - full).abs()
+                                <= tol + full * 1e-6
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    false
+                };
+                if touches(&paths[i], &paths[j]) || touches(&paths[j], &paths[i]) {
+                    let (lo, hi) = (ri.min(rj), ri.max(rj));
+                    parent[hi] = lo;
+                }
+            }
+        }
+        let root0 = find(&mut parent, 0);
+        let mut pieces = 1usize;
+        let mut stray: Option<(f64, f64)> = None;
+        for i in 1..n {
+            if find(&mut parent, i) != root0 {
+                pieces += 1;
+                if stray.is_none() {
+                    stray = Some(paths[i][0].to_lat_lon_deg());
+                }
+            }
+        }
+        if let Some(at) = stray {
+            return Err(RiverSystemError::Disconnected { id, pieces, at });
+        }
+        Ok(RiverSystem { id, paths })
+    }
+}
+
 /// A river path in the overlay: noded into the partition's vertex
 /// pool wherever it meets canonical geometry; free elsewhere. Never
 /// a face — a polyline cannot have holes.

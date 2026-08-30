@@ -33,22 +33,45 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
     // rivers: OSM's connected network, clipped at the water witnesses
     let mut water_rings: Vec<Vec<UnitVec>> = seas.clone();
     water_rings.extend(lakes.iter().map(|(_, r)| r.clone()));
+    // THE TYPE GATE: every network passes through RiverSystem, whose
+    // constructor refuses a disconnected system — the dam-split class
+    // (one river arriving as separate collinear pieces) cannot reach
+    // the canon; it dies here with coordinates. Clipping at water may
+    // legitimately split a system (a river through a lake), so the
+    // gate runs on the UNCLIPPED network and clipping happens after.
+    let mut by_net: std::collections::BTreeMap<String, (String, Vec<Vec<UnitVec>>)> =
+        std::collections::BTreeMap::new();
+    for (name, net, pts) in load_osm_rivers(30.0)? {
+        let e = by_net.entry(net).or_insert_with(|| (name.clone(), Vec::new()));
+        if e.0.is_empty() {
+            e.0 = name;
+        }
+        e.1.push(pts);
+    }
     let mut polylines: Vec<WitnessPolyline> = Vec::new();
     let mut jordan_n = 0usize;
     let mut river_n = 0usize;
-    for (name, pts) in load_osm_rivers(30.0)? {
-        for run in clip_outside_water(&pts, &water_rings) {
-            if run.len() < 2 {
-                continue;
+    for (net, (name, paths)) in by_net {
+        let system = map_partition::RiverSystem::new(
+            if name.is_empty() { format!("network-{net}") } else { name.clone() },
+            paths,
+            PartitionConfig::default().tau_edge,
+        )
+        .map_err(|e| format!("river system integrity: {e:?}"))?;
+        for pts in system.paths {
+            for run in clip_outside_water(&pts, &water_rings) {
+                if run.len() < 2 {
+                    continue;
+                }
+                let id = if name.contains("Jordan") {
+                    jordan_n += 1;
+                    format!("jordan-{jordan_n}")
+                } else {
+                    river_n += 1;
+                    format!("river-{river_n}")
+                };
+                polylines.push(WitnessPolyline { id, pts: run });
             }
-            let id = if name.contains("Jordan") {
-                jordan_n += 1;
-                format!("jordan-{jordan_n}")
-            } else {
-                river_n += 1;
-                format!("river-{river_n}")
-            };
-            polylines.push(WitnessPolyline { id, pts: run });
         }
     }
 
@@ -420,7 +443,7 @@ fn load_ne_lakes() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
 
 /// OSM rivers from the vendored geojson: only networks whose total
 /// length reaches `min_km` (the plate draws rivers, not ditches).
-fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, Vec<UnitVec>)>, String> {
+fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, String, Vec<UnitVec>)>, String> {
     let text = std::fs::read_to_string(data_path("data/osm/rivers.geojson"))
         .map_err(|e| format!("osm rivers: {e}"))?;
     let v: serde_json::Value =
@@ -455,7 +478,7 @@ fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, Vec<UnitVec>)>, String> {
         let pts = line_of(f);
         if pts.len() >= 2 {
             let name = f["properties"]["name"].as_str().unwrap_or("").to_string();
-            out.push((name, pts));
+            out.push((name, net.to_string(), pts));
         }
     }
     Ok(out)
