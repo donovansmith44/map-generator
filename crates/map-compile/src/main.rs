@@ -293,7 +293,22 @@ fn build(args: &[String]) {
         &BTreeMap::new(),
     )
     .unwrap_or_else(|e| die(&e));
-    eprintln!("water: bridged");
+    // ---- authored witness: the traced plate's water, beside
+    // natural-earth in the same layer (pieces select; the plate's
+    // seas sit flush against the plate-traced region borders).
+    let plate_tl = map_adapters::plate_water_timeline(tp0);
+    bridge_filtered(
+        &mut store,
+        &plate_tl,
+        LayerKind::Water,
+        Witness::Authored,
+        "authored",
+        Some(map_types::RegionClass::Water),
+        &BTreeSet::new(),
+        &BTreeMap::new(),
+    )
+    .unwrap_or_else(|e| die(&e));
+    eprintln!("water: bridged (+ plate witness)");
 
     // ---- natural-earth witness: Relief
     let terrain_bytes = std::fs::read("data/terrain/etopo_15min.bin")

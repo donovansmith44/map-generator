@@ -228,6 +228,27 @@ fn unnamed_features_are_counted_not_silently_dropped() {
 /// Water bodies ingest as first-class Water regions — lawful, labeled,
 /// and mergeable with the rest of the world.
 #[test]
+fn plate_water_is_water_classed_and_closed() {
+    let tl = crate::plate_water::plate_water_timeline(tp(-4004));
+    assert_eq!(tl.regions.len(), 2, "the Great Sea and the waters of the Jordan");
+    assert!(tl.regions.values().all(|r| r.class == map_types::RegionClass::Water));
+    for hist in tl.boundaries.values() {
+        for (_, b) in &hist.versions {
+            assert!(b.pts.len() > 3, "a ring, not a sliver");
+            assert_eq!(b.pts.first(), b.pts.last(), "plate water rings close");
+            assert!(b.provenance.contains("plate-trace"), "tracing disclosed");
+        }
+    }
+    // the Jordan's waters span Chinnereth to the Salt Sea
+    let jordan = tl
+        .regions
+        .values()
+        .find(|r| r.label_at(&tp(-1000)).unwrap().contains("Jordan"))
+        .expect("the Jordan's waters");
+    assert_eq!(jordan.geom_history[0].1.parts.len(), 2, "river system + Hermon streams");
+}
+
+#[test]
 fn waters_are_explorable_regions()  {
     use crate::surveys::{merge_timelines, scripture_timeline, stand_in_gazetteer};
     let text = fc(&[
