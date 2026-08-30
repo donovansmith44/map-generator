@@ -316,19 +316,26 @@ fn build(args: &[String]) {
     // The tribes enter TIME at the allotment: the Conquest & Judges
     // era boundary, read from the vendored atlas eras — never a
     // hardcoded year.
-    let allotment_from = {
+    let (allotment_from, kingdom_from) = {
         let text = std::fs::read_to_string("data/atlas-vendor/eras.json")
             .unwrap_or_else(|e| die(&format!("eras: {e}")));
         let eras = parse_eras(&text).unwrap_or_else(|e| die(&e));
-        let era = eras
-            .iter()
-            .find(|e| e.id == "conquest-judges")
-            .unwrap_or_else(|| die("eras: no conquest-judges era"));
-        ts_or_die(era.from_year)
+        let at = |id: &str| {
+            let era = eras
+                .iter()
+                .find(|e| e.id == id)
+                .unwrap_or_else(|| die(&format!("eras: no {id} era")));
+            ts_or_die(era.from_year)
+        };
+        (at("conquest-judges"), at("united-kingdom"))
     };
-    let summary =
-        map_compile::partition_bridge::bridge_partition(&mut store, tp0, allotment_from)
-            .unwrap_or_else(|e| die(&format!("partition: {e}")));
+    let summary = map_compile::partition_bridge::bridge_partition(
+        &mut store,
+        tp0,
+        allotment_from,
+        kingdom_from,
+    )
+    .unwrap_or_else(|e| die(&format!("partition: {e}")));
     eprintln!("{summary}");
     report_md.push_str(&format!("- {summary}
 "));

@@ -367,6 +367,7 @@ pub fn bridge_partition(
     store: &mut CanonStore,
     t0: Timestamp,
     allotment_from: Timestamp,
+    kingdom_from: Timestamp,
 ) -> Result<String, String> {
     let (regions, polylines) = gather_witnesses()?;
     let part = build(&regions, &polylines, &PartitionConfig::default())
@@ -502,6 +503,12 @@ pub fn bridge_partition(
     }
 
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0, None)?;
+    // THE ALLOTMENT SPAN: the tribes stand from the conquest until
+    // the monarchy rises — the Territory layer's own israel polity
+    // begins at the united-kingdom era, so the tribal confederation
+    // yields exactly where the atlas says the kingdom takes over.
+    // Canaan-whole is the scripture-frame on either side of the span;
+    // content addressing makes its return the SAME features.
     overlay_features(
         store,
         LayerKind::ScriptureClaims,
@@ -509,7 +516,14 @@ pub fn bridge_partition(
         t0,
         Some(allotment_from),
     )?;
-    overlay_features(store, LayerKind::ScriptureClaims, &allotment_fids, allotment_from, None)?;
+    overlay_features(
+        store,
+        LayerKind::ScriptureClaims,
+        &allotment_fids,
+        allotment_from,
+        Some(kingdom_from),
+    )?;
+    overlay_features(store, LayerKind::ScriptureClaims, &before_fids, kingdom_from, None)?;
     overlay_features(store, LayerKind::Water, &water_fids, t0, None)?;
 
     Ok(format!(
@@ -911,4 +925,15 @@ pub(crate) fn overlay_features_for_law(
     from: Timestamp,
 ) -> Result<(), String> {
     overlay_features(store, layer, fids, from, None)
+}
+
+#[cfg(test)]
+pub(crate) fn overlay_features_for_law_span(
+    store: &mut CanonStore,
+    layer: LayerKind,
+    fids: &BTreeSet<map_canon::FeatureId>,
+    from: Timestamp,
+    until: Option<Timestamp>,
+) -> Result<(), String> {
+    overlay_features(store, layer, fids, from, until)
 }

@@ -442,8 +442,12 @@ impl CanonProvider {
             let rank = match layer {
                 LayerKind::Background => 0u8,
                 LayerKind::Relief => 1,
-                LayerKind::Territory => 2,
-                LayerKind::ScriptureClaims => 3,
+                // the scripture-frame (Canaan, the allotments, the
+                // nations) lies beneath the POLITICAL layer: eras
+                // hand off between them, and when both speak at once
+                // the kingdom paints over the frame it rose from
+                LayerKind::ScriptureClaims => 2,
+                LayerKind::Territory => 3,
                 LayerKind::Water => 4,
                 LayerKind::Journeys => 5,
             };

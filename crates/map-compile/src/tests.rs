@@ -570,6 +570,40 @@ fn a_cohort_enters_time_at_its_moment() {
     let at = |y: i32| store.snapshots()[&world.state_at(&ts(y)).unwrap()].features.clone();
     assert!(at(-2000).contains(&old) && !at(-2000).contains(&tribe), "before: no tribes");
     assert!(at(-1406).contains(&old) && at(-1406).contains(&tribe), "the rising moment inherits");
-    assert!(at(-1000).contains(&tribe), "after: the tribes stand");
+    assert!(at(-1200).contains(&tribe), "within the span: the tribes stand");
     assert_eq!(world.moments().len(), 2, "one world before, one from the rising");
+
+    // and a SPAN closes: overlaid [from, until), the cohort is gone at
+    // the closing moment and after, while everything else remains
+    let king = mk(&mut store, "king");
+    crate::partition_bridge::overlay_features_for_law_span(
+        &mut store,
+        LayerKind::ScriptureClaims,
+        &[king].into(),
+        ts(-1050),
+        None,
+    )
+    .unwrap();
+    // rebuild the span for the tribe: give it an until
+    let mut store2 = CanonStore::default();
+    let old2 = mk(&mut store2, "old");
+    let sid2 = store2.insert_snapshot(Snapshot { features: [old2].into() });
+    let mut world2 = World::default();
+    world2.insert(ts(-4004), sid2).unwrap();
+    store2.set_layer(LayerKind::ScriptureClaims, world2);
+    let tribe2 = mk(&mut store2, "tribe");
+    crate::partition_bridge::overlay_features_for_law_span(
+        &mut store2,
+        LayerKind::ScriptureClaims,
+        &[tribe2].into(),
+        ts(-1406),
+        Some(ts(-1050)),
+    )
+    .unwrap();
+    let world2 = &store2.layers()[&LayerKind::ScriptureClaims];
+    let at2 = |y: i32| store2.snapshots()[&world2.state_at(&ts(y)).unwrap()].features.clone();
+    assert!(at2(-1200).contains(&tribe2), "within the span");
+    assert!(!at2(-1050).contains(&tribe2), "the closing moment is without the cohort");
+    assert!(at2(-1050).contains(&old2), "what always stood still stands");
+    assert!(!at2(-900).contains(&tribe2), "and after");
 }
