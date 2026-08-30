@@ -205,6 +205,15 @@ pub fn build_with(
             .collect()
     };
 
+    // total ring area per witness: the measure of specificity
+    let wit_area: BTreeMap<String, f64> = {
+        let mut m: BTreeMap<String, f64> = BTreeMap::new();
+        for (w, _, ring, _) in &rings_norm {
+            *m.entry(w.clone()).or_insert(0.0) += cycle_area(ring).abs();
+        }
+        m
+    };
+
     // deterministic processing order regardless of caller order
     segs.sort_by(|s, t| key_of(&s.a).cmp(&key_of(&t.a)).then(key_of(&s.b).cmp(&key_of(&t.b))));
 
@@ -525,7 +534,10 @@ pub fn build_with(
             continue;
         }
         // precedence: water over land; among land, the MOST SPECIFIC
-        // claim first (deeper in the parent chain); then id order.
+        // claim first — deeper in the parent chain, then the SMALLER
+        // witness (a region names the face over the country that
+        // contains it: specificity is measured, never curated); id
+        // order only as the final deterministic tie.
         kinds.sort_by(|a, b| {
             let rank = |k: &FaceKind| match k {
                 FaceKind::Lake => 0,
@@ -535,7 +547,13 @@ pub fn build_with(
             };
             let da = wit_depth.get(&a.0).copied().unwrap_or(0);
             let db = wit_depth.get(&b.0).copied().unwrap_or(0);
-            rank(&a.1).cmp(&rank(&b.1)).then(db.cmp(&da)).then(a.0.cmp(&b.0))
+            let aa = wit_area.get(&a.0).copied().unwrap_or(0.0);
+            let ab = wit_area.get(&b.0).copied().unwrap_or(0.0);
+            rank(&a.1)
+                .cmp(&rank(&b.1))
+                .then(db.cmp(&da))
+                .then(aa.partial_cmp(&ab).unwrap_or(std::cmp::Ordering::Equal))
+                .then(a.0.cmp(&b.0))
         });
         face.kind = kinds[0].1.clone();
         face.claims = kinds.iter().map(|(w, _, _)| w.clone()).collect();

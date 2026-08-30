@@ -504,3 +504,28 @@ fn subdivision_claims_only_within_parent() {
     assert_eq!(lake_face.claims.first().map(String::as_str), Some("lake"));
     assert!(p.area_residual() < 1e-10);
 }
+
+/// Overlapping same-kind witnesses without hierarchy: the SMALLER
+/// witness names the face — specificity is measured, never curated.
+/// A tribe overlapping the country that surrounds it wins its own
+/// ground even where their rings disagree; the country keeps the rest.
+#[test]
+fn smaller_witness_names_the_shared_face() {
+    let country = region("zz-country", FaceKind::LandClaim, vec![square(10.0, 10.0, 30.0, 30.0)]);
+    // id sorts AFTER "zz-country" alphabetically? no — "province" < "zz-country",
+    // so give the small one a LATER id to prove area (not id order) decides.
+    let province = region("zz-z-province", FaceKind::LandClaim, vec![square(12.0, 12.0, 18.0, 18.0)]);
+    let p = build(&[country, province], &[], &cfg()).unwrap();
+    ok(&p);
+    let f = p
+        .faces
+        .iter()
+        .find(|f| f.claims.contains(&"zz-z-province".to_string()))
+        .expect("the shared face exists");
+    assert_eq!(
+        f.claims.first().map(String::as_str),
+        Some("zz-z-province"),
+        "the smaller witness names the face it shares with its country"
+    );
+    assert!(p.area_residual() < 1e-10);
+}

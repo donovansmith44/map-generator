@@ -370,6 +370,17 @@ fn plate_partition_face_census() {
             && f.claims == vec!["canaan".to_string()]),
         "the pure Canaan face exists"
     );
+    // every tribe names at least one face: the open-data allotments
+    // survive snapping, healing, and precedence end to end.
+    for tribe in [
+        "judah", "simeon", "benjamin", "ephraim", "manasseh-west", "dan", "issachar",
+        "zebulun", "asher", "naphtali", "reuben", "gad", "manasseh-east",
+    ] {
+        assert!(
+            p.faces.iter().any(|f| f.claims.first().map(String::as_str) == Some(tribe)),
+            "tribe {tribe} names no face"
+        );
+    }
     let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
     let mut jer_face = None;
     for (i, _f) in p.faces.iter().enumerate() {

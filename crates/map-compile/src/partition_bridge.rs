@@ -146,19 +146,57 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
     for pl in polylines.iter().filter(|p| p.id.starts_with("jordan")) {
         snap_targets.push((pl.pts.clone(), false));
     }
-    let budget = 3.0 / 6371.0; // the lattice witness's declared accuracy
-    for (slug, parent, ring) in map_adapters::tribal_rings() {
+    let budget = 3.0 / 6371.0; // the vendored witness's declared accuracy
+    for (slug, parent, ring) in load_tribal_rings()? {
         let snapped = snap_ring_to(&ring, &snap_targets, budget);
         if snapped.len() >= 3 {
             regions.push(WitnessRegion {
-                id: slug.to_string(),
+                id: slug,
                 kind: FaceKind::LandClaim,
                 rings: vec![snapped],
-                parent: parent.map(|s| s.to_string()),
+                parent,
             });
         }
     }
     Ok((regions, polylines))
+}
+
+/// The tribal allotments: open data traced from the Wikimedia Commons
+/// twelve-tribes map (CC BY-SA 3.0, see data/wikimedia/LICENSE.md),
+/// georeferenced through that map's own city markers. Shorelines were
+/// adopted from the real water at vendor time; parents ride in the
+/// data (west-bank tribes nest in canaan, Simeon in Judah, the east
+/// bank stands alone).
+fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, String> {
+    let text = std::fs::read_to_string(data_path("data/wikimedia/tribes12.geojson"))
+        .map_err(|e| format!("tribes12: {e}"))?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("tribes12: {e}"))?;
+    let mut out = Vec::new();
+    for f in v["features"].as_array().into_iter().flatten() {
+        let Some(slug) = f["properties"]["tribe"].as_str() else { continue };
+        let parent = f["properties"]["parent"].as_str().map(str::to_string);
+        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
+        else {
+            continue;
+        };
+        let ring: Vec<UnitVec> = outer
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                let lon = c[0].as_f64()?;
+                let lat = c[1].as_f64()?;
+                Some(UnitVec::from_lat_lon_deg(lat, lon))
+            })
+            .collect();
+        if ring.len() >= 3 {
+            out.push((slug.to_string(), parent, ring));
+        }
+    }
+    if out.len() != 13 {
+        return Err(format!("tribes12: expected 13 tribal rings, found {}", out.len()));
+    }
+    Ok(out)
 }
 
 /// Push ring points INTO adjacent water: through a lake/sea boundary
