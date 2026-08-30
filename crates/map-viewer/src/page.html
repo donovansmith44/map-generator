@@ -479,11 +479,18 @@ function setupPlateNav() {
     if (!drag.moved) return;
     state.view.lon = drag.lon - dx * lonPerPx;
     state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * latPerPx));
-    // GPU preview: slide the existing frame; the real frame comes on
-    // release. No fetch, no SVG re-parse, no layout per mouse event.
-    preview.tx = drag.ptx + dx;
-    preview.ty = drag.pty + dy;
-    applyPreview();
+    if (flat) {
+      // translation IS the flat chart's pan: slide the frame on the
+      // compositor, fetch the real frame on release.
+      preview.tx = drag.ptx + dx;
+      preview.ty = drag.pty + dy;
+      applyPreview();
+    } else {
+      // the globe's pan is a ROTATION — only a fresh frame can show
+      // it. Drag-quality frames are ~100 KB now; the in-flight queue
+      // coalesces moves, so this is the live spin it always was.
+      render("drag");
+    }
   });
   let suppressClick = false;
   const finish = () => {
@@ -531,6 +538,7 @@ function setupPlateNav() {
       preview.s *= f;
       applyPreview();
     }
+    if (state.projection !== "flat") render("drag"); // the sphere re-curves live
     clearTimeout(settle);
     settle = setTimeout(() => render(), 180);
   }, { passive: false });
