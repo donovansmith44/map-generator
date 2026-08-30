@@ -380,15 +380,16 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         Err(MergeError::DuplicateBoundary(_))
     ));
 
-    // The full Scripture set — the promise, all twelve tribal
-    // allotments (Levi has none, JOS 13:33), and the kingdom eras —
-    // is lawful as a whole: every waypoint resolves, every rise,
-    // border change, and fall narrated.
+    // The full Scripture set — the promise, the nations, and the
+    // kingdom eras — is lawful as a whole: every waypoint resolves,
+    // every rise, border change, and fall narrated. (The tribal
+    // allotments left the survey book for open data: they enter
+    // through the partition now — data/wikimedia/tribes12.geojson.)
     let all = scripture_timeline();
-    // traced plate contour + promise + 13 allotments + 17 nations
-    // + 2 vision + 4 tetrarchies + 4 kingdom eras = 42 regions; plus
-    // 5 journeys as open ways.
-    assert_eq!(all.regions.len(), 42, "the Scripture set");
+    // traced plate contour + promise + 17 nations + 2 vision
+    // + 4 tetrarchies + 4 kingdom eras = 29 regions; plus the
+    // journeys as open ways.
+    assert_eq!(all.regions.len(), 29, "the Scripture set");
     let journeys = all
         .boundaries
         .values()

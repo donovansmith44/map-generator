@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use map_types::UnitVec;
 
 use crate::{
-    bearing, cycle_area, winding, FaceKind, Fnv, PEdge, PFace, PHalf, Partition,
+    bearing, cycle_area, winding, FaceKind, PEdge, PFace, PHalf, Partition,
     PartitionConfig, RiverPath,
 };
 
@@ -327,7 +327,7 @@ pub fn build_with(
     // (an antenna stub or a bridge left by partial witness merges) —
     // it is removed deterministically and the arrangement reassembled.
     let (vertices, mut edges, halves, faces) = 'outer: loop {
-        let (vertices, mut edges, halves, mut faces, face_rep, wrap_face, edge_keys) = loop {
+        let (vertices, edges, halves, mut faces, face_rep, wrap_face, edge_keys) = loop {
         // canonical vertices = reps used by atomic arcs
         let mut used: Vec<usize> = atomic.keys().flat_map(|&(a, b)| [a, b]).collect();
         used.sort();
@@ -770,23 +770,4 @@ fn point_near_arc(p: &UnitVec, a: &UnitVec, b: &UnitVec, tol: f64) -> bool {
     }
     let off = ((p.x() * nx + p.y() * ny + p.z() * nz) / nn).abs().asin();
     off <= tol && on_arc(p, a, b, tol * 4.0)
-}
-
-/// Deterministic content hash of a witness set — used by tests to
-/// state order-invariance without exposing internals.
-pub fn witness_hash(regions: &[WitnessRegion]) -> u64 {
-    let mut keys: Vec<Vec<u8>> = regions
-        .iter()
-        .map(|w| {
-            let mut h = Fnv::new();
-            h.bytes(w.id.as_bytes());
-            h.finish().to_be_bytes().to_vec()
-        })
-        .collect();
-    keys.sort();
-    let mut h = Fnv::new();
-    for k in keys {
-        h.bytes(&k);
-    }
-    h.finish()
 }

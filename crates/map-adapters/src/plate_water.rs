@@ -583,7 +583,7 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
     let chart = plate_chart();
     let mut tl = WorldTimeline::default();
 
-    let mut part = |tl: &mut WorldTimeline, tag: &str, ring: &[(f64, f64)]| -> RegionPart {
+    let part = |tl: &mut WorldTimeline, tag: &str, ring: &[(f64, f64)]| -> RegionPart {
         let mut pts: Vec<UnitVec> = ring
             .iter()
             .map(|(x, y)| chart.to_sphere(*x, *y).expect("plate rings live on the plate"))
@@ -608,7 +608,7 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
         RegionPart { cycle: vec![(bid, Orientation::Forward)], holes: Vec::new() }
     };
 
-    let mut region = |tl: &mut WorldTimeline, key: &str, label: &str, rings: &[&[(f64, f64)]]| {
+    let region = |tl: &mut WorldTimeline, key: &str, label: &str, rings: &[&[(f64, f64)]]| {
         let parts: Vec<RegionPart> = rings
             .iter()
             .enumerate()

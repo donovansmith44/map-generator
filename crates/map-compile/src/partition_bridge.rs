@@ -75,22 +75,11 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
         }
     }
 
-    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — and it does
-    // not copy one either. The border river (the Jordan) becomes a
-    // thin CORRIDOR FACE (a ~400 m buffer of its centerline), so it
-    // can win overlaps exactly like a lake. The canaan ring then just
-    // pushes generously INTO every adjacent water body, and the
-    // classification clips it back to the water's own boundary:
-    // one mechanism for sea, lakes, and river — no snapping, no
-    // splices, no transition chords at the lake tips.
-    let jordan_paths: Vec<Vec<UnitVec>> = polylines
-        .iter()
-        .filter(|p| p.id.starts_with("jordan"))
-        .map(|p| p.pts.clone())
-        .collect();
-    // the corridor is raster-buffered at vendor time (a meandering
-    // centerline buffered on the sphere self-intersects; a raster
-    // union cannot)
+    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — the border
+    // river (the Jordan) becomes a thin CORRIDOR FACE so it can win
+    // overlaps exactly like a lake. The corridor is raster-buffered at
+    // vendor time (a meandering centerline buffered on the sphere
+    // self-intersects; a raster union cannot).
     let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
 
     // (region-to-water overlap is prepared in raster space at
@@ -247,147 +236,6 @@ fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, St
         return Err(format!("tribes12: expected 13 tribal rings, found {}", out.len()));
     }
     Ok(out)
-}
-
-/// Push ring points INTO adjacent water: through a lake/sea boundary
-/// to `depth` beyond it (points already inside stay), and just past a
-/// river centerline so the corridor face owns the crossing. The water
-/// then clips the region back to its own boundary — flush without
-/// copying anyone's line.
-#[allow(clippy::too_many_arguments)]
-fn push_into_water(
-    ring: &[UnitVec],
-    lakes: &[Vec<UnitVec>],
-    seas: &[Vec<UnitVec>],
-    rivers: &[Vec<UnitVec>],
-    shore_reach: f64,
-    shore_depth: f64,
-    river_reach: f64,
-    river_depth: f64,
-) -> Vec<UnitVec> {
-    let past = |p: &UnitVec, q: &UnitVec, extra: f64| -> Option<UnitVec> {
-        let d = p.angle_to(q);
-        if d < 1e-12 {
-            return None;
-        }
-        // walk from p through q, distance d + extra
-        let t = (d + extra) / d;
-        let (sa, sb) = (((1.0 - t) * d).sin() / d.sin(), (t * d).sin() / d.sin());
-        UnitVec::normalize(
-            sa * p.x() + sb * q.x(),
-            sa * p.y() + sb * q.y(),
-            sa * p.z() + sb * q.z(),
-        )
-        .ok()
-    };
-    let nearest_on_lines = |p: &UnitVec, lines: &[Vec<UnitVec>], closed: bool| -> Option<(UnitVec, f64)> {
-        let mut best: Option<(UnitVec, f64)> = None;
-        for line in lines {
-            let t = SnapTarget { pts: line.clone(), closed, budget: 0.0 };
-            if let Some((_, _, q, d)) = nearest_on_target(p, &t) {
-                if best.as_ref().map_or(true, |(_, bd)| d < *bd) {
-                    best = Some((q, d));
-                }
-            }
-        }
-        best
-    };
-    ring.iter()
-        .map(|p| {
-            // already inside a shoreline body: leave it (overlap done)
-            let in_shore = lakes.iter().chain(seas.iter()).any(|r| winding(r, p) == 1);
-            if in_shore {
-                return *p;
-            }
-            let shore = nearest_on_lines(p, lakes, true)
-                .into_iter()
-                .chain(nearest_on_lines(p, seas, true))
-                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-            let river = nearest_on_lines(p, rivers, false);
-            match (shore, river) {
-                (Some((q, ds)), r)
-                    if ds <= shore_reach
-                        && r.as_ref().map_or(true, |(_, dr)| ds <= *dr || *dr > river_reach) =>
-                {
-                    past(p, &q, shore_depth).unwrap_or(*p)
-                }
-                (_, Some((q, dr))) if dr <= river_reach => {
-                    past(p, &q, river_depth).unwrap_or(*p)
-                }
-                _ => *p,
-            }
-        })
-        .collect()
-}
-
-struct SnapTarget {
-    pts: Vec<UnitVec>,
-    closed: bool,
-    /// how far this target reaches for ring points (radians)
-    budget: f64,
-}
-
-/// Subdivide ring segments so no chord exceeds `max_step` radians —
-/// a dense ring snaps continuously instead of chording past meanders.
-fn densify_ring(ring: &[UnitVec], max_step: f64) -> Vec<UnitVec> {
-    let mut out = Vec::with_capacity(ring.len() * 2);
-    let n = ring.len();
-    for i in 0..n {
-        let a = ring[i];
-        let b = ring[(i + 1) % n];
-        out.push(a);
-        let d = a.angle_to(&b);
-        let steps = (d / max_step).ceil() as usize;
-        for k in 1..steps {
-            let f = k as f64 / steps as f64;
-            if let Ok(m) = UnitVec::normalize(
-                a.x() * (1.0 - f) + b.x() * f,
-                a.y() * (1.0 - f) + b.y() * f,
-                a.z() * (1.0 - f) + b.z() * f,
-            ) {
-                out.push(m);
-            }
-        }
-    }
-    out
-}
-
-/// Nearest point on a target polyline to `p`: (segment index, param
-/// in [0,1], the point, angular distance).
-fn nearest_on_target(p: &UnitVec, t: &SnapTarget) -> Option<(usize, f64, UnitVec, f64)> {
-    let n = t.pts.len();
-    let segs = if t.closed { n } else { n - 1 };
-    let mut best: Option<(usize, f64, UnitVec, f64)> = None;
-    for s in 0..segs {
-        let a = t.pts[s];
-        let b = t.pts[(s + 1) % n];
-        let (nx, ny, nz) = a.cross_raw(&b);
-        let nn = (nx * nx + ny * ny + nz * nz).sqrt();
-        if nn < 1e-12 {
-            continue;
-        }
-        let d = (p.x() * nx + p.y() * ny + p.z() * nz) / nn;
-        let proj =
-            UnitVec::normalize(p.x() - d * nx / nn, p.y() - d * ny / nn, p.z() - d * nz / nn);
-        let full = a.angle_to(&b);
-        let (q, tt) = match proj {
-            Ok(pr) if (pr.angle_to(&a) + pr.angle_to(&b) - full).abs() < full * 0.02 + 1e-9 => {
-                (pr, if full > 0.0 { pr.angle_to(&a) / full } else { 0.0 })
-            }
-            _ => {
-                if p.angle_to(&a) <= p.angle_to(&b) {
-                    (a, 0.0)
-                } else {
-                    (b, 1.0)
-                }
-            }
-        };
-        let dist = p.angle_to(&q);
-        if best.as_ref().map_or(true, |(_, _, _, bd)| dist < *bd) {
-            best = Some((s, tt, q, dist));
-        }
-    }
-    best
 }
 
 /// Build the partition and bridge it into the store. Returns a

@@ -36,6 +36,7 @@ pub struct CanonProvider {
     styles: BTreeMap<StyleId, Style>,
     gazetteer: Option<GazetteerExport>,
     entity_by_rid: BTreeMap<RegionId, EntityId>,
+    entity_by_bid: BTreeMap<BoundaryId, EntityId>,
     events: Vec<ChangeEvent>,
     /// palette slot per area entity, assigned ONCE at load by graph
     /// coloring over the shared-border graph — the style's promise
@@ -100,12 +101,14 @@ impl CanonProvider {
         gazetteer: Option<GazetteerExport>,
     ) -> Self {
         let mut entity_by_rid = BTreeMap::new();
+        let mut entity_by_bid = BTreeMap::new();
         for f in store.features().values() {
             entity_by_rid.insert(rid_of(f.entity()), f.entity().clone());
+            entity_by_bid.insert(bid_of(f.entity()), f.entity().clone());
         }
         let events = derive_events(&store);
         let palette_slot = palette_slots(&store);
-        CanonProvider { store, styles, gazetteer, entity_by_rid, events, palette_slot }
+        CanonProvider { store, styles, gazetteer, entity_by_rid, entity_by_bid, events, palette_slot }
     }
 
     pub fn from_canon_file(
@@ -116,6 +119,52 @@ impl CanonProvider {
         let bytes = std::fs::read(path).map_err(|e| format!("canon: {e}"))?;
         let store = map_canon::persist::from_bytes(&bytes)?;
         Ok(Self::new(store, styles, gazetteer))
+    }
+
+    /// The polyline of a feature, for morphing: an area's longest
+    /// ring, a line's border. Ways morph nothing.
+    fn morph_pts(&self, f: &Feature) -> Option<Vec<UnitVec>> {
+        match f {
+            Feature::Area(a) => a
+                .rings
+                .iter()
+                .filter_map(|bid| self.store.borders().get(bid).map(|b| b.0.clone()))
+                .max_by_key(Vec::len),
+            Feature::Line(l) => self.store.borders().get(&l.border).map(|b| b.0.clone()),
+            _ => None,
+        }
+    }
+
+    /// A Shift event's before/after geometry: the entity's feature in
+    /// the snapshot AT the event moment and in the moment before it,
+    /// searched across layers (the event's boundary id names the
+    /// entity, and an entity lives in one layer).
+    fn shift_geometries(
+        &self,
+        boundary: &BoundaryId,
+        at: &Timestamp,
+    ) -> Option<(Vec<UnitVec>, Vec<UnitVec>)> {
+        let ent = self.entity_by_bid.get(boundary)?;
+        for world in self.store.layers().values() {
+            let Some(sid_after) = world.moments().get(at) else { continue };
+            let sid_before = world
+                .moments()
+                .range(..at.clone())
+                .next_back()
+                .map(|(_, s)| *s)?;
+            let find = |sid: &map_canon::SnapshotId| -> Option<Vec<UnitVec>> {
+                let snap = self.store.snapshots().get(sid)?;
+                snap.features
+                    .iter()
+                    .filter_map(|fid| self.store.features().get(fid))
+                    .find(|f| f.entity() == ent)
+                    .and_then(|f| self.morph_pts(f))
+            };
+            if let (Some(before), Some(after)) = (find(&sid_before), find(sid_after)) {
+                return Some((before, after));
+            }
+        }
+        None
     }
 
     fn style(&self, id: StyleId) -> Result<&Style, MapError> {
@@ -645,30 +694,68 @@ impl MapProvider for CanonProvider {
         &self,
         from: TimePoint,
         to: TimePoint,
-        _viewport: Bbox,
-        _lod: Lod,
+        viewport: Bbox,
+        lod: Lod,
     ) -> Result<TransitionScript, MapError> {
         if from == to {
-            return Ok(TransitionScript::empty());
+            return Ok(TransitionScript::empty()); // the identity (law 8)
         }
-        let q = |t: TimePoint| RenderQuery {
-            subject: RenderSubject::World,
-            time: TimeSelector::At(t),
-            viewport: None,
-            lod: Lod::exact(),
-            layers: LayerSet::GEOMETRY,
-            style: *self.styles.keys().next().expect("a style"),
-        };
-        let a = self.render(&q(from))?;
-        let b = self.render(&q(to))?;
-        let ra: BTreeSet<RegionId> = a.regions.iter().map(|r| r.region).collect();
-        let rb: BTreeSet<RegionId> = b.regions.iter().map(|r| r.region).collect();
+        if from > to {
+            return Ok(invert(self.transition(to, from, viewport, lod)?));
+        }
+        let mut events: Vec<&ChangeEvent> = self.changes_between(from, to);
+        events.sort_by_key(|e| e.at);
         let mut script = TransitionScript::empty();
-        for gone in ra.difference(&rb) {
-            script.steps.push(TransitionStep::FadeOut { region: *gone });
-        }
-        for come in rb.difference(&ra) {
-            script.steps.push(TransitionStep::FadeIn { region: *come });
+        for e in events {
+            match &e.kind {
+                ChangeKind::Rise { region } => {
+                    script.steps.push(TransitionStep::FadeIn { region: *region })
+                }
+                ChangeKind::Fall { region } => {
+                    script.steps.push(TransitionStep::FadeOut { region: *region })
+                }
+                ChangeKind::Shift { boundary } => {
+                    // a same-entity reshape MORPHS: slerp pairs with
+                    // equal counts by resampling; if either side's
+                    // geometry cannot be found, crossfade honestly
+                    match self.shift_geometries(boundary, &e.at) {
+                        Some((before, after)) => {
+                            let a = map_types::simplify_polyline(&before, lod);
+                            let b = map_types::simplify_polyline(&after, lod);
+                            let n = a.len().max(b.len()).max(2);
+                            script.steps.push(TransitionStep::Morph {
+                                boundary: *boundary,
+                                from_pts: resample(&a, n),
+                                to_pts: resample(&b, n),
+                            });
+                        }
+                        None => {
+                            if let Some(ent) = self.entity_by_bid.get(boundary) {
+                                let rid = rid_of(ent);
+                                script.steps.push(TransitionStep::FadeOut { region: rid });
+                                script.steps.push(TransitionStep::FadeIn { region: rid });
+                            }
+                        }
+                    }
+                }
+                // a journey's progress is time-parameterized rendering,
+                // not a topology change
+                ChangeKind::Journey { .. } => {}
+                ChangeKind::Rename { .. } => {}
+                ChangeKind::Split { parent, children, seam } => {
+                    script.steps.push(TransitionStep::SplitAlong {
+                        parent: *parent,
+                        seam: seam.clone(),
+                        children: children.clone(),
+                    })
+                }
+                ChangeKind::Merge { parents, child } => {
+                    script.steps.push(TransitionStep::MergeAcross {
+                        parents: parents.clone(),
+                        child: *child,
+                    })
+                }
+            }
         }
         Ok(script)
     }
@@ -680,6 +767,61 @@ impl MapProvider for CanonProvider {
 }
 
 // ------------------------------------------------------ pure helpers
+
+/// Equal-count resampling along a polyline (slerp between attested
+/// points) so a morph pairs vertices one-to-one.
+fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
+    if pts.len() < 2 || n < 2 {
+        return pts.to_vec();
+    }
+    let mut cumulative = vec![0.0];
+    for w in pts.windows(2) {
+        cumulative.push(cumulative.last().unwrap() + w[0].angle_to(&w[1]));
+    }
+    let total = *cumulative.last().unwrap();
+    if total <= 0.0 {
+        return vec![pts[0]; n];
+    }
+    let mut out = Vec::with_capacity(n);
+    let mut seg = 0usize;
+    for i in 0..n {
+        let target = total * (i as f64) / ((n - 1) as f64);
+        while seg + 2 < cumulative.len() && cumulative[seg + 1] < target {
+            seg += 1;
+        }
+        let span = cumulative[seg + 1] - cumulative[seg];
+        let t = if span > 0.0 { (target - cumulative[seg]) / span } else { 0.0 };
+        let p = map_types::slerp(&pts[seg], &pts[seg + 1], t.clamp(0.0, 1.0)).unwrap_or(pts[seg]);
+        out.push(p);
+    }
+    out
+}
+
+/// Play a script backwards: fades swap, splits merge, morphs reverse.
+fn invert(script: TransitionScript) -> TransitionScript {
+    let steps = script
+        .steps
+        .into_iter()
+        .rev()
+        .map(|s| match s {
+            TransitionStep::Morph { boundary, from_pts, to_pts } => {
+                TransitionStep::Morph { boundary, from_pts: to_pts, to_pts: from_pts }
+            }
+            TransitionStep::FadeIn { region } => TransitionStep::FadeOut { region },
+            TransitionStep::FadeOut { region } => TransitionStep::FadeIn { region },
+            TransitionStep::SplitAlong { parent, children, .. } => {
+                TransitionStep::MergeAcross { parents: children, child: parent }
+            }
+            TransitionStep::MergeAcross { parents, child } => TransitionStep::SplitAlong {
+                parent: child,
+                seam: Vec::new(),
+                children: parents,
+            },
+        })
+        .collect();
+    TransitionScript { steps }
+}
+
 
 /// Palette slots by GRAPH COLORING over the shared-border graph,
 /// computed once per canon: two areas that share a border stretch

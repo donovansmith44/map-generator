@@ -548,38 +548,6 @@ fn point_strictly_in_ring(p: &UnitVec, ring: &[UnitVec]) -> bool {
     total.abs() > 1.5 * std::f64::consts::PI
 }
 
-/// Proper great-circle crossing: the segments intersect at a point
-/// strictly interior to BOTH arcs. Parallel arcs (shared edges) and
-/// endpoint touches (shared corners) are not crossings.
-fn segments_cross(a0: &UnitVec, a1: &UnitVec, b0: &UnitVec, b1: &UnitVec) -> bool {
-    const EPS: f64 = 1e-12;
-    const ANG_EPS: f64 = 1e-9;
-    let n1 = cross(a0, a1);
-    let n2 = cross(b0, b1);
-    let l = (
-        n1.1 * n2.2 - n1.2 * n2.1,
-        n1.2 * n2.0 - n1.0 * n2.2,
-        n1.0 * n2.1 - n1.1 * n2.0,
-    );
-    let ln = norm(l);
-    if ln < EPS {
-        return false; // same great circle: collinear touch, not a crossing
-    }
-    let cand = (l.0 / ln, l.1 / ln, l.2 / ln);
-    let strictly_within = |p: (f64, f64, f64), s0: &UnitVec, s1: &UnitVec| -> bool {
-        let d0 = dot3(p, as_tuple(s0)).clamp(-1.0, 1.0).acos();
-        let d1 = dot3(p, as_tuple(s1)).clamp(-1.0, 1.0).acos();
-        let span = dot3(as_tuple(s0), as_tuple(s1)).clamp(-1.0, 1.0).acos();
-        d0 > ANG_EPS && d1 > ANG_EPS && (d0 + d1) <= span + ANG_EPS
-    };
-    for p in [cand, (-cand.0, -cand.1, -cand.2)] {
-        if strictly_within(p, a0, a1) && strictly_within(p, b0, b1) {
-            return true;
-        }
-    }
-    false
-}
-
 /// Interpenetration below this angular depth (degrees) is tracing
 /// slop at the sources' own precision, not a contradiction. Measured
 /// on real atlas polities 2026-08-27: adjacent-kingdom slivers reach
