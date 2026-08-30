@@ -463,7 +463,7 @@ pub fn build(
         .collect();
     let _ = face_len;
     for fi in 0..faces.len() {
-        if faces[fi].area >= cfg.sliver_area || faces[fi].kind == FaceKind::Background {
+        if faces[fi].area >= cfg.sliver_area {
             continue;
         }
         // neighbor with the longest shared boundary
@@ -477,10 +477,18 @@ pub fn build(
                 }
             }
         }
-        if let Some((&nb, _)) = shared
+        // prefer a non-background neighbor: a sliver between land
+        // and water belongs to one of them, never to the void
+        let pick = shared
             .iter()
+            .filter(|(&nb, _)| faces[nb].kind != FaceKind::Background)
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap().then(b.0.cmp(a.0)))
-        {
+            .or_else(|| {
+                shared
+                    .iter()
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap().then(b.0.cmp(a.0)))
+            });
+        if let Some((&nb, _)) = pick {
             let (kind, claims) = (faces[nb].kind.clone(), faces[nb].claims.clone());
             diagnostics.push(format!(
                 "sliver face {fi} ({:.3e} sr) absorbed semantically into face {nb}",

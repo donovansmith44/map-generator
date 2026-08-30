@@ -28,32 +28,11 @@ use map_types::UnitVec;
 pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
     let canaan = map_adapters::plate_canaan_ring();
     let (seas, _plate_lakes) = map_adapters::plate_water_witnesses();
-
-    let mut regions: Vec<WitnessRegion> = Vec::new();
-    regions.push(WitnessRegion {
-        id: "canaan".into(),
-        kind: FaceKind::LandClaim,
-        rings: vec![canaan],
-    });
-    for (i, ring) in seas.into_iter().enumerate() {
-        regions.push(WitnessRegion {
-            id: if i == 0 { "great-sea".into() } else { format!("great-sea-{i}") },
-            kind: FaceKind::Sea,
-            rings: vec![ring],
-        });
-    }
-    // lakes: Natural Earth's real geometry (the rivers are real, so
-    // the lakes they flow into must be the real ones too)
-    for (name, ring) in load_ne_lakes()? {
-        regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring] });
-    }
+    let lakes = load_ne_lakes()?;
 
     // rivers: OSM's connected network, clipped at the water witnesses
-    let water_rings: Vec<Vec<UnitVec>> = regions
-        .iter()
-        .filter(|r| r.kind != FaceKind::LandClaim)
-        .flat_map(|r| r.rings.iter().cloned())
-        .collect();
+    let mut water_rings: Vec<Vec<UnitVec>> = seas.clone();
+    water_rings.extend(lakes.iter().map(|(_, r)| r.clone()));
     let mut polylines: Vec<WitnessPolyline> = Vec::new();
     let mut jordan_n = 0usize;
     let mut river_n = 0usize;
@@ -72,7 +51,156 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
             polylines.push(WitnessPolyline { id, pts: run });
         }
     }
+
+    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN: the canaan
+    // ring snaps onto the real lake rings and the Jordan's own
+    // meanders (splicing their intermediate points in), so the
+    // partition merges region and water into shared edges — flush is
+    // structural, and the plate-vs-reality offset dies here.
+    let mut targets: Vec<SnapTarget> = lakes
+        .iter()
+        .map(|(_, r)| SnapTarget { pts: r.clone(), closed: true })
+        .collect();
+    for pl in polylines.iter().filter(|p| p.id.starts_with("jordan")) {
+        targets.push(SnapTarget { pts: pl.pts.clone(), closed: false });
+    }
+    let budget = 4.0 / 6371.0; // 4 km shoreline budget
+    let canaan = snap_ring_to_targets(&canaan, &targets, budget);
+
+    let mut regions: Vec<WitnessRegion> = Vec::new();
+    regions.push(WitnessRegion {
+        id: "canaan".into(),
+        kind: FaceKind::LandClaim,
+        rings: vec![canaan],
+    });
+    for (i, ring) in seas.into_iter().enumerate() {
+        regions.push(WitnessRegion {
+            id: if i == 0 { "great-sea".into() } else { format!("great-sea-{i}") },
+            kind: FaceKind::Sea,
+            rings: vec![ring],
+        });
+    }
+    for (name, ring) in lakes {
+        regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring] });
+    }
     Ok((regions, polylines))
+}
+
+struct SnapTarget {
+    pts: Vec<UnitVec>,
+    closed: bool,
+}
+
+/// Nearest point on a target polyline to `p`: (segment index, param
+/// in [0,1], the point, angular distance).
+fn nearest_on_target(p: &UnitVec, t: &SnapTarget) -> Option<(usize, f64, UnitVec, f64)> {
+    let n = t.pts.len();
+    let segs = if t.closed { n } else { n - 1 };
+    let mut best: Option<(usize, f64, UnitVec, f64)> = None;
+    for s in 0..segs {
+        let a = t.pts[s];
+        let b = t.pts[(s + 1) % n];
+        let (nx, ny, nz) = a.cross_raw(&b);
+        let nn = (nx * nx + ny * ny + nz * nz).sqrt();
+        if nn < 1e-12 {
+            continue;
+        }
+        let d = (p.x() * nx + p.y() * ny + p.z() * nz) / nn;
+        let proj =
+            UnitVec::normalize(p.x() - d * nx / nn, p.y() - d * ny / nn, p.z() - d * nz / nn);
+        let full = a.angle_to(&b);
+        let (q, tt) = match proj {
+            Ok(pr) if (pr.angle_to(&a) + pr.angle_to(&b) - full).abs() < full * 0.02 + 1e-9 => {
+                (pr, if full > 0.0 { pr.angle_to(&a) / full } else { 0.0 })
+            }
+            _ => {
+                if p.angle_to(&a) <= p.angle_to(&b) {
+                    (a, 0.0)
+                } else {
+                    (b, 1.0)
+                }
+            }
+        };
+        let dist = p.angle_to(&q);
+        if best.as_ref().map_or(true, |(_, _, _, bd)| dist < *bd) {
+            best = Some((s, tt, q, dist));
+        }
+    }
+    best
+}
+
+/// Snap ring vertices onto nearby targets and splice the targets'
+/// own intermediate vertices between consecutive snapped points, so
+/// the ring FOLLOWS the water line exactly.
+fn snap_ring_to_targets(ring: &[UnitVec], targets: &[SnapTarget], budget: f64) -> Vec<UnitVec> {
+    #[derive(Clone)]
+    enum P {
+        Free(UnitVec),
+        Snapped { target: usize, s: f64, at: UnitVec },
+    }
+    let snapped: Vec<P> = ring
+        .iter()
+        .map(|p| {
+            let mut best: Option<(usize, f64, UnitVec, f64)> = None;
+            for (ti, t) in targets.iter().enumerate() {
+                if let Some((s, tt, q, d)) = nearest_on_target(p, t) {
+                    if d <= budget && best.as_ref().map_or(true, |(_, _, _, bd)| d < *bd) {
+                        best = Some((ti, s as f64 + tt, q, d));
+                    }
+                }
+            }
+            match best {
+                Some((ti, s, q, _)) => P::Snapped { target: ti, s, at: q },
+                None => P::Free(*p),
+            }
+        })
+        .collect();
+    let mut out: Vec<UnitVec> = Vec::new();
+    let n = snapped.len();
+    for i in 0..n {
+        let cur = &snapped[i];
+        let nxt = &snapped[(i + 1) % n];
+        match cur {
+            P::Free(p) => out.push(*p),
+            P::Snapped { target, s, at } => {
+                out.push(*at);
+                if let P::Snapped { target: t2, s: s2, .. } = nxt {
+                    if target == t2 {
+                        // walk the target between the two params, the
+                        // short way, splicing its vertices in
+                        let t = &targets[*target];
+                        let m = t.pts.len() as f64;
+                        let span = if t.closed {
+                            let fwd = (s2 - s).rem_euclid(m);
+                            if fwd <= m - fwd { fwd } else { -((s - s2).rem_euclid(m)) }
+                        } else {
+                            s2 - s
+                        };
+                        if span.abs() <= 60.0 && span.abs() > 1e-9 {
+                            let step: f64 = if span >= 0.0 { 1.0 } else { -1.0 };
+                            let mut k = if step > 0.0 { s.floor() + 1.0 } else { s.ceil() - 1.0 };
+                            while (k - s) * step > 0.0 && (k - s) * step < span.abs() {
+                                let idx = (k.rem_euclid(m)) as usize % t.pts.len();
+                                out.push(t.pts[idx]);
+                                k += step;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // clean: drop consecutive near-duplicates
+    let mut clean: Vec<UnitVec> = Vec::new();
+    for p in out {
+        if clean.last().map_or(true, |q: &UnitVec| q.angle_to(&p) > 1e-9) {
+            clean.push(p);
+        }
+    }
+    while clean.len() > 1 && clean[0].angle_to(clean.last().unwrap()) <= 1e-9 {
+        clean.pop();
+    }
+    clean
 }
 
 /// Build the partition and bridge it into the store. Returns a
