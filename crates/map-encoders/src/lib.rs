@@ -794,6 +794,53 @@ fn flat_bounds(scene: &Snapshot) -> (f64, f64, f64, f64) {
     b.unwrap_or((-180.0, -90.0, 180.0, 90.0))
 }
 
+/// Sutherland–Hodgman: clip a closed ring (lon, lat) to an axis
+/// window, returning a CLOSED ring — the flat plate's topology
+/// guard. Deterministic, classical, no tolerances.
+fn clip_ring_to_window(
+    ring: &[(f64, f64)],
+    (wx0, wy0, wx1, wy1): (f64, f64, f64, f64),
+) -> Vec<(f64, f64)> {
+    let mut pts: Vec<(f64, f64)> = ring.to_vec();
+    // each edge: keep = predicate, intersect against the boundary line
+    let edges: [(bool, f64, bool); 4] = [
+        (true, wx0, true),   // x >= wx0
+        (true, wx1, false),  // x <= wx1
+        (false, wy0, true),  // y >= wy0
+        (false, wy1, false), // y <= wy1
+    ];
+    for (is_x, bound, keep_ge) in edges {
+        if pts.is_empty() {
+            break;
+        }
+        let inside = |p: &(f64, f64)| {
+            let v = if is_x { p.0 } else { p.1 };
+            if keep_ge { v >= bound } else { v <= bound }
+        };
+        let cross = |a: &(f64, f64), b: &(f64, f64)| -> (f64, f64) {
+            let (av, bv) = if is_x { (a.0, b.0) } else { (a.1, b.1) };
+            let t = if (bv - av).abs() < 1e-12 { 0.0 } else { (bound - av) / (bv - av) };
+            (a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1))
+        };
+        let mut out = Vec::with_capacity(pts.len() + 4);
+        for i in 0..pts.len() {
+            let a = pts[i];
+            let b = pts[(i + 1) % pts.len()];
+            match (inside(&a), inside(&b)) {
+                (true, true) => out.push(b),
+                (true, false) => out.push(cross(&a, &b)),
+                (false, true) => {
+                    out.push(cross(&a, &b));
+                    out.push(b);
+                }
+                (false, false) => {}
+            }
+        }
+        pts = out;
+    }
+    pts
+}
+
 fn encode_flat(
     enc: &SvgEncoder,
     scene: &Snapshot,
@@ -805,32 +852,47 @@ fn encode_flat(
         return Err(EncodeError("width smaller than padding".to_string()));
     }
     // The window in map degrees: an explicit camera crops (half-height
-    // = zoom, 2:1 aspect); otherwise fit the whole content.
-    let (x0, y1, span_x, span_y, page) = match zoom {
+    // = zoom, 2:1 aspect at the STANDARD PARALLEL — the equirect
+    // x-scale carries cos(center lat), so a square league renders
+    // square instead of ~18% too wide at Canaan's latitude); otherwise
+    // fit the whole content.
+    let (x0, y1, span_x, span_y, kx, page) = match zoom {
         Some(z) => {
             let z = z.clamp(0.05, 90.0);
             let (clat, clon) = center.unwrap_or((0.0, 0.0));
+            let kx = clat.to_radians().cos().max(0.05);
             let pad = (enc.width * 0.05).max(24.0);
             let height = enc.width / 2.0;
             (
-                clon - 2.0 * z,
+                clon - 2.0 * z / kx,
                 clat + z,
-                4.0 * z,
+                4.0 * z / kx,
                 2.0 * z,
+                kx,
                 Some((-pad, -pad, enc.width + pad, height + pad)),
             )
         }
         None => {
             let (x0, y0, x1, y1) = flat_bounds(scene);
-            (x0, y1, (x1 - x0).max(1e-6), (y1 - y0).max(1e-6), None)
+            (x0, y1, (x1 - x0).max(1e-6), (y1 - y0).max(1e-6), 1.0, None)
         }
     };
     let scale = inner / span_x;
-    let height = span_y * scale + 2.0 * enc.padding;
+    let height = span_y * (scale / kx) + 2.0 * enc.padding;
     let place = move |p: &UnitVec| -> (f64, f64) {
         let (lat, lon) = lat_lon(p);
-        (enc.padding + (lon - x0) * scale, enc.padding + (y1 - lat) * scale)
+        (enc.padding + (lon - x0) * scale, enc.padding + (y1 - lat) * (scale / kx))
     };
+    // CLIP CLOSED RINGS TO THE WINDOW before projecting: culling
+    // chunks of a ring would break even-odd topology (a world ocean
+    // whose land holes fall off-window floods the page). Clipping
+    // keeps every ring closed and every hole a hole.
+    let clip_window = zoom.map(|z| {
+        let z = z.clamp(0.05, 90.0);
+        let (clat, clon) = center.unwrap_or((0.0, 0.0));
+        let m = 0.2 * z; // margin so strokes at the edge stay honest
+        (clon - 2.0 * z / kx - m, clat - z - m, clon + 2.0 * z / kx + m, clat + z + m)
+    });
 
     // The resolved view rides the root either way, so the workbench
     // can pan and zoom the flat plate exactly like the globe.
@@ -844,8 +906,41 @@ fn encode_flat(
             span_y / 2.0
         ),
     );
+    // The whole-sphere sentinel (RegionPart's empty-cycle convention,
+    // same as the globe's limb disc): on a flat page, the whole world
+    // IS the page — the sentinel becomes the page rectangle and the
+    // region's holes cut the land out (evenodd).
+    let covers_sphere = |pts: &[UnitVec]| -> bool {
+        pts.len() <= 4 && pts.iter().any(|a| pts.iter().any(|b| a.dot(b) < -0.99))
+    };
+    let page_rect: Vec<(f64, f64)> = {
+        let pad = (enc.width * 0.05).max(24.0);
+        vec![
+            (-pad, -pad),
+            (enc.width + pad, -pad),
+            (enc.width + pad, height + pad),
+            (-pad, height + pad),
+        ]
+    };
     let ring_of = |ring: &Ring| -> Vec<Vec<(f64, f64)>> {
-        vec![ring.points().iter().map(place).collect()]
+        if covers_sphere(ring.points()) {
+            return vec![page_rect.clone()];
+        }
+        let ll: Vec<(f64, f64)> =
+            ring.points().iter().map(|p| { let (la, lo) = lat_lon(p); (lo, la) }).collect();
+        let clipped = match clip_window {
+            Some(w) => clip_ring_to_window(&ll, w),
+            None => ll,
+        };
+        if clipped.len() < 3 {
+            return Vec::new();
+        }
+        vec![clipped
+            .into_iter()
+            .map(|(lo, la)| {
+                (enc.padding + (lo - x0) * scale, enc.padding + (y1 - la) * (scale / kx))
+            })
+            .collect()]
     };
     let line_of =
         |pts: &[UnitVec]| -> Vec<Vec<(f64, f64)>> { vec![pts.iter().map(place).collect()] };

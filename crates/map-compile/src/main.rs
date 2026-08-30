@@ -293,22 +293,11 @@ fn build(args: &[String]) {
         &BTreeMap::new(),
     )
     .unwrap_or_else(|e| die(&e));
-    // ---- authored witness: the traced plate's water, beside
-    // natural-earth in the same layer (pieces select; the plate's
-    // seas sit flush against the plate-traced region borders).
-    let plate_tl = map_adapters::plate_water_timeline(tp0);
-    bridge_filtered(
-        &mut store,
-        &plate_tl,
-        LayerKind::Water,
-        Witness::Authored,
-        "authored",
-        Some(map_types::RegionClass::Water),
-        &BTreeSet::new(),
-        &BTreeMap::new(),
-    )
-    .unwrap_or_else(|e| die(&e));
-    eprintln!("water: bridged (+ plate witness)");
+    // The traced plate's own water is gone from the canon: the sphere
+    // partition serves the real sea, lakes, and rivers with shared
+    // borders — the plate trace was its scaffolding, not a second
+    // voice speaking over it.
+    eprintln!("water: bridged");
 
     // ---- THE SPHERE PARTITION: one closed arrangement from the plate
     // witnesses; its faces and rivers enter the canon with shared

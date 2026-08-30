@@ -555,3 +555,104 @@ fn fixed_camera_frames_identically_and_pieces_stay_addressable() {
         "every region carries the name the API speaks"
     );
 }
+
+/// THE FLAT PLATE'S TOPOLOGY GUARD: a water body larger than the
+/// window, with a land hole inside the view, must keep its hole —
+/// culling ring chunks broke even-odd topology and flooded the page
+/// (the world ocean, observed); clipping keeps every ring closed.
+#[test]
+fn flat_window_keeps_holes_of_oversized_rings() {
+    let ring = |pts: Vec<(f64, f64)>| {
+        Ring::new(pts.into_iter().map(|(la, lo)| UnitVec::from_lat_lon_deg(la, lo)).collect())
+            .unwrap()
+    };
+    // an ocean far larger than the window…
+    let ocean = ring(vec![(0.0, 0.0), (0.0, 60.0), (50.0, 60.0), (50.0, 0.0)]);
+    // …with a small island hole inside the camera window
+    let island = ring(vec![(31.0, 34.0), (31.0, 36.0), (33.0, 36.0), (33.0, 34.0)]);
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(9)),
+        entity: Some("sea".into()),
+        outer: vec![ocean],
+        holes: vec![island],
+        paint: map_types::style::Paint { fill: map_types::style::Rgba(10, 20, 200, 255) },
+        sources: Default::default(),
+    });
+    let svg = SvgEncoder {
+        projection: Projection::Flat { center: Some((32.0, 35.0)), zoom: Some(2.0) },
+        width: 800.0,
+        smooth: false,
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    // the region's path must contain TWO subpaths (outer + hole): two
+    // moveto commands — a flooded page would have one
+    let d = svg.split("d=\"").nth(1).unwrap().split('"').next().unwrap();
+    let movetos = d.matches('M').count();
+    assert!(movetos >= 2, "the island hole survives the window: {movetos} subpaths");
+}
+
+/// THE STANDARD PARALLEL: at the camera's latitude, one degree of
+/// longitude renders cos(lat) as wide as a degree of latitude — a
+/// square league is square, not 18% fat.
+#[test]
+fn flat_projection_holds_its_standard_parallel() {
+    let mut scene = Snapshot::empty();
+    scene.markers.push(map_types::scene::StyledMarker {
+        at: UnitVec::from_lat_lon_deg(32.0, 35.0),
+        style: map_types::style::MarkerStyle {
+            color: map_types::style::Rgba(0, 0, 0, 255),
+            size: 2.0,
+        },
+        sources: Default::default(),
+        place: None,
+    });
+    let enc = SvgEncoder {
+        projection: Projection::Flat { center: Some((32.0, 35.0)), zoom: Some(2.0) },
+        width: 800.0,
+        smooth: false,
+        ..SvgEncoder::default()
+    };
+    let svg = enc.encode(&scene).unwrap();
+    // read the resolved view: span check via data attributes
+    let grab = |attr: &str| -> f64 {
+        svg.split(attr).nth(1).unwrap().split('"').nth(1).unwrap().parse().unwrap()
+    };
+    assert!((grab("data-clat=") - 32.0).abs() < 1e-6);
+    assert!((grab("data-clon=") - 35.0).abs() < 1e-6);
+    // place two probes 1 deg apart in lat and in cos-corrected lon:
+    // their pixel distances must match (the projection is measured
+    // through the public artifact, not internals)
+    let mut probe = Snapshot::empty();
+    for (la, lo) in [(32.0, 35.0), (33.0, 35.0), (32.0, 35.0 + 1.0 / 32f64.to_radians().cos())] {
+        probe.markers.push(map_types::scene::StyledMarker {
+            at: UnitVec::from_lat_lon_deg(la, lo),
+            style: map_types::style::MarkerStyle {
+                color: map_types::style::Rgba(0, 0, 0, 255),
+                size: 2.0,
+            },
+            sources: Default::default(),
+            place: None,
+        });
+    }
+    let svg = enc.encode(&probe).unwrap();
+    let mut pts: Vec<(f64, f64)> = svg
+        .match_indices("<circle")
+        .map(|(i, _)| {
+            let seg = &svg[i..];
+            let g = |a: &str| -> f64 {
+                seg.split(a).nth(1).unwrap().split('"').nth(1).unwrap().parse().unwrap()
+            };
+            (g("cx="), g("cy="))
+        })
+        .collect();
+    pts.truncate(3);
+    let d_lat = ((pts[0].0 - pts[1].0).powi(2) + (pts[0].1 - pts[1].1).powi(2)).sqrt();
+    let d_lon = ((pts[0].0 - pts[2].0).powi(2) + (pts[0].1 - pts[2].1).powi(2)).sqrt();
+    assert!(
+        (d_lat - d_lon).abs() / d_lat < 0.02,
+        "a square league is square: lat step {d_lat:.1}px vs lon step {d_lon:.1}px"
+    );
+}

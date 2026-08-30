@@ -112,6 +112,9 @@
     width: 100%; height: 100%;
     display: grid; place-items: center;
     min-width: 0; min-height: 0;
+    /* pan/zoom previews are pure compositor transforms — the SVG is
+       repainted only when a real frame arrives */
+    will-change: transform;
   }
   #plate > pre { place-self: center; }
   /* The fade runs on insert and ENDS at full opacity — no class
@@ -343,6 +346,8 @@ async function render(quality) {
 }
 
 function absorbSvg(layer, body) {
+  layer.style.transform = "";
+  layer.style.transformOrigin = "";
   layer.innerHTML = body;
   const svg = layer.querySelector("svg");
   if (svg && svg.dataset.clat !== undefined) {
@@ -435,9 +440,14 @@ function setupPlateNav() {
     if (!drag) return;
     const rect = plate.querySelector("svg")?.getBoundingClientRect();
     if (!rect) return;
-    // Flat's window is 2:1 (4*zoom degrees across); the globe shows
-    // 2*zoom degrees across its width.
-    const degPerPx = ((state.projection === "flat" ? 4 : 2) * state.view.zoom) / rect.width;
+    // The globe shows 2*zoom degrees across its width; flat shows
+    // 2*zoom degrees of LATITUDE over its half-width height, and
+    // 4*zoom/cos(lat) degrees of longitude across (the standard
+    // parallel keeps a square league square).
+    const flat = state.projection === "flat";
+    const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
+    const lonPerPx = (flat ? 4 * state.view.zoom / kx : 2 * state.view.zoom) / rect.width;
+    const latPerPx = (flat ? 4 * state.view.zoom : 2 * state.view.zoom) / rect.width;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
       drag.moved = true;
@@ -445,9 +455,12 @@ function setupPlateNav() {
       plate.setPointerCapture(drag.id);
     }
     if (!drag.moved) return;
-    state.view.lon = drag.lon - dx * degPerPx;
-    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * degPerPx));
-    render("drag");
+    state.view.lon = drag.lon - dx * lonPerPx;
+    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * latPerPx));
+    // GPU preview: slide the existing frame; the real frame comes on
+    // release. No fetch, no SVG re-parse, no layout per mouse event.
+    const layer = plate.querySelector(".layer");
+    if (layer) layer.style.transform = `translate(${dx}px, ${dy}px)`;
   });
   let suppressClick = false;
   const finish = () => {
@@ -462,15 +475,25 @@ function setupPlateNav() {
   plate.addEventListener("pointercancel", finish);
 
   let settle = null;
+  let wheelScale = 1;
   plate.addEventListener("wheel", e => {
     if (state.encoder !== "svg") return;
     e.preventDefault();
     if (!pinView()) return;
     const factor = e.deltaY > 0 ? 1.18 : 1 / 1.18;
     state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
-    render("drag");
+    // GPU preview: scale the existing frame about the cursor; the
+    // real frame renders when the wheel settles.
+    const layer = plate.querySelector(".layer");
+    if (layer) {
+      const rect = layer.getBoundingClientRect();
+      wheelScale /= factor;
+      layer.style.transformOrigin =
+        `${e.clientX - rect.left + (rect.left - layer.offsetLeft)}px ${e.clientY - rect.top}px`;
+      layer.style.transform = `scale(${wheelScale})`;
+    }
     clearTimeout(settle);
-    settle = setTimeout(() => render(), 220);
+    settle = setTimeout(() => { wheelScale = 1; render(); }, 180);
   }, { passive: false });
 
   plate.addEventListener("dblclick", () => { resetView(); render(); });
