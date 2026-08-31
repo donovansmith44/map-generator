@@ -326,6 +326,48 @@ fn split_ring_at_antimeridian(pts: &[UnitVec]) -> Vec<Vec<UnitVec>> {
     [clip(true), clip(false)].into_iter().filter(|piece| piece.len() >= 3).collect()
 }
 
+// ---------------------------------------------------------- densify
+
+/// Maximum edge length (radians) in a packed resource. A consumer
+/// clipping at the globe's limb folds hidden vertices onto the limb
+/// circle and joins them with chords; the chord's deviation from the
+/// true limb arc is ≈ step²/8 × (page/2). At 0.05 rad and the design
+/// page (1200 px) that is ~0.19 px — under the project's half-pixel
+/// law. Derived, not tuned: a longer step would let a folded chord
+/// cut visibly across the disc and flip fill parity over the lens
+/// between chord and arc (the smeared-continent artifact).
+const MAX_EDGE_STEP: f64 = 0.05;
+
+/// Subdivide long edges along their great circles so no packed edge
+/// exceeds `MAX_EDGE_STEP`. Pure refinement: every original vertex
+/// survives, inserted points lie on the original arcs — the drawn
+/// shape is identical on every chart.
+fn densify_run(pts: &[UnitVec], closed: bool) -> Vec<UnitVec> {
+    let n = pts.len();
+    if n < 2 {
+        return pts.to_vec();
+    }
+    let edges = if closed { n } else { n - 1 };
+    let mut out = Vec::with_capacity(n * 2);
+    for i in 0..edges {
+        let (p, q) = (&pts[i], &pts[(i + 1) % n]);
+        out.push(*p);
+        let angle = p.angle_to(q);
+        if angle > MAX_EDGE_STEP {
+            let steps = (angle / MAX_EDGE_STEP).ceil() as usize;
+            for k in 1..steps {
+                if let Ok(mid) = map_types::slerp(p, q, k as f64 / steps as f64) {
+                    out.push(mid);
+                }
+            }
+        }
+    }
+    if !closed {
+        out.push(pts[n - 1]);
+    }
+    out
+}
+
 // ----------------------------------------------------- binary packing
 
 /// Packet magic: "MGR1" — map geometry resource, format 1.
@@ -449,6 +491,14 @@ impl GpuSceneEncoder {
             let sk = style_of(&mut styles, GpuStyle::Fill { color: r.paint.fill });
             for ring in r.outer.iter().chain(&r.holes) {
                 for piece in split_ring_at_antimeridian(ring.points()) {
+                    // The sentinel stays its raw ≤5 points (its mark IS
+                    // covers_sphere); everything else densifies so limb
+                    // folding downstream stays within the half-pixel law.
+                    let piece = if map_types::covers_sphere(&piece) {
+                        piece
+                    } else {
+                        densify_run(&piece, true)
+                    };
                     let (id, geom) =
                         add(&mut resources, &mut seen, ResourceKind::RingLoop, &piece);
                     features.push(FeatureInstance {
@@ -472,6 +522,7 @@ impl GpuSceneEncoder {
                 },
             );
             for piece in split_line_at_antimeridian(&b.pts) {
+                let piece = densify_run(&piece, false);
                 let (id, geom) = add(&mut resources, &mut seen, ResourceKind::LineStrip, &piece);
                 features.push(FeatureInstance {
                     feature: format!("boundary:{:016x}", b.boundary.0 .0),
