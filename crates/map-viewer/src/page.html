@@ -912,7 +912,22 @@ async function gpuSync() {
 
 async function gpuSyncInner() {
   const p = currentParams();
-  for (const k of ["encoder", "smooth", "projection"]) p.delete(k);
+  // The small-data residency law (spec 13): the retained scene is the
+  // WHOLE WORLD at the camera's detail, never a viewport slice. A
+  // viewport-culled scene would cull each layer independently - the
+  // ocean's land-shaped holes can survive a cull their terrain fills
+  // did not, punching bare-paper silhouettes through the sea at the
+  // margins - and rotation could outrun acquisition. Center is
+  // dropped; zoom stays, because the one LOD law reads it.
+  for (const k of ["encoder", "smooth", "projection", "center"]) p.delete(k);
+  // The LOD ladder: sample the half-pixel law at half-octave zoom
+  // steps (the discrete levels a LodChain names, spec 36), so a zoom
+  // ease reuses resident representations and refinement transitions
+  // fire at step edges instead of minting a new world per wheel tick.
+  const zRaw = parseFloat(p.get("zoom"));
+  if (isFinite(zRaw) && zRaw > 0) {
+    p.set("zoom", Math.pow(2, Math.round(Math.log2(zRaw) * 2) / 2).toFixed(4));
+  }
   const key = p.toString();
   if (gpu.sceneKey === key && gpu.manifest) return;
   gpu.sceneKey = key;
