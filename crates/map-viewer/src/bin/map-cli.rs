@@ -91,12 +91,12 @@ fn main() {
         let canonical = canonical_query(query);
         let (status, ctype, body, _) = map_viewer::route(&app, "/api/render", &canonical);
         if status != 200 {
-            eprintln!("FAILED {query}: {body}");
+            eprintln!("FAILED {query}: {}", String::from_utf8_lossy(&body));
             std::process::exit(1);
         }
         let file = artifact_name(&canonical, &world_pin, ext_for(ctype));
         let path = std::path::Path::new(&out_dir).join(&file);
-        std::fs::write(&path, body.as_bytes()).expect("artifact writes");
+        std::fs::write(&path, &body).expect("artifact writes");
         eprintln!("{} <- {}", file, name.as_deref().unwrap_or(&canonical));
         manifest.push(serde_json::json!({
             "name": name,

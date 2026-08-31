@@ -810,3 +810,144 @@ fn the_sentinel_keeps_its_holes_on_both_charts() {
         );
     }
 }
+
+// ================================================== retained-scene GPU
+
+use crate::{EncodedScene, GpuSceneEncoder, ResourceKind, RESOURCE_MAGIC};
+
+fn gpu_encode(scene: &Snapshot) -> EncodedScene {
+    GpuSceneEncoder.encode(scene).unwrap()
+}
+
+/// Law 11 for the retained backend: same scene, same manifest, same
+/// payload bytes — content-addressed caching survives the encoding.
+#[test]
+fn gpu_encoder_is_deterministic() {
+    let a = gpu_encode(&sample_scene());
+    let b = gpu_encode(&sample_scene());
+    assert_eq!(a.manifest_json(), b.manifest_json());
+    assert_eq!(a.resources.len(), b.resources.len());
+    for (ra, rb) in a.resources.iter().zip(&b.resources) {
+        assert_eq!(ra.payload, rb.payload);
+    }
+}
+
+/// §8: the manifest is semantic references only — no projected
+/// vertices, no rasterized frame, no SVG.
+#[test]
+fn manifest_carries_no_geometry() {
+    let enc = gpu_encode(&sample_scene());
+    let json = enc.manifest_json();
+    assert!(!json.contains("<svg"), "no SVG in a manifest");
+    assert!(!json.contains("\"x\":") && !json.contains("\"points\":["), "no vertex payloads");
+    // Every feature references resources by id; the ids resolve.
+    let ids: std::collections::BTreeSet<_> =
+        enc.resources.iter().map(|r| r.descriptor.id).collect();
+    for f in &enc.manifest.features {
+        assert!(ids.contains(&f.resource), "feature references a shipped resource");
+    }
+}
+
+/// §I5 / Test G: equal geometry content yields ONE resource however
+/// many features reference it — the historical-reuse property at the
+/// resource layer.
+#[test]
+fn equal_content_shares_one_resource() {
+    let mut scene = Snapshot::empty();
+    let pts = vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(5.0, 12.0)];
+    for n in [7u64, 8u64] {
+        scene.boundaries.push(StyledBoundary {
+            boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(n)),
+            pts: pts.clone(),
+            stroke: Stroke {
+                color: Rgba(90, 60, 40, 255),
+                width: 1.5,
+                pattern: StrokePattern::Solid,
+            },
+            sources: Default::default(),
+        });
+    }
+    let enc = gpu_encode(&scene);
+    let lines: Vec<_> = enc
+        .resources
+        .iter()
+        .filter(|r| r.descriptor.kind == ResourceKind::LineStrip)
+        .collect();
+    assert_eq!(lines.len(), 1, "one payload for one content");
+    let features: Vec<_> =
+        enc.manifest.features.iter().filter(|f| f.feature.starts_with("boundary:")).collect();
+    assert_eq!(features.len(), 2, "both semantic features remain");
+    assert_eq!(features[0].resource, features[1].resource);
+    assert_eq!(features[0].geometry, features[1].geometry);
+}
+
+/// §R8: a geometry's identity is independent of its style — restyling
+/// the same points must not mint a new geometry or resource.
+#[test]
+fn identity_is_independent_of_style() {
+    let pts = vec![uv(0.0, 0.0), uv(0.0, 10.0)];
+    let scene_with = |color: Rgba| {
+        let mut s = Snapshot::empty();
+        s.boundaries.push(StyledBoundary {
+            boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(3)),
+            pts: pts.clone(),
+            stroke: Stroke { color, width: 2.0, pattern: StrokePattern::Solid },
+            sources: Default::default(),
+        });
+        s
+    };
+    let a = gpu_encode(&scene_with(Rgba(255, 0, 0, 255)));
+    let b = gpu_encode(&scene_with(Rgba(0, 0, 255, 255)));
+    assert_eq!(a.resources[0].descriptor.id, b.resources[0].descriptor.id);
+    assert_eq!(a.resources[0].payload, b.resources[0].payload);
+    assert_ne!(a.manifest.features[0].style, b.manifest.features[0].style);
+}
+
+/// §63/§17: the binary packet decodes back to the geometry — header
+/// fields honest, f32 unit-sphere vertices, bounds containing every
+/// vertex.
+#[test]
+fn binary_packet_roundtrips() {
+    let enc = gpu_encode(&sample_scene());
+    for r in &enc.resources {
+        let p = &r.payload;
+        assert_eq!(&p[0..4], &RESOURCE_MAGIC);
+        let u32_at = |o: usize| u32::from_le_bytes(p[o..o + 4].try_into().unwrap());
+        let u64_at = |o: usize| u64::from_le_bytes(p[o..o + 8].try_into().unwrap());
+        let f32_at = |o: usize| f32::from_le_bytes(p[o..o + 4].try_into().unwrap());
+        assert_eq!(u64_at(8), r.descriptor.id.0 .0);
+        assert_eq!(u64_at(16), r.descriptor.geometry.0 .0);
+        let count = u32_at(40) as usize;
+        assert_eq!(count, r.descriptor.vertex_count as usize);
+        assert_eq!(u32_at(44), 0, "format 1 ships no indices");
+        assert_eq!(p.len(), 48 + count * 12);
+        assert_eq!(p.len() as u64, r.descriptor.byte_length);
+        let (bx, by, bz, br) =
+            (f32_at(24) as f64, f32_at(28) as f64, f32_at(32) as f64, f32_at(36) as f64);
+        for i in 0..count {
+            let o = 48 + i * 12;
+            let (x, y, z) = (f32_at(o) as f64, f32_at(o + 4) as f64, f32_at(o + 8) as f64);
+            let n = (x * x + y * y + z * z).sqrt();
+            assert!((n - 1.0).abs() < 1e-3, "vertex stays on the unit sphere");
+            let dot = (x * bx + y * by + z * bz) / n;
+            let angle = dot.clamp(-1.0, 1.0).acos();
+            assert!(angle <= br + 1e-3, "bounds cap contains every vertex");
+        }
+    }
+}
+
+/// Every scene element lands as a resource of its kind: region rings
+/// as loops, boundaries as strips, markers as points.
+#[test]
+fn scene_elements_map_to_kinds() {
+    let enc = gpu_encode(&sample_scene());
+    let kind_count = |k: ResourceKind| {
+        enc.resources.iter().filter(|r| r.descriptor.kind == k).count()
+    };
+    assert_eq!(kind_count(ResourceKind::RingLoop), 1);
+    assert_eq!(kind_count(ResourceKind::LineStrip), 1);
+    assert_eq!(kind_count(ResourceKind::Points), 1);
+    let json = enc.manifest_json();
+    assert!(json.contains("\"kind\":\"stroke\""));
+    assert!(json.contains("\"kind\":\"marker\""));
+}

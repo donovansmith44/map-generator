@@ -126,6 +126,16 @@
     pointer-events: none;
     will-change: transform;
   }
+  /* THE RETAINED GPU LAYER (rendering spec stage 4): a WebGL2 canvas
+     above the document, projecting resident unit-sphere geometry with
+     camera uniforms every animation frame. Input passes through — the
+     layer is pure output. */
+  #plate canvas.gl {
+    grid-area: 1 / 1;
+    width: 100%; height: 100%;
+    z-index: 3;
+    pointer-events: none;
+  }
   #plate > pre { place-self: center; }
   /* The fade runs on insert and ENDS at full opacity — no class
      choreography that a skipped animation frame could strand. */
@@ -252,6 +262,7 @@
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief" checked> relief</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="journeys" checked> journeys</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="gpu"> webgl borders (retained)</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -469,6 +480,9 @@ async function render(quality) {
     const body = await res.text();
     showPlate(res, body, p.get("encoder"));
     state.frameQuality = quality === "drag" ? "drag" : "full";
+    // The retained layer follows every settled scene — fire-and-forget:
+    // acquisition never rides the render path (§R4).
+    if (quality !== "drag") gpuSync();
   } finally {
     inFlight = false;
     if (queued) { const q = queued === "full" ? undefined : queued; queued = null; render(q); }
@@ -518,12 +532,13 @@ function frameStatus(res, body) {
   });
 }
 
-// Clear the plate of frames while the PORTRAIT (a plate-level
-// sibling that must survive every frame swap) stays put.
+// Clear the plate of frames while the PORTRAIT and the retained GPU
+// layer (plate-level siblings that must survive every frame swap —
+// existing content persists, spec R3) stay put.
 function clearPlateFrames() {
   const plate = $("plate");
   for (const c of [...plate.childNodes]) {
-    if (!(c.nodeType === 1 && c.classList.contains("portrait"))) c.remove();
+    if (!(c.nodeType === 1 && (c.classList.contains("portrait") || c.classList.contains("gl")))) c.remove();
   }
 }
 
@@ -580,6 +595,267 @@ function setStatus(s) {
   add("scene", s.scene);
   add("query", s.query);
   add("bytes", s.bytes);
+}
+
+// ------------------------------------------------ the retained GPU layer
+// Rendering spec, stages 3–4: a ResourceCache of content-addressed,
+// immutable geometry (§11, §14) and a WebGL2 renderer that projects
+// resident unit-sphere vertices with camera uniforms every animation
+// frame (§28–§30). The frame loop never fetches, decodes, or awaits
+// (§R4); acquisition runs independently (§26); camera motion changes
+// uniforms only (§R1/§R2). Resources persist across scene and
+// projection switches — identity is content, not view (§R8, §31).
+const gpu = {
+  enabled: false,
+  canvas: null, gl: null, prog: null, loc: null,
+  // ResourceCache (§11): id hex -> { state, kind, count, vao }.
+  // States walk the §14 progression: requested -> gpu (resident).
+  cache: new Map(),
+  manifest: null,       // the semantic scene manifest (§8)
+  drawItems: [],        // paint-order references, rebuilt per manifest (§64)
+  sceneKey: null,
+  raf: null,
+};
+
+const GPU_VS = `#version 300 es
+precision highp float;
+in vec3 aPos;
+uniform int uMode;                    // 0 globe, 1 flat
+uniform vec3 uEast, uNorth, uCenter;  // globe basis at the camera target
+uniform float uScale;                 // px per projected sin-unit
+uniform vec2 uC;                      // globe page center (viewBox px)
+uniform vec4 uFlat;                   // x0(lon), y1(lat), scaleX, scaleY
+uniform float uPadding;               // the encoder's page padding
+uniform float uK;                     // viewBox px -> css px
+uniform vec2 uOrigin;                 // letterbox origin, css px
+uniform vec2 uCss;                    // canvas css size
+uniform float uPointSize;
+out float vFront;
+void main() {
+  vec2 pv;
+  if (uMode == 0) {
+    // The same orthographic mathematics the server's Globe speaks:
+    // page = center + (dot east, -dot north) * scale; the far
+    // hemisphere is carried to the fragment stage and discarded.
+    vFront = dot(aPos, uCenter);
+    pv = vec2(uC.x + dot(aPos, uEast) * uScale, uC.y - dot(aPos, uNorth) * uScale);
+  } else {
+    // The flat plate's equirectangular law, standard parallel at the
+    // camera latitude — identical to the server's encode_flat.
+    vFront = 1.0;
+    float lat = degrees(asin(clamp(aPos.z, -1.0, 1.0)));
+    float lon = degrees(atan(aPos.y, aPos.x));
+    pv = vec2(uPadding + (lon - uFlat.x) * uFlat.z, uPadding + (uFlat.y - lat) * uFlat.w);
+  }
+  vec2 css = uOrigin + uK * pv;
+  gl_Position = vec4(css.x / uCss.x * 2.0 - 1.0, 1.0 - css.y / uCss.y * 2.0, 0.0, 1.0);
+  gl_PointSize = uPointSize;
+}`;
+
+const GPU_FS = `#version 300 es
+precision mediump float;
+in float vFront;
+uniform vec4 uColor;
+out vec4 o;
+void main() {
+  if (vFront < 0.0) discard;  // behind the limb
+  o = vec4(uColor.rgb * uColor.a, uColor.a);  // premultiplied over the page
+}`;
+
+function gpuInit() {
+  if (gpu.gl) return true;
+  const canvas = document.createElement("canvas");
+  canvas.className = "gl";
+  $("plate").appendChild(canvas);
+  const gl = canvas.getContext("webgl2", { alpha: true, antialias: true, premultipliedAlpha: true });
+  if (!gl) { setStatus({ error: "webgl2 unavailable — the retained layer needs it" }); return false; }
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, GPU_VS));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, GPU_FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  const loc = {};
+  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor"]) {
+    loc[n] = gl.getUniformLocation(prog, n);
+  }
+  loc.aPos = gl.getAttribLocation(prog, "aPos");
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gpu.canvas = canvas; gpu.gl = gl; gpu.prog = prog; gpu.loc = loc;
+  return true;
+}
+
+// Decode one §63 binary packet and make it GPU-resident. Validation
+// happens BEFORE the resource becomes drawable (spec §40 step 5) — a
+// bad payload is dropped, never half-drawn.
+function gpuUpload(idHex, bytes) {
+  const gl = gpu.gl;
+  const dv = new DataView(bytes);
+  if (bytes.byteLength < 48 ||
+      String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== "MGR1") {
+    gpu.cache.delete(idHex);
+    return;
+  }
+  const kind = dv.getUint32(4, true);
+  const count = dv.getUint32(40, true);
+  if (bytes.byteLength < 48 + count * 12) { gpu.cache.delete(idHex); return; }
+  const verts = new Float32Array(bytes, 48, count * 3);
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(gpu.loc.aPos);
+  gl.vertexAttribPointer(gpu.loc.aPos, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  gpu.cache.set(idHex, { state: "gpu", kind, count, vao });
+}
+
+// The acquisition loop (§26): fetch what the manifest demands and is
+// not yet resident. Bounded concurrency, no frame ever waits on it.
+async function gpuAcquire(ids) {
+  const missing = ids.filter(id => !gpu.cache.has(id));
+  missing.forEach(id => gpu.cache.set(id, { state: "requested" }));
+  let i = 0;
+  const worker = async () => {
+    while (i < missing.length) {
+      const id = missing[i++];
+      try {
+        const res = await fetch("/api/resource?id=" + id);
+        if (!res.ok) { gpu.cache.delete(id); continue; }
+        gpuUpload(id, await res.arrayBuffer());
+      } catch { gpu.cache.delete(id); }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+}
+
+// Ask for the semantic scene manifest (§8) matching the current full
+// render, then acquire what the draw list demands. The key drops
+// encoder/smooth/projection: the scene is projection-independent
+// (§31) — switching charts reuses every resident resource.
+async function gpuSync() {
+  if (!gpu.enabled) return;
+  const p = currentParams();
+  for (const k of ["encoder", "smooth", "projection"]) p.delete(k);
+  const key = p.toString();
+  if (gpu.sceneKey === key && gpu.manifest) return;
+  gpu.sceneKey = key;
+  const res = await fetch("/api/scene?" + p.toString());
+  if (!res.ok || gpu.sceneKey !== key) return;
+  const man = await res.json();
+  if (gpu.sceneKey !== key) return;
+  gpu.manifest = man;
+  const meta = new Map(man.resources.map(r => [r.id, r]));
+  // The draw list (§64): boundary strokes and markers — the stage-4
+  // layer. Region rings stay server-side until fills land; residency
+  // is demand-driven, not whole-atlas (§12).
+  gpu.drawItems = man.features.filter(f => {
+    const s = man.styles[f.style], r = meta.get(f.resource);
+    if (!s || !r) return false;
+    if (s.kind === "marker") return true;
+    return s.kind === "stroke" && s.width > 0 && r.kind === "line";
+  }).map(f => ({ id: f.resource, style: man.styles[f.style] }));
+  gpuAcquire([...new Set(gpu.drawItems.map(it => it.id))]);
+}
+
+// One retained frame (§25): sample the continuous camera, set
+// uniforms, draw what is resident. No fetch, no parse, no await.
+function gpuDraw() {
+  const gl = gpu.gl, canvas = gpu.canvas;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(rect.width * dpr));
+  const H = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const cam = state.cameraNow && state.cameraNow();
+  const svg = $("plate").querySelector(".layer svg");
+  if (!cam || cam.zoom === null || !svg || !gpu.manifest) return;
+  const vb = svg.viewBox && svg.viewBox.baseVal;
+  if (!vb || vb.width <= 0) return;
+  const k = Math.min(rect.width / vb.width, rect.height / vb.height);
+  const ox = (rect.width - vb.width * k) / 2;
+  const oy = (rect.height - vb.height * k) / 2;
+  const rad = d => d * Math.PI / 180;
+  const loc = gpu.loc;
+  gl.useProgram(gpu.prog);
+  gl.uniform1f(loc.uPadding, 16.0);
+  gl.uniform1f(loc.uK, k);
+  gl.uniform2f(loc.uOrigin, ox, oy);
+  gl.uniform2f(loc.uCss, rect.width, rect.height);
+  if (state.projection === "flat") {
+    const z = Math.max(0.05, Math.min(90, cam.zoom));
+    const kx = Math.max(0.05, Math.cos(rad(cam.lat)));
+    const scaleG = (vb.width - 32) / (2 * z);
+    const spanX = 2 * z / kx;
+    const spanY = (vb.width / 2) / scaleG;
+    gl.uniform1i(loc.uMode, 1);
+    gl.uniform4f(loc.uFlat, cam.lon - spanX / 2, cam.lat + spanY / 2, scaleG * kx, scaleG);
+  } else {
+    const clat = rad(cam.lat), clon = rad(cam.lon);
+    const C = [Math.cos(clat) * Math.cos(clon), Math.cos(clat) * Math.sin(clon), Math.sin(clat)];
+    let E = [-C[1], C[0], 0];
+    const el = Math.hypot(E[0], E[1], E[2]);
+    E = el < 1e-9 ? [0, 1, 0] : [E[0] / el, E[1] / el, E[2] / el];
+    let N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+    const nl = Math.hypot(N[0], N[1], N[2]);
+    N = nl < 1e-9 ? [0, 0, 1] : [N[0] / nl, N[1] / nl, N[2] / nl];
+    const rView = Math.sin(rad(Math.max(1, Math.min(90, cam.zoom))));
+    gl.uniform1i(loc.uMode, 0);
+    gl.uniform3f(loc.uEast, E[0], E[1], E[2]);
+    gl.uniform3f(loc.uNorth, N[0], N[1], N[2]);
+    gl.uniform3f(loc.uCenter, C[0], C[1], C[2]);
+    gl.uniform1f(loc.uScale, (vb.width - 32) / 2 / rView);
+    gl.uniform2f(loc.uC, vb.width / 2, vb.width / 2);
+  }
+  const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+  for (const it of gpu.drawItems) {
+    const r = gpu.cache.get(it.id);
+    if (!r || r.state !== "gpu") continue;  // not resident yet — never blocks (§R4)
+    const s = it.style;
+    let [cr, cg, cb, ca] = s.color;
+    if (s.kind === "marker") {
+      gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
+      gl.uniform1f(loc.uPointSize, Math.max(2, s.size * 2 * k * dpr));
+      gl.bindVertexArray(r.vao);
+      gl.drawArrays(gl.POINTS, 0, r.count);
+      continue;
+    }
+    let w = s.width;
+    if (s.pattern === "zonal") { w *= 6; ca *= 0.35; }  // the server's zonal dress
+    gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
+    gl.uniform1f(loc.uPointSize, 1.0);
+    gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * k * dpr)));
+    gl.bindVertexArray(r.vao);
+    gl.drawArrays(gl.LINE_STRIP, 0, r.count);
+  }
+  gl.bindVertexArray(null);
+}
+
+function gpuTick() {
+  if (!gpu.enabled) { gpu.raf = null; return; }
+  gpuDraw();
+  gpu.raf = requestAnimationFrame(gpuTick);
+}
+
+function gpuSetEnabled(on) {
+  gpu.enabled = on && gpuInit();
+  if (gpu.canvas) gpu.canvas.style.display = gpu.enabled ? "" : "none";
+  if (gpu.enabled) {
+    gpu.sceneKey = null;      // refetch the manifest for the current view
+    gpuSync();
+    if (!gpu.raf) gpu.raf = requestAnimationFrame(gpuTick);
+  }
 }
 
 // ----------------------------------------------------- globe navigation
@@ -661,6 +937,15 @@ function setupPlateNav() {
   state.applyViewTransform = applyViewTransform;
   state.moving = () => animating || !!drag;
   state.liveDrag = () => !!drag && state.projection !== "flat";
+  // The continuous camera, sampled by the retained GPU layer each
+  // animation frame (spec §21/§25): the hand during a live drag, the
+  // eased visual view mid-animation, the landed frame's view at rest.
+  state.cameraNow = () => {
+    if (drag && state.view.zoom !== null) return { ...state.view };
+    if (visual.zoom !== null) return { lat: visual.lat, lon: visual.lon, zoom: visual.zoom };
+    if (state.frameView) return { ...state.frameView };
+    return state.resolved ? { ...state.resolved } : null;
+  };
   // A frame landing AT REST is the server's answer to where the
   // camera is — a chart may clamp or resolve the request, and the
   // client adopts the resolved view rather than holding a transform
@@ -1084,6 +1369,7 @@ async function init() {
   $("relief").addEventListener("change", () => render());
   $("journeys").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
+  $("gpu").addEventListener("change", e => gpuSetEnabled(e.target.checked));
   $("expose").addEventListener("change", () => {
     $("rangebox").hidden = $("rangehint").hidden = !$("expose").checked;
     loadFromOptions();

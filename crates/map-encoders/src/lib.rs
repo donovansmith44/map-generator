@@ -14,6 +14,13 @@
 
 use std::fmt::Write as _;
 
+mod gpu;
+pub use gpu::{
+    EncodedScene, FeatureInstance, GeometryId, GeometryResource, GpuSceneEncoder, GpuStyle,
+    ResourceDescriptor, ResourceId, ResourceKind, SceneManifest, SphericalBounds, StyleKey,
+    RESOURCE_MAGIC,
+};
+
 use map_types::scene::LabelSubject;
 use map_types::style::{Rgba, StrokePattern};
 use map_types::{EncodeError, Ring, SceneEncoder, Snapshot, TransitionEncoder, UnitVec};

@@ -17,7 +17,7 @@ use atlas_graph_types::covenant::SourceId;
 
 use map_adapters::{load_exports, merged_gazetteer};
 use map_provider::SCRIPTURE_SOURCE;
-use map_encoders::{GeoJsonEncoder, JsonTransitionEncoder, SvgEncoder};
+use map_encoders::{GeoJsonEncoder, GpuSceneEncoder, JsonTransitionEncoder, SvgEncoder};
 use map_types::style::*;
 use map_types::{
     ChangeKind, Interval, LayerSet, Lod, MapAddressed, MapProvider, Monoid, RegionId,
@@ -61,6 +61,11 @@ pub struct App {
     /// composable API (entities, features, pieces, scaffold) needs
     /// more than the dyn contract exposes.
     canon: Option<Arc<map_provider::canon_provider::CanonProvider>>,
+    /// The content-addressed geometry payload store (rendering spec
+    /// §63): filled as /api/scene manifests are encoded, read by
+    /// /api/resource. Immutable entries — equal id, equal bytes — so
+    /// concurrent publishes can never disagree.
+    resources: std::sync::Mutex<std::collections::BTreeMap<u64, Vec<u8>>>,
 }
 
 mod templates;
@@ -257,6 +262,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         anchor,
         overlay_tints,
         canon: Some(canon_provider),
+        resources: std::sync::Mutex::new(std::collections::BTreeMap::new()),
     }
 }
 
@@ -595,9 +601,154 @@ fn encode(
     }
 }
 
+/// The whole scene-composition pipeline, shared by every consumer of
+/// a composed frame (the SVG render and the retained-scene manifest):
+/// pieces, the multi-subject overlay monoid, bible-mode selection, and
+/// the ghost backdrop. Returns the scene, the content face (globe
+/// auto-centering), and — when exactly one query composed it — that
+/// query, whose pid rides the response headers.
+fn composed_scene(
+    app: &App,
+    p: &Params,
+) -> Result<(Snapshot, Option<(f64, f64)>, Option<RenderQuery>), String> {
+    // A PIECES render: a transparent, aligned layer of just the named
+    // entities — composable by construction.
+    if let Some(ids) = p.get("pieces") {
+        let Some(canon) = app.canon.as_ref() else {
+            return Err("pieces requires the canon (run map-compile build)".to_string());
+        };
+        if p.get("center").is_none() || p.get("zoom").is_none() {
+            return Err("pieces requires center and zoom (alignment law)".to_string());
+        }
+        let set: std::collections::BTreeSet<map_canon::EntityId> = ids
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| map_canon::EntityId(s.to_string()))
+            .collect();
+        let Some(q) = build_query(app, p, "", Some("world")) else {
+            return Err("bad query".to_string());
+        };
+        return match canon.render_pieces(&q, &set) {
+            Err(e) => Err(format!("{e:?}")),
+            Ok(scene) => Ok((scene, None, Some(q))),
+        };
+    }
+    // The subject may be a comma-list: a multi-region map is the
+    // overlay of each region's own query (the monoid).
+    let keys: Vec<&str> =
+        p.get("subject").unwrap_or("world").split(',').filter(|s| !s.is_empty()).collect();
+    if keys.is_empty() {
+        return Err("no subject".to_string());
+    }
+    let mut queries = Vec::new();
+    for k in &keys {
+        let Some(q) = build_query(app, p, "", Some(k)) else {
+            return Err("bad query".to_string());
+        };
+        queries.push(q);
+    }
+    let mut scenes = Vec::new();
+    let mut first_err = None;
+    for q in &queries {
+        match app.provider.render(q) {
+            Ok(s) => scenes.push(s),
+            Err(e) => {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+        }
+    }
+    if scenes.is_empty() {
+        return Err(format!("{:?}", first_err.expect("some error")));
+    }
+    let mut subject_scene = Snapshot::empty();
+    for s in scenes {
+        subject_scene = subject_scene.combine(s);
+    }
+    // BIBLE MODE: only what is derived from Scripture is realized — a
+    // semantic selection by the scripture source. It filters the
+    // WORLD, never the user's own selection: a focused Roman Empire
+    // stays realized (its sources disclose what grounds it) — only
+    // the un-asked-for world reduces to what Scripture says.
+    let bible = p.get("bible") == Some("1");
+    let is_world_only = keys == ["world"];
+    if bible && is_world_only {
+        subject_scene = scripture_only(&subject_scene);
+    }
+    // The whole globe as context, the subject the realized thing:
+    // overlay(world in ghost dress, subject in full) — the monoid
+    // again, two contract calls and a combine. In bible mode the
+    // backdrop is always on: the ghost is the disclosure that the
+    // rest is NOT Scripture-derived.
+    let q = queries[0].clone();
+    let face = scene_centroid(&subject_scene);
+    let want_context = bible || (p.get("context") != Some("0") && !is_world_only);
+    let scene = if want_context {
+        let ghost_style = app.ghosts.get(&q.style).copied();
+        let backdrop_at = match q.time {
+            TimeSelector::At(t) => t,
+            TimeSelector::Over(i) => i.to.unwrap_or(i.from),
+        };
+        match ghost_style {
+            None => subject_scene,
+            Some(style) => {
+                let ghost_q = RenderQuery {
+                    subject: RenderSubject::World,
+                    time: TimeSelector::At(backdrop_at),
+                    viewport: q.viewport.clone(),
+                    lod: q.lod,
+                    layers: LayerSet::GEOMETRY,
+                    style,
+                };
+                match app.provider.render(&ghost_q) {
+                    Err(e) => return Err(format!("{e:?}")),
+                    Ok(backdrop) => {
+                        without_realized(backdrop, &subject_scene).combine(subject_scene)
+                    }
+                }
+            }
+        }
+    } else {
+        subject_scene
+    };
+    let single = if queries.len() == 1 { Some(q) } else { None };
+    Ok((scene, face, single))
+}
+
 // ------------------------------------------------------------- routes
 
-pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<(String, String)>) {
+/// The public route: bytes out, so binary resource payloads (spec
+/// §63) and text responses travel the same path.
+pub fn route(
+    app: &App,
+    path: &str,
+    query: &str,
+) -> (u16, &'static str, Vec<u8>, Vec<(String, String)>) {
+    // Content-addressed geometry payloads: the one binary route.
+    if path == "/api/resource" {
+        let p = Params::parse(query);
+        let Some(id) = p.get("id").and_then(|h| u64::from_str_radix(h, 16).ok()) else {
+            return (400, "text/plain", b"id required (hex)".to_vec(), Vec::new());
+        };
+        return match app.resources.lock().expect("resource store").get(&id) {
+            Some(bytes) => (200, "application/octet-stream", bytes.clone(), Vec::new()),
+            // Not resident is not an error state to hide: the client's
+            // acquisition loop re-requests the scene manifest, which
+            // re-publishes what this world can produce.
+            None => (
+                404,
+                "text/plain",
+                b"resource not resident - re-request /api/scene".to_vec(),
+                Vec::new(),
+            ),
+        };
+    }
+    let (status, ctype, body, headers) = route_text(app, path, query);
+    (status, ctype, body.into_bytes(), headers)
+}
+
+fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<(String, String)>) {
     let p = Params::parse(query);
     let bad = |msg: &str| (400u16, "text/plain", msg.to_string(), Vec::new());
 
@@ -788,116 +939,9 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
             }
         }
 
-        "/api/render" => {
-            // A PIECES render: a transparent, aligned image layer of
-            // just the named entities — composable by construction.
-            if let Some(ids) = p.get("pieces") {
-                let Some(canon) = app.canon.as_ref() else {
-                    return bad("pieces requires the canon (run map-compile build)");
-                };
-                if p.get("center").is_none() || p.get("zoom").is_none() {
-                    return bad("pieces requires center and zoom (alignment law)");
-                }
-                let set: std::collections::BTreeSet<map_canon::EntityId> = ids
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(|s| map_canon::EntityId(s.to_string()))
-                    .collect();
-                let Some(q) = build_query(app, &p, "", Some("world")) else {
-                    return bad("bad query");
-                };
-                return match canon.render_pieces(&q, &set) {
-                    Err(e) => bad(&format!("{e:?}")),
-                    Ok(scene) => match encode(&p, &scene, None) {
-                        Err(e) => bad(&e),
-                        Ok((body, ctype)) => (200, ctype, body, Vec::new()),
-                    },
-                };
-            }
-            // The subject may be a comma-list: a multi-region map is
-            // the overlay of each region's own query (the monoid).
-            let keys: Vec<&str> = p
-                .get("subject")
-                .unwrap_or("world")
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .collect();
-            if keys.is_empty() {
-                return bad("no subject");
-            }
-            let mut queries = Vec::new();
-            for k in &keys {
-                let Some(q) = build_query(app, &p, "", Some(k)) else { return bad("bad query") };
-                queries.push(q);
-            }
-            let mut scenes = Vec::new();
-            let mut first_err = None;
-            for q in &queries {
-                match app.provider.render(q) {
-                    Ok(s) => scenes.push(s),
-                    Err(e) => {
-                        if first_err.is_none() {
-                            first_err = Some(e);
-                        }
-                    }
-                }
-            }
-            if scenes.is_empty() {
-                return bad(&format!("{:?}", first_err.expect("some error")));
-            }
-            let mut subject_scene = Snapshot::empty();
-            for s in scenes {
-                subject_scene = subject_scene.combine(s);
-            }
-            // BIBLE MODE: only what is derived from Scripture is
-            // realized — a semantic selection by the scripture source.
-            let bible = p.get("bible") == Some("1");
-            let is_world_only = keys == ["world"];
-            // Bible mode is a filter on the WORLD, never on the user's
-            // own selection: a focused Roman Empire stays realized (its
-            // sources disclose what grounds it) — only the un-asked-for
-            // world reduces to what Scripture says.
-            if bible && is_world_only {
-                subject_scene = scripture_only(&subject_scene);
-            }
-            // The whole globe as context, the subject the realized
-            // thing: overlay(world in ghost dress, subject in full) —
-            // the monoid again, two contract calls and a combine. In
-            // bible mode the backdrop is always on: the ghost is the
-            // disclosure that the rest is NOT Scripture-derived.
-            let q = queries[0].clone();
-            let face = scene_centroid(&subject_scene);
-            let want_context =
-                bible || (p.get("context") != Some("0") && !is_world_only);
-            let scene = if want_context {
-                let ghost_style = app.ghosts.get(&q.style).copied();
-                let backdrop_at = match q.time {
-                    TimeSelector::At(t) => t,
-                    TimeSelector::Over(i) => i.to.unwrap_or(i.from),
-                };
-                match ghost_style {
-                    None => subject_scene,
-                    Some(style) => {
-                        let ghost_q = RenderQuery {
-                            subject: RenderSubject::World,
-                            time: TimeSelector::At(backdrop_at),
-                            viewport: q.viewport.clone(),
-                            lod: q.lod,
-                            layers: LayerSet::GEOMETRY,
-                            style,
-                        };
-                        match app.provider.render(&ghost_q) {
-                            Err(e) => return bad(&format!("{e:?}")),
-                            Ok(backdrop) => {
-                                without_realized(backdrop, &subject_scene).combine(subject_scene)
-                            }
-                        }
-                    }
-                }
-            } else {
-                subject_scene
-            };
-            match encode(&p, &scene, face) {
+        "/api/render" => match composed_scene(app, &p) {
+            Err(e) => bad(&e),
+            Ok((scene, face, single)) => match encode(&p, &scene, face) {
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
@@ -906,7 +950,7 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                         ("X-Attribution".to_string(), attribution.join(", ")),
                         ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
                     ];
-                    if queries.len() == 1 {
+                    if let Some(q) = single {
                         headers.push((
                             "X-Query-Pid".to_string(),
                             format!("{:016x}", q.map_pid().hash.0),
@@ -914,8 +958,36 @@ pub fn route(app: &App, path: &str, query: &str) -> (u16, &'static str, String, 
                     }
                     (200, ctype, body, headers)
                 }
+            },
+        },
+
+        // The RETAINED-SCENE protocol (rendering spec, stages 2–3):
+        // the same composed scene the SVG path draws, answered as a
+        // semantic manifest instead of a picture. Geometry travels
+        // separately, content-addressed, via /api/resource — a camera
+        // change downstream never re-requests either.
+        "/api/scene" => match composed_scene(app, &p) {
+            Err(e) => bad(&e),
+            Ok((scene, _face, _single)) => {
+                match GpuSceneEncoder.encode(&scene) {
+                    Err(e) => bad(&e.0),
+                    Ok(es) => {
+                        // Publish payloads into the content-addressed
+                        // store. Immutable by identity: an id already
+                        // present IS the same bytes. Eviction is a
+                        // declared later stage (spec stage 9) — the
+                        // store only grows for now.
+                        let mut store = app.resources.lock().expect("resource store");
+                        for r in &es.resources {
+                            store
+                                .entry(r.descriptor.id.0 .0)
+                                .or_insert_with(|| r.payload.clone());
+                        }
+                        (200, "application/json", es.manifest_json(), Vec::new())
+                    }
+                }
             }
-        }
+        },
 
         // The focused subject's own timeline: which scrub stops carry a
         // mapping for it. Derived at startup through the contract's
@@ -1046,7 +1118,7 @@ fn handle(app: &App, mut stream: TcpStream) {
     }
     head.push_str("\r\n");
     let _ = stream.write_all(head.as_bytes());
-    let _ = stream.write_all(body.as_bytes());
+    let _ = stream.write_all(&body);
 }
 
 #[cfg(test)]
