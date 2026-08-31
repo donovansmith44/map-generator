@@ -900,6 +900,17 @@ async function gpuAcquire(ids) {
 // (§31) — switching charts reuses every resident resource.
 async function gpuSync() {
   if (!gpu.enabled) return;
+  if (gpu.syncing) { gpu.syncPending = true; return; }
+  gpu.syncing = true;
+  try {
+    await gpuSyncInner();
+  } finally {
+    gpu.syncing = false;
+    if (gpu.syncPending) { gpu.syncPending = false; gpuSync(); }
+  }
+}
+
+async function gpuSyncInner() {
   const p = currentParams();
   for (const k of ["encoder", "smooth", "projection"]) p.delete(k);
   const key = p.toString();
@@ -1140,6 +1151,25 @@ function endMorph(it) {
 // more than the whole world once — so kx >= z/180. (0.05 remains
 // the server's own floor.) Without this, polar views blow the window
 // past 360 degrees and panning wraps the planet.
+// The encoder's default page width: the DESIGN BASELINE all style
+// sizes (label px, stroke widths, marker radii) are stated against.
+// Resolution changes the render page, never the design — sizes scale
+// by vb/DESIGN so the on-screen look is resolution-invariant (§50).
+const DESIGN_WIDTH = 1200;
+
+// The flat chart's lawful latitude range at a zoom: the page must
+// stay within the world — its longitude span at the true standard
+// parallel may not exceed 360 (|lat| <= acos(z/180)) and the pole
+// must stay off the page (|lat| <= 90 - spanY/2). Both bounds derive
+// from the chart law, nothing tuned.
+function flatLatMax(zoom) {
+  const z = Math.max(0.05, Math.min(90, zoom));
+  const vbw = parseFloat($("res").value) || DESIGN_WIDTH;
+  const spanY = z * vbw / (vbw - 32);
+  const noWrap = Math.acos(Math.min(1, z / 180)) * 180 / Math.PI;
+  return Math.max(0, Math.min(89, noWrap, 90 - spanY / 2));
+}
+
 function flatKx(lat, zoom) {
   const z = Math.max(0.05, Math.min(90, zoom));
   return Math.max(0.05, z / 180, Math.cos(lat * Math.PI / 180));
@@ -1153,8 +1183,10 @@ function makeProjector(cam, vb) {
   const rad = d => d * Math.PI / 180;
   if (state.projection === "flat") {
     const z = Math.max(0.05, Math.min(90, cam.zoom));
+    const cap = flatLatMax(cam.zoom);
+    cam = { ...cam, lat: Math.max(-cap, Math.min(cap, cam.lat)) };
     const refLat = state.flatRefLat !== null && state.flatRefLat !== undefined
-      ? state.flatRefLat : cam.lat;
+      ? Math.max(-cap, Math.min(cap, state.flatRefLat)) : cam.lat;
     const kx = flatKx(refLat, cam.zoom);
     const scaleG = (vb.width - 32) / (2 * z);
     const spanX = 2 * z / kx;
@@ -1293,7 +1325,7 @@ function drawLabels(proj, vb, k, ox, oy, rect) {
   for (const l of list) {
     const key = l.subject + "|" + l.text;
     const pr = proj.project(l.anchor[0], l.anchor[1], l.anchor[2]);
-    let size = l.size;
+    let size = l.size * vb.width / DESIGN_WIDTH;
     let ok = pr[2] >= 0 && pr[0] > -40 && pr[0] < vb.width + 40 && pr[1] > -40 && pr[1] < vb.height + 40;
     if (ok && l.subject.startsWith("region:")) {
       // NOTHING UNSEEN SPEAKS: the extent gate, from the rings'
@@ -1440,7 +1472,7 @@ function gpuHitTest(e) {
     if (!m.place) continue;
     const pr = proj.project(m.at[0], m.at[1], m.at[2]);
     if (pr[2] < 0) continue;
-    if (Math.hypot(x - pr[0], y - pr[1]) <= Math.max(9, m.size * 3)) return "place:" + m.place;
+    if (Math.hypot(x - pr[0], y - pr[1]) <= Math.max(9, m.size * 3) * vb.width / DESIGN_WIDTH) return "place:" + m.place;
   }
   for (let i = gpu.drawItems.length - 1; i >= 0; i--) {
     const it = gpu.drawItems[i];
@@ -1579,7 +1611,7 @@ function gpuDraw() {
     ca *= it.alpha !== undefined ? it.alpha : 1;
     if (s.kind === "marker") {
       gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
-      gl.uniform1f(loc.uPointSize, Math.max(2, s.size * 2 * k * dpr));
+      gl.uniform1f(loc.uPointSize, Math.max(2, s.size * 2 * (vb.width / DESIGN_WIDTH) * k * dpr));
       gl.bindVertexArray(r.vao);
       gl.drawArrays(gl.POINTS, 0, r.count);
       continue;
@@ -1588,7 +1620,7 @@ function gpuDraw() {
     if (s.pattern === "zonal") { w *= 6; ca *= 0.35; }  // the server's zonal dress
     gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
     gl.uniform1f(loc.uPointSize, 1.0);
-    gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * k * dpr)));
+    gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * (vb.width / DESIGN_WIDTH) * k * dpr)));
     // Continuous refinement (§R6): the finer representation eases
     // from its parent's shape; at the end the parent may release.
     const morphing = !!it.morph;
@@ -1608,6 +1640,20 @@ function gpuDraw() {
 function gpuTick() {
   if (!gpu.enabled) { gpu.raf = null; return; }
   gpuDraw();
+  const cam = state.cameraNow && state.cameraNow();
+  if (cam && cam.zoom !== null && gpu.scene) {
+    const ref = gpu.syncCam;
+    const walked = ref
+      ? Math.abs(cam.lat - ref.lat) + Math.abs(cam.lon - ref.lon)
+      : Infinity;
+    // The demand envelope: re-demand once the camera has walked 40%
+    // of the view radius or the zoom has shifted by ~35% -- fractions
+    // of the view itself, not pixel constants.
+    if (!ref || walked > cam.zoom * 0.4 || Math.abs(Math.log(cam.zoom / ref.zoom)) > 0.3) {
+      gpu.syncCam = { lat: cam.lat, lon: cam.lon, zoom: cam.zoom };
+      gpuSync();
+    }
+  }
   gpu.raf = requestAnimationFrame(gpuTick);
 }
 
@@ -1711,6 +1757,9 @@ function setupPlateNav() {
   state.cameraNow = () => {
     if (drag && state.view.zoom !== null) return { ...state.view };
     if (visual.zoom !== null) return { lat: visual.lat, lon: visual.lon, zoom: visual.zoom };
+    // A pinned target with no ease running IS the camera: it outranks
+    // the last frame's stamp (which may describe an older chart).
+    if (state.view.zoom !== null) return { ...state.view };
     if (state.frameView) return { ...state.frameView };
     return state.resolved ? { ...state.resolved } : null;
   };
@@ -1730,6 +1779,14 @@ function setupPlateNav() {
   };
   state.syncVisualToFrame = fv => {
     if (drag && visual.zoom !== null) { visual.lat = fv.lat; visual.lon = fv.lon; }
+  };
+  // Jump the camera outright (chart switches): target and eased view
+  // move together — no stale ease pulls the map somewhere old.
+  state.setCamera = (lat, lon, zoom) => {
+    state.view = { lat, lon, zoom };
+    visual.lat = lat;
+    visual.lon = lon;
+    visual.zoom = zoom;
   };
 
   let animating = false, lastT = 0;
@@ -1813,8 +1870,9 @@ function setupPlateNav() {
       plate.setPointerCapture(drag.id);
     }
     if (!drag.moved) return;
+    const latCap = flat ? flatLatMax(state.view.zoom) : 89;
     state.view.lon = drag.lon - dx * (gp.g / kx);
-    state.view.lat = Math.max(-89, Math.min(89, drag.lat + dy * gp.g));
+    state.view.lat = Math.max(-latCap, Math.min(latCap, drag.lat + dy * gp.g));
     if (flat) {
       // a drag is DIRECT manipulation: visual follows the hand 1:1,
       // the transform shows it, the frame comes on release
@@ -1875,8 +1933,9 @@ function setupPlateNav() {
     const lrect = layer.getBoundingClientRect();
     const cx = e.clientX - lrect.left - gp.cb.cx;
     const cy = e.clientY - lrect.top - gp.cb.cy;
+    const latCap2 = flat ? flatLatMax(state.view.zoom) : 89;
     state.view.lon += cx * (gp.g / kx) * (1 - 1 / f);
-    state.view.lat = Math.max(-89, Math.min(89, state.view.lat - cy * gp.g * (1 - 1 / f)));
+    state.view.lat = Math.max(-latCap2, Math.min(latCap2, state.view.lat - cy * gp.g * (1 - 1 / f)));
     animate(); // the lerp carries the visuals; done -> one true frame
   }, { passive: false });
 
@@ -2144,7 +2203,21 @@ async function init() {
   radioRow($("encoders"), meta.encoders.map(e => ({ name: e, value: e })), state.encoder,
     v => { state.encoder = v; render(); });
   radioRow($("projections"), (meta.projections || ["globe", "flat"]).map(e => ({ name: e, value: e })), state.projection,
-    v => { state.projection = v; resetView(); render(); });
+    v => {
+      state.projection = v;
+      if (gpu.enabled && pinView()) {
+        // The camera law (§32): both charts consume the same camera
+        // — switching keeps the ground, clamped into the flat
+        // chart's lawful latitude window.
+        const lat = v === "flat"
+          ? Math.max(-flatLatMax(state.view.zoom), Math.min(flatLatMax(state.view.zoom), state.view.lat))
+          : state.view.lat;
+        state.setCamera(lat, state.view.lon, state.view.zoom);
+      } else {
+        resetView();
+      }
+      render();
+    });
   $("bible").addEventListener("change", e => setBible(e.target.checked));
   $("play").addEventListener("click", () => (player.on ? stopPlayback() : startPlayback()));
   $("prev").addEventListener("click", () => setStop(state.idx - 1));
