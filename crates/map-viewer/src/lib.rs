@@ -63,9 +63,63 @@ pub struct App {
     canon: Option<Arc<map_provider::canon_provider::CanonProvider>>,
     /// The content-addressed geometry payload store (rendering spec
     /// §63): filled as /api/scene manifests are encoded, read by
-    /// /api/resource. Immutable entries — equal id, equal bytes — so
-    /// concurrent publishes can never disagree.
-    resources: std::sync::Mutex<std::collections::BTreeMap<u64, Vec<u8>>>,
+    /// /api/resource(s). Immutable entries — equal id, equal bytes —
+    /// so concurrent publishes can never disagree.
+    resources: std::sync::Mutex<ResourceStore>,
+}
+
+/// Server-side residency with stage-9 eviction: entries are stamped
+/// with the generation of the last manifest that referenced them, and
+/// when the store exceeds its declared budget the oldest generations
+/// leave first. Identity makes eviction safe — a dropped payload is
+/// re-derivable from the canon by the next /api/scene, never lost.
+struct ResourceStore {
+    entries: std::collections::BTreeMap<u64, (Vec<u8>, u64)>,
+    generation: u64,
+    bytes: usize,
+}
+
+/// Declared capacity parameter (spec §67): half a GiB of packed
+/// geometry — roughly fifty full-world fine-LOD scenes of the current
+/// atlas (~9 MB packed) — bounding a long-running workbench without
+/// ever touching a recently published scene.
+const RESOURCE_STORE_BUDGET: usize = 512 * 1024 * 1024;
+
+impl ResourceStore {
+    fn new() -> Self {
+        ResourceStore { entries: std::collections::BTreeMap::new(), generation: 0, bytes: 0 }
+    }
+    /// Publish one manifest's payloads: stamp every referenced id with
+    /// a fresh generation, then trim the oldest generations over
+    /// budget.
+    fn publish<'a>(&mut self, resources: impl Iterator<Item = (u64, &'a Vec<u8>)>) {
+        self.generation += 1;
+        let generation = self.generation;
+        for (id, payload) in resources {
+            match self.entries.get_mut(&id) {
+                Some(e) => e.1 = generation,
+                None => {
+                    self.bytes += payload.len();
+                    self.entries.insert(id, (payload.clone(), generation));
+                }
+            }
+        }
+        if self.bytes > RESOURCE_STORE_BUDGET {
+            let mut by_gen: Vec<(u64, u64, usize)> =
+                self.entries.iter().map(|(id, (p, g))| (*g, *id, p.len())).collect();
+            by_gen.sort_unstable();
+            for (g, id, len) in by_gen {
+                if self.bytes <= RESOURCE_STORE_BUDGET || g == generation {
+                    break;
+                }
+                self.entries.remove(&id);
+                self.bytes -= len;
+            }
+        }
+    }
+    fn get(&self, id: u64) -> Option<&Vec<u8>> {
+        self.entries.get(&id).map(|(p, _)| p)
+    }
 }
 
 mod templates;
@@ -262,7 +316,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         anchor,
         overlay_tints,
         canon: Some(canon_provider),
-        resources: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+        resources: std::sync::Mutex::new(ResourceStore::new()),
     }
 }
 
@@ -725,13 +779,32 @@ pub fn route(
     path: &str,
     query: &str,
 ) -> (u16, &'static str, Vec<u8>, Vec<(String, String)>) {
+    // Batched geometry payloads: one response, many self-framing MGR1
+    // packets in the requested order (each packet's header carries its
+    // own vertex/index counts, so the stream needs no envelope). An id
+    // not resident is simply absent — the client notices the gap and
+    // re-requests the scene manifest, same contract as the single route.
+    if path == "/api/resources" {
+        let p = Params::parse(query);
+        let Some(ids) = p.get("ids") else {
+            return (400, "text/plain", b"ids required (comma-separated hex)".to_vec(), Vec::new());
+        };
+        let store = app.resources.lock().expect("resource store");
+        let mut body = Vec::new();
+        for id in ids.split(',').filter_map(|h| u64::from_str_radix(h, 16).ok()) {
+            if let Some(bytes) = store.get(id) {
+                body.extend_from_slice(bytes);
+            }
+        }
+        return (200, "application/octet-stream", body, Vec::new());
+    }
     // Content-addressed geometry payloads: the one binary route.
     if path == "/api/resource" {
         let p = Params::parse(query);
         let Some(id) = p.get("id").and_then(|h| u64::from_str_radix(h, 16).ok()) else {
             return (400, "text/plain", b"id required (hex)".to_vec(), Vec::new());
         };
-        return match app.resources.lock().expect("resource store").get(&id) {
+        return match app.resources.lock().expect("resource store").get(id) {
             Some(bytes) => (200, "application/octet-stream", bytes.clone(), Vec::new()),
             // Not resident is not an error state to hide: the client's
             // acquisition loop re-requests the scene manifest, which
@@ -978,11 +1051,9 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                         // declared later stage (spec stage 9) — the
                         // store only grows for now.
                         let mut store = app.resources.lock().expect("resource store");
-                        for r in &es.resources {
-                            store
-                                .entry(r.descriptor.id.0 .0)
-                                .or_insert_with(|| r.payload.clone());
-                        }
+                        store.publish(
+                            es.resources.iter().map(|r| (r.descriptor.id.0 .0, &r.payload)),
+                        );
                         (200, "application/json", es.manifest_json(), Vec::new())
                     }
                 }

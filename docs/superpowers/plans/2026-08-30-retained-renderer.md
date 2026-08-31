@@ -1,4 +1,41 @@
-# Retained Renderer (Spec Stages 2–5) — State & Execution Plan
+# Retained Renderer (Spec Stages 2–11) — State & Execution Plan
+
+## Stages 6–11 (2026-08-30, second pass)
+
+- **Batch transport**: `/api/resources?ids=…` streams many self-framing MGR1
+  packets in one response; the client acquires in 300-id chunks (under the
+  server's 8 KB request-line budget), 3 concurrent workers.
+- **Stage 6 — labels**: the manifest carries labels as semantics (text,
+  spherical anchor, subject key, resolved voice, style, priority = scene
+  order §53). The client shapes/rasterizes through the browser into a 2048²
+  glyph atlas and draws screen-space quads. Placement is deterministic with
+  retained-placement priority (§51) and lifecycle fades over the declared
+  450 ms (§56); the extent gate uses the true projected extent of resident
+  rings (cap pre-filter first).
+- **Stage 8 — temporal transitions**: scenes double-buffer; the old scene
+  stays drawable until the new one's acquisition completes, then an atomic
+  swap with birth/death alpha fades by feature key. Playback scrubs the
+  retained scene (no SVG fetches).
+- **Stage 7 — refinement**: DP monotonicity (law 7) makes a coarser
+  boundary's vertices a subset of the finer's, so the correspondence (§38)
+  is computed client-side by subset matching; inserted vertices ease from
+  the parent chord via a per-vertex `aPrev` attribute + morph uniform
+  (renormalized chordal mix). No correspondence → clean snap, never a fake.
+- **Stage 9 — eviction**: client budget = 16 MiB × navigator.deviceMemory
+  (declared, capability-derived §68); retention = active + incoming scenes +
+  fading features; oldest unretained residents evict (GL buffers deleted).
+  Server store budget 512 MiB, generation-stamped, oldest generations first.
+- **Stage 11 posture**: the checkbox is now "retained renderer (webgl)".
+  When on: zero `/api/render` fetches for any camera motion (verified by
+  request log), the SVG document and portrait stand down (kept for export
+  and for toggling back), clicks resolve through the CPU Hit Index (§57–59:
+  label boxes → marker hit-circles → region even-odd parity), and the
+  whole-sphere sentinel is dressed as the page (mode-2 full-page pass in
+  the stencil parity, matching the SVG's `whole_world` treatment).
+- **Stage 10 (paging/tiling): deliberately NOT built** — the spec's own
+  gate ("only when dataset growth requires it") is not met at 9 MB packed.
+
+
 
 ## Preservation of the Canaan / 12-tribes work (2026-08-30)
 

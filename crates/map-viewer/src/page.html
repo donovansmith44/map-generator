@@ -136,6 +136,17 @@
     z-index: 3;
     pointer-events: none;
   }
+  /* Primary mode: the canvas IS the map and wears the page's paper
+     ground — the same dress the svg rule below declares. */
+  #plate.gpu-primary canvas.gl {
+    background: #f6f1e4;
+    border: 1px solid var(--edge);
+    box-shadow: 0 0 60px rgba(0,0,0,.5);
+  }
+  /* Stage 11 posture: with the retained renderer primary, the SVG
+     document and its portrait stand down (kept in the DOM for export
+     and for the mode toggle back). */
+  #plate.gpu-primary .layer, #plate.gpu-primary .portrait { visibility: hidden; }
   #plate > pre { place-self: center; }
   /* The fade runs on insert and ENDS at full opacity — no class
      choreography that a skipped animation frame could strand. */
@@ -262,7 +273,7 @@
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief" checked> relief</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="journeys" checked> journeys</label>
-    <label class="inline" style="margin-top:6px"><input type="checkbox" id="gpu"> webgl borders (retained)</label>
+    <label class="inline" style="margin-top:6px"><input type="checkbox" id="gpu"> retained renderer (webgl)</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -380,6 +391,7 @@ const portrait = { el: null, view: null, ready: false, timer: null, cover: false
 // a string scan reads it; the vector document itself waits for rest.
 let freshing = false;
 async function freshenPortrait() {
+  if (gpu.enabled) return;  // the retained layer needs no portrait
   if (freshing) return;
   freshing = true;
   try {
@@ -450,6 +462,7 @@ function schedulePortrait(delay) {
   portrait.timer = setTimeout(takePortrait, delay);
 }
 async function takePortrait() {
+  if (gpu.enabled) return;  // the retained layer needs no portrait
   const svg = $("plate").querySelector(".layer svg");
   if (!svg || !state.frameView) return;
   // serializing the full document costs a frame's worth of main
@@ -472,6 +485,14 @@ async function takePortrait() {
 }
 
 async function render(quality) {
+  // STAGE 11 POSTURE: with the retained renderer primary, a render
+  // request is a scene-demand update, never an SVG fetch — the camera
+  // moves, the map does not get rebuilt (§77). Non-SVG encoders
+  // (geojson inspection) still pass through.
+  if (gpu.enabled && state.encoder === "svg") {
+    gpuSync();
+    return;
+  }
   if (inFlight) { queued = quality || "full"; return; }
   inFlight = true;
   try {
@@ -620,6 +641,8 @@ const gpu = {
 const GPU_VS = `#version 300 es
 precision highp float;
 in vec3 aPos;
+in vec3 aPrev;                        // refinement parent position (§38)
+uniform float uMorph;                 // 0 = parent shape, 1 = own shape
 uniform int uMode;                    // 0 globe, 1 flat
 uniform vec3 uEast, uNorth, uCenter;  // globe basis at the camera target
 uniform float uScale;                 // px per projected sin-unit
@@ -632,19 +655,43 @@ uniform vec2 uCss;                    // canvas css size
 uniform float uPointSize;
 out float vFront;
 void main() {
+  if (uMode == 3) {
+    // The globe's sentinel dress: the LIMB DISC (the SVG's own
+    // whole_world for the orthographic chart) - unit-circle coords
+    // scaled by the projection, then the shared letterbox transform.
+    vFront = 1.0;
+    vec2 dv = vec2(uC.x + aPos.x * uScale, uC.y - aPos.y * uScale);
+    vec2 dcss = uOrigin + uK * dv;
+    gl_Position = vec4(dcss.x / uCss.x * 2.0 - 1.0, 1.0 - dcss.y / uCss.y * 2.0, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  if (uMode == 2) {
+    // The whole-sphere sentinel's dress (covers_sphere): its interior
+    // is everything — the page itself, exactly as the SVG dresses it.
+    vFront = 1.0;
+    gl_Position = vec4(aPos.xy, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  // Continuous refinement (§38): the vertex eases from its position
+  // on the parent representation to its own; normalize keeps the
+  // path on the sphere (chordal mix renormalized ≈ slerp at these
+  // angular scales). uMorph=1 (the default) is the plain shape.
+  vec3 p = normalize(mix(aPrev, aPos, uMorph));
   vec2 pv;
   if (uMode == 0) {
     // The same orthographic mathematics the server's Globe speaks:
     // page = center + (dot east, -dot north) * scale; the far
     // hemisphere is carried to the fragment stage and discarded.
-    vFront = dot(aPos, uCenter);
-    pv = vec2(uC.x + dot(aPos, uEast) * uScale, uC.y - dot(aPos, uNorth) * uScale);
+    vFront = dot(p, uCenter);
+    pv = vec2(uC.x + dot(p, uEast) * uScale, uC.y - dot(p, uNorth) * uScale);
   } else {
     // The flat plate's equirectangular law, standard parallel at the
     // camera latitude — identical to the server's encode_flat.
     vFront = 1.0;
-    float lat = degrees(asin(clamp(aPos.z, -1.0, 1.0)));
-    float lon = degrees(atan(aPos.y, aPos.x));
+    float lat = degrees(asin(clamp(p.z, -1.0, 1.0)));
+    float lon = degrees(atan(p.y, p.x));
     pv = vec2(uPadding + (lon - uFlat.x) * uFlat.z, uPadding + (uFlat.y - lat) * uFlat.w);
   }
   vec2 css = uOrigin + uK * pv;
@@ -682,31 +729,102 @@ function gpuInit() {
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   const loc = {};
-  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor"]) {
+  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor","uMorph"]) {
     loc[n] = gl.getUniformLocation(prog, n);
   }
   loc.aPos = gl.getAttribLocation(prog, "aPos");
+  loc.aPrev = gl.getAttribLocation(prog, "aPrev");
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gpu.canvas = canvas; gpu.gl = gl; gpu.prog = prog; gpu.loc = loc;
+  // The label program: screen-space textured quads out of the glyph
+  // atlas (§47) — position and size in css px, texture premultiplied.
+  const lvs = `#version 300 es
+precision highp float;
+in vec2 aCorner;
+uniform vec2 uPos, uSize, uCss;
+uniform vec4 uUV;
+out vec2 vUV;
+void main() {
+  vec2 css = uPos + aCorner * uSize;
+  gl_Position = vec4(css.x / uCss.x * 2.0 - 1.0, 1.0 - css.y / uCss.y * 2.0, 0.0, 1.0);
+  vUV = mix(uUV.xy, uUV.zw, aCorner);
+}`;
+  const lfs = `#version 300 es
+precision mediump float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform float uAlpha;
+out vec4 o;
+void main() { o = texture(uTex, vUV) * uAlpha; }`;
+  const lprog = gl.createProgram();
+  gl.attachShader(lprog, compile(gl.VERTEX_SHADER, lvs));
+  gl.attachShader(lprog, compile(gl.FRAGMENT_SHADER, lfs));
+  gl.linkProgram(lprog);
+  if (!gl.getProgramParameter(lprog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(lprog));
+  gpu.lprog = lprog;
+  gpu.lloc = {};
+  for (const n of ["uPos", "uSize", "uUV", "uCss", "uAlpha", "uTex"]) {
+    gpu.lloc[n] = gl.getUniformLocation(lprog, n);
+  }
+  const aCorner = gl.getAttribLocation(lprog, "aCorner");
+  gpu.quadVao = gl.createVertexArray();
+  gl.bindVertexArray(gpu.quadVao);
+  const qbuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, qbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(aCorner);
+  gl.vertexAttribPointer(aCorner, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  // The sentinel dresses: a page triangle (flat chart, mode 2) and a
+  // limb disc fan (globe, mode 3) - the SVG's own whole_world shapes.
+  const staticVao = data => {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc.aPos);
+    gl.vertexAttribPointer(loc.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(loc.aPrev);
+    gl.vertexAttribPointer(loc.aPrev, 3, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    return vao;
+  };
+  gpu.pageVao = staticVao(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]));
+  const disc = [0, 0, 0];
+  for (let i = 0; i <= 96; i++) {
+    const a = i / 96 * Math.PI * 2;
+    disc.push(Math.cos(a), Math.sin(a), 0);
+  }
+  gpu.discVao = staticVao(new Float32Array(disc));
+  gpu.discCount = disc.length / 3;
+  glyphAtlasInit();
   return true;
 }
 
-// Decode one §63 binary packet and make it GPU-resident. Validation
-// happens BEFORE the resource becomes drawable (spec §40 step 5) — a
-// bad payload is dropped, never half-drawn.
-function gpuUpload(idHex, bytes) {
+// Decode one §63 binary packet at an offset and make it GPU-resident.
+// Validation happens BEFORE the resource becomes drawable (spec §40
+// step 5) — a bad payload is dropped, never half-drawn. Returns the
+// byte length consumed, or -1 when the stream cannot continue.
+function gpuUpload(bytes, offset) {
   const gl = gpu.gl;
   const dv = new DataView(bytes);
-  if (bytes.byteLength < 48 ||
-      String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== "MGR1") {
-    gpu.cache.delete(idHex);
-    return;
+  if (bytes.byteLength < offset + 48 ||
+      String.fromCharCode(dv.getUint8(offset), dv.getUint8(offset + 1),
+                          dv.getUint8(offset + 2), dv.getUint8(offset + 3)) !== "MGR1") {
+    return -1;
   }
-  const kind = dv.getUint32(4, true);
-  const count = dv.getUint32(40, true);
-  if (bytes.byteLength < 48 + count * 12) { gpu.cache.delete(idHex); return; }
-  const verts = new Float32Array(bytes, 48, count * 3);
+  const kind = dv.getUint32(offset + 4, true);
+  const idHex = (dv.getBigUint64(offset + 8, true)).toString(16).padStart(16, "0");
+  const count = dv.getUint32(offset + 40, true);
+  const indexCount = dv.getUint32(offset + 44, true);
+  const len = 48 + count * 12 + indexCount * 4;
+  if (bytes.byteLength < offset + len) return -1;
+  // The vertex payload may sit at a non-4-aligned offset in a batched
+  // stream only if a packet length were unaligned — every field is a
+  // multiple of 4 bytes, so a slice-free view is safe.
+  const verts = new Float32Array(bytes.slice(offset + 48, offset + 48 + count * 12));
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   const buf = gl.createBuffer();
@@ -714,27 +832,53 @@ function gpuUpload(idHex, bytes) {
   gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(gpu.loc.aPos);
   gl.vertexAttribPointer(gpu.loc.aPos, 3, gl.FLOAT, false, 0, 0);
+  // aPrev defaults to the vertex's own position: uMorph=1 draws the
+  // plain shape; a refinement rebinds this attribute (§38).
+  gl.enableVertexAttribArray(gpu.loc.aPrev);
+  gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
-  gpu.cache.set(idHex, { state: "gpu", kind, count, vao });
+  // The CPU copy stays resident beside the GPU buffer: extents, hit
+  // testing, and refinement correspondence all read it (§59, §38).
+  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, bytes: len, verts });
+  return len;
 }
 
 // The acquisition loop (§26): fetch what the manifest demands and is
-// not yet resident. Bounded concurrency, no frame ever waits on it.
+// not yet resident, in batches (§63's transport is self-framing, so
+// many packets ride one response). Bounded concurrency; no frame ever
+// waits on it. Batch size stays under the server's request-line
+// budget (~8 KB): 300 ids × 17 bytes ≈ 5 KB.
 async function gpuAcquire(ids) {
   const missing = ids.filter(id => !gpu.cache.has(id));
   missing.forEach(id => gpu.cache.set(id, { state: "requested" }));
-  let i = 0;
+  const chunks = [];
+  for (let i = 0; i < missing.length; i += 300) chunks.push(missing.slice(i, i + 300));
+  let c = 0;
   const worker = async () => {
-    while (i < missing.length) {
-      const id = missing[i++];
+    while (c < chunks.length) {
+      const chunk = chunks[c++];
       try {
-        const res = await fetch("/api/resource?id=" + id);
-        if (!res.ok) { gpu.cache.delete(id); continue; }
-        gpuUpload(id, await res.arrayBuffer());
-      } catch { gpu.cache.delete(id); }
+        const res = await fetch("/api/resources?ids=" + chunk.join(","));
+        if (!res.ok) { chunk.forEach(id => gpu.cache.delete(id)); continue; }
+        const bytes = await res.arrayBuffer();
+        const got = new Set();
+        for (let off = 0; off < bytes.byteLength; ) {
+          const before = off;
+          const dv = new DataView(bytes);
+          const idHex = bytes.byteLength >= off + 16
+            ? dv.getBigUint64(off + 8, true).toString(16).padStart(16, "0") : null;
+          const len = gpuUpload(bytes, off);
+          if (len < 0) break;
+          if (idHex) got.add(idHex);
+          off = before + len;
+        }
+        // Absent ids: not resident server-side — clear the request
+        // mark so a later scene sync can re-demand them.
+        chunk.forEach(id => { if (!got.has(id) && gpu.cache.get(id)?.state === "requested") gpu.cache.delete(id); });
+      } catch { chunk.forEach(id => { if (gpu.cache.get(id)?.state === "requested") gpu.cache.delete(id); }); }
     }
   };
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 3 }, worker));
 }
 
 // Ask for the semantic scene manifest (§8) matching the current full
@@ -752,7 +896,6 @@ async function gpuSync() {
   if (!res.ok || gpu.sceneKey !== key) return;
   const man = await res.json();
   if (gpu.sceneKey !== key) return;
-  gpu.manifest = man;
   const meta = new Map(man.resources.map(r => [r.id, r]));
   // The draw list (§64), in manifest paint order. Fills group a
   // region's consecutive rings into ONE even-odd pass (stage 5) —
@@ -760,35 +903,542 @@ async function gpuSync() {
   // the stencil parity technique, so both renderers share one fill
   // law. The whole-sphere sentinel (marked by the server) is dressed
   // by the page, never projected — it stays out of the fan pass.
-  gpu.drawItems = [];
+  let items = [];
   let fillGroup = null;
   for (const f of man.features) {
     const s = man.styles[f.style], r = meta.get(f.resource);
     if (!s || !r) continue;
     if (s.kind === "fill") {
       if (fillGroup && fillGroup.key === f.feature && fillGroup.styleKey === f.style) {
-        if (!r.whole) fillGroup.ids.push(f.resource);
+        if (r.whole) fillGroup.whole = true;
+        else fillGroup.ids.push(f.resource);
       } else {
         fillGroup = { type: "fill", key: f.feature, styleKey: f.style, style: s,
-                      ids: r.whole ? [] : [f.resource] };
-        gpu.drawItems.push(fillGroup);
+                      ids: r.whole ? [] : [f.resource], whole: !!r.whole, alpha: 1 };
+        items.push(fillGroup);
       }
       continue;
     }
     fillGroup = null;
     if (s.kind === "marker") {
-      gpu.drawItems.push({ type: "marker", id: f.resource, style: s });
+      items.push({ type: "marker", key: f.feature, id: f.resource, style: s, alpha: 1 });
     } else if (s.kind === "stroke" && s.width > 0 && r.kind === "line") {
-      gpu.drawItems.push({ type: "stroke", id: f.resource, style: s });
+      items.push({ type: "stroke", key: f.feature, id: f.resource, style: s, alpha: 1 });
     }
   }
-  gpu.drawItems = gpu.drawItems.filter(it => it.type !== "fill" || it.ids.length);
+  items = items.filter(it => it.type !== "fill" || it.ids.length || it.whole);
+  const regionRings = new Map();
+  for (const it of items) {
+    if (it.type === "fill" && it.key.startsWith("region:")) regionRings.set(it.key, it.ids);
+  }
   const wanted = new Set();
-  for (const it of gpu.drawItems) {
+  for (const it of items) {
     if (it.type === "fill") it.ids.forEach(id => wanted.add(id));
     else wanted.add(it.id);
   }
-  gpuAcquire([...wanted]);
+  // THE TEMPORAL LAW (§45, stage 8): the old scene stays drawable
+  // while the new one's resources arrive; the swap is atomic, after
+  // acquisition — never a clear-then-refill. The first scene has
+  // nothing to preserve and activates immediately, streaming in.
+  const sceneObj = { key, manifest: man, drawItems: items, meta, regionRings, wanted: [...wanted] };
+  gpu.incoming = sceneObj;
+  if (!gpu.scene) activateScene(sceneObj, false);
+  gpuAcquire(sceneObj.wanted).then(() => {
+    if (gpu.incoming === sceneObj && gpu.scene !== sceneObj) activateScene(sceneObj, true);
+  });
+}
+
+// The lifecycle duration for scene fades and refinement eases — the
+// same declared 450 ms parameter the page's frame fade and the label
+// lifecycle use (§56: declared, not an ad-hoc constant).
+const SCENE_FADE_MS = 450;
+
+// The DP-subset correspondence (§38): the project's LOD law keeps a
+// coarser polyline's vertices as a SUBSET of the finer one's (law 7
+// monotonicity), so refinement is additive by construction (§37).
+// For each fine vertex, its position ON the coarse polyline: matched
+// vertices map to themselves; inserted vertices land on the coarse
+// chord between their surrounding matches, parameterized by arc
+// length. Returns null when the runs don't correspond (a genuine
+// topology change — the swap snaps instead of lying with a morph).
+function refinementParents(coarse, fine) {
+  if (coarse.length >= fine.length) return null;
+  const parentPos = new Float32Array(fine.length);
+  let j = 0;  // coarse cursor (in vertices)
+  let lastMatchFine = -1;
+  const nC = coarse.length / 3, nF = fine.length / 3;
+  const eq = (i, jj) =>
+    coarse[jj * 3] === fine[i * 3] && coarse[jj * 3 + 1] === fine[i * 3 + 1] && coarse[jj * 3 + 2] === fine[i * 3 + 2];
+  if (!eq(0, 0) || !eq(nF - 1, nC - 1)) return null;
+  const pending = [];
+  for (let i = 0; i < nF; i++) {
+    if (j < nC && eq(i, j)) {
+      parentPos[i * 3] = fine[i * 3];
+      parentPos[i * 3 + 1] = fine[i * 3 + 1];
+      parentPos[i * 3 + 2] = fine[i * 3 + 2];
+      // Distribute the pending inserted vertices along the coarse
+      // chord ending here, by cumulative fine-path arc length.
+      if (pending.length && j > 0) {
+        const a = (j - 1) * 3, b = j * 3;
+        let total = 0;
+        const legs = [];
+        let px = fine[(lastMatchFine) * 3], py = fine[lastMatchFine * 3 + 1], pz = fine[lastMatchFine * 3 + 2];
+        for (const pi of pending.concat([i])) {
+          const dx = fine[pi * 3] - px, dy = fine[pi * 3 + 1] - py, dz = fine[pi * 3 + 2] - pz;
+          const d = Math.hypot(dx, dy, dz);
+          legs.push(d);
+          total += d;
+          px = fine[pi * 3]; py = fine[pi * 3 + 1]; pz = fine[pi * 3 + 2];
+        }
+        let acc = 0;
+        for (let m = 0; m < pending.length; m++) {
+          acc += legs[m];
+          const t = total > 0 ? acc / total : (m + 1) / (pending.length + 1);
+          const pi = pending[m];
+          const mx = coarse[a] + t * (coarse[b] - coarse[a]);
+          const my = coarse[a + 1] + t * (coarse[b + 1] - coarse[a + 1]);
+          const mz = coarse[a + 2] + t * (coarse[b + 2] - coarse[a + 2]);
+          const n = Math.hypot(mx, my, mz) || 1;
+          parentPos[pi * 3] = mx / n;
+          parentPos[pi * 3 + 1] = my / n;
+          parentPos[pi * 3 + 2] = mz / n;
+        }
+        pending.length = 0;
+      }
+      lastMatchFine = i;
+      j++;
+    } else {
+      pending.push(i);
+    }
+  }
+  if (j !== nC || pending.length) return null;  // not a subset: no correspondence
+  return parentPos;
+}
+
+// Atomic scene swap (§45): compute lifecycle fades (birth/death by
+// feature key, §56's Appearing/Disappearing) and refinement morphs
+// (same feature, finer resource → continuous ease, §R6). The old
+// scene's dying features keep drawing while they fade — existing
+// content persists (§R3).
+function activateScene(s, fade) {
+  const gl = gpu.gl;
+  const old = gpu.scene;
+  gpu.scene = s;
+  if (gpu.incoming === s) gpu.incoming = null;
+  gpu.manifest = s.manifest;
+  gpu.meta = s.meta;
+  gpu.regionRings = s.regionRings;
+  gpu.drawItems = s.drawItems;
+  gpu.fading = gpu.fading || [];
+  if (!fade || !old) return;
+  const itemKey = it => it.type + "|" + it.key + "|" + (it.styleKey || "");
+  const oldByKey = new Map(old.drawItems.map(it => [itemKey(it), it]));
+  const newKeys = new Set(s.drawItems.map(itemKey));
+  const now = performance.now();
+  for (const it of s.drawItems) {
+    const prev = oldByKey.get(itemKey(it));
+    if (!prev) {
+      it.alpha = 0;
+      it.birth = now;  // Appearing: fade toward 1
+      continue;
+    }
+    // Same feature, new representation: try the refinement morph.
+    if (it.type === "stroke" && prev.id !== it.id) {
+      const fine = gpu.cache.get(it.id), coarse = gpu.cache.get(prev.id);
+      if (fine && coarse && fine.state === "gpu" && coarse.state === "gpu") {
+        const parents = refinementParents(coarse.verts, fine.verts);
+        if (parents) {
+          const pbuf = gl.createBuffer();
+          gl.bindVertexArray(fine.vao);
+          gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
+          gl.bufferData(gl.ARRAY_BUFFER, parents, gl.STATIC_DRAW);
+          gl.enableVertexAttribArray(gpu.loc.aPrev);
+          gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
+          gl.bindVertexArray(null);
+          it.morph = { start: now, pbuf, id: it.id };
+        }
+      }
+    }
+  }
+  // Disappearing features: carried from the old scene, fading out on
+  // top of the new one; their resources stay resident until done.
+  for (const it of old.drawItems) {
+    if (!newKeys.has(itemKey(it))) gpu.fading.push({ ...it, death: now });
+  }
+  // Growth happens only here: check the budget now, and again once
+  // the dying features have released their retentions.
+  gpuEvict();
+  setTimeout(gpuEvict, SCENE_FADE_MS + 100);
+}
+
+// Eviction (stage 9): driven by resource identity, retention
+// references, and capacity — never feature rules. The budget is a
+// declared runtime parameter derived from the platform's own memory
+// capability (§68): 16 MiB of geometry per reported GiB of device
+// memory (deviceMemory is the browser's measurement; 4 GiB assumed
+// where it declines to say). Content-addressed entries are always
+// safe to drop — identity makes them re-fetchable, never unique.
+const GPU_BUDGET_BYTES = (navigator.deviceMemory || 4) * 16 * 1024 * 1024;
+
+function gpuEvict() {
+  const gl = gpu.gl;
+  if (!gl) return;
+  const retained = new Set();
+  for (const s of [gpu.scene, gpu.incoming]) {
+    if (s) s.wanted.forEach(id => retained.add(id));
+  }
+  for (const it of gpu.fading || []) {
+    if (it.type === "fill") it.ids.forEach(id => retained.add(id));
+    else retained.add(it.id);
+  }
+  let total = 0;
+  for (const r of gpu.cache.values()) total += r.bytes || 0;
+  if (total <= GPU_BUDGET_BYTES) return;
+  // Map iteration order is insertion order — the oldest unretained
+  // residents go first (§I13: invisible ≠ evictable; unretained is).
+  for (const [id, r] of gpu.cache) {
+    if (total <= GPU_BUDGET_BYTES) break;
+    if (retained.has(id) || r.state !== "gpu") continue;
+    gl.deleteVertexArray(r.vao);
+    gl.deleteBuffer(r.buf);
+    gpu.cache.delete(id);
+    total -= r.bytes || 0;
+  }
+}
+
+// A finished morph returns the VAO's aPrev to the vertex's own buffer
+// and frees the parent-position buffer.
+function endMorph(it) {
+  const gl = gpu.gl;
+  const r = gpu.cache.get(it.morph.id);
+  if (r && r.state === "gpu") {
+    gl.bindVertexArray(r.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, r.buf);
+    gl.enableVertexAttribArray(gpu.loc.aPrev);
+    gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+  }
+  gl.deleteBuffer(it.morph.pbuf);
+  it.morph = null;
+}
+
+// The ONE projection law, mirrored in JS for label placement, region
+// extents, and hit testing — the same formulas the vertex shader and
+// the server's encoders speak. Positions come back in viewBox units;
+// `front` is negative behind the globe's limb.
+function makeProjector(cam, vb) {
+  const rad = d => d * Math.PI / 180;
+  if (state.projection === "flat") {
+    const z = Math.max(0.05, Math.min(90, cam.zoom));
+    const kx = Math.max(0.05, Math.cos(rad(cam.lat)));
+    const scaleG = (vb.width - 32) / (2 * z);
+    const spanX = 2 * z / kx;
+    const spanY = (vb.width / 2) / scaleG;
+    const x0 = cam.lon - spanX / 2, y1 = cam.lat + spanY / 2;
+    const scaleX = scaleG * kx, scaleY = scaleG;
+    return {
+      mode: 1, x0, y1, scaleX, scaleY, scale: scaleG,
+      project(x, y, z3) {
+        const lat = Math.asin(Math.max(-1, Math.min(1, z3))) * 180 / Math.PI;
+        const lon = Math.atan2(y, x) * 180 / Math.PI;
+        return [16 + (lon - x0) * scaleX, 16 + (y1 - lat) * scaleY, 1];
+      },
+      // radius of a spherical cap on the page, viewBox units
+      capRadius(r) { return Math.min(r, Math.PI / 2) * 180 / Math.PI * scaleY; },
+    };
+  }
+  const clat = rad(cam.lat), clon = rad(cam.lon);
+  const C = [Math.cos(clat) * Math.cos(clon), Math.cos(clat) * Math.sin(clon), Math.sin(clat)];
+  let E = [-C[1], C[0], 0];
+  const el = Math.hypot(E[0], E[1], E[2]);
+  E = el < 1e-9 ? [0, 1, 0] : [E[0] / el, E[1] / el, E[2] / el];
+  let N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
+  const nl = Math.hypot(N[0], N[1], N[2]);
+  N = nl < 1e-9 ? [0, 0, 1] : [N[0] / nl, N[1] / nl, N[2] / nl];
+  const rView = Math.sin(rad(Math.max(1, Math.min(90, cam.zoom))));
+  const scale = (vb.width - 32) / 2 / rView;
+  const cx = vb.width / 2;
+  return {
+    mode: 0, E, N, C, scale,
+    project(x, y, z3) {
+      const front = x * C[0] + y * C[1] + z3 * C[2];
+      const e = x * E[0] + y * E[1] + z3 * E[2];
+      const n = x * N[0] + y * N[1] + z3 * N[2];
+      return [cx + e * scale, cx - n * scale, front];
+    },
+    capRadius(r) { return Math.sin(Math.min(r, Math.PI / 2)) * scale; },
+  };
+}
+
+// ---- the retained label subsystem (§46–§56) ----
+// Glyphs rasterize through the browser's own shaping into a texture
+// atlas; the voice (family, weight, tracking…) is style DATA from the
+// manifest, never invented here (§48). Placement is deterministic in
+// (scene, camera, previous placement): scene order is priority (§53),
+// a legal retained placement always wins over alternates (§51), and
+// visibility changes fade over the declared lifecycle duration —
+// LABEL_FADE_MS, the same declared 450 ms the page's frame fade uses.
+const LABEL_FADE_MS = 450;
+const glyphs = { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false };
+const labelState = new Map();  // key -> { dy, alpha, seen }
+
+function glyphAtlasInit() {
+  if (glyphs.canvas) return;
+  glyphs.canvas = document.createElement("canvas");
+  glyphs.canvas.width = 2048;
+  glyphs.canvas.height = 2048;
+  glyphs.ctx = glyphs.canvas.getContext("2d", { willReadFrequently: false });
+  const gl = gpu.gl;
+  glyphs.tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, glyphs.tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+function glyphAtlasReset() {
+  glyphs.ctx.clearRect(0, 0, 2048, 2048);
+  glyphs.map.clear();
+  glyphs.x = glyphs.y = glyphs.rowH = 0;
+  glyphs.dirty = true;
+}
+
+// One rasterized run per (text, voice, quantized size, colors). The
+// halo bakes in exactly as the SVG writes it: stroke behind fill at
+// 0.24 em. Returns null only when a single run cannot fit the atlas.
+function glyphEntry(text, voice, sizeCss, color, halo, retried) {
+  const dpr = window.devicePixelRatio || 1;
+  const px = Math.max(2, Math.round(sizeCss * 2) / 2);  // quantize: bounded atlas
+  const key = [text, voice.family, voice.weight, voice.italic, voice.tracking, px,
+               color.join(), halo.join()].join("|");
+  const hit = glyphs.map.get(key);
+  if (hit) return hit;
+  const ctx = glyphs.ctx;
+  ctx.font = `${voice.italic ? "italic " : ""}${voice.weight} ${px * dpr}px ${voice.family}`;
+  try { ctx.letterSpacing = (voice.tracking * px * dpr) + "px"; } catch (e) {}
+  const m = ctx.measureText(text);
+  const pad = Math.ceil(px * dpr * 0.4);
+  const w = Math.ceil(m.width) + pad * 2;
+  const h = Math.ceil(px * dpr * 1.4) + pad;
+  if (w > 2048) return null;
+  if (glyphs.x + w > 2048) { glyphs.x = 0; glyphs.y += glyphs.rowH; glyphs.rowH = 0; }
+  if (glyphs.y + h > 2048) {
+    if (retried) return null;
+    glyphAtlasReset();
+    return glyphEntry(text, voice, sizeCss, color, halo, true);
+  }
+  const bx = glyphs.x, by = glyphs.y;
+  const baseline = by + pad + px * dpr;
+  ctx.textAlign = "left";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = `rgba(${halo[0]},${halo[1]},${halo[2]},${halo[3] / 255})`;
+  ctx.lineWidth = px * dpr * 0.48;
+  ctx.strokeText(text, bx + pad, baseline);
+  ctx.fillStyle = `rgba(${color[0]},${color[1]},${color[2]},${color[3] / 255})`;
+  ctx.fillText(text, bx + pad, baseline);
+  const e = {
+    u0: bx / 2048, v0: by / 2048, u1: (bx + w) / 2048, v1: (by + h) / 2048,
+    w: w / dpr, h: h / dpr, px,
+  };
+  glyphs.map.set(key, e);
+  glyphs.x += w;
+  glyphs.rowH = Math.max(glyphs.rowH, h);
+  glyphs.dirty = true;
+  return e;
+}
+
+let labelClock = 0;
+function drawLabels(proj, vb, k, ox, oy, rect) {
+  const list = (gpu.manifest && gpu.manifest.labels) || [];
+  if (!list.length || !glyphs.ctx) return;
+  const gl = gpu.gl, loc = gpu.lloc;
+  const now = performance.now();
+  const dt = labelClock ? Math.min(100, now - labelClock) : 16;
+  labelClock = now;
+  // The server's own legibility law, in viewBox units: page/260, never
+  // under 4 (§35 stays the ONE detail law; this is typography's floor).
+  const minSize = Math.max(4, vb.width / 260);
+  const placed = [];
+  const collides = b => placed.some(p => b[0] < p[2] && p[0] < b[2] && b[1] < p[3] && p[1] < b[3]);
+  const draws = [];
+  for (const l of list) {
+    const key = l.subject + "|" + l.text;
+    const pr = proj.project(l.anchor[0], l.anchor[1], l.anchor[2]);
+    let size = l.size;
+    let ok = pr[2] >= 0 && pr[0] > -40 && pr[0] < vb.width + 40 && pr[1] > -40 && pr[1] < vb.height + 40;
+    if (ok && l.subject.startsWith("region:")) {
+      // NOTHING UNSEEN SPEAKS: the extent gate, from the rings'
+      // spherical caps — the cap is the retained, projection-free
+      // bound (§33), so the gate needs no per-vertex work.
+      const rings = gpu.regionRings && gpu.regionRings.get(l.subject);
+      if (!rings || !rings.length) ok = false;
+      else {
+        // Cheap cap pre-filter, then the SVG's own rule: the TRUE
+        // projected extent of the territory decides fit and speech.
+        let cap = 0;
+        for (const id of rings) {
+          const meta = gpu.meta && gpu.meta.get(id);
+          if (meta) cap = Math.max(cap, 2 * proj.capRadius(meta.bounds.radius));
+        }
+        if (cap < minSize) ok = false;
+        else {
+          let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, any = false;
+          for (const id of rings) {
+            const rr = gpu.cache.get(id);
+            if (!rr || rr.state !== "gpu") continue;
+            const v = rr.verts;
+            for (let vi = 0; vi < v.length; vi += 3) {
+              const pv = proj.project(v[vi], v[vi + 1], v[vi + 2]);
+              if (pv[2] < 0) continue;
+              any = true;
+              if (pv[0] < bx0) bx0 = pv[0];
+              if (pv[1] < by0) by0 = pv[1];
+              if (pv[0] > bx1) bx1 = pv[0];
+              if (pv[1] > by1) by1 = pv[1];
+            }
+          }
+          const extW = any ? bx1 - bx0 : 0, extH = any ? by1 - by0 : 0;
+          if (!any || Math.max(extW, extH) < minSize) ok = false;
+          else if (l.face !== "water") {
+            const chars = Math.max(1, [...(l.voice.uppercase ? l.text.toUpperCase() : l.text)].length);
+            size = Math.min(size, extW * 0.92 / (chars * l.voice.advance), extH * 0.8);
+          }
+        }
+      }
+    }
+    if (size < minSize) ok = false;
+    let st = labelState.get(key);
+    if (ok) {
+      const text = l.voice.uppercase ? l.text.toUpperCase() : l.text;
+      const chars = Math.max(1, [...text].length);
+      const w = chars * l.voice.advance * size;
+      const h = size * 1.25;
+      // Retained placement first (§51); alternates only when it went
+      // illegal; deterministic candidate order (§54).
+      const dys = [];
+      if (st && st.dy !== undefined) dys.push(st.dy);
+      for (const d of [0, -h, h, -2 * h, 2 * h]) if (!dys.includes(d)) dys.push(d);
+      let spot = null;
+      for (const dy of dys) {
+        const b = [pr[0] - w / 2, pr[1] + dy - h * 0.75, pr[0] + w / 2, pr[1] + dy + h * 0.35];
+        if (!collides(b)) { spot = { dy, b }; break; }
+      }
+      if (spot) {
+        placed.push(spot.b);
+        if (!st) { st = { alpha: 0 }; labelState.set(key, st); }
+        st.dy = spot.dy;
+        st.target = 1;
+        st.draw = { text, x: pr[0], y: pr[1] + spot.dy, size, l };
+      } else ok = false;
+    }
+    if (!ok && st) { st.target = 0; st.draw = st.draw && st.alpha > 0 ? st.draw : null; }
+    if (st) st.seen = now;
+  }
+  // Lifecycle fades (§56): alpha walks toward its target over the
+  // declared duration; a fully faded label forgets its placement.
+  gl.useProgram(gpu.lprog);
+  gl.uniform2f(loc.uCss, rect.width, rect.height);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, glyphs.tex);
+  gl.uniform1i(loc.uTex, 0);
+  gl.bindVertexArray(gpu.quadVao);
+  const pending = [];
+  for (const [key, st] of labelState) {
+    // A label the active scene no longer speaks fades out — the
+    // Disappearing lifecycle, not a pop (§55/§56).
+    if (st.seen !== now) st.target = 0;
+    st.alpha += (st.target ? 1 : -1) * dt / LABEL_FADE_MS;
+    st.alpha = Math.max(0, Math.min(1, st.alpha));
+    if (st.alpha <= 0 && !st.target) { labelState.delete(key); continue; }
+    if (!st.draw) continue;
+    const d = st.draw;
+    const e = glyphEntry(d.text, d.l.voice, d.size * k,
+                         d.l.color, d.l.halo);
+    if (!e) continue;
+    pending.push({ e, d, alpha: st.alpha });
+  }
+  if (glyphs.dirty) {
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, glyphs.canvas);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    glyphs.dirty = false;
+  }
+  for (const { e, d, alpha } of pending) {
+    // css position from viewBox position through the letterbox
+    const cx = ox + k * d.x, cy = oy + k * d.y;
+    gl.uniform2f(loc.uPos, cx - e.w / 2, cy - e.h * 0.75);
+    gl.uniform2f(loc.uSize, e.w, e.h);
+    gl.uniform4f(loc.uUV, e.u0, e.v0, e.u1, e.v1);
+    gl.uniform1f(loc.uAlpha, alpha);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  gl.bindVertexArray(null);
+}
+
+// The frame's page geometry, in the encoder's own viewBox units —
+// synthesized from the declared resolution and projection page law
+// (globe: square; flat: half-width plus the 16px paddings), so the
+// retained renderer never depends on an SVG element existing (§72).
+function frameBox() {
+  const w = parseFloat($("res").value) || 1200;
+  return { width: w, height: state.projection === "flat" ? w / 2 + 32 : w };
+}
+
+// The Hit Index (§57–§59): screen point → semantic FeatureId, CPU
+// tests over resident geometry, walking paint order from the top.
+// Labels and marker hit-circles first (they sit above), then regions
+// by even-odd parity — the same interior law the fills draw.
+function gpuHitTest(e) {
+  if (!gpu.canvas || !gpu.manifest) return null;
+  const rect = gpu.canvas.getBoundingClientRect();
+  const cam = state.cameraNow && state.cameraNow();
+  if (!cam || cam.zoom === null) return null;
+  const vb = frameBox();
+  const k = Math.min(rect.width / vb.width, rect.height / vb.height);
+  const ox = (rect.width - vb.width * k) / 2, oy = (rect.height - vb.height * k) / 2;
+  const x = (e.clientX - rect.left - ox) / k, y = (e.clientY - rect.top - oy) / k;
+  const proj = makeProjector(cam, vb);
+  for (const [key, st] of labelState) {
+    if (!st.draw || st.alpha < 0.5) continue;
+    const subj = key.split("|")[0];
+    if (!subj.startsWith("place:")) continue;
+    const d = st.draw;
+    const chars = Math.max(1, [...d.text].length);
+    const w = chars * d.l.voice.advance * d.size, h = d.size * 1.25;
+    if (x >= d.x - w / 2 && x <= d.x + w / 2 && y >= d.y - h * 0.75 && y <= d.y + h * 0.35) return subj;
+  }
+  for (const m of gpu.manifest.markers || []) {
+    if (!m.place) continue;
+    const pr = proj.project(m.at[0], m.at[1], m.at[2]);
+    if (pr[2] < 0) continue;
+    if (Math.hypot(x - pr[0], y - pr[1]) <= Math.max(9, m.size * 3)) return "place:" + m.place;
+  }
+  for (let i = gpu.drawItems.length - 1; i >= 0; i--) {
+    const it = gpu.drawItems[i];
+    if (it.type !== "fill" || !it.key.startsWith("region:")) continue;
+    let inside = false, behind = false;
+    for (const id of it.ids) {
+      const r = gpu.cache.get(id);
+      if (!r || r.state !== "gpu") continue;
+      const v = r.verts, n = v.length / 3;
+      const pts = new Float64Array(n * 2);
+      for (let j = 0; j < n; j++) {
+        const pr = proj.project(v[j * 3], v[j * 3 + 1], v[j * 3 + 2]);
+        if (pr[2] < 0) { behind = true; break; }
+        pts[j * 2] = pr[0];
+        pts[j * 2 + 1] = pr[1];
+      }
+      if (behind) break;
+      for (let j = 0; j < n; j++) {
+        const jx = pts[j * 2], jy = pts[j * 2 + 1];
+        const kx2 = pts[((j + 1) % n) * 2], ky2 = pts[((j + 1) % n) * 2 + 1];
+        if ((jy > y) !== (ky2 > y) && x < jx + (y - jy) / (ky2 - jy) * (kx2 - jx)) inside = !inside;
+      }
+    }
+    if (!behind && inside) return it.key;
+  }
+  return null;
 }
 
 // One retained frame (§25): sample the continuous camera, set
@@ -805,48 +1455,44 @@ function gpuDraw() {
   gl.clearStencil(0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
   const cam = state.cameraNow && state.cameraNow();
-  const svg = $("plate").querySelector(".layer svg");
-  if (!cam || cam.zoom === null || !svg || !gpu.manifest) return;
-  const vb = svg.viewBox && svg.viewBox.baseVal;
-  if (!vb || vb.width <= 0) return;
+  if (!cam || cam.zoom === null || !gpu.manifest) return;
+  const vb = frameBox();
   const k = Math.min(rect.width / vb.width, rect.height / vb.height);
   const ox = (rect.width - vb.width * k) / 2;
   const oy = (rect.height - vb.height * k) / 2;
-  const rad = d => d * Math.PI / 180;
+  const proj = makeProjector(cam, vb);
   const loc = gpu.loc;
   gl.useProgram(gpu.prog);
   gl.uniform1f(loc.uPadding, 16.0);
   gl.uniform1f(loc.uK, k);
   gl.uniform2f(loc.uOrigin, ox, oy);
   gl.uniform2f(loc.uCss, rect.width, rect.height);
-  if (state.projection === "flat") {
-    const z = Math.max(0.05, Math.min(90, cam.zoom));
-    const kx = Math.max(0.05, Math.cos(rad(cam.lat)));
-    const scaleG = (vb.width - 32) / (2 * z);
-    const spanX = 2 * z / kx;
-    const spanY = (vb.width / 2) / scaleG;
+  if (proj.mode === 1) {
     gl.uniform1i(loc.uMode, 1);
-    gl.uniform4f(loc.uFlat, cam.lon - spanX / 2, cam.lat + spanY / 2, scaleG * kx, scaleG);
+    gl.uniform4f(loc.uFlat, proj.x0, proj.y1, proj.scaleX, proj.scaleY);
   } else {
-    const clat = rad(cam.lat), clon = rad(cam.lon);
-    const C = [Math.cos(clat) * Math.cos(clon), Math.cos(clat) * Math.sin(clon), Math.sin(clat)];
-    let E = [-C[1], C[0], 0];
-    const el = Math.hypot(E[0], E[1], E[2]);
-    E = el < 1e-9 ? [0, 1, 0] : [E[0] / el, E[1] / el, E[2] / el];
-    let N = [C[1] * E[2] - C[2] * E[1], C[2] * E[0] - C[0] * E[2], C[0] * E[1] - C[1] * E[0]];
-    const nl = Math.hypot(N[0], N[1], N[2]);
-    N = nl < 1e-9 ? [0, 0, 1] : [N[0] / nl, N[1] / nl, N[2] / nl];
-    const rView = Math.sin(rad(Math.max(1, Math.min(90, cam.zoom))));
     gl.uniform1i(loc.uMode, 0);
-    gl.uniform3f(loc.uEast, E[0], E[1], E[2]);
-    gl.uniform3f(loc.uNorth, N[0], N[1], N[2]);
-    gl.uniform3f(loc.uCenter, C[0], C[1], C[2]);
-    gl.uniform1f(loc.uScale, (vb.width - 32) / 2 / rView);
+    gl.uniform3f(loc.uEast, proj.E[0], proj.E[1], proj.E[2]);
+    gl.uniform3f(loc.uNorth, proj.N[0], proj.N[1], proj.N[2]);
+    gl.uniform3f(loc.uCenter, proj.C[0], proj.C[1], proj.C[2]);
+    gl.uniform1f(loc.uScale, proj.scale);
     gl.uniform2f(loc.uC, vb.width / 2, vb.width / 2);
   }
   const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
   const resident = id => { const r = gpu.cache.get(id); return r && r.state === "gpu" ? r : null; };
+  const now = performance.now();
+  gl.uniform1f(loc.uMorph, 1.0);
+  // Lifecycle alphas (§56): births ramp up; the old scene's dying
+  // features ride along, ramping down, until fully gone (§R3).
+  gpu.fading = (gpu.fading || []).filter(it => now - it.death < SCENE_FADE_MS);
   for (const it of gpu.drawItems) {
+    if (it.birth !== undefined && it.birth !== null) {
+      it.alpha = Math.min(1, (now - it.birth) / SCENE_FADE_MS);
+      if (it.alpha >= 1) it.birth = null;
+    }
+  }
+  for (const it of gpu.fading) it.alpha = Math.max(0, 1 - (now - it.death) / SCENE_FADE_MS);
+  for (const it of gpu.drawItems.concat(gpu.fading)) {
     if (it.type === "fill") {
       // The even-odd interior via stencil parity: pass 1 fans each
       // ring with INVERT (color off), pass 2 repaints where parity is
@@ -856,11 +1502,26 @@ function gpuDraw() {
       // fill its lakes (validation before drawability, §40).
       const rings = it.ids.map(resident);
       if (rings.some(r => !r)) continue;
-      const [cr, cg, cb, ca] = it.style.color;
+      const [cr, cg, cb, caBase] = it.style.color;
+      const ca = caBase * (it.alpha !== undefined ? it.alpha : 1);
+      const pagePass = () => {
+        if (!it.whole) return;
+        if (proj.mode === 0) {
+          gl.uniform1i(loc.uMode, 3);  // the globe's limb disc
+          gl.bindVertexArray(gpu.discVao);
+          gl.drawArrays(gl.TRIANGLE_FAN, 0, gpu.discCount);
+        } else {
+          gl.uniform1i(loc.uMode, 2);  // the flat chart's page
+          gl.bindVertexArray(gpu.pageVao);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+        gl.uniform1i(loc.uMode, proj.mode);
+      };
       gl.enable(gl.STENCIL_TEST);
       gl.colorMask(false, false, false, false);
       gl.stencilFunc(gl.ALWAYS, 0, 0xff);
       gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
+      pagePass();
       for (const r of rings) {
         gl.bindVertexArray(r.vao);
         gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
@@ -869,6 +1530,7 @@ function gpuDraw() {
       gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
       gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
       gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
+      pagePass();
       for (const r of rings) {
         gl.bindVertexArray(r.vao);
         gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
@@ -880,6 +1542,7 @@ function gpuDraw() {
     if (!r) continue;  // not resident yet — never blocks (§R4)
     const s = it.style;
     let [cr, cg, cb, ca] = s.color;
+    ca *= it.alpha !== undefined ? it.alpha : 1;
     if (s.kind === "marker") {
       gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
       gl.uniform1f(loc.uPointSize, Math.max(2, s.size * 2 * k * dpr));
@@ -892,10 +1555,20 @@ function gpuDraw() {
     gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
     gl.uniform1f(loc.uPointSize, 1.0);
     gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * k * dpr)));
+    // Continuous refinement (§R6): the finer representation eases
+    // from its parent's shape; at the end the parent may release.
+    const morphing = !!it.morph;
+    if (morphing) {
+      const t = Math.min(1, (now - it.morph.start) / SCENE_FADE_MS);
+      gl.uniform1f(loc.uMorph, t);
+      if (t >= 1) endMorph(it);
+    }
     gl.bindVertexArray(r.vao);
     gl.drawArrays(gl.LINE_STRIP, 0, r.count);
+    if (morphing) gl.uniform1f(loc.uMorph, 1.0);
   }
   gl.bindVertexArray(null);
+  drawLabels(proj, vb, k, ox, oy, rect);
 }
 
 function gpuTick() {
@@ -907,10 +1580,14 @@ function gpuTick() {
 function gpuSetEnabled(on) {
   gpu.enabled = on && gpuInit();
   if (gpu.canvas) gpu.canvas.style.display = gpu.enabled ? "" : "none";
+  $("plate").classList.toggle("gpu-primary", gpu.enabled);
   if (gpu.enabled) {
+    pinView();                // the retained camera continues from here
     gpu.sceneKey = null;      // refetch the manifest for the current view
     gpuSync();
     if (!gpu.raf) gpu.raf = requestAnimationFrame(gpuTick);
+  } else {
+    render();                 // hand the plate back to the document
   }
 }
 
@@ -953,6 +1630,7 @@ function setupPlateNav() {
     return { w: vb.width * k, h: vb.height * k, cx: lrect.width / 2, cy: lrect.height / 2, lrect };
   }
   function applyViewTransform() {
+    if (gpu.enabled) return;  // the retained layer projects for itself
     const layers = plate.querySelectorAll(".layer");
     const layer = layers[layers.length - 1];
     const svg = layer?.querySelector("svg");
@@ -1066,6 +1744,7 @@ function setupPlateNav() {
   // while anything is moving.
   let sharpen = null;
   function settleSharp() {
+    if (gpu.enabled) { gpuSync(); return; }  // demand update only
     render("drag");
     clearTimeout(sharpen);
     sharpen = setTimeout(() => { if (!animating && !drag) render(); }, 320);
@@ -1106,6 +1785,9 @@ function setupPlateNav() {
       // the transform shows it, the frame comes on release
       visual.lat = state.view.lat; visual.lon = state.view.lon;
       applyViewTransform();
+    } else if (gpu.enabled) {
+      // retained-primary: the GL layer reads the hand's own camera
+      // every animation frame — no frames to fetch (§R2).
     } else {
       // the globe's pan is a rotation: live drag-quality frames. The
       // visual view rides the FRAME's view (set on arrival), not the
@@ -1160,10 +1842,15 @@ function setupPlateNav() {
     if (suppressClick) { suppressClick = false; return; }
     // Regions by their fill, places (journey stations) by their
     // marker's hit circle or their name.
+    let key = null;
     const hit = e.target.closest && e.target.closest("path[data-region], [data-place]");
-    if (!hit) return;
-    const key = hit.dataset.region ? "region:" + hit.dataset.region
-                                   : "place:" + hit.dataset.place;
+    if (hit) {
+      key = hit.dataset.region ? "region:" + hit.dataset.region
+                               : "place:" + hit.dataset.place;
+    } else if (gpu.enabled) {
+      key = gpuHitTest(e);  // the Hit Index (§57): semantics, not DOM
+    }
+    if (!key) return;
     pinView(); // map clicks never move the camera
     const has = state.selection.includes(key);
     let next;
@@ -1261,6 +1948,11 @@ async function playFrame() {
   state.idx += 1;
   drawScrubber();
   loadChanges(); // the narrative keeps pace, no await
+  if (gpu.enabled && state.encoder === "svg") {
+    gpuSync();  // the temporal transition (stage 8) draws the change
+    player.timer = setTimeout(playFrame, parseInt($("speed").value, 10));
+    return;
+  }
   const p = currentParams();
   const res = await fetch("/api/render?" + p.toString());
   const body = await res.text();

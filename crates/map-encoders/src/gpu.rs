@@ -125,12 +125,48 @@ pub enum GpuStyle {
     Marker { color: Rgba, size: f64 },
 }
 
+/// A label as SEMANTIC data (§46): text, spherical anchor, subject,
+/// the resolved typographic voice, and a deterministic priority.
+/// Placement is renderer work — the manifest never carries a screen
+/// position (§8), and priority is scene order: the style system's own
+/// paint order, no invented ranking (§53).
+#[derive(Clone, Debug, PartialEq)]
+pub struct LabelResource {
+    pub text: String,
+    pub anchor: (f64, f64, f64),
+    /// "region:HEX" | "boundary:HEX" | "place:ID" | "free" — the same
+    /// subject keys hit-testing and selection speak (§58).
+    pub subject: String,
+    pub face: &'static str,
+    pub color: Rgba,
+    pub halo: Rgba,
+    pub size: f64,
+    pub voice_family: &'static str,
+    pub voice_weight: u16,
+    pub voice_italic: bool,
+    pub voice_uppercase: bool,
+    pub voice_tracking_em: f64,
+    pub voice_advance_em: f64,
+    pub priority: u32,
+}
+
+/// One marker with its semantic identity — hit testing maps a click
+/// back to the place it stands on (§58), so the id rides the manifest.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarkerResource {
+    pub at: (f64, f64, f64),
+    pub place: Option<String>,
+    pub size: f64,
+}
+
 /// The semantic scene manifest (§8): references, not pictures.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneManifest {
     pub scene_revision: ContentHash,
     pub features: Vec<FeatureInstance>,
     pub styles: BTreeMap<StyleKey, GpuStyle>,
+    pub labels: Vec<LabelResource>,
+    pub markers: Vec<MarkerResource>,
 }
 
 /// The encoder's whole answer (§18).
@@ -358,11 +394,62 @@ impl GpuSceneEncoder {
             });
         }
 
+        // Labels ride the manifest as semantics (§46): the renderer
+        // owns placement; the scene owns text, anchor, and dress.
+        let labels: Vec<LabelResource> = scene
+            .labels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                use map_types::scene::LabelSubject;
+                let subject = match &l.subject {
+                    LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
+                    LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
+                    LabelSubject::Place(p) => format!("place:{}", p.0 .0),
+                    LabelSubject::Free => "free".to_string(),
+                };
+                use map_types::scene::LabelFace;
+                LabelResource {
+                    text: l.text.clone(),
+                    anchor: (l.at.x(), l.at.y(), l.at.z()),
+                    subject,
+                    face: match l.face {
+                        LabelFace::Territory => "territory",
+                        LabelFace::Water => "water",
+                        LabelFace::Place => "place",
+                        LabelFace::Memory => "memory",
+                    },
+                    color: l.style.color,
+                    halo: l.style.halo,
+                    size: l.style.size,
+                    voice_family: l.voice.family,
+                    voice_weight: l.voice.weight,
+                    voice_italic: l.voice.italic,
+                    voice_uppercase: l.voice.uppercase,
+                    voice_tracking_em: l.voice.tracking_em,
+                    voice_advance_em: l.voice.advance_em,
+                    priority: i as u32,
+                }
+            })
+            .collect();
+
+        let markers: Vec<MarkerResource> = scene
+            .markers
+            .iter()
+            .map(|m| MarkerResource {
+                at: (m.at.x(), m.at.y(), m.at.z()),
+                place: m.place.as_ref().map(|p| p.0 .0.clone()),
+                size: m.style.size,
+            })
+            .collect();
+
         EncodedScene {
             manifest: SceneManifest {
                 scene_revision: scene.map_pid().hash,
                 features,
                 styles,
+                labels,
+                markers,
             },
             resources,
         }
@@ -437,7 +524,45 @@ impl EncodedScene {
                 }
             }
         }
-        s.push_str("},\"resources\":[");
+        s.push_str("},\"labels\":[");
+        for (i, l) in m.labels.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            // serde escapes the free text; everything else is plain.
+            let row = serde_json::json!({
+                "text": l.text,
+                "anchor": [l.anchor.0, l.anchor.1, l.anchor.2],
+                "subject": l.subject,
+                "face": l.face,
+                "color": [l.color.0, l.color.1, l.color.2, l.color.3],
+                "halo": [l.halo.0, l.halo.1, l.halo.2, l.halo.3],
+                "size": l.size,
+                "voice": {
+                    "family": l.voice_family,
+                    "weight": l.voice_weight,
+                    "italic": l.voice_italic,
+                    "uppercase": l.voice_uppercase,
+                    "tracking": l.voice_tracking_em,
+                    "advance": l.voice_advance_em,
+                },
+                "priority": l.priority,
+            });
+            s.push_str(&row.to_string());
+        }
+        s.push_str("],\"markers\":[");
+        for (i, m2) in m.markers.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            let row = serde_json::json!({
+                "at": [m2.at.0, m2.at.1, m2.at.2],
+                "place": m2.place,
+                "size": m2.size,
+            });
+            s.push_str(&row.to_string());
+        }
+        s.push_str("],\"resources\":[");
         for (i, r) in self.resources.iter().enumerate() {
             let d = &r.descriptor;
             let _ = write!(
