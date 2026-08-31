@@ -667,7 +667,7 @@ function gpuInit() {
   const canvas = document.createElement("canvas");
   canvas.className = "gl";
   $("plate").appendChild(canvas);
-  const gl = canvas.getContext("webgl2", { alpha: true, antialias: true, premultipliedAlpha: true });
+  const gl = canvas.getContext("webgl2", { alpha: true, antialias: true, premultipliedAlpha: true, stencil: true });
   if (!gl) { setStatus({ error: "webgl2 unavailable — the retained layer needs it" }); return false; }
   const compile = (type, src) => {
     const s = gl.createShader(type);
@@ -754,16 +754,41 @@ async function gpuSync() {
   if (gpu.sceneKey !== key) return;
   gpu.manifest = man;
   const meta = new Map(man.resources.map(r => [r.id, r]));
-  // The draw list (§64): boundary strokes and markers — the stage-4
-  // layer. Region rings stay server-side until fills land; residency
-  // is demand-driven, not whole-atlas (§12).
-  gpu.drawItems = man.features.filter(f => {
+  // The draw list (§64), in manifest paint order. Fills group a
+  // region's consecutive rings into ONE even-odd pass (stage 5) —
+  // exactly the SVG's fill-rule="evenodd", realized on the GPU with
+  // the stencil parity technique, so both renderers share one fill
+  // law. The whole-sphere sentinel (marked by the server) is dressed
+  // by the page, never projected — it stays out of the fan pass.
+  gpu.drawItems = [];
+  let fillGroup = null;
+  for (const f of man.features) {
     const s = man.styles[f.style], r = meta.get(f.resource);
-    if (!s || !r) return false;
-    if (s.kind === "marker") return true;
-    return s.kind === "stroke" && s.width > 0 && r.kind === "line";
-  }).map(f => ({ id: f.resource, style: man.styles[f.style] }));
-  gpuAcquire([...new Set(gpu.drawItems.map(it => it.id))]);
+    if (!s || !r) continue;
+    if (s.kind === "fill") {
+      if (fillGroup && fillGroup.key === f.feature && fillGroup.styleKey === f.style) {
+        if (!r.whole) fillGroup.ids.push(f.resource);
+      } else {
+        fillGroup = { type: "fill", key: f.feature, styleKey: f.style, style: s,
+                      ids: r.whole ? [] : [f.resource] };
+        gpu.drawItems.push(fillGroup);
+      }
+      continue;
+    }
+    fillGroup = null;
+    if (s.kind === "marker") {
+      gpu.drawItems.push({ type: "marker", id: f.resource, style: s });
+    } else if (s.kind === "stroke" && s.width > 0 && r.kind === "line") {
+      gpu.drawItems.push({ type: "stroke", id: f.resource, style: s });
+    }
+  }
+  gpu.drawItems = gpu.drawItems.filter(it => it.type !== "fill" || it.ids.length);
+  const wanted = new Set();
+  for (const it of gpu.drawItems) {
+    if (it.type === "fill") it.ids.forEach(id => wanted.add(id));
+    else wanted.add(it.id);
+  }
+  gpuAcquire([...wanted]);
 }
 
 // One retained frame (§25): sample the continuous camera, set
@@ -777,7 +802,8 @@ function gpuDraw() {
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
   gl.viewport(0, 0, W, H);
   gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clearStencil(0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
   const cam = state.cameraNow && state.cameraNow();
   const svg = $("plate").querySelector(".layer svg");
   if (!cam || cam.zoom === null || !svg || !gpu.manifest) return;
@@ -819,9 +845,39 @@ function gpuDraw() {
     gl.uniform2f(loc.uC, vb.width / 2, vb.width / 2);
   }
   const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+  const resident = id => { const r = gpu.cache.get(id); return r && r.state === "gpu" ? r : null; };
   for (const it of gpu.drawItems) {
-    const r = gpu.cache.get(it.id);
-    if (!r || r.state !== "gpu") continue;  // not resident yet — never blocks (§R4)
+    if (it.type === "fill") {
+      // The even-odd interior via stencil parity: pass 1 fans each
+      // ring with INVERT (color off), pass 2 repaints where parity is
+      // odd, zeroing stencil as it goes so each pixel lands once and
+      // the buffer is clean for the next region. A region draws only
+      // when EVERY ring is resident — a half-arrived interior would
+      // fill its lakes (validation before drawability, §40).
+      const rings = it.ids.map(resident);
+      if (rings.some(r => !r)) continue;
+      const [cr, cg, cb, ca] = it.style.color;
+      gl.enable(gl.STENCIL_TEST);
+      gl.colorMask(false, false, false, false);
+      gl.stencilFunc(gl.ALWAYS, 0, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
+      for (const r of rings) {
+        gl.bindVertexArray(r.vao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
+      }
+      gl.colorMask(true, true, true, true);
+      gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
+      gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
+      for (const r of rings) {
+        gl.bindVertexArray(r.vao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
+      }
+      gl.disable(gl.STENCIL_TEST);
+      continue;
+    }
+    const r = resident(it.id);
+    if (!r) continue;  // not resident yet — never blocks (§R4)
     const s = it.style;
     let [cr, cg, cb, ca] = s.color;
     if (s.kind === "marker") {

@@ -83,6 +83,11 @@ pub struct ResourceDescriptor {
     pub byte_length: u64,
     pub vertex_count: u32,
     pub bounds: SphericalBounds,
+    /// The whole-sphere sentinel (map-types `covers_sphere`): a ring
+    /// whose interior is everything — a chart dresses it as the page
+    /// or the limb rather than projecting its edges (the existing
+    /// project law, carried to the manifest so no consumer re-guesses).
+    pub whole: bool,
 }
 
 /// One resource: descriptor + the packed binary packet (§63).
@@ -112,6 +117,10 @@ pub struct StyleKey(pub u64);
 /// values come from the scene's own resolved styles, never invented.
 #[derive(Clone, Debug, PartialEq)]
 pub enum GpuStyle {
+    /// A region's interior under the scene's declared fill law
+    /// (even-odd across the region's rings, exactly as the SVG
+    /// encoder writes `fill-rule="evenodd"`).
+    Fill { color: Rgba },
     Stroke { color: Rgba, width: f64, pattern: StrokePattern },
     Marker { color: Rgba, size: f64 },
 }
@@ -155,6 +164,10 @@ fn geometry_id(pts: &[UnitVec]) -> GeometryId {
 fn style_key(style: &GpuStyle) -> StyleKey {
     let mut c = Canon::new();
     match style {
+        GpuStyle::Fill { color } => {
+            c.tag("fill");
+            c.u8_(color.0).u8_(color.1).u8_(color.2).u8_(color.3);
+        }
         GpuStyle::Stroke { color, width, pattern } => {
             c.tag("stroke");
             c.u8_(color.0).u8_(color.1).u8_(color.2).u8_(color.3);
@@ -253,6 +266,7 @@ fn pack(kind: ResourceKind, pts: &[UnitVec]) -> GeometryResource {
             byte_length: payload.len() as u64,
             vertex_count: pts.len() as u32,
             bounds,
+            whole: map_types::covers_sphere(pts),
         },
         payload,
     }
@@ -288,18 +302,13 @@ impl GpuSceneEncoder {
             key
         };
 
-        // Region rings ship as ring loops: retained geometry for the
-        // fill/outline stages (residency is not visibility — §I13 —
-        // a consumer may keep them resident and draw nothing yet).
+        // Region rings ship as ring loops wearing the region's FILL
+        // style: the consumer realizes the interior under the scene's
+        // even-odd law (stage 5) — all of one region's rings
+        // participate in one fill, so they share one feature key and
+        // arrive in ring order.
         for r in &scene.regions {
-            let sk = style_of(
-                &mut styles,
-                GpuStyle::Stroke {
-                    color: r.paint.fill,
-                    width: 0.0, // a fill paint carries no stroke width
-                    pattern: StrokePattern::Solid,
-                },
-            );
+            let sk = style_of(&mut styles, GpuStyle::Fill { color: r.paint.fill });
             for ring in r.outer.iter().chain(&r.holes) {
                 let (id, geom) =
                     add(&mut resources, &mut seen, ResourceKind::RingLoop, ring.points());
@@ -394,6 +403,13 @@ impl EncodedScene {
                 s.push(',');
             }
             match v {
+                GpuStyle::Fill { color } => {
+                    let _ = write!(
+                        s,
+                        "\"{:016x}\":{{\"kind\":\"fill\",\"color\":[{},{},{},{}]}}",
+                        k.0, color.0, color.1, color.2, color.3
+                    );
+                }
                 GpuStyle::Stroke { color, width, pattern } => {
                     let _ = write!(
                         s,
@@ -426,12 +442,13 @@ impl EncodedScene {
             let d = &r.descriptor;
             let _ = write!(
                 s,
-                "{}{{\"id\":\"{:016x}\",\"kind\":\"{}\",\"bytes\":{},\"vertices\":{},\"bounds\":{{\"center\":[{:.6},{:.6},{:.6}],\"radius\":{:.6}}}}}",
+                "{}{{\"id\":\"{:016x}\",\"kind\":\"{}\",\"bytes\":{},\"vertices\":{},{}\"bounds\":{{\"center\":[{:.6},{:.6},{:.6}],\"radius\":{:.6}}}}}",
                 if i > 0 { "," } else { "" },
                 d.id.0 .0,
                 d.kind.name(),
                 d.byte_length,
                 d.vertex_count,
+                if d.whole { "\"whole\":true," } else { "" },
                 d.bounds.center.0,
                 d.bounds.center.1,
                 d.bounds.center.2,

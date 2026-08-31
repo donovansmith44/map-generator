@@ -951,3 +951,111 @@ fn scene_elements_map_to_kinds() {
     assert!(json.contains("\"kind\":\"stroke\""));
     assert!(json.contains("\"kind\":\"marker\""));
 }
+
+/// Stage 5: a region's rings wear its FILL style in the manifest —
+/// one feature key across all its rings, so a consumer realizes the
+/// interior under one even-odd pass, exactly like the SVG's
+/// fill-rule="evenodd".
+#[test]
+fn region_rings_share_one_fill_feature() {
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(21)),
+        entity: None,
+        outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
+        holes: vec![Ring::new(vec![uv(2.0, 4.0), uv(2.0, 6.0), uv(4.0, 5.0)]).unwrap()],
+        paint: Paint { fill: Rgba(210, 190, 150, 200) },
+        sources: Default::default(),
+    });
+    let enc = gpu_encode(&scene);
+    let fills: Vec<_> = enc
+        .manifest
+        .features
+        .iter()
+        .filter(|f| matches!(enc.manifest.styles[&f.style], crate::GpuStyle::Fill { .. }))
+        .collect();
+    assert_eq!(fills.len(), 2, "outer + hole, both fill-styled");
+    assert_eq!(fills[0].feature, fills[1].feature, "one region, one feature key");
+    assert_eq!(fills[0].style, fills[1].style);
+    assert!(enc.manifest_json().contains("\"kind\":\"fill\""));
+}
+
+/// The whole-sphere sentinel is a first-class law (covers_sphere):
+/// the manifest marks it so no consumer re-guesses which ring is the
+/// world's envelope.
+#[test]
+fn sentinel_ring_is_marked_whole() {
+    let sentinel = Ring::new(vec![
+        uv(0.0, 0.0),
+        uv(0.0, 120.0),
+        uv(0.0, -120.0),
+        uv(5.0, 179.0), // near-antipodal to the first point
+    ])
+    .unwrap();
+    assert!(map_types::covers_sphere(sentinel.points()), "test ring must trip the sentinel law");
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(22)),
+        entity: None,
+        outer: vec![sentinel],
+        holes: vec![],
+        paint: Paint { fill: Rgba(1, 2, 200, 255) },
+        sources: Default::default(),
+    });
+    let enc = gpu_encode(&scene);
+    assert!(enc.resources[0].descriptor.whole);
+    assert!(enc.manifest_json().contains("\"whole\":true"));
+    // An ordinary territory never wears the mark.
+    let plain = gpu_encode(&sample_scene());
+    assert!(plain.resources.iter().all(|r| !r.descriptor.whole));
+    assert!(!plain.manifest_json().contains("\"whole\""));
+}
+
+/// THE PARITY LAW behind the whole retained path: whatever the SVG
+/// backend draws, the manifest describes — same scene value, same
+/// paints, same features. The system that makes the maps the owner
+/// likes IS the system the GPU consumes; this test is the tripwire
+/// against the two ever describing different worlds.
+#[test]
+fn manifest_and_svg_describe_the_same_scene() {
+    use map_types::MapAddressed as _;
+    let scene = sample_scene();
+    let svg = SvgEncoder {
+        projection: Projection::Globe { center: Some((4.0, 5.0)), zoom: Some(12.0) },
+        width: 1200.0,
+        smooth: false,
+        ..SvgEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    let enc = gpu_encode(&scene);
+    // Every region the scene styles: its exact fill paint appears in
+    // both encodings.
+    for r in &scene.regions {
+        let Rgba(cr, cg, cb, _) = r.paint.fill;
+        assert!(svg.contains(&format!("fill=\"rgb({cr},{cg},{cb})\"")), "SVG paints the region");
+        let key = format!("region:{:016x}", r.region.0 .0);
+        let f = enc.manifest.features.iter().find(|f| f.feature == key).expect("manifest has it");
+        match &enc.manifest.styles[&f.style] {
+            crate::GpuStyle::Fill { color } => assert_eq!(*color, r.paint.fill),
+            other => panic!("region wears a fill, not {other:?}"),
+        }
+    }
+    // Every boundary: same stroke color and width both sides.
+    for b in &scene.boundaries {
+        let Rgba(cr, cg, cb, _) = b.stroke.color;
+        assert!(svg.contains(&format!("stroke=\"rgb({cr},{cg},{cb})\"")), "SVG strokes it");
+        let key = format!("boundary:{:016x}", b.boundary.0 .0);
+        let f = enc.manifest.features.iter().find(|f| f.feature == key).expect("manifest has it");
+        match &enc.manifest.styles[&f.style] {
+            crate::GpuStyle::Stroke { color, width, .. } => {
+                assert_eq!(*color, b.stroke.color);
+                assert_eq!(*width, b.stroke.width);
+            }
+            other => panic!("boundary wears a stroke, not {other:?}"),
+        }
+    }
+    // And the manifest's revision is the scene's own content address —
+    // the same identity law the rest of the system caches by.
+    assert_eq!(enc.manifest.scene_revision, scene.map_pid().hash);
+}

@@ -1,4 +1,33 @@
-# Retained Renderer (Spec Stages 2–4) — State & Execution Plan
+# Retained Renderer (Spec Stages 2–5) — State & Execution Plan
+
+## Preservation of the Canaan / 12-tribes work (2026-08-30)
+
+- **Every input is committed**: `git status data` is clean (only `data/canon/`
+  is gitignored, as an artifact).
+- **The canon reproduces byte-identically**: `cargo run --release -p
+  map-compile -- build --out <tmp>` produced an 81,331,146-byte canon.json
+  exactly equal (`cmp`) to the live `data/canon/canon.json`. Loss of the
+  artifact costs one rebuild command, nothing more.
+- **The 16 canonical plates are regression-pinned**: rendered via `map-cli
+  plates` before and after the stage-5 changes — byte-identical (the SVG
+  path is untouched by the retained-renderer work).
+- The loose repo-root PNG "10 Canaan Before the Conquest of Joshua.png" is a
+  © 2020 Knowing the Bible *reference* image (third-party), not project
+  output — left on disk, deliberately not committed.
+
+## Stage 5 (fills) — decision record
+
+Fills are realized on the GPU with the stencil even-odd parity technique
+over the already-retained ring resources, NOT server-side triangulation:
+even-odd is the fill law the SVG encoder already declares
+(`fill-rule="evenodd"`), so both renderers share one semantics, and
+LOD-simplified real-world rings (which can self-intersect) render
+identically instead of feeding a fragile ear-clipper. The manifest now
+carries honest `fill` styles per region (one feature key across a region's
+rings) and marks the whole-sphere sentinel via the existing `covers_sphere`
+law. A region's fill draws only when every ring is resident (§40).
+Server-side triangulation remains the stage-7 route if refinement
+correspondences need it.
 
 > Implements `docs/superpowers/specs/2026-08-30-refactor.md` (stages 2–4 of its
 > own migration strategy). Written mid-session to checkpoint state.
