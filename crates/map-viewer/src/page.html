@@ -314,6 +314,7 @@ const state = {
   view: { lat: null, lon: null, zoom: null },    // null = server decides
   resolved: null,                                // what the last svg reported
   subjectStops: null,                            // stops ALL selected are mapped at
+  flatRefLat: null,                              // held standard parallel during a flat drag
 };
 
 const subjectKey = () => state.selection.length ? state.selection.join(",") : "world";
@@ -681,15 +682,26 @@ void main() {
   vec3 p = normalize(mix(aPrev, aPos, uMorph));
   vec2 pv;
   if (uMode == 0) {
-    // The same orthographic mathematics the server's Globe speaks:
-    // page = center + (dot east, -dot north) * scale; the far
-    // hemisphere is carried to the fragment stage and discarded.
+    // The same orthographic mathematics the server's Globe speaks.
+    // A vertex behind the limb FOLDS ONTO the limb circle — the GPU
+    // analog of the server's clip-to-limb: hidden stretches hug the
+    // silhouette instead of mirror-projecting back into the disc,
+    // and their fragments still discard by interpolated vFront.
     vFront = dot(p, uCenter);
-    pv = vec2(uC.x + dot(p, uEast) * uScale, uC.y - dot(p, uNorth) * uScale);
+    vec2 en = vec2(dot(p, uEast), dot(p, uNorth));
+    if (vFront < 0.0) {
+      float l = length(en);
+      if (l > 1e-6) en /= l;
+    }
+    pv = vec2(uC.x + en.x * uScale, uC.y - en.y * uScale);
   } else {
     // The flat plate's equirectangular law, standard parallel at the
-    // camera latitude — identical to the server's encode_flat.
-    vFront = 1.0;
+    // camera latitude — identical to the server's encode_flat. The
+    // longitude wraps to the copy nearest the camera (the server
+    // clips rings to its window instead; same truth), and the far
+    // hemisphere carries its dot for the fragment discard, so seam-
+    // crossing edges never streak across the page.
+    vFront = dot(p, uCenter);
     float lat = degrees(asin(clamp(p.z, -1.0, 1.0)));
     float lon = degrees(atan(p.y, p.x));
     pv = vec2(uPadding + (lon - uFlat.x) * uFlat.z, uPadding + (uFlat.y - lat) * uFlat.w);
@@ -703,9 +715,10 @@ const GPU_FS = `#version 300 es
 precision mediump float;
 in float vFront;
 uniform vec4 uColor;
+uniform float uFrontMin;
 out vec4 o;
 void main() {
-  if (vFront < 0.0) discard;  // behind the limb
+  if (vFront < uFrontMin) discard;  // behind the limb / past the seam
   o = vec4(uColor.rgb * uColor.a, uColor.a);  // premultiplied over the page
 }`;
 
@@ -729,7 +742,7 @@ function gpuInit() {
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   const loc = {};
-  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor","uMorph"]) {
+  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor","uMorph","uFrontMin"]) {
     loc[n] = gl.getUniformLocation(prog, n);
   }
   loc.aPos = gl.getAttribLocation(prog, "aPos");
@@ -1122,6 +1135,16 @@ function endMorph(it) {
   it.morph = null;
 }
 
+// The flat chart's standard parallel, with a LAW-derived floor: the
+// page spans 2z/kx degrees of longitude, and a page may never span
+// more than the whole world once — so kx >= z/180. (0.05 remains
+// the server's own floor.) Without this, polar views blow the window
+// past 360 degrees and panning wraps the planet.
+function flatKx(lat, zoom) {
+  const z = Math.max(0.05, Math.min(90, zoom));
+  return Math.max(0.05, z / 180, Math.cos(lat * Math.PI / 180));
+}
+
 // The ONE projection law, mirrored in JS for label placement, region
 // extents, and hit testing — the same formulas the vertex shader and
 // the server's encoders speak. Positions come back in viewBox units;
@@ -1130,18 +1153,23 @@ function makeProjector(cam, vb) {
   const rad = d => d * Math.PI / 180;
   if (state.projection === "flat") {
     const z = Math.max(0.05, Math.min(90, cam.zoom));
-    const kx = Math.max(0.05, Math.cos(rad(cam.lat)));
+    const refLat = state.flatRefLat !== null && state.flatRefLat !== undefined
+      ? state.flatRefLat : cam.lat;
+    const kx = flatKx(refLat, cam.zoom);
     const scaleG = (vb.width - 32) / (2 * z);
     const spanX = 2 * z / kx;
     const spanY = (vb.width / 2) / scaleG;
     const x0 = cam.lon - spanX / 2, y1 = cam.lat + spanY / 2;
     const scaleX = scaleG * kx, scaleY = scaleG;
+    const clat0 = rad(cam.lat), clon0 = rad(cam.lon);
+    const C = [Math.cos(clat0) * Math.cos(clon0), Math.cos(clat0) * Math.sin(clon0), Math.sin(clat0)];
     return {
-      mode: 1, x0, y1, scaleX, scaleY, scale: scaleG,
+      mode: 1, x0, y1, scaleX, scaleY, scale: scaleG, lon0: cam.lon, C,
       project(x, y, z3) {
         const lat = Math.asin(Math.max(-1, Math.min(1, z3))) * 180 / Math.PI;
         const lon = Math.atan2(y, x) * 180 / Math.PI;
-        return [16 + (lon - x0) * scaleX, 16 + (y1 - lat) * scaleY, 1];
+        const front = x * C[0] + y * C[1] + z3 * C[2];
+        return [16 + (lon - x0) * scaleX, 16 + (y1 - lat) * scaleY, front];
       },
       // radius of a spherical cap on the page, viewBox units
       capRadius(r) { return Math.min(r, Math.PI / 2) * 180 / Math.PI * scaleY; },
@@ -1470,6 +1498,11 @@ function gpuDraw() {
   if (proj.mode === 1) {
     gl.uniform1i(loc.uMode, 1);
     gl.uniform4f(loc.uFlat, proj.x0, proj.y1, proj.scaleX, proj.scaleY);
+    gl.uniform3f(loc.uCenter, proj.C[0], proj.C[1], proj.C[2]);
+    // No discard on the flat chart: the encoder splits geometry at
+    // the antimeridian, so every primitive projects where it belongs
+    // and off-window content clips at the viewport for free.
+    gl.uniform1f(loc.uFrontMin, -1.1);
   } else {
     gl.uniform1i(loc.uMode, 0);
     gl.uniform3f(loc.uEast, proj.E[0], proj.E[1], proj.E[2]);
@@ -1477,6 +1510,7 @@ function gpuDraw() {
     gl.uniform3f(loc.uCenter, proj.C[0], proj.C[1], proj.C[2]);
     gl.uniform1f(loc.uScale, proj.scale);
     gl.uniform2f(loc.uC, vb.width / 2, vb.width / 2);
+    gl.uniform1f(loc.uFrontMin, 0.0);
   }
   const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
   const resident = id => { const r = gpu.cache.get(id); return r && r.state === "gpu" ? r : null; };
@@ -1764,13 +1798,14 @@ function setupPlateNav() {
     if (!pinView()) return;
     ensureVisual();
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lat: state.view.lat, lon: state.view.lon, moved: false };
+    if (state.projection === "flat") state.flatRefLat = state.view.lat;
   });
   plate.addEventListener("pointermove", e => {
     if (!drag) return;
     const gp = groundPerPx();
     if (!gp) return;
     const flat = state.projection === "flat";
-    const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
+    const kx = flat ? flatKx(state.flatRefLat !== null ? state.flatRefLat : state.view.lat, state.view.zoom) : 1;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) {
       drag.moved = true;
@@ -1787,7 +1822,11 @@ function setupPlateNav() {
       applyViewTransform();
     } else if (gpu.enabled) {
       // retained-primary: the GL layer reads the hand's own camera
-      // every animation frame — no frames to fetch (§R2).
+      // every animation frame — no frames to fetch (§R2). The eased
+      // visual view rides along, so RELEASING the pointer stays put
+      // instead of snapping back to the pre-drag view.
+      visual.lat = state.view.lat;
+      visual.lon = state.view.lon;
     } else {
       // the globe's pan is a rotation: live drag-quality frames. The
       // visual view rides the FRAME's view (set on arrival), not the
@@ -1801,6 +1840,12 @@ function setupPlateNav() {
     const moved = drag.moved;
     drag = null;
     plate.classList.remove("dragging");
+    state.flatRefLat = null;
+    const wrap = Math.round(state.view.lon / 360) * 360;
+    if (wrap) {
+      state.view.lon -= wrap;
+      if (visual.zoom !== null) visual.lon -= wrap;
+    }
     suppressClick = moved;
     if (moved) settleSharp();
   };
@@ -1825,7 +1870,7 @@ function setupPlateNav() {
     // CURSOR-ANCHORED TARGET: the ground under the cursor stays under
     // the cursor when the lerp arrives
     const flat = state.projection === "flat";
-    const kx = flat ? Math.max(0.05, Math.cos(state.view.lat * Math.PI / 180)) : 1;
+    const kx = flat ? flatKx(state.view.lat, state.view.zoom) : 1;
     const layer = plate.querySelector(".layer");
     const lrect = layer.getBoundingClientRect();
     const cx = e.clientX - lrect.left - gp.cb.cx;

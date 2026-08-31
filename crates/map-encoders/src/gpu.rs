@@ -224,6 +224,108 @@ fn style_key(style: &GpuStyle) -> StyleKey {
     StyleKey(hash64(&c.done()))
 }
 
+// ------------------------------------------------- antimeridian split
+
+/// Nudge a point off the y=0 plane so its longitude lands firmly on
+/// the intended side of ±180 after f32 rounding.
+fn nudge_y(p: &UnitVec, positive: bool) -> UnitVec {
+    let eps = 1e-6;
+    if p.y().abs() > eps {
+        return *p;
+    }
+    let y = if positive { eps } else { -eps };
+    UnitVec::normalize(p.x(), y, p.z()).unwrap_or(*p)
+}
+
+/// Where the chord a→b pierces the y = 0 plane, normalized back to
+/// the sphere.
+fn y_crossing(a: &UnitVec, b: &UnitVec) -> UnitVec {
+    let (ya, yb) = (a.y(), b.y());
+    let t = if (ya - yb).abs() < 1e-12 { 0.5 } else { ya / (ya - yb) };
+    UnitVec::normalize(
+        a.x() + t * (b.x() - a.x()),
+        a.y() + t * (b.y() - a.y()),
+        a.z() + t * (b.z() - a.z()),
+    )
+    .unwrap_or(*a)
+}
+
+/// Does this run ever cross the antimeridian half-plane (y = 0 with
+/// x < 0, i.e. longitude ±180)? Runs that stay clear ship unsplit —
+/// identical ids to before, and most of the atlas's content.
+fn crosses_antimeridian(pts: &[UnitVec], closed: bool) -> bool {
+    let n = pts.len();
+    let edges = if closed { n } else { n.saturating_sub(1) };
+    (0..edges).any(|i| {
+        let (a, b) = (&pts[i], &pts[(i + 1) % n]);
+        (a.y() >= 0.0) != (b.y() >= 0.0) && a.x() + b.x() < 0.0
+    })
+}
+
+/// Split an open polyline wherever it crosses the antimeridian: each
+/// returned run lives entirely within one longitude half, so an
+/// equirectangular chart can never draw a seam-crossing edge as a
+/// streak across the page. Pure geometry — the globe draws the same
+/// pixels, the split point lying ON the original chord.
+fn split_line_at_antimeridian(pts: &[UnitVec]) -> Vec<Vec<UnitVec>> {
+    if !crosses_antimeridian(pts, false) {
+        return vec![pts.to_vec()];
+    }
+    let mut runs: Vec<Vec<UnitVec>> = Vec::new();
+    let mut run: Vec<UnitVec> = Vec::new();
+    for i in 0..pts.len() {
+        if i > 0 {
+            let (a, b) = (&pts[i - 1], &pts[i]);
+            if (a.y() >= 0.0) != (b.y() >= 0.0) && a.x() + b.x() < 0.0 {
+                let c = y_crossing(a, b);
+                run.push(nudge_y(&c, a.y() >= 0.0));
+                if run.len() > 1 {
+                    runs.push(std::mem::take(&mut run));
+                } else {
+                    run.clear();
+                }
+                run.push(nudge_y(&c, b.y() >= 0.0));
+            }
+        }
+        run.push(pts[i]);
+    }
+    if run.len() > 1 {
+        runs.push(run);
+    }
+    runs
+}
+
+/// Split a closed ring into its y ≥ 0 and y ≤ 0 pieces
+/// (Sutherland–Hodgman against the plane through the poles). The two
+/// pieces share their cut edges, which cancel under even-odd parity —
+/// the interior is unchanged on every chart, and neither piece can
+/// cross the antimeridian. Rings that never touch it pass through
+/// whole, ids untouched.
+fn split_ring_at_antimeridian(pts: &[UnitVec]) -> Vec<Vec<UnitVec>> {
+    if pts.len() < 3 || map_types::covers_sphere(pts) || !crosses_antimeridian(pts, true) {
+        return vec![pts.to_vec()];
+    }
+    let clip = |keep_pos: bool| -> Vec<UnitVec> {
+        let inside = |p: &UnitVec| if keep_pos { p.y() >= 0.0 } else { p.y() <= 0.0 };
+        let mut out: Vec<UnitVec> = Vec::new();
+        for i in 0..pts.len() {
+            let a = &pts[i];
+            let b = &pts[(i + 1) % pts.len()];
+            match (inside(a), inside(b)) {
+                (true, true) => out.push(*b),
+                (true, false) => out.push(y_crossing(a, b)),
+                (false, true) => {
+                    out.push(y_crossing(a, b));
+                    out.push(*b);
+                }
+                (false, false) => {}
+            }
+        }
+        out.iter().map(|p| nudge_y(p, keep_pos)).collect()
+    };
+    [clip(true), clip(false)].into_iter().filter(|piece| piece.len() >= 3).collect()
+}
+
 // ----------------------------------------------------- binary packing
 
 /// Packet magic: "MGR1" — map geometry resource, format 1.
@@ -346,14 +448,16 @@ impl GpuSceneEncoder {
         for r in &scene.regions {
             let sk = style_of(&mut styles, GpuStyle::Fill { color: r.paint.fill });
             for ring in r.outer.iter().chain(&r.holes) {
-                let (id, geom) =
-                    add(&mut resources, &mut seen, ResourceKind::RingLoop, ring.points());
-                features.push(FeatureInstance {
-                    feature: format!("region:{:016x}", r.region.0 .0),
-                    geometry: geom,
-                    resource: id,
-                    style: sk,
-                });
+                for piece in split_ring_at_antimeridian(ring.points()) {
+                    let (id, geom) =
+                        add(&mut resources, &mut seen, ResourceKind::RingLoop, &piece);
+                    features.push(FeatureInstance {
+                        feature: format!("region:{:016x}", r.region.0 .0),
+                        geometry: geom,
+                        resource: id,
+                        style: sk,
+                    });
+                }
             }
         }
         // Boundaries: the representative Stage-4 layer — real strokes
@@ -367,13 +471,15 @@ impl GpuSceneEncoder {
                     pattern: b.stroke.pattern,
                 },
             );
-            let (id, geom) = add(&mut resources, &mut seen, ResourceKind::LineStrip, &b.pts);
-            features.push(FeatureInstance {
-                feature: format!("boundary:{:016x}", b.boundary.0 .0),
-                geometry: geom,
-                resource: id,
-                style: sk,
-            });
+            for piece in split_line_at_antimeridian(&b.pts) {
+                let (id, geom) = add(&mut resources, &mut seen, ResourceKind::LineStrip, &piece);
+                features.push(FeatureInstance {
+                    feature: format!("boundary:{:016x}", b.boundary.0 .0),
+                    geometry: geom,
+                    resource: id,
+                    style: sk,
+                });
+            }
         }
         // Markers batch by style: one Points resource per marker dress.
         let mut by_style: BTreeMap<StyleKey, (MarkerStyle, Vec<UnitVec>)> = BTreeMap::new();

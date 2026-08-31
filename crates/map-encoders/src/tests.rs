@@ -1059,3 +1059,71 @@ fn manifest_and_svg_describe_the_same_scene() {
     // the same identity law the rest of the system caches by.
     assert_eq!(enc.manifest.scene_revision, scene.map_pid().hash);
 }
+
+/// The antimeridian split: pieces never cross the seam, cut edges
+/// cancel under even-odd parity, and geometry clear of the seam ships
+/// whole with untouched ids.
+#[test]
+fn antimeridian_split_is_seam_safe() {
+    // A ring straddling lon 180 (the Bering shape of the problem).
+    let ring = Ring::new(vec![
+        uv(60.0, 170.0),
+        uv(60.0, -170.0),
+        uv(70.0, -170.0),
+        uv(70.0, 170.0),
+    ])
+    .unwrap();
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(31)),
+        entity: None,
+        outer: vec![ring],
+        holes: vec![],
+        paint: Paint { fill: Rgba(1, 2, 3, 255) },
+        sources: Default::default(),
+    });
+    scene.boundaries.push(StyledBoundary {
+        boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(32)),
+        pts: vec![uv(60.0, 170.0), uv(60.0, -170.0), uv(55.0, -160.0)],
+        stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
+        sources: Default::default(),
+    });
+    let enc = gpu_encode(&scene);
+    // Every emitted piece lives in ONE longitude half: no edge of any
+    // piece can cross lon ±180.
+    for r in &enc.resources {
+        let p = &r.payload;
+        let count = u32::from_le_bytes(p[40..44].try_into().unwrap()) as usize;
+        let mut pos = false;
+        let mut neg = false;
+        for i in 0..count {
+            let o = 48 + i * 12;
+            let y = f32::from_le_bytes(p[o + 4..o + 8].try_into().unwrap());
+            if y > 0.0 {
+                pos = true;
+            }
+            if y < 0.0 {
+                neg = true;
+            }
+        }
+        assert!(!(pos && neg), "a piece stays within one longitude half");
+    }
+    // The seam-crossing ring became two ring pieces under one feature.
+    let ring_feats: Vec<_> =
+        enc.manifest.features.iter().filter(|f| f.feature.starts_with("region:")).collect();
+    assert_eq!(ring_feats.len(), 2, "two parity pieces, one region");
+    assert_eq!(ring_feats[0].feature, ring_feats[1].feature);
+    // The crossing boundary split into two strips under one feature.
+    let line_feats: Vec<_> =
+        enc.manifest.features.iter().filter(|f| f.feature.starts_with("boundary:")).collect();
+    assert_eq!(line_feats.len(), 2, "the strip splits at the seam");
+    // Seam-free geometry ships whole and keeps its identity.
+    let calm = gpu_encode(&sample_scene());
+    let calm2 = gpu_encode(&sample_scene());
+    assert_eq!(calm.resources.len(), calm2.resources.len());
+    assert_eq!(
+        calm.manifest.features.iter().filter(|f| f.feature.starts_with("boundary:")).count(),
+        1,
+        "a near-east boundary stays one strip"
+    );
+}
