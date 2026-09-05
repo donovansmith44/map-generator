@@ -800,3 +800,252 @@ fn labeling_voice_follows_face() {
     assert_eq!(l.voice(LabelFace::Place).family, "sans-p");
     assert_eq!(l.voice(LabelFace::Memory).family, "serif-m");
 }
+
+// ------------------------------- the containment law: inside_ring
+// A closed spherical ring divides the sphere into two components; the
+// INTERIOR is the smaller-area component (ties go left of traversal).
+// The law is a property of the point set, not the traversal — reversing
+// the ring changes nothing. The whole-sphere sentinel's interior is
+// everything, by the covers_sphere decree.
+
+/// Deterministic LCG so the property tests are reproducible runs, not
+/// flakes — the crate takes no dependencies (C1), randomness included.
+struct Lcg(u64);
+impl Lcg {
+    fn f(&mut self) -> f64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
+    }
+    fn range(&mut self, lo: f64, hi: f64) -> f64 {
+        lo + (hi - lo) * self.f()
+    }
+}
+
+/// An orthonormal frame with `axis` as its pole: the same east/north
+/// construction the projectors use.
+fn frame(axis: &UnitVec) -> (UnitVec, UnitVec) {
+    let e = UnitVec::normalize(-axis.y(), axis.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let (nx, ny, nz) = axis.cross_raw(&e);
+    (e, UnitVec::normalize(nx, ny, nz).unwrap())
+}
+
+/// A point at angular distance `rad` from `axis`, at azimuth `theta`
+/// in the axis's frame.
+fn at(axis: &UnitVec, rad: f64, theta: f64) -> UnitVec {
+    let (e, n) = frame(axis);
+    let (c, s) = (rad.cos(), rad.sin());
+    UnitVec::normalize(
+        axis.x() * c + (e.x() * theta.cos() + n.x() * theta.sin()) * s,
+        axis.y() * c + (e.y() * theta.cos() + n.y() * theta.sin()) * s,
+        axis.z() * c + (e.z() * theta.cos() + n.z() * theta.sin()) * s,
+    )
+    .unwrap()
+}
+
+/// A simple (star-shaped) ring around `axis`: jittered uniform
+/// azimuths, radii in [r_lo, r_hi]. The jitter keeps every azimuth gap
+/// below pi, which keeps the ring SIMPLE (in the gnomonic projection
+/// about the axis geodesics are straight lines, so each edge stays in
+/// its own azimuth wedge) — the containment law speaks only about
+/// simple rings, so the generator must honour that.
+fn star_ring(rng: &mut Lcg, axis: &UnitVec, m: usize, r_lo: f64, r_hi: f64) -> Vec<UnitVec> {
+    (0..m)
+        .map(|j| {
+            let t = (j as f64 + 0.8 * rng.f()) * std::f64::consts::TAU / m as f64;
+            at(axis, rng.range(r_lo, r_hi), t)
+        })
+        .collect()
+}
+
+/// The classic 2D even-odd ray cast — the very rule the SVG fill and
+/// the hit test speak, used here as the planar oracle.
+fn planar_even_odd(x: f64, y: f64, pts: &[(f64, f64)]) -> bool {
+    let mut inside = false;
+    let n = pts.len();
+    for j in 0..n {
+        let (jx, jy) = pts[j];
+        let (kx, ky) = pts[(j + 1) % n];
+        if ((jy > y) != (ky > y)) && x < jx + (y - jy) / (ky - jy) * (kx - jx) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+#[test]
+fn containment_agrees_with_planar_even_odd_on_the_front_hemisphere() {
+    let mut rng = Lcg(0x5eed_0001);
+    let deg = std::f64::consts::PI / 180.0;
+    for _ in 0..200 {
+        // A camera, a ring comfortably on its front hemisphere, points nearby.
+        let cam = UnitVec::from_lat_lon_deg(rng.range(-80.0, 80.0), rng.range(-180.0, 180.0));
+        let (ce, cn) = frame(&cam);
+        let axis = at(&cam, rng.range(0.0, 55.0) * deg, rng.range(0.0, std::f64::consts::TAU));
+        let m = 5 + (rng.f() * 35.0) as usize;
+        let ring = star_ring(&mut rng, &axis, m, 5.0 * deg, 25.0 * deg);
+        // The oracle draws straight chords where the sphere draws
+        // great-circle arcs: densify each edge before projecting so the
+        // polygon follows the projected curve, and skip samples inside
+        // the residual guard band along the boundary.
+        let mut flat: Vec<(f64, f64)> = Vec::new();
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            for k in 0..32 {
+                let q = slerp(&a, &b, f64::from(k) / 32.0).unwrap();
+                flat.push((q.dot(&ce), q.dot(&cn)));
+            }
+        }
+        for _ in 0..20 {
+            let p = at(&axis, rng.range(0.0, 30.0) * deg, rng.range(0.0, std::f64::consts::TAU));
+            let (px, py) = (p.dot(&ce), p.dot(&cn));
+            let near_boundary = (0..flat.len()).any(|j| {
+                let (ax, ay) = flat[j];
+                let (bx, by) = flat[(j + 1) % flat.len()];
+                let (dx, dy) = (bx - ax, by - ay);
+                let t = if dx * dx + dy * dy < 1e-30 {
+                    0.0
+                } else {
+                    ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
+                };
+                let t = t.clamp(0.0, 1.0);
+                let (qx, qy) = (ax + t * dx, ay + t * dy);
+                (px - qx).hypot(py - qy) < 1e-4
+            });
+            if near_boundary {
+                continue;
+            }
+            let want = planar_even_odd(px, py, &flat);
+            assert_eq!(inside_ring(&p, &ring), want, "cap path disagrees with planar oracle");
+            assert_eq!(
+                inside_ring_general(&p, &ring),
+                want,
+                "general path disagrees with planar oracle"
+            );
+        }
+    }
+}
+
+#[test]
+fn containment_holds_for_rings_hugging_the_limb() {
+    let mut rng = Lcg(0x5eed_0002);
+    let deg = std::f64::consts::PI / 180.0;
+    for _ in 0..50 {
+        let axis = UnitVec::from_lat_lon_deg(rng.range(-80.0, 80.0), rng.range(-180.0, 180.0));
+        // Ring vertices between 86 and 89 degrees from the axis: a whisker
+        // short of a great circle.
+        let m = 8 + (rng.f() * 50.0) as usize;
+        let ring = star_ring(&mut rng, &axis, m, 86.0 * deg, 89.0 * deg);
+        let anti = axis.antipode();
+        assert!(inside_ring(&axis, &ring), "the axis is inside its own near-hemispheric ring");
+        assert!(!inside_ring(&anti, &ring), "the antipode is outside");
+        let theta = rng.range(0.0, std::f64::consts::TAU);
+        assert!(inside_ring(&at(&axis, 80.0 * deg, theta), &ring), "well within the shortest radius");
+        assert!(!inside_ring(&at(&axis, 89.7 * deg, theta), &ring), "beyond the longest radius");
+        // Both implementation paths, same answers.
+        for _ in 0..10 {
+            let p = at(&axis, rng.range(0.0, 180.0) * deg, rng.range(0.0, std::f64::consts::TAU));
+            assert_eq!(inside_ring(&p, &ring), inside_ring_general(&p, &ring));
+        }
+    }
+}
+
+#[test]
+fn containment_of_a_pole() {
+    let north: Vec<UnitVec> =
+        (0..36).map(|i| UnitVec::from_lat_lon_deg(80.0, f64::from(i) * 10.0 - 180.0)).collect();
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(90.0, 0.0), &north));
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(-90.0, 0.0), &north));
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(0.0, 0.0), &north));
+    let south: Vec<UnitVec> =
+        (0..36).map(|i| UnitVec::from_lat_lon_deg(-80.0, f64::from(i) * 10.0 - 180.0)).collect();
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(-90.0, 0.0), &south));
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(90.0, 0.0), &south));
+}
+
+#[test]
+fn containment_survives_a_skewed_vertex_mean() {
+    // The lat -30 circle, subdivided unevenly so the vertex mean swings
+    // far off the true (south-polar) axis and its bounding cap fails the
+    // hemisphere test — the general path must still call the south side
+    // (the smaller component) the interior.
+    let mut ring: Vec<UnitVec> = Vec::new();
+    let mut lon = -180.0;
+    while lon < 0.0 {
+        ring.push(UnitVec::from_lat_lon_deg(-30.0, lon));
+        lon += 2.0;
+    }
+    while lon < 180.0 {
+        ring.push(UnitVec::from_lat_lon_deg(-30.0, lon));
+        lon += 30.0;
+    }
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(-90.0, 0.0), &ring), "south pole is inside");
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(90.0, 0.0), &ring), "north pole is outside");
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(20.0, 45.0), &ring), "the tropics are outside");
+    let reversed: Vec<UnitVec> = ring.iter().rev().copied().collect();
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(-90.0, 0.0), &reversed));
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(90.0, 0.0), &reversed));
+}
+
+#[test]
+fn containment_is_traversal_invariant() {
+    let mut rng = Lcg(0x5eed_0003);
+    let deg = std::f64::consts::PI / 180.0;
+    for _ in 0..100 {
+        let axis = UnitVec::from_lat_lon_deg(rng.range(-85.0, 85.0), rng.range(-180.0, 180.0));
+        let wide = rng.f() < 0.5;
+        let (lo, hi) = if wide { (70.0, 88.0) } else { (5.0, 30.0) };
+        let m = 6 + (rng.f() * 30.0) as usize;
+        let ring = star_ring(&mut rng, &axis, m, lo * deg, hi * deg);
+        let reversed: Vec<UnitVec> = ring.iter().rev().copied().collect();
+        for _ in 0..10 {
+            let p = at(&axis, rng.range(0.0, 180.0) * deg, rng.range(0.0, std::f64::consts::TAU));
+            assert_eq!(
+                inside_ring(&p, &ring),
+                inside_ring(&p, &reversed),
+                "interior is a property of the point set, not the traversal"
+            );
+        }
+    }
+}
+
+#[test]
+fn containment_of_degenerate_and_sentinel_rings() {
+    // Fewer than three points: no interior.
+    let two = vec![UnitVec::from_lat_lon_deg(0.0, 0.0), UnitVec::from_lat_lon_deg(10.0, 0.0)];
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(5.0, 0.0), &two));
+    // A tiny triangle: its centre is in, a point a degree away is not.
+    let c = UnitVec::from_lat_lon_deg(10.0, 10.0);
+    let tiny = vec![
+        UnitVec::from_lat_lon_deg(10.001, 10.0),
+        UnitVec::from_lat_lon_deg(9.999, 10.001),
+        UnitVec::from_lat_lon_deg(9.999, 9.999),
+    ];
+    assert!(inside_ring(&c, &tiny));
+    assert!(!inside_ring(&UnitVec::from_lat_lon_deg(11.0, 10.0), &tiny));
+    // The whole-sphere sentinel (covers_sphere): interior is everything.
+    let sentinel = vec![
+        UnitVec::from_lat_lon_deg(90.0, 0.0),
+        UnitVec::from_lat_lon_deg(0.0, 0.0),
+        UnitVec::from_lat_lon_deg(-90.0, 0.0),
+        UnitVec::from_lat_lon_deg(0.0, 180.0),
+    ];
+    assert!(covers_sphere(&sentinel));
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(37.0, -122.0), &sentinel));
+    assert!(inside_ring(&UnitVec::from_lat_lon_deg(-37.0, 58.0), &sentinel));
+}
+
+#[test]
+fn containment_when_the_query_is_the_cap_axis() {
+    // p antipodal to the default reference (the cap axis's antipode):
+    // the reference must sidestep deterministically, not misfire.
+    let mut rng = Lcg(0x5eed_0004);
+    let deg = std::f64::consts::PI / 180.0;
+    for _ in 0..50 {
+        let axis = UnitVec::from_lat_lon_deg(rng.range(-85.0, 85.0), rng.range(-180.0, 180.0));
+        let ring = star_ring(&mut rng, &axis, 12, 15.0 * deg, 20.0 * deg);
+        assert!(inside_ring(&axis, &ring), "a star ring's own axis is inside it");
+        assert!(!inside_ring(&axis.antipode(), &ring));
+    }
+}
+

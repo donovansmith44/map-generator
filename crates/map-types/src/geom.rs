@@ -92,6 +92,11 @@ impl UnitVec {
     pub fn canon(&self, c: &mut Canon) {
         c.f64_(self.x).f64_(self.y).f64_(self.z);
     }
+
+    /// The diametrically opposite point. Exactly unit by construction.
+    pub fn antipode(&self) -> UnitVec {
+        UnitVec { x: -self.x, y: -self.y, z: -self.z }
+    }
 }
 
 /// Spherical linear interpolation. Total except between antipodes,
@@ -265,6 +270,264 @@ fn dp_mark(pts: &[UnitVec], i: usize, j: usize, tol: f64, keep: &mut [bool]) {
         dp_mark(pts, i, worst, tol, keep);
         dp_mark(pts, worst, j, tol, keep);
     }
+}
+
+// -------------------------------------------- the containment law
+//
+// THE MISSING PRIMITIVE both renderers' limb bugs reduce to: does a
+// point lie inside a closed spherical ring? A closed SIMPLE curve
+// divides the sphere into two components, and — unlike the plane —
+// neither holds a point at infinity to call "outside". The law below
+// speaks about simple (non-self-intersecting) rings, which is what the
+// geometry pipeline stores; a self-crossing ring has no two-component
+// decomposition for it to speak about. The convention, stated once and
+// tested as law:
+//
+//   THE INTERIOR OF A RING IS ITS SMALLER-AREA COMPONENT
+//   (an exact half-sphere tie goes to the left of traversal).
+//
+// Consequences, each a property test in tests.rs:
+//   - traversal-invariant: reversing the ring changes nothing, so the
+//     even-odd fill rule (which ignores winding) composes over rings;
+//   - for a ring bounded by a spherical cap smaller than a hemisphere
+//     the interior is the cap-side component, so the antipode of the
+//     cap's axis is provably OUTSIDE — the fast path;
+//   - the whole-sphere sentinel (covers_sphere) has NO smaller side;
+//     its interior is everything, by the existing decree above.
+//
+// Membership is decided by even-odd crossing counts: the geodesic from
+// the query point to a reference point of known status crosses the
+// ring an odd number of times exactly when the two lie in different
+// components. Crossings use the same half-open sign convention as the
+// classic 2D ray cast, so an arc through a ring vertex counts once,
+// and a vertex merely touched counts twice (parity unchanged).
+
+/// Signed-side test with the half-open convention: a point exactly on
+/// the great circle counts as the negative side, the same tie-break
+/// the 2D even-odd cast uses at vertices.
+fn side(n: (f64, f64, f64), q: &UnitVec) -> bool {
+    n.0 * q.x + n.1 * q.y + n.2 * q.z > 0.0
+}
+
+/// Is `x` (on the great circle through `u`,`v`) within the shorter arc
+/// u->v? Writing x = alpha*u + beta*v, membership is alpha,beta >= 0;
+/// the shared positive denominator 1 - dot(u,v)^2 is dropped.
+fn within_arc(x: &UnitVec, u: &UnitVec, v: &UnitVec) -> bool {
+    let c = u.dot(v);
+    let (du, dv) = (x.dot(u), x.dot(v));
+    du - c * dv >= 0.0 && dv - c * du >= 0.0
+}
+
+/// Does the geodesic p->r cross the edge a->b? Both arcs are the
+/// shorter great-circle arcs.
+fn arcs_cross(p: &UnitVec, r: &UnitVec, n1: (f64, f64, f64), a: &UnitVec, b: &UnitVec) -> bool {
+    if side(n1, a) == side(n1, b) {
+        return false; // edge does not straddle the test arc's circle
+    }
+    let n2 = a.cross_raw(b);
+    if side(n2, p) == side(n2, r) {
+        return false; // test arc does not straddle the edge's circle
+    }
+    // The two great circles meet at +/-(n1 x n2); the crossing counts
+    // only if one of those lies on BOTH shorter arcs.
+    let x = (
+        n1.1 * n2.2 - n1.2 * n2.1,
+        n1.2 * n2.0 - n1.0 * n2.2,
+        n1.0 * n2.1 - n1.1 * n2.0,
+    );
+    let Ok(x) = UnitVec::normalize(x.0, x.1, x.2) else {
+        return false; // coplanar: grazing contact, no transversal crossing
+    };
+    for s in [x, x.antipode()] {
+        if within_arc(&s, p, r) && within_arc(&s, a, b) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Crossing parity of the geodesic p->r against every ring edge
+/// (excluding index `skip`, for the labelling walk that starts ON that
+/// edge). True = odd = p and r in different components.
+fn crossing_parity(p: &UnitVec, r: &UnitVec, ring: &[UnitVec], skip: Option<usize>) -> bool {
+    let n1 = p.cross_raw(r);
+    let mut odd = false;
+    let n = ring.len();
+    for i in 0..n {
+        if skip == Some(i) {
+            continue;
+        }
+        if arcs_cross(p, r, n1, &ring[i], &ring[(i + 1) % n]) {
+            odd = !odd;
+        }
+    }
+    odd
+}
+
+/// The ring's bounding cap: vertex-mean axis and the cosine of the
+/// angular radius (the minimum dot with the axis). None when the
+/// vertices cancel to no meaningful centre.
+fn ring_cap(ring: &[UnitVec]) -> Option<(UnitVec, f64)> {
+    let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+    for p in ring {
+        x += p.x;
+        y += p.y;
+        z += p.z;
+    }
+    let axis = UnitVec::normalize(x, y, z).ok()?;
+    let cos_r = ring.iter().map(|p| p.dot(&axis)).fold(1.0_f64, f64::min);
+    Some((axis, cos_r.clamp(-1.0, 1.0)))
+}
+
+/// Is `p` inside the closed ring, under the smaller-component law
+/// documented above? Rings are cyclic (no repeated closing point).
+/// Fewer than three distinct points have no interior; a covers_sphere
+/// sentinel contains everything.
+pub fn inside_ring(p: &UnitVec, ring: &[UnitVec]) -> bool {
+    if ring.len() < 3 {
+        return false;
+    }
+    if covers_sphere(ring) {
+        return true;
+    }
+    if let Some((axis, cos_r)) = ring_cap(ring) {
+        if cos_r > 0.0 {
+            // The ring fits in a cap smaller than a hemisphere: every
+            // point beyond the cap — the axis's antipode in particular
+            // — is in the outside component, and the interior (the
+            // cap-side component, within an open hemisphere) is the
+            // smaller side. Odd crossings = inside.
+            let r = outside_reference(p, &axis, cos_r);
+            return crossing_parity(p, &r, ring, None);
+        }
+    }
+    inside_ring_general(p, ring)
+}
+
+/// A reference point provably outside the cap (axis, cos_r), chosen so
+/// it is never near-antipodal to `p` (a geodesic between antipodes is
+/// ill-defined). The axis's antipode serves unless `p` sits near the
+/// axis; the fallbacks stay outside the cap by construction — any
+/// point at more than the cap's angle from the axis is outside.
+fn outside_reference(p: &UnitVec, axis: &UnitVec, cos_r: f64) -> UnitVec {
+    let anti = axis.antipode();
+    if p.dot(&anti) > -0.999 {
+        return anti;
+    }
+    // p is essentially the axis: step off the antipode along a
+    // perpendicular, staying more than the cap's angle away from the
+    // axis. Halfway between the cap rim and the antipode is exact.
+    let e = UnitVec::normalize(-axis.y, axis.x, 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let phi = (cos_r.acos() + std::f64::consts::PI) / 2.0;
+    let (c, s) = (phi.cos(), phi.sin());
+    UnitVec::normalize(
+        axis.x * c + e.x * s,
+        axis.y * c + e.y * s,
+        axis.z * c + e.z * s,
+    )
+    .expect("axis and perpendicular are orthonormal")
+}
+
+/// The general path, no cap assumption: label the two components by
+/// area (Gauss–Bonnet turning angles) and decide membership by parity
+/// against the labelled side. pub(crate) so the law tests can drive it
+/// directly against the fast path.
+pub(crate) fn inside_ring_general(p: &UnitVec, ring: &[UnitVec]) -> bool {
+    // Drop consecutive duplicates: zero-length edges carry no turning
+    // angle and no crossing, only conditioning trouble.
+    let mut pts: Vec<UnitVec> = Vec::with_capacity(ring.len());
+    for q in ring {
+        if pts.last().map_or(true, |l: &UnitVec| l.dot(q) < 1.0 - 1e-12) {
+            pts.push(*q);
+        }
+    }
+    while pts.len() > 1 && pts[0].dot(pts.last().unwrap()) >= 1.0 - 1e-12 {
+        pts.pop();
+    }
+    if pts.len() < 3 {
+        return false;
+    }
+    let n = pts.len();
+
+    // Area of the LEFT-of-traversal component: 2*pi minus the summed
+    // signed turning angles (spherical Gauss–Bonnet; left turns
+    // positive about the outward normal).
+    let mut turn = 0.0;
+    for i in 0..n {
+        let u = &pts[(i + n - 1) % n];
+        let v = &pts[i];
+        let w = &pts[(i + 1) % n];
+        // Unit tangents at v: arriving from u, departing toward w.
+        let t_in = UnitVec::normalize(
+            v.x * u.dot(v) - u.x,
+            v.y * u.dot(v) - u.y,
+            v.z * u.dot(v) - u.z,
+        );
+        let t_out = UnitVec::normalize(
+            w.x - v.x * v.dot(w),
+            w.y - v.y * v.dot(w),
+            w.z - v.z * v.dot(w),
+        );
+        let (Ok(t_in), Ok(t_out)) = (t_in, t_out) else {
+            continue; // an antipodal edge pair: no defined tangent, no turn
+        };
+        let cr = t_in.cross_raw(&t_out);
+        turn += (cr.0 * v.x + cr.1 * v.y + cr.2 * v.z).atan2(t_in.dot(&t_out));
+    }
+    let left_area = std::f64::consts::TAU - turn;
+    let left_is_interior = left_area <= std::f64::consts::TAU;
+
+    // The longest edge anchors the labelling: its midpoint m lies ON
+    // the ring, and the geodesic m->r meets that edge's great circle
+    // only at m itself (two great circles cross exactly at +/-m), so
+    // skipping the edge in the count is exact, and whether a point
+    // just LEFT of m reaches r without crossing the edge is decided
+    // by which side of the edge's circle r lies on.
+    let mut e_best = 0;
+    let mut c_best = 2.0;
+    for i in 0..n {
+        let c = pts[i].dot(&pts[(i + 1) % n]);
+        if c < c_best {
+            c_best = c;
+            e_best = i;
+        }
+    }
+    let (a, b) = (&pts[e_best], &pts[(e_best + 1) % n]);
+    let m = UnitVec::normalize(a.x + b.x, a.y + b.y, a.z + b.z)
+        .expect("the longest edge of a deduplicated ring is not antipodal");
+    let ncr = a.cross_raw(b);
+    let n_hat = UnitVec::normalize(ncr.0, ncr.1, ncr.2)
+        .expect("the longest edge spans a defined great circle");
+
+    // A reference not near-antipodal to p or m and decisively off the
+    // labelling edge's great circle. Six spread candidates: p can veto
+    // at most one, m one, the circle two.
+    let candidates = [
+        UnitVec { x: 0.0, y: 0.0, z: 1.0 },
+        UnitVec { x: 0.0, y: 0.0, z: -1.0 },
+        UnitVec { x: 1.0, y: 0.0, z: 0.0 },
+        UnitVec { x: 0.0, y: 1.0, z: 0.0 },
+        UnitVec { x: -1.0, y: 0.0, z: 0.0 },
+        UnitVec { x: 0.0, y: -1.0, z: 0.0 },
+    ];
+    let r = candidates
+        .iter()
+        .find(|r| p.dot(r) > -0.999 && m.dot(r) > -0.999 && r.dot(&n_hat).abs() > 1e-6)
+        .copied()
+        .unwrap_or(candidates[0]);
+
+    // Parity of the LEFT class: crossings from m to r over the other
+    // edges, plus one for the labelling edge itself when r lies to its
+    // right (a just-left point must cross the edge to depart right).
+    let mut left_parity = crossing_parity(&m, &r, &pts, Some(e_best));
+    if !side((n_hat.x, n_hat.y, n_hat.z), &r) {
+        left_parity = !left_parity;
+    }
+    let p_parity = crossing_parity(p, &r, &pts, None);
+    // p is in the left class iff its parity matches the left class's;
+    // inside iff that class is the interior.
+    (p_parity == left_parity) == left_is_interior
 }
 
 /// Viewport: a spherical cap — the simplest sound "arbitrary chunk of
