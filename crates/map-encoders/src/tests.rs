@@ -1307,3 +1307,195 @@ fn limb_clip_emits_multiple_lobes_when_the_ring_returns() {
         );
     }
 }
+
+// ------------------------- cross-language fixtures for the JS port
+// The retained renderer carries a line-for-line port of inside_ring
+// and clip_ring_front (crates/map-viewer/src/limb.js). One committed
+// fixture file holds inputs and Rust-computed outputs; this test
+// guards the Rust side against drift, and the Node test
+// (crates/map-viewer/tests/limb.test.mjs) holds the port to the same
+// answers. Regenerate with:
+//   cargo test -p map-encoders bless_limb_fixtures -- --ignored
+
+fn limb_fixture_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../map-viewer/tests/fixtures/limb.json")
+}
+
+fn hourglass_ring() -> Vec<UnitVec> {
+    // The two-lobe band from limb_clip_emits_multiple_lobes.
+    let mut ring: Vec<UnitVec> = Vec::new();
+    let mut lat = -40.0;
+    while lat <= 40.0 {
+        ring.push(uv(lat, -65.0));
+        lat += 5.0;
+    }
+    let mut lon = -75.0;
+    while lon >= -175.0 {
+        ring.push(uv(40.0, lon));
+        lon -= 10.0;
+    }
+    let mut lon = 175.0;
+    while lon >= 75.0 {
+        ring.push(uv(40.0, lon));
+        lon -= 10.0;
+    }
+    let mut lat = 40.0;
+    while lat >= -40.0 {
+        ring.push(uv(lat, 65.0));
+        lat -= 5.0;
+    }
+    let mut lon = 75.0;
+    while lon <= 175.0 {
+        ring.push(uv(-40.0, lon));
+        lon += 10.0;
+    }
+    let mut lon = -175.0;
+    while lon <= -75.0 {
+        ring.push(uv(-40.0, lon));
+        lon += 10.0;
+    }
+    ring
+}
+
+fn skewed_mean_ring() -> Vec<UnitVec> {
+    let mut ring: Vec<UnitVec> = Vec::new();
+    let mut lon = -180.0;
+    while lon < 0.0 {
+        ring.push(UnitVec::from_lat_lon_deg(-30.0, lon));
+        lon += 2.0;
+    }
+    while lon < 180.0 {
+        ring.push(UnitVec::from_lat_lon_deg(-30.0, lon));
+        lon += 30.0;
+    }
+    ring
+}
+
+struct LimbCase {
+    name: &'static str,
+    c: UnitVec,
+    ring: Vec<UnitVec>,
+    probes: Vec<UnitVec>,
+}
+
+fn limb_fixture_cases() -> Vec<LimbCase> {
+    let deg = std::f64::consts::PI / 180.0;
+    let c = uv(20.0, -150.0);
+    let pacific_axis = circle_ring(&c, 100.0 * deg, 12)[3];
+    vec![
+        LimbCase {
+            name: "pacific-antipode",
+            c,
+            ring: circle_ring(&pacific_axis, 79.0 * deg, 720),
+            probes: vec![
+                c,
+                pacific_axis,
+                pacific_axis.antipode(),
+                circle_ring(&pacific_axis, 60.0 * deg, 720)
+                    .into_iter()
+                    .find(|p| p.dot(&c) > 0.35)
+                    .expect("front interior probe"),
+            ],
+        },
+        LimbCase {
+            name: "wholly-front",
+            c,
+            ring: circle_ring(&c, 30.0 * deg, 90),
+            probes: vec![c, c.antipode(), uv(20.0, -100.0)],
+        },
+        LimbCase {
+            name: "wholly-hidden",
+            c,
+            ring: circle_ring(&c.antipode(), 30.0 * deg, 90),
+            probes: vec![c, c.antipode()],
+        },
+        LimbCase {
+            name: "hourglass-two-lobes",
+            c: uv(0.0, 0.0),
+            ring: hourglass_ring(),
+            probes: vec![uv(0.0, -75.0), uv(0.0, 75.0), uv(0.0, 0.0), uv(60.0, -75.0)],
+        },
+        LimbCase {
+            name: "rim-straddler",
+            c,
+            ring: circle_ring(&circle_ring(&c, 85.0 * deg, 8)[1], 30.0 * deg, 240),
+            probes: vec![c, circle_ring(&c, 85.0 * deg, 8)[1]],
+        },
+        LimbCase {
+            name: "pole-ring",
+            c: uv(80.0, 0.0),
+            ring: (0..36).map(|i| uv(80.0, f64::from(i) * 10.0 - 180.0)).collect(),
+            probes: vec![uv(90.0, 0.0), uv(-90.0, 0.0), uv(0.0, 0.0)],
+        },
+        LimbCase {
+            name: "skewed-mean-general-path",
+            c,
+            ring: skewed_mean_ring(),
+            probes: vec![uv(-90.0, 0.0), uv(90.0, 0.0), uv(20.0, 45.0)],
+        },
+    ]
+}
+
+fn limb_fixture_json() -> serde_json::Value {
+    let cases: Vec<serde_json::Value> = limb_fixture_cases()
+        .into_iter()
+        .map(|cs| {
+            let flat: Vec<f64> =
+                cs.ring.iter().flat_map(|p| [p.x(), p.y(), p.z()]).collect();
+            let probes: Vec<serde_json::Value> = cs
+                .probes
+                .iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "p": [p.x(), p.y(), p.z()],
+                        "inside": map_types::inside_ring(p, &cs.ring),
+                    })
+                })
+                .collect();
+            let loops = crate::clip_ring_front(&cs.ring, &cs.c);
+            let all_front = cs.ring.iter().all(|p| p.dot(&cs.c) >= 0.0);
+            let clip = if all_front {
+                serde_json::json!({ "kind": "same" })
+            } else if loops.is_empty() {
+                serde_json::json!({ "kind": "none" })
+            } else {
+                let ls: Vec<Vec<f64>> = loops
+                    .iter()
+                    .map(|run| run.iter().flat_map(|p| [p.x(), p.y(), p.z()]).collect())
+                    .collect();
+                serde_json::json!({ "kind": "loops", "loops": ls })
+            };
+            serde_json::json!({
+                "name": cs.name,
+                "c": [cs.c.x(), cs.c.y(), cs.c.z()],
+                "ring": flat,
+                "probes": probes,
+                "clip": clip,
+            })
+        })
+        .collect();
+    serde_json::json!({ "cases": cases })
+}
+
+#[test]
+#[ignore = "writes the committed fixture; run explicitly to bless"]
+fn bless_limb_fixtures() {
+    let path = limb_fixture_path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, serde_json::to_string_pretty(&limb_fixture_json()).unwrap()).unwrap();
+    println!("blessed {}", path.display());
+}
+
+#[test]
+fn limb_fixtures_match_rust() {
+    let committed = std::fs::read_to_string(limb_fixture_path())
+        .expect("fixture file exists — bless_limb_fixtures writes it")
+        .replace("\r\n", "\n");
+    let fresh = serde_json::to_string_pretty(&limb_fixture_json()).unwrap();
+    assert!(
+        committed.trim_end() == fresh.trim_end(),
+        "committed limb fixtures drifted from the Rust implementation — \
+         re-bless if the change is intended, and update the JS port"
+    );
+}

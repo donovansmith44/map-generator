@@ -27,6 +27,7 @@ use map_types::SceneEncoder as _;
 use map_types::TransitionEncoder as _;
 
 const PAGE: &str = include_str!("page.html");
+const LIMB_JS: &str = include_str!("limb.js");
 /// Default port. 8080/8081/8000/5000 belong to the Bible Atlas
 /// pipeline on this machine — the workbench stays clear of them.
 /// Override with MAP_VIEWER_PORT.
@@ -827,6 +828,11 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
 
     match path {
         "/" => (200, "text/html", PAGE.to_string(), Vec::new()),
+
+        // The limb laws (containment + clip), one pure module shared
+        // by the page and the Node cross-language tests. Compiled into
+        // the binary like the page itself.
+        "/limb.js" => (200, "application/javascript", LIMB_JS.to_string(), Vec::new()),
 
         "/api/meta" => {
             let styles: Vec<serde_json::Value> = app
