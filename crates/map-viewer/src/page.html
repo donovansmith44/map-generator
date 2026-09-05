@@ -102,6 +102,16 @@
   #bench { display: flex; flex-direction: column; min-width: 0; }
   #plate {
     flex: 1; overflow: hidden; display: grid; padding: 14px;
+    /* THE ONE CELL IS THE PLATE: without a definite template the
+       implicit row is content-sized, the layers' height:100% has no
+       basis, and the frame's own square aspect (viewBox) stretches
+       everything to full width — the landing globe ran off the top
+       and bottom of the viewport. With the cell pinned to the padding
+       box, every layer letterboxes within it: the svg by
+       preserveAspectRatio (xMidYMid meet), the portrait by
+       object-fit: contain, the GL canvas by its own min-k transform —
+       the contain law all three already spoke, now given a box. */
+    grid-template-columns: 100%; grid-template-rows: 100%;
     cursor: grab; touch-action: none;
   }
   #plate.dragging { cursor: grabbing; }
