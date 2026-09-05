@@ -648,31 +648,25 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
     crossings.sort_by(|a, b| a.az.partial_cmp(&b.az).expect("azimuths are finite"));
     let m = crossings.len();
 
-    // The limb arcs between consecutive crossings: inside the original
-    // ring or not, decided by the containment law at each midpoint.
+    // The limb arcs between consecutive crossings alternate inside/
+    // outside — every transversal crossing flips membership along the
+    // limb — so ONE containment query anchors them all: decide the
+    // WIDEST arc (the best-conditioned midpoint) with inside_ring and
+    // alternate around the circle. O(n + K) instead of O(n * K) —
+    // the difference between a frame and whole seconds on fine-LOD
+    // coastlines. Two-regularity (every crossing flanked by exactly
+    // one interior arc) holds by construction.
     let gap = |j: usize| -> f64 {
         let hi = crossings[(j + 1) % m].az + if j + 1 == m { std::f64::consts::TAU } else { 0.0 };
         hi - crossings[j].az
     };
-    let mut arc_inside: Vec<bool> = (0..m)
-        .map(|j| {
-            let g = gap(j);
-            g > 1e-12 && map_types::inside_ring(&limb_point(crossings[j].az + g / 2.0), pts)
-        })
-        .collect();
-    // Two-regularity: every crossing needs exactly one interior arc
-    // beside it. A tangential graze can starve a crossing; give it the
-    // narrower neighbour so the walk still closes.
-    for j in 0..m {
-        let before = (j + m - 1) % m;
-        if !arc_inside[j] && !arc_inside[before] {
-            if gap(j) <= gap(before) {
-                arc_inside[j] = true;
-            } else {
-                arc_inside[before] = true;
-            }
-        }
-    }
+    let widest = (0..m)
+        .max_by(|&a, &b| gap(a).partial_cmp(&gap(b)).expect("gaps are finite"))
+        .expect("a straddler has crossings");
+    let anchor =
+        map_types::inside_ring(&limb_point(crossings[widest].az + gap(widest) / 2.0), pts);
+    let arc_inside: Vec<bool> =
+        (0..m).map(|j| ((j + m - widest) % 2 == 0) == anchor).collect();
 
     // Stitch: from a chain end, follow the interior limb arc beside it
     // to the next crossing, pick up that chain (forward from its entry

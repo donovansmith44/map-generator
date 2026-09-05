@@ -635,9 +635,14 @@ function gpuUpload(bytes, offset) {
   return len;
 }
 
-// The camera identity a cached clip is valid for.
+// The camera identity a cached clip is valid for — QUANTIZED to a
+// ~0.001 grid on the direction components, so an easing camera reuses
+// its clips across many frames instead of reclipping every frame. The
+// staleness bound is sub-pixel where it can be seen: near whole-globe
+// zoom the rim shifts under a pixel, and at deep zoom the limb (the
+// only approximate part) is far off screen.
 function camKeyOf(C) {
-  return C[0].toFixed(6) + "," + C[1].toFixed(6) + "," + C[2].toFixed(6);
+  return C[0].toFixed(3) + "," + C[1].toFixed(3) + "," + C[2].toFixed(3);
 }
 
 // One clipped lobe as a scratch fan buffer — the same attribute layout
@@ -832,7 +837,36 @@ async function gpuSyncInner() {
   if (!gpu.scene) activateScene(sceneObj, false);
   gpuAcquire(sceneObj.wanted).then(() => {
     if (gpu.incoming === sceneObj && gpu.scene !== sceneObj) activateScene(sceneObj, true);
+    healResidency(sceneObj, 0);
   });
+}
+
+// RESIDENCY HEALS ITSELF (§26/§67): during rapid zoom the LOD ladder
+// publishes several scene generations and the server's bounded
+// resource store may evict an earlier generation's payloads before
+// this client finishes fetching them — the batch response simply
+// omits them, and a scene then activates with gaps: fills whose
+// groups never draw, white land where a region should be. A dropped
+// payload is re-derivable by the next /api/scene (the store's own
+// contract), so the client's half of the contract is this loop:
+// while the scene is still current and anything it wants is not
+// resident, re-request the manifest (which re-publishes every
+// payload) and re-acquire just the gaps. Bounded, backing off, and
+// abandoned the moment a newer scene takes over.
+async function healResidency(sceneObj, attempt) {
+  if (gpu.scene !== sceneObj && gpu.incoming !== sceneObj) return; // superseded
+  const missing = sceneObj.wanted.filter(id => {
+    const r = gpu.cache.get(id);
+    return !r || r.state !== "gpu";
+  });
+  if (!missing.length || attempt >= 5) return;
+  await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+  if (gpu.scene !== sceneObj && gpu.incoming !== sceneObj) return;
+  try {
+    await fetch("/api/scene?" + sceneObj.key); // re-publishes payloads
+    await gpuAcquire(missing);
+  } catch { /* transient: the next attempt retries */ }
+  healResidency(sceneObj, attempt + 1);
 }
 
 // The lifecycle duration for scene fades and refinement eases — the
@@ -1434,7 +1468,12 @@ function gpuDraw() {
   // item (their geometry is clipped, so parity needs every fragment).
   const frameFrontMin = proj.mode === 1 ? -1.1 : 0.0;
   const camKey = proj.mode === 0 ? camKeyOf(proj.C) : "flat";
-  const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+  // A driver CAPABILITY, not frame state — and getParameter is a
+  // synchronous pipeline flush: queried per frame it stalls JS behind
+  // the entire rasterization backlog (measured: 5.6 s on the first
+  // frame after a fine-LOD scene switch). Query once, keep forever.
+  const widthRange =
+    gpu.widthRange || (gpu.widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE));
   const resident = id => { const r = gpu.cache.get(id); return r && r.state === "gpu" ? r : null; };
   const now = performance.now();
   gl.uniform1f(loc.uMorph, 1.0);

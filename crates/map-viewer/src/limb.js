@@ -300,20 +300,17 @@ function clipRingFront(v, C, E, N) {
     const hi = crossings[(j + 1) % m].az + (j + 1 === m ? TAU : 0);
     return hi - crossings[j].az;
   };
+  // The limb arcs alternate inside/outside — every transversal
+  // crossing flips membership along the limb — so ONE containment
+  // query anchors them all: decide the WIDEST arc (best-conditioned
+  // midpoint) and alternate. O(n + K) instead of O(n * K) — the
+  // difference between a frame and whole seconds on fine-LOD
+  // coastlines. Two-regularity holds by construction.
+  let widest = 0;
+  for (let j = 1; j < m; j++) if (gap(j) > gap(widest)) widest = j;
+  const anchor = insideRing(limbPoint(crossings[widest].az + gap(widest) / 2), v);
   const arcInside = new Array(m);
-  for (let j = 0; j < m; j++) {
-    const g = gap(j);
-    const mid = limbPoint(crossings[j].az + g / 2);
-    arcInside[j] = g > 1e-12 && insideRing(mid, v);
-  }
-  // Two-regularity repair for tangential grazes: every crossing needs
-  // one interior arc beside it; starve cases get the narrower one.
-  for (let j = 0; j < m; j++) {
-    const before = (j + m - 1) % m;
-    if (!arcInside[j] && !arcInside[before]) {
-      if (gap(j) <= gap(before)) arcInside[j] = true; else arcInside[before] = true;
-    }
-  }
+  for (let j = 0; j < m; j++) arcInside[j] = ((j + m - widest) % 2 === 0) === anchor;
 
   // Stitch: chains and interior limb arcs alternate around each loop.
   const slot = (k, isEntry) => crossings.findIndex(x => x.chain === k && x.isEntry === isEntry);
