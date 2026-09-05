@@ -554,12 +554,27 @@ fn front_crossing(a: &UnitVec, b: &UnitVec, c: &UnitVec) -> UnitVec {
     .unwrap_or(*a)
 }
 
-/// Clip a closed ring to the front hemisphere. Where the ring passes
-/// behind, the cut edge follows the LIMB, sweeping the same way around
-/// the view axis as the hidden stretch actually travels (accumulated
-/// azimuth) — exact for any simple ring, including the world ocean's
-/// sphere-wrapping envelope, with no special cases.
-fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<UnitVec> {
+/// Radians between successive points walked along the limb — the same
+/// curve both renderers close a clipped ring on.
+const LIMB_STEP: f64 = 0.06;
+
+/// Clip a closed ring to the front hemisphere, emitting the visible
+/// region's boundary as one or more closed loops (a ring may clip
+/// into several disjoint lobes; even-odd filling is indifferent).
+///
+/// THE LIMB RULE, derived rather than swept: every place the ring
+/// pierces the horizon is a crossing whose azimuth is measured ON the
+/// limb, where atan2 is perfectly conditioned. Sorted by azimuth, the
+/// crossings cut the limb into arcs, and an arc belongs to the clipped
+/// fill exactly when its midpoint lies inside the original ring — the
+/// inside_ring containment law. The old rule accumulated azimuth over
+/// HIDDEN vertices, which is meaningless near the camera antipode
+/// (atan2 of two near-zeros) and inverted Pacific-centred views.
+///
+/// Stitching is a two-regular graph walk: each crossing joins exactly
+/// one visible chain of the ring and exactly one interior limb arc, so
+/// chains and arcs alternate around each output loop.
+fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
     let n = pts.len();
     if n < 3 {
         return Vec::new();
@@ -571,16 +586,6 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<UnitVec> {
     let north = UnitVec::normalize(ncr.0, ncr.1, ncr.2)
         .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
     let azimuth = |p: &UnitVec| -> f64 { p.dot(&north).atan2(p.dot(&east)) };
-    let wrap = |d: f64| -> f64 {
-        let mut d = d % std::f64::consts::TAU;
-        if d > std::f64::consts::PI {
-            d -= std::f64::consts::TAU;
-        }
-        if d < -std::f64::consts::PI {
-            d += std::f64::consts::TAU;
-        }
-        d
-    };
     let limb_point = |theta: f64| -> UnitVec {
         UnitVec::normalize(
             east.x() * theta.cos() + north.x() * theta.sin(),
@@ -590,46 +595,140 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<UnitVec> {
         .expect("limb basis is orthonormal")
     };
 
-    let front = |p: &UnitVec| p.dot(c) >= 0.0;
-    if pts.iter().all(front) {
-        return pts.to_vec();
+    let front: Vec<bool> = pts.iter().map(|p| p.dot(c) >= 0.0).collect();
+    if front.iter().all(|f| *f) {
+        return vec![pts.to_vec()];
     }
-    let Some(start) = (0..n).position(|i| front(&pts[i])) else {
-        return Vec::new(); // wholly behind
-    };
+    if !front.iter().any(|f| *f) {
+        // No vertex faces the camera: nothing is visible. Under the
+        // smaller-component law this is a theorem, not a heuristic —
+        // the ring-free front hemisphere (area 2 pi) always lies in
+        // the LARGER component, so it never meets the interior. (The
+        // whole-sphere sentinel, whose interior is everything by
+        // decree, is dressed upstream and never reaches this clip.)
+        return Vec::new();
+    }
 
-    let mut out: Vec<UnitVec> = Vec::with_capacity(n);
-    let mut i = start;
-    let mut walked = 0usize;
-    while walked < n {
-        let p = pts[i % n];
-        if front(&p) {
-            out.push(p);
-            i += 1;
-            walked += 1;
+    // Visible chains: maximal front runs of the ring, each bracketed
+    // by the crossings where it enters and leaves the hemisphere.
+    // Start the walk at a chain head so every chain is gathered whole.
+    let start = (0..n)
+        .find(|&i| front[i] && !front[(i + n - 1) % n])
+        .expect("both classes are populated");
+    let mut chains: Vec<(UnitVec, Vec<UnitVec>, UnitVec)> = Vec::new();
+    let mut cur: Option<(UnitVec, Vec<UnitVec>)> = None;
+    for j in 0..n {
+        let idx = (start + j) % n;
+        let prv = (idx + n - 1) % n;
+        if front[idx] {
+            if cur.is_none() {
+                cur = Some((front_crossing(&pts[prv], &pts[idx], c), Vec::new()));
+            }
+            cur.as_mut().expect("just ensured").1.push(pts[idx]);
+        } else if let Some((entry, verts)) = cur.take() {
+            chains.push((entry, verts, front_crossing(&pts[prv], &pts[idx], c)));
+        }
+    }
+    // The walk began at a chain head, so its predecessor is hidden and
+    // the final iteration always closed the last chain.
+    debug_assert!(cur.is_none());
+
+    // Every crossing, tagged with its chain and end, sorted by the
+    // azimuth measured on the limb.
+    struct Crossing {
+        az: f64,
+        chain: usize,
+        is_entry: bool,
+    }
+    let mut crossings: Vec<Crossing> = Vec::with_capacity(chains.len() * 2);
+    for (k, (entry, _, exit)) in chains.iter().enumerate() {
+        crossings.push(Crossing { az: azimuth(entry), chain: k, is_entry: true });
+        crossings.push(Crossing { az: azimuth(exit), chain: k, is_entry: false });
+    }
+    crossings.sort_by(|a, b| a.az.partial_cmp(&b.az).expect("azimuths are finite"));
+    let m = crossings.len();
+
+    // The limb arcs between consecutive crossings: inside the original
+    // ring or not, decided by the containment law at each midpoint.
+    let gap = |j: usize| -> f64 {
+        let hi = crossings[(j + 1) % m].az + if j + 1 == m { std::f64::consts::TAU } else { 0.0 };
+        hi - crossings[j].az
+    };
+    let mut arc_inside: Vec<bool> = (0..m)
+        .map(|j| {
+            let g = gap(j);
+            g > 1e-12 && map_types::inside_ring(&limb_point(crossings[j].az + g / 2.0), pts)
+        })
+        .collect();
+    // Two-regularity: every crossing needs exactly one interior arc
+    // beside it. A tangential graze can starve a crossing; give it the
+    // narrower neighbour so the walk still closes.
+    for j in 0..m {
+        let before = (j + m - 1) % m;
+        if !arc_inside[j] && !arc_inside[before] {
+            if gap(j) <= gap(before) {
+                arc_inside[j] = true;
+            } else {
+                arc_inside[before] = true;
+            }
+        }
+    }
+
+    // Stitch: from a chain end, follow the interior limb arc beside it
+    // to the next crossing, pick up that chain (forward from its entry
+    // or backward from its exit — even-odd cares nothing for winding),
+    // and repeat until the loop closes.
+    let slot = |k: usize, is_entry: bool| -> usize {
+        crossings
+            .iter()
+            .position(|x| x.chain == k && x.is_entry == is_entry)
+            .expect("every chain end is a crossing")
+    };
+    let mut used = vec![false; chains.len()];
+    let mut out: Vec<Vec<UnitVec>> = Vec::new();
+    for k0 in 0..chains.len() {
+        if used[k0] {
             continue;
         }
-        // A hidden stretch begins: exit crossing, azimuth sweep of the
-        // hidden path, entry crossing, limb arc between them.
-        let exit = front_crossing(&pts[(i + n - 1) % n], &pts[i % n], c);
-        let mut sweep = 0.0;
-        let mut prev = azimuth(&exit);
-        while walked < n && !front(&pts[i % n]) {
-            let a = azimuth(&pts[i % n]);
-            sweep += wrap(a - prev);
-            prev = a;
-            i += 1;
-            walked += 1;
+        let start_slot = slot(k0, true);
+        let mut run: Vec<UnitVec> = Vec::new();
+        let mut k = k0;
+        let mut enter_at_entry = true;
+        for _ in 0..chains.len() {
+            used[k] = true;
+            let (entry, verts, exit) = &chains[k];
+            // The chain, traversed from whichever end the walk arrived.
+            let leave = if enter_at_entry {
+                run.push(*entry);
+                run.extend(verts.iter().copied());
+                run.push(*exit);
+                slot(k, false)
+            } else {
+                run.push(*exit);
+                run.extend(verts.iter().rev().copied());
+                run.push(*entry);
+                slot(k, true)
+            };
+            // The one interior limb arc beside that crossing.
+            let before = (leave + m - 1) % m;
+            let (next, a0, sweep) = if arc_inside[leave] {
+                ((leave + 1) % m, crossings[leave].az, gap(leave))
+            } else {
+                debug_assert!(arc_inside[before], "two-regularity was repaired above");
+                (before, crossings[leave].az, -gap(before))
+            };
+            let steps = (sweep.abs() / LIMB_STEP).ceil().max(1.0) as usize;
+            for s in 1..steps {
+                run.push(limb_point(a0 + sweep * s as f64 / steps as f64));
+            }
+            if next == start_slot {
+                break; // the loop closed where it began
+            }
+            k = crossings[next].chain;
+            // Arriving at a chain's entry means walking it forward.
+            enter_at_entry = crossings[next].is_entry;
         }
-        let entry = front_crossing(&pts[(i + n - 1) % n], &pts[i % n], c);
-        sweep += wrap(azimuth(&entry) - prev);
-        out.push(exit);
-        let start_az = azimuth(&exit);
-        let steps = (sweep.abs() / 0.06).ceil().max(1.0) as usize;
-        for k in 1..steps {
-            out.push(limb_point(start_az + sweep * k as f64 / steps as f64));
-        }
-        out.push(entry);
+        out.push(run);
     }
     out
 }
@@ -705,9 +804,10 @@ struct Chart<'a> {
     chrome: String,
     /// the whole-sphere sentinel's dress: limb disc / page rectangle.
     whole_world: Vec<(f64, f64)>,
-    /// a closed ring, clipped topology-preserving, projected. Empty =
-    /// culled entirely.
-    clip_ring: Box<dyn Fn(&[UnitVec]) -> Vec<(f64, f64)> + 'a>,
+    /// a closed ring, clipped topology-preserving, projected. A ring
+    /// may clip into several closed loops (even-odd is indifferent);
+    /// empty = culled entirely.
+    clip_ring: Box<dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>> + 'a>,
     /// an open line, clipped into visible runs, projected.
     clip_line: Box<dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>> + 'a>,
     /// a single point, or None when the chart cannot show it.
@@ -731,12 +831,7 @@ fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
         if covers_sphere(ring.points()) {
             return vec![chart.whole_world.clone()];
         }
-        let px = (chart.clip_ring)(ring.points());
-        if px.len() < 3 {
-            Vec::new()
-        } else {
-            vec![px]
-        }
+        (chart.clip_ring)(ring.points()).into_iter().filter(|px| px.len() >= 3).collect()
     };
     let line_of = |pts: &[UnitVec]| (chart.clip_line)(pts);
     let point_of = |p: &UnitVec| (chart.place)(p);
@@ -822,8 +917,10 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
         chrome,
         whole_world: disc,
         clip_ring: Box::new(move |pts: &[UnitVec]| {
-            let clipped = clip_ring_front(&densify(pts, max_step, true), &center);
-            clipped.iter().map(|p| g.place_unclipped(p)).collect()
+            clip_ring_front(&densify(pts, max_step, true), &center)
+                .into_iter()
+                .map(|run| run.iter().map(|p| g.place_unclipped(p)).collect())
+                .collect()
         }),
         clip_line: Box::new(move |pts: &[UnitVec]| {
             clip_line_front(&densify(pts, max_step, false), &center)
@@ -991,12 +1088,12 @@ fn encode_flat(
                 Some(w) => clip_ring_to_window(&ll, w),
                 None => ll,
             };
-            clipped
+            vec![clipped
                 .into_iter()
                 .map(|(lo, la)| {
                     (enc.padding + (lo - x0) * scale_x, enc.padding + (y1 - la) * scale_y)
                 })
-                .collect()
+                .collect()]
         }),
         clip_line: Box::new(move |pts: &[UnitVec]| vec![pts.iter().map(place).collect()]),
         place: Box::new(move |p: &UnitVec| Some(place(p))),

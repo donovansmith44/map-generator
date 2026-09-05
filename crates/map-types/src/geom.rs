@@ -309,15 +309,6 @@ fn side(n: (f64, f64, f64), q: &UnitVec) -> bool {
     n.0 * q.x + n.1 * q.y + n.2 * q.z > 0.0
 }
 
-/// Is `x` (on the great circle through `u`,`v`) within the shorter arc
-/// u->v? Writing x = alpha*u + beta*v, membership is alpha,beta >= 0;
-/// the shared positive denominator 1 - dot(u,v)^2 is dropped.
-fn within_arc(x: &UnitVec, u: &UnitVec, v: &UnitVec) -> bool {
-    let c = u.dot(v);
-    let (du, dv) = (x.dot(u), x.dot(v));
-    du - c * dv >= 0.0 && dv - c * du >= 0.0
-}
-
 /// Does the geodesic p->r cross the edge a->b? Both arcs are the
 /// shorter great-circle arcs.
 fn arcs_cross(p: &UnitVec, r: &UnitVec, n1: (f64, f64, f64), a: &UnitVec, b: &UnitVec) -> bool {
@@ -328,22 +319,22 @@ fn arcs_cross(p: &UnitVec, r: &UnitVec, n1: (f64, f64, f64), a: &UnitVec, b: &Un
     if side(n2, p) == side(n2, r) {
         return false; // test arc does not straddle the edge's circle
     }
-    // The two great circles meet at +/-(n1 x n2); the crossing counts
-    // only if one of those lies on BOTH shorter arcs.
+    // The two great circles meet at the antipodal pair +/-(n1 x n2).
+    // The straddles above guarantee each shorter arc crosses the
+    // OTHER's circle exactly once — at whichever of +/-x lies nearer
+    // that arc's midpoint. The arcs cross each other iff those are the
+    // same point: the midpoint dots agree in sign. (An endpoint-exact
+    // crossing keeps a robust margin here — dot(x, a+b) is 1+cos(edge)
+    // when x IS a vertex — where an alpha/beta arc-membership test
+    // sits on a rounding knife-edge.)
     let x = (
         n1.1 * n2.2 - n1.2 * n2.1,
         n1.2 * n2.0 - n1.0 * n2.2,
         n1.0 * n2.1 - n1.1 * n2.0,
     );
-    let Ok(x) = UnitVec::normalize(x.0, x.1, x.2) else {
-        return false; // coplanar: grazing contact, no transversal crossing
-    };
-    for s in [x, x.antipode()] {
-        if within_arc(&s, p, r) && within_arc(&s, a, b) {
-            return true;
-        }
-    }
-    false
+    let d_ab = x.0 * (a.x + b.x) + x.1 * (a.y + b.y) + x.2 * (a.z + b.z);
+    let d_pr = x.0 * (p.x + r.x) + x.1 * (p.y + r.y) + x.2 * (p.z + r.z);
+    d_ab * d_pr > 0.0
 }
 
 /// Crossing parity of the geodesic p->r against every ring edge

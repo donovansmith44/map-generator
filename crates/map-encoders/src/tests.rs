@@ -1127,3 +1127,183 @@ fn antimeridian_split_is_seam_safe() {
         "a near-east boundary stays one strip"
     );
 }
+
+// ---------------------------------------- the limb clip, law-checked
+// clip_ring_front derives everything from inside_ring: limb arcs
+// between crossings are kept exactly when their midpoints lie inside
+// the original ring. These tests pin the geometry the old
+// hidden-azimuth sweep got wrong near the camera antipode.
+
+/// A circle of angular radius `r` (radians) around `axis`, `m` points.
+fn circle_ring(axis: &UnitVec, r: f64, m: usize) -> Vec<UnitVec> {
+    let e = UnitVec::normalize(-axis.y(), axis.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let (nx, ny, nz) = axis.cross_raw(&e);
+    let n = UnitVec::normalize(nx, ny, nz).unwrap();
+    (0..m)
+        .map(|k| {
+            let t = std::f64::consts::TAU * k as f64 / m as f64;
+            let (c, s) = (r.cos(), r.sin());
+            UnitVec::normalize(
+                axis.x() * c + (e.x() * t.cos() + n.x() * t.sin()) * s,
+                axis.y() * c + (e.y() * t.cos() + n.y() * t.sin()) * s,
+                axis.z() * c + (e.z() * t.cos() + n.z() * t.sin()) * s,
+            )
+            .unwrap()
+        })
+        .collect()
+}
+
+/// The view-plane frame at camera centre `c` (the projectors' own
+/// east/north construction).
+fn view_frame(c: &UnitVec) -> (UnitVec, UnitVec) {
+    let e = UnitVec::normalize(-c.y(), c.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let (nx, ny, nz) = c.cross_raw(&e);
+    (e, UnitVec::normalize(nx, ny, nz).unwrap())
+}
+
+/// Even-odd over every emitted loop, projected to the view plane.
+fn clipped_contains(loops: &[Vec<UnitVec>], c: &UnitVec, probe: &UnitVec) -> bool {
+    let (e, nv) = view_frame(c);
+    let (x, y) = (probe.dot(&e), probe.dot(&nv));
+    let mut inside = false;
+    for run in loops {
+        let pts: Vec<(f64, f64)> = run.iter().map(|p| (p.dot(&e), p.dot(&nv))).collect();
+        let n = pts.len();
+        for j in 0..n {
+            let (jx, jy) = pts[j];
+            let (kx, ky) = pts[(j + 1) % n];
+            if ((jy > y) != (ky > y)) && x < jx + (y - jy) / (ky - jy) * (kx - jx) {
+                inside = !inside;
+            }
+        }
+    }
+    inside
+}
+
+#[test]
+fn limb_clip_keeps_every_point_on_the_front() {
+    let c = uv(20.0, -150.0);
+    let deg = std::f64::consts::PI / 180.0;
+    for (axis_off, radius) in [(60.0, 40.0), (100.0, 79.0), (85.0, 30.0), (30.0, 45.0)] {
+        let axis = circle_ring(&c, axis_off * deg, 8)[0];
+        let ring = circle_ring(&axis, radius * deg, 180);
+        for run in crate::clip_ring_front(&ring, &c) {
+            assert!(run.len() >= 3, "a clipped run is a closed ring");
+            for p in &run {
+                assert!(p.dot(&c) >= -1e-9, "every clipped point faces the camera");
+            }
+        }
+    }
+}
+
+#[test]
+fn limb_clip_does_not_invert_around_the_antipode() {
+    // The Pacific bug, distilled: a big ring whose hidden stretch
+    // passes within a degree of the camera antipode, where the old
+    // sweep accumulated atan2 of two near-zeros. The view centre is
+    // NOT inside this ring, and the clip must agree.
+    let c = uv(20.0, -150.0);
+    let deg = std::f64::consts::PI / 180.0;
+    let axis = circle_ring(&c, 100.0 * deg, 12)[3];
+    let ring = circle_ring(&axis, 79.0 * deg, 720);
+    assert!(
+        !map_types::inside_ring(&c, &ring),
+        "fixture sanity: the camera centre is outside the ring"
+    );
+    let loops = crate::clip_ring_front(&ring, &c);
+    assert!(!loops.is_empty(), "the ring straddles the limb, something is visible");
+    assert!(
+        !clipped_contains(&loops, &c, &c),
+        "the clipped fill must not swallow the view centre"
+    );
+    // And a point inside the ring on the front side must stay covered.
+    let probe = circle_ring(&axis, 60.0 * deg, 720)
+        .into_iter()
+        .find(|p| p.dot(&c) > 0.35)
+        .expect("part of the interior faces the camera");
+    assert!(map_types::inside_ring(&probe, &ring), "fixture sanity: probe is inside");
+    assert!(clipped_contains(&loops, &c, &probe), "the clipped fill keeps the visible interior");
+}
+
+#[test]
+fn limb_clip_totality_at_the_extremes() {
+    let c = uv(20.0, -150.0);
+    let deg = std::f64::consts::PI / 180.0;
+    // Wholly front: the ring comes back as itself, one run.
+    let front = circle_ring(&c, 30.0 * deg, 90);
+    let loops = crate::clip_ring_front(&front, &c);
+    assert_eq!(loops.len(), 1);
+    assert_eq!(loops[0], front);
+    // Wholly behind, small: dropped.
+    let behind = circle_ring(&c.antipode(), 30.0 * deg, 90);
+    assert!(crate::clip_ring_front(&behind, &c).is_empty());
+    // Wholly behind and large: STILL dropped. Under the smaller-
+    // component law a hidden ring's interior can never reach the
+    // front — the ring-free front hemisphere (area 2 pi) always sits
+    // in the larger component. (A ring surrounding the whole front,
+    // like a 95-degree circle about the antipode, has front-facing
+    // vertices and never lands in this branch; the whole-sphere
+    // sentinel is dressed upstream.)
+    let wide = circle_ring(&c.antipode(), 80.0 * deg, 360);
+    assert!(wide.iter().all(|p| p.dot(&c) < 0.0), "fixture sanity: all vertices hidden");
+    assert!(crate::clip_ring_front(&wide, &c).is_empty());
+    // And the near-limb front-facing giant: comes back whole, one run.
+    let surround = circle_ring(&c.antipode(), 95.0 * deg, 360);
+    assert!(surround.iter().all(|p| p.dot(&c) > 0.0), "fixture sanity: all vertices front");
+    assert_eq!(crate::clip_ring_front(&surround, &c).len(), 1);
+}
+
+#[test]
+fn limb_clip_emits_multiple_lobes_when_the_ring_returns() {
+    // An hourglass band: up the front at lon -65, across the far side
+    // at lat 40, down the front at lon 65, and back across the far
+    // side at lat -40. Its interior (the smaller component) is the
+    // band outside [-65, 65] longitude between the two parallels; the
+    // visible part of that is TWO strips, one at each side of the
+    // disc, so the clip must emit at least two closed loops.
+    let c = uv(0.0, 0.0);
+    let mut ring: Vec<UnitVec> = Vec::new();
+    let mut lat = -40.0;
+    while lat <= 40.0 {
+        ring.push(uv(lat, -65.0));
+        lat += 5.0;
+    }
+    let mut lon = -75.0;
+    while lon >= -175.0 {
+        ring.push(uv(40.0, lon));
+        lon -= 10.0;
+    }
+    let mut lon = 175.0;
+    while lon >= 75.0 {
+        ring.push(uv(40.0, lon));
+        lon -= 10.0;
+    }
+    let mut lat = 40.0;
+    while lat >= -40.0 {
+        ring.push(uv(lat, 65.0));
+        lat -= 5.0;
+    }
+    let mut lon = 75.0;
+    while lon <= 175.0 {
+        ring.push(uv(-40.0, lon));
+        lon += 10.0;
+    }
+    let mut lon = -175.0;
+    while lon <= -75.0 {
+        ring.push(uv(-40.0, lon));
+        lon += 10.0;
+    }
+    let loops = crate::clip_ring_front(&ring, &c);
+    assert!(loops.len() >= 2, "two visible strips need two loops (got {})", loops.len());
+    for (lat, lon, want) in
+        [(0.0, -75.0, true), (0.0, 75.0, true), (0.0, 0.0, false), (60.0, -75.0, false)]
+    {
+        assert_eq!(
+            clipped_contains(&loops, &c, &uv(lat, lon)),
+            want,
+            "probe at lat {lat} lon {lon}"
+        );
+    }
+}
