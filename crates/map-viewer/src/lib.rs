@@ -1060,26 +1060,16 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                         store.publish(
                             es.resources.iter().map(|r| (r.descriptor.id.0 .0, &r.payload)),
                         );
-                        // The server's answer to where the camera
-                        // lands — the same law the SVG frame stamps on
-                        // its root, served as a header so the retained
-                        // viewer needs no picture to resolve a landing
-                        // view. Explicit camera params win; else the
-                        // content face; else the content's own centre
-                        // and extent.
-                        let center = p
-                            .get("center")
-                            .and_then(|v| {
-                                let (lat, lon) = v.split_once(',')?;
-                                Some((
-                                    lat.parse::<f64>().ok()?.clamp(-89.9, 89.9),
-                                    lon.parse::<f64>().ok()?,
-                                ))
-                            })
-                            .or(face);
-                        let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+        // THE LANDING VIEW of the scene, camera-independent
+                        // by law: face the subject (or the content)
+                        // and zoom to the content's extent, IGNORING
+                        // any camera the request happens to carry.
+                        // The client adopts it as the fallback behind
+                        // an unpinned camera — a reset target — so a
+                        // pinned zoom riding the demand (the LOD
+                        // ladder needs it) must never leak into it.
                         let (vlat, vlon, vzoom) =
-                            map_encoders::resolve_globe_view(&scene, center, zoom);
+                            map_encoders::resolve_globe_view(&scene, face, None);
                         let headers = vec![(
                             "X-Resolved-View".to_string(),
                             format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),

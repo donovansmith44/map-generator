@@ -103,87 +103,31 @@
   #plate {
     flex: 1; overflow: hidden; display: grid; padding: 14px;
     /* THE ONE CELL IS THE PLATE: without a definite template the
-       implicit row is content-sized, the layers' height:100% has no
-       basis, and the frame's own square aspect (viewBox) stretches
-       everything to full width — the landing globe ran off the top
-       and bottom of the viewport. With the cell pinned to the padding
-       box, every layer letterboxes within it: the svg by
-       preserveAspectRatio (xMidYMid meet), the portrait by
-       object-fit: contain, the GL canvas by its own min-k transform —
-       the contain law all three already spoke, now given a box. */
+       implicit row is content-sized and a child's own aspect can
+       stretch it past the viewport — the landing globe once ran off
+       the top and bottom. With the cell pinned to the padding box,
+       the canvas letterboxes within it by its own min-k transform. */
     grid-template-columns: 100%; grid-template-rows: 100%;
     cursor: grab; touch-action: none;
   }
   #plate.dragging { cursor: grabbing; }
-  /* Layers STRETCH to the plate (a definite box for the svg's
-     max-width/max-height) and center their own content. */
-  #plate .layer {
-    grid-area: 1 / 1;
-    width: 100%; height: 100%;
-    display: grid; place-items: center;
-    min-width: 0; min-height: 0;
-    contain: layout paint; /* a landing frame's work stays inside */
-
-  }
-  /* THE PORTRAIT: the bitmap the zoom ease scales. Same cell, same
-     letterboxing as the vector frame it portrays; above the layers
-     whenever it is visible. */
-  #plate .portrait {
-    grid-area: 1 / 1;
-    width: 100%; height: 100%;
-    object-fit: contain;
-    z-index: 2;
-    pointer-events: none;
-    will-change: transform;
-  }
-  /* THE RETAINED GPU LAYER (rendering spec stage 4): a WebGL2 canvas
-     above the document, projecting resident unit-sphere geometry with
-     camera uniforms every animation frame. Input passes through — the
-     layer is pure output. */
+  /* THE RETAINED RENDERER (rendering spec stage 4) — the map itself:
+     a WebGL2 canvas projecting resident unit-sphere geometry with
+     camera uniforms every animation frame. Input passes through to
+     the plate — the layer is pure output. Paper, not slate: the
+     scene's translucent fills compose against this ground (a dark
+     ground turns the hypsometric relief to mud). */
   #plate canvas.gl {
     grid-area: 1 / 1;
     width: 100%; height: 100%;
-    z-index: 3;
     pointer-events: none;
-  }
-  /* Primary mode: the canvas IS the map and wears the page's paper
-     ground — the same dress the svg rule below declares. */
-  #plate.gpu-primary canvas.gl {
     background: #f6f1e4;
     border: 1px solid var(--edge);
     box-shadow: 0 0 60px rgba(0,0,0,.5);
   }
-  /* Stage 11 posture: with the retained renderer primary, the SVG
-     document and its portrait stand down (kept in the DOM for export
-     and for the mode toggle back). */
-  #plate.gpu-primary .layer, #plate.gpu-primary .portrait { visibility: hidden; }
+  /* Inspection panels (geojson text, the overlay picture) sit in the
+     same cell while the canvas steps aside. */
   #plate > pre { place-self: center; }
-  /* The fade runs on insert and ENDS at full opacity — no class
-     choreography that a skipped animation frame could strand. */
-  #plate .layer.entering { animation: framein 450ms linear; }
-  @keyframes framein { from { opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { #plate .layer.entering { animation: none; } }
-  #plate svg {
-    /* the on-screen size belongs to the layout, not to the render
-       resolution: a 1200px drag frame and a 2400px settle frame
-       display at exactly the same size (sharpness is the only
-       difference), so the frame can never resize mid-gesture */
-    width: 100%; height: 100%;
-    /* the eased camera transforms THIS element: promote it, or every
-       tick repaints the whole svg on the CPU instead of compositing */
-    will-change: transform;
-    /* Paper, not slate: the scene's translucent fills (land, terrain
-       bands) compose against this ground — a dark ground turns the
-       hypsometric relief to mud. */
-    background: #f6f1e4;
-    border: 1px solid var(--edge);
-    box-shadow: 0 0 60px rgba(0,0,0,.5);
-  }
-  #plate svg path[data-region] { cursor: pointer; }
-  #plate svg path[data-region]:hover { stroke: var(--stop); stroke-width: 1.2; }
-  #plate svg [data-place] { cursor: pointer; }
-  #plate svg circle[data-place]:hover { fill: var(--stop); fill-opacity: 0.25; }
-  #plate svg text[data-place]:hover { text-decoration: underline; }
   #plate pre {
     max-width: 100%; max-height: 100%; overflow: auto;
     color: var(--dim); font-size: 11px; padding: 12px;
@@ -283,7 +227,6 @@
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="topo" checked> seas &amp; lakes</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="relief" checked> relief</label>
     <label class="inline" style="margin-top:6px"><input type="checkbox" id="journeys" checked> journeys</label>
-    <label class="inline" style="margin-top:6px"><input type="checkbox" id="gpu"> retained renderer (webgl)</label>
   </section>
 
   <section class="group" aria-label="encoder">
@@ -1619,7 +1562,6 @@ function gpuTick() {
 function gpuSetEnabled(on) {
   gpu.enabled = on && gpuInit();
   if (gpu.canvas) gpu.canvas.style.display = gpu.enabled ? "" : "none";
-  $("plate").classList.toggle("gpu-primary", gpu.enabled);
   if (gpu.enabled) {
     pinView();                // the retained camera continues from here
     gpu.sceneKey = null;      // refetch the manifest for the current view
@@ -1651,11 +1593,9 @@ function setupPlateNav() {
   let drag = null;
 
   // THE EASED CAMERA: the wheel and drags set the TARGET (state.view);
-  // a per-frame lerp carries the VISUAL view toward it, and one
-  // transform — derived from the displayed frame's own stamped view —
-  // shows the difference. A newly arrived frame lands seamlessly:
-  // its stamp replaces frameView and the same math yields the same
-  // pixels. Nothing is ever reset; everything converges.
+  // a per-frame lerp carries the VISUAL view toward it, and the
+  // retained layer samples the visual view every animation frame.
+  // Nothing is ever reset; everything converges.
   const visual = { lat: null, lon: null, zoom: null };
   function ensureVisual() {
     if (visual.zoom === null || !pinView()) {
@@ -2097,7 +2037,6 @@ async function init() {
   $("relief").addEventListener("change", () => render());
   $("journeys").addEventListener("change", () => render());
   $("labels").addEventListener("change", () => render());
-  $("gpu").addEventListener("change", e => gpuSetEnabled(e.target.checked));
   $("expose").addEventListener("change", () => {
     $("rangebox").hidden = $("rangehint").hidden = !$("expose").checked;
     loadFromOptions();
@@ -2140,10 +2079,10 @@ async function init() {
   });
   setBible($("bible").checked); // bible mode is the default dress
   setupPlateNav();
-  // THE RETAINED RENDERER IS THE RENDERER: on from the first frame.
-  // (The SVG display path is retired; the server's SVG encoder lives
-  // on as the verification oracle and the CLI's picture output.)
-  $("gpu").checked = true;
+  // THE RETAINED RENDERER IS THE RENDERER: on from the first frame,
+  // no mode to toggle. (The SVG display path is retired; the server's
+  // SVG encoder lives on as the verification oracle and the CLI's
+  // picture output.)
   gpuSetEnabled(true);
   await setStop(state.idx);
 }
