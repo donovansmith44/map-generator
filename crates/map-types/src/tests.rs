@@ -135,9 +135,21 @@ fn biblical_anchor(at: i32) -> Anchor {
     }
 }
 
-fn honest_style() -> Style {
+type StyleParts = (
+    BoundaryStrokes,
+    Paint,
+    Paint,
+    AgeRamp,
+    Option<[Paint; 8]>,
+    AgeRamp,
+    crate::style::Labeling,
+    MarkerStyle,
+    DeltaEmphasis,
+);
+
+fn honest_style_parts() -> StyleParts {
     let stroke = |r, pattern| Stroke { color: Rgba(r, 0, 0, 255), width: 1.0, pattern };
-    Style::new(
+    (
         BoundaryStrokes {
             line: stroke(0, StrokePattern::Solid),
             frontier: stroke(60, StrokePattern::Zonal),
@@ -164,7 +176,14 @@ fn honest_style() -> Style {
             seam: stroke(250, StrokePattern::Solid),
         },
     )
-    .unwrap()
+}
+
+fn build_style(p: StyleParts) -> Style {
+    Style::new(p.0, p.1, p.2, p.3, p.4, p.5, p.6, p.7, p.8).unwrap()
+}
+
+fn honest_style() -> Style {
+    build_style(honest_style_parts())
 }
 
 fn marker_scene(tag: u8) -> Snapshot {
@@ -1049,3 +1068,44 @@ fn containment_when_the_query_is_the_cap_axis() {
     }
 }
 
+
+// -------------------------- style identity is TOTAL over the dress
+// A style's content address must cover every field a renderer reads;
+// any blind spot lets two different dresses collide into one StyleId
+// and the second silently vanishes from the style table. The way
+// stroke, the four label voices, and the scaling law were once
+// invisible to the hash — a font-only restyle was impossible to ship.
+
+#[test]
+fn style_identity_sees_every_field() {
+    use crate::style::*;
+    let base = honest_style();
+    let id0 = base.id();
+
+    // Differ ONLY in the way stroke.
+    let mut ways = honest_style_parts();
+    ways.0.way = Stroke { color: Rgba(9, 9, 9, 255), width: 2.5, pattern: StrokePattern::Dashed };
+    let way_style = build_style(ways);
+    assert_ne!(id0, way_style.id(), "the way stroke is part of the dress");
+
+    // Differ ONLY in a label voice.
+    let mut voiced = honest_style_parts();
+    voiced.6.territory.weight = 900;
+    let voice_style = build_style(voiced);
+    assert_ne!(id0, voice_style.id(), "a voice is part of the dress");
+
+    // Differ ONLY in a voice's family.
+    let mut familied = honest_style_parts();
+    familied.6.water.family = "'Some Other Serif', serif";
+    let family_style = build_style(familied);
+    assert_ne!(id0, family_style.id(), "the family is part of the dress");
+
+    // Differ ONLY in the label scaling law.
+    let mut scaled = honest_style_parts();
+    scaled.6.scale.water_ink = 0.9;
+    let scale_style = build_style(scaled);
+    assert_ne!(id0, scale_style.id(), "the scaling law is part of the dress");
+
+    // And identical parts still agree, of course.
+    assert_eq!(id0, build_style(honest_style_parts()).id());
+}

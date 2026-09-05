@@ -261,12 +261,19 @@ impl Style {
         self.delta
     }
 
+    /// IDENTITY IS TOTAL OVER THE DRESS: every field a renderer reads
+    /// is hashed. A blind spot here lets two different dresses collide
+    /// into one StyleId and the second silently vanishes from the
+    /// style table — the way stroke, the four voices, and the scaling
+    /// law were once invisible, which made a font-only restyle
+    /// impossible to ship as a new template.
     pub fn canon(&self, c: &mut Canon) {
         c.tag("style");
         self.boundaries.line.canon(c);
         self.boundaries.frontier.canon(c);
         self.boundaries.disputed.canon(c);
         self.boundaries.unknown.canon(c);
+        self.boundaries.way.canon(c);
         self.region.canon(c);
         self.water.canon(c);
         self.topo.newest.canon(c);
@@ -282,6 +289,22 @@ impl Style {
         c.u8_(r).u8_(g).u8_(b).u8_(a);
         let Rgba(r, g, b, a) = self.labeling.base.halo;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.labeling.base.size);
+        for voice in [
+            &self.labeling.territory,
+            &self.labeling.water,
+            &self.labeling.place,
+            &self.labeling.memory,
+        ] {
+            c.str_(voice.family)
+                .u8_((voice.weight >> 8) as u8)
+                .u8_((voice.weight & 0xff) as u8)
+                .u8_(voice.italic as u8)
+                .u8_(voice.uppercase as u8)
+                .f64_(voice.tracking_em)
+                .f64_(voice.advance_em);
+        }
+        let sc = &self.labeling.scale;
+        c.f64_(sc.unit_area_sr).f64_(sc.min).f64_(sc.max).f64_(sc.water_shrink).f64_(sc.water_ink);
         let Rgba(r, g, b, a) = self.marker.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.marker.size);
         self.delta.before.canon(c);
