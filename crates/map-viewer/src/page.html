@@ -856,8 +856,70 @@ function gpuUpload(bytes, offset) {
   gl.bindVertexArray(null);
   // The CPU copy stays resident beside the GPU buffer: extents, hit
   // testing, and refinement correspondence all read it (§59, §38).
-  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, bytes: len, verts });
+  // The bounding cap (limb.js) settles most rings' visibility in one
+  // dot product per frame, so only limb straddlers ever pay to clip.
+  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, bytes: len, verts, cap: ringCap(verts) });
   return len;
+}
+
+// The camera identity a cached clip is valid for.
+function camKeyOf(C) {
+  return C[0].toFixed(6) + "," + C[1].toFixed(6) + "," + C[2].toFixed(6);
+}
+
+// One clipped lobe as a scratch fan buffer — the same attribute layout
+// gpuUpload builds, minus the cache entry.
+function lobeVao(lobe) {
+  const gl = gpu.gl;
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, lobe, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(gpu.loc.aPos);
+  gl.vertexAttribPointer(gpu.loc.aPos, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(gpu.loc.aPrev);
+  gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  return { vao, buf, count: lobe.length / 3 };
+}
+
+function dropClipScratch(r) {
+  const gl = gpu.gl;
+  for (const d of r.clipScratch || []) {
+    gl.deleteVertexArray(d.vao);
+    gl.deleteBuffer(d.buf);
+  }
+  r.clipScratch = null;
+  r.clipKey = null;
+}
+
+// THE VISIBLE RING (the GPU's reading of clip_ring_front): the fill
+// parity passes draw a ring CLIPPED to the front hemisphere, closed
+// along the limb, so every fragment reaches the stencil and nothing
+// needs discarding. The bounding-cap fast path keeps wholly-front
+// rings on their own GPU buffers and drops wholly-hidden ones for one
+// dot product; only straddlers clip, memoised per camera. Returns the
+// draw list for one ring: [] hidden, [r] the ring's own buffer, or
+// scratch lobe buffers (a ring may clip into several visible lobes;
+// even-odd parity is indifferent).
+function visibleFillDraws(r, proj, camKey) {
+  if (proj.mode !== 0) return [r]; // flat: split at the antimeridian upstream
+  const cap = r.cap;
+  if (cap && cap.cosR > 0) {
+    const t = cap.ax * proj.C[0] + cap.ay * proj.C[1] + cap.az * proj.C[2];
+    const sinR = Math.sqrt(1 - cap.cosR * cap.cosR);
+    if (t >= sinR) return [r];   // whole cap in front: the ring's own buffer
+    if (t <= -sinR) return [];   // whole cap behind: nothing to draw
+  }
+  if (r.clipKey !== camKey) {
+    dropClipScratch(r);
+    r.clipKey = camKey;
+    const vr = clipRingFront(r.verts, proj.C, proj.E, proj.N);
+    r.clipSelf = vr === r.verts;
+    r.clipScratch = r.clipSelf || !vr ? [] : vr.map(lobeVao);
+  }
+  return r.clipSelf ? [r] : r.clipScratch;
 }
 
 // The acquisition loop (§26): fetch what the manifest demands and is
@@ -1144,6 +1206,7 @@ function gpuEvict() {
     if (retained.has(id) || r.state !== "gpu") continue;
     gl.deleteVertexArray(r.vao);
     gl.deleteBuffer(r.buf);
+    dropClipScratch(r);
     gpu.cache.delete(id);
     total -= r.bytes || 0;
   }
@@ -1585,6 +1648,10 @@ function gpuDraw() {
     gl.uniform2f(loc.uC, vb.width / 2, vb.width / 2);
     gl.uniform1f(loc.uFrontMin, 0.0);
   }
+  // Strokes and markers keep the limb discard; fills override it per
+  // item (their geometry is clipped, so parity needs every fragment).
+  const frameFrontMin = proj.mode === 1 ? -1.1 : 0.0;
+  const camKey = proj.mode === 0 ? camKeyOf(proj.C) : "flat";
   const widthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
   const resident = id => { const r = gpu.cache.get(id); return r && r.state === "gpu" ? r : null; };
   const now = performance.now();
@@ -1609,6 +1676,16 @@ function gpuDraw() {
       // fill its lakes (validation before drawability, §40).
       const rings = it.ids.map(resident);
       if (rings.some(r => !r)) continue;
+      // Bug A's repair: the parity passes draw VISIBLE rings — clipped
+      // to the front hemisphere and closed along the limb (limb.js) —
+      // so no fragment is ever discarded mid-parity. The discard used
+      // to skip half of a cancelling INVERT pair and strand the pixel
+      // odd: land where there should be ocean, in a crescent at the
+      // rim where the interpolated chord undercut the true arc.
+      const draws = [];
+      for (const r of rings) {
+        for (const d of visibleFillDraws(r, proj, camKey)) draws.push(d);
+      }
       const [cr, cg, cb, caBase] = it.style.color;
       const ca = caBase * (it.alpha !== undefined ? it.alpha : 1);
       const pagePass = () => {
@@ -1624,25 +1701,27 @@ function gpuDraw() {
         }
         gl.uniform1i(loc.uMode, proj.mode);
       };
+      gl.uniform1f(loc.uFrontMin, -1.1); // parity needs every fragment
       gl.enable(gl.STENCIL_TEST);
       gl.colorMask(false, false, false, false);
       gl.stencilFunc(gl.ALWAYS, 0, 0xff);
       gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
       pagePass();
-      for (const r of rings) {
-        gl.bindVertexArray(r.vao);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
+      for (const d of draws) {
+        gl.bindVertexArray(d.vao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, d.count);
       }
       gl.colorMask(true, true, true, true);
       gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
       gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
       gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
       pagePass();
-      for (const r of rings) {
-        gl.bindVertexArray(r.vao);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, r.count);
+      for (const d of draws) {
+        gl.bindVertexArray(d.vao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, d.count);
       }
       gl.disable(gl.STENCIL_TEST);
+      gl.uniform1f(loc.uFrontMin, frameFrontMin); // strokes/markers keep theirs
       continue;
     }
     const r = resident(it.id);
