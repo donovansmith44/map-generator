@@ -1047,7 +1047,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
         // change downstream never re-requests either.
         "/api/scene" => match composed_scene(app, &p) {
             Err(e) => bad(&e),
-            Ok((scene, _face, _single)) => {
+            Ok((scene, face, _single)) => {
                 match GpuSceneEncoder.encode(&scene) {
                     Err(e) => bad(&e.0),
                     Ok(es) => {
@@ -1060,7 +1060,31 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                         store.publish(
                             es.resources.iter().map(|r| (r.descriptor.id.0 .0, &r.payload)),
                         );
-                        (200, "application/json", es.manifest_json(), Vec::new())
+                        // The server's answer to where the camera
+                        // lands — the same law the SVG frame stamps on
+                        // its root, served as a header so the retained
+                        // viewer needs no picture to resolve a landing
+                        // view. Explicit camera params win; else the
+                        // content face; else the content's own centre
+                        // and extent.
+                        let center = p
+                            .get("center")
+                            .and_then(|v| {
+                                let (lat, lon) = v.split_once(',')?;
+                                Some((
+                                    lat.parse::<f64>().ok()?.clamp(-89.9, 89.9),
+                                    lon.parse::<f64>().ok()?,
+                                ))
+                            })
+                            .or(face);
+                        let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+                        let (vlat, vlon, vzoom) =
+                            map_encoders::resolve_globe_view(&scene, center, zoom);
+                        let headers = vec![(
+                            "X-Resolved-View".to_string(),
+                            format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),
+                        )];
+                        (200, "application/json", es.manifest_json(), headers)
                     }
                 }
             }

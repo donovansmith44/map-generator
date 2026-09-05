@@ -1009,6 +1009,15 @@ async function gpuSyncInner() {
   gpu.sceneKey = key;
   const res = await fetch("/api/scene?" + p.toString());
   if (!res.ok || gpu.sceneKey !== key) return;
+  // The server's answer to where the camera lands (the law the SVG
+  // frame used to stamp on its root): the landing fallback whenever
+  // the hand has not pinned a view. cameraNow consults it last, so a
+  // pinned or easing camera is never disturbed.
+  const rv = res.headers.get("X-Resolved-View");
+  if (rv) {
+    const [rla, rlo, rz] = rv.split(",").map(parseFloat);
+    if ([rla, rlo, rz].every(isFinite)) state.resolved = { lat: rla, lon: rlo, zoom: rz };
+  }
   const man = await res.json();
   if (gpu.sceneKey !== key) return;
   const meta = new Map(man.resources.map(r => [r.id, r]));
@@ -2406,6 +2415,11 @@ async function init() {
   });
   setBible($("bible").checked); // bible mode is the default dress
   setupPlateNav();
+  // THE RETAINED RENDERER IS THE RENDERER: on from the first frame.
+  // (The SVG display path is retired; the server's SVG encoder lives
+  // on as the verification oracle and the CLI's picture output.)
+  $("gpu").checked = true;
+  gpuSetEnabled(true);
   await setStop(state.idx);
 }
 init();

@@ -841,23 +841,36 @@ fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
     s
 }
 
-fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Option<f64>) -> String {
-    // Basis on the sphere at the view center.
-    let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
-        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0)); // pole-on view
-    let (nx, ny, nz) = center.cross_raw(&east);
-    let north = UnitVec::normalize(nx, ny, nz).unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
-
-    // Zoom to the visible content's angular extent; the whole
-    // hemisphere when content reaches (or wraps) the limb.
-    let mut globe = Globe { center, east, north, scale: 1.0, cx: 0.0, cy: 0.0 };
+/// THE GLOBE'S CAMERA RESOLUTION, as one law any route can consult:
+/// an explicit camera wins; otherwise the view faces the given point
+/// (or the content's centre) and zooms to the visible content's
+/// angular extent — the whole hemisphere when content reaches or
+/// wraps the limb. Returns (lat, lon, zoom degrees), the same values
+/// the SVG frame has always stamped on its root; the retained-scene
+/// route serves them as a header so a viewer with no SVG frame still
+/// learns where the camera lands.
+pub fn resolve_globe_view(
+    scene: &Snapshot,
+    center: Option<(f64, f64)>,
+    zoom: Option<f64>,
+) -> (f64, f64, f64) {
+    let c = match center {
+        Some((lat, lon)) => UnitVec::from_lat_lon_deg(lat, lon),
+        None => content_center(scene),
+    };
+    let east = UnitVec::normalize(-c.y(), c.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0));
+    let (nx, ny, nz) = c.cross_raw(&east);
+    let north =
+        UnitVec::normalize(nx, ny, nz).unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
+    let globe = Globe { center: c, east, north, scale: 1.0, cx: 0.0, cy: 0.0 };
     let r_view = match zoom {
         Some(deg) => deg.clamp(1.0, 90.0).to_radians().sin(),
         None => {
             let mut r_max: f64 = 0.0;
             let mut any_behind = false;
             for p in scene_points(scene) {
-                if p.dot(&center) >= 0.0 {
+                if p.dot(&c) >= 0.0 {
                     r_max = r_max.max(globe.radial(p));
                 } else {
                     any_behind = true;
@@ -870,6 +883,23 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
             }
         }
     };
+    let (lat, lon) = lat_lon(&c);
+    (lat, lon, r_view.clamp(-1.0, 1.0).asin().to_degrees())
+}
+
+fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Option<f64>) -> String {
+    // Basis on the sphere at the view center.
+    let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
+        .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0)); // pole-on view
+    let (nx, ny, nz) = center.cross_raw(&east);
+    let north = UnitVec::normalize(nx, ny, nz).unwrap_or_else(|_| UnitVec::from_lat_lon_deg(90.0, 0.0));
+
+    // The one camera law (resolve_globe_view): zoom to the content's
+    // extent, whole hemisphere when it reaches or wraps the limb.
+    let (clat0, clon0) = lat_lon(&center);
+    let r_view =
+        resolve_globe_view(scene, Some((clat0, clon0)), zoom).2.to_radians().sin();
+    let mut globe = Globe { center, east, north, scale: 1.0, cx: 0.0, cy: 0.0 };
     let inner = enc.width - 2.0 * enc.padding;
     globe.scale = inner / 2.0 / r_view;
     globe.cx = enc.width / 2.0;
