@@ -735,7 +735,9 @@ async function gpuAcquire(ids) {
       } catch { chunk.forEach(id => { if (gpu.cache.get(id)?.state === "requested") gpu.cache.delete(id); }); }
     }
   };
-  await Promise.all(Array.from({ length: 3 }, worker));
+  // six lanes: the server answers a thread per connection, so the
+  // ~300 ms it spends encoding each chunk overlaps across lanes
+  await Promise.all(Array.from({ length: 6 }, worker));
 }
 
 // Ask for the semantic scene manifest (§8) matching the current full
@@ -843,7 +845,18 @@ async function gpuSyncInner() {
   const sceneObj = { key, manifest: man, drawItems: items, meta, regionRings, wanted: [...wanted] };
   gpu.incoming = sceneObj;
   if (!gpu.scene) activateScene(sceneObj, false);
-  gpuAcquire(sceneObj.wanted).then(() => {
+  gpuAcquire(sceneObj.wanted).then(async () => {
+    // THE TEMPORAL LAW, kept honestly: the swap happens only when
+    // the incoming scene is WHOLE. Rapid zoom races scene
+    // generations against the store's bounded retention, and an
+    // acquire can finish with gaps — activating then blanked every
+    // fill still waiting on one straggler ring (the ocean, with its
+    // thousands of island rings at fine detail, went white for
+    // seconds). Heal the gaps BEFORE the swap, while the old scene
+    // keeps drawing; if they outlive the bounded attempts, activate
+    // anyway — disclosure beats deadlock — and heal on.
+    if (gpu.incoming !== sceneObj) return;
+    await healResidency(sceneObj, 0);
     if (gpu.incoming === sceneObj && gpu.scene !== sceneObj) activateScene(sceneObj, true);
     healResidency(sceneObj, 0);
   });
@@ -874,7 +887,9 @@ async function healResidency(sceneObj, attempt) {
     await fetch("/api/scene?" + sceneObj.key); // re-publishes payloads
     await gpuAcquire(missing);
   } catch { /* transient: the next attempt retries */ }
-  healResidency(sceneObj, attempt + 1);
+  // awaited, so a caller that gates on healing (the pre-activation
+  // swap) waits for the WHOLE bounded loop, not just round one
+  await healResidency(sceneObj, attempt + 1);
 }
 
 // The lifecycle duration for scene fades and refinement eases — the
