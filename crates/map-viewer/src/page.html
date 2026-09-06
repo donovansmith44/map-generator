@@ -1068,8 +1068,17 @@ const DESIGN_WIDTH = 1200;
 // parallel may not exceed 360 (|lat| <= acos(z/180)) and the pole
 // must stay off the page (|lat| <= 90 - spanY/2). Both bounds derive
 // from the chart law, nothing tuned.
+// THE CHART'S OWN ZOOM CEILING (the camera law): zoom is degrees of
+// half-extent along x. The globe can show at most a hemisphere (90 —
+// there is nothing more to see of a sphere); the flat chart can show
+// the whole world (180 — a 360° span, where the kx >= z/180 floor
+// pins the page exactly to the world's width). The ceiling belongs
+// to the CHART, not to a constant: clamping the flat chart at the
+// globe's 90 cut the visible world in half.
+function zoomCeil() { return state.projection === "flat" ? 180 : 90; }
+
 function flatLatMax(zoom) {
-  const z = Math.max(0.05, Math.min(90, zoom));
+  const z = Math.max(0.05, Math.min(180, zoom));
   const vbw = parseFloat($("res").value) || DESIGN_WIDTH;
   const spanY = z * vbw / (vbw - 32);
   const noWrap = Math.acos(Math.min(1, z / 180)) * 180 / Math.PI;
@@ -1077,7 +1086,7 @@ function flatLatMax(zoom) {
 }
 
 function flatKx(lat, zoom) {
-  const z = Math.max(0.05, Math.min(90, zoom));
+  const z = Math.max(0.05, Math.min(180, zoom));
   return Math.max(0.05, z / 180, Math.cos(lat * Math.PI / 180));
 }
 
@@ -1088,7 +1097,7 @@ function flatKx(lat, zoom) {
 function makeProjector(cam, vb) {
   const rad = d => d * Math.PI / 180;
   if (state.projection === "flat") {
-    const z = Math.max(0.05, Math.min(90, cam.zoom));
+    const z = Math.max(0.05, Math.min(180, cam.zoom));
     const cap = flatLatMax(cam.zoom);
     cam = { ...cam, lat: Math.max(-cap, Math.min(cap, cam.lat)) };
     const refLat = state.flatRefLat !== null && state.flatRefLat !== undefined
@@ -1794,7 +1803,7 @@ function setupPlateNav() {
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; // lines -> px
     const factor = Math.exp(Math.max(-160, Math.min(160, dy)) * 0.00165);
     const oldZoom = state.view.zoom;
-    state.view.zoom = Math.max(0.15, Math.min(90, state.view.zoom * factor));
+    state.view.zoom = Math.max(0.15, Math.min(zoomCeil(), state.view.zoom * factor));
     const f = oldZoom / state.view.zoom;
     // CURSOR-ANCHORED TARGET: the ground under the cursor stays under
     // the cursor when the lerp arrives
@@ -2065,10 +2074,14 @@ async function init() {
         // The camera law (§32): both charts consume the same camera
         // — switching keeps the ground, clamped into the flat
         // chart's lawful latitude window.
+        // ... and clamped into the TARGET chart's zoom ceiling: a
+        // whole-world flat view (zoom up to 180) folds back to the
+        // globe's hemisphere on the way over.
+        const zoom = Math.min(state.view.zoom, v === "flat" ? 180 : 90);
         const lat = v === "flat"
-          ? Math.max(-flatLatMax(state.view.zoom), Math.min(flatLatMax(state.view.zoom), state.view.lat))
+          ? Math.max(-flatLatMax(zoom), Math.min(flatLatMax(zoom), state.view.lat))
           : state.view.lat;
-        state.setCamera(lat, state.view.lon, state.view.zoom);
+        state.setCamera(lat, state.view.lon, zoom);
       } else {
         resetView();
       }
