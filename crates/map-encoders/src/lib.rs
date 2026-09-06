@@ -84,6 +84,12 @@ pub struct SvgEncoder {
     /// attested vertex (an interpolating spline — no data point moves,
     /// corners soften). Off = raw polylines.
     pub smooth: bool,
+    /// The page dress, injected from the query's style: the paper
+    /// ground, the globe's chrome, and how patterns realize. Defaults
+    /// are the classical reference values (map-types Default impls).
+    pub paper: map_types::style::Paint,
+    pub chrome: map_types::style::GlobeChrome,
+    pub pattern: map_types::style::PatternGeometry,
 }
 
 impl Default for SvgEncoder {
@@ -93,19 +99,36 @@ impl Default for SvgEncoder {
             padding: 16.0,
             projection: Projection::Globe { center: None, zoom: None },
             smooth: true,
+            paper: map_types::style::Paint { fill: map_types::style::Rgba(246, 241, 228, 255) },
+            chrome: Default::default(),
+            pattern: Default::default(),
         }
     }
 }
 
 // -------------------------------------------------- shared svg pieces
 
-fn stroke_attrs(st: map_types::style::Stroke) -> (f64, &'static str, f64) {
+fn stroke_attrs(
+    st: map_types::style::Stroke,
+    pg: &map_types::style::PatternGeometry,
+) -> (f64, String, f64) {
     match st.pattern {
-        StrokePattern::Solid => (st.width, "", alpha(st.color)),
-        StrokePattern::Dashed => (st.width, " stroke-dasharray=\"6 4\"", alpha(st.color)),
-        StrokePattern::Hatched => (st.width, " stroke-dasharray=\"2 3\"", alpha(st.color)),
-        // A frontier is a zone, not a line: broad and soft.
-        StrokePattern::Zonal => (st.width * 6.0, "", alpha(st.color) * 0.35),
+        StrokePattern::Solid => (st.width, String::new(), alpha(st.color)),
+        StrokePattern::Dashed => (
+            st.width,
+            format!(" stroke-dasharray=\"{} {}\"", pg.dashed_on, pg.dashed_off),
+            alpha(st.color),
+        ),
+        StrokePattern::Hatched => (
+            st.width,
+            format!(" stroke-dasharray=\"{} {}\"", pg.hatched_on, pg.hatched_off),
+            alpha(st.color),
+        ),
+        // A frontier is a zone, not a line: broad and soft — by the
+        // style's own declared proportions.
+        StrokePattern::Zonal => {
+            (st.width * pg.zonal_width, String::new(), alpha(st.color) * pg.zonal_alpha)
+        }
     }
 }
 
@@ -286,6 +309,7 @@ fn emit_scene(
     line_of: &dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>>,
     point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
     smooth: bool,
+    pattern: &map_types::style::PatternGeometry,
     page: &Option<Bounds>,
 ) -> std::collections::BTreeMap<u64, Bounds> {
     let mut extents: std::collections::BTreeMap<u64, Bounds> = Default::default();
@@ -360,7 +384,7 @@ fn emit_scene(
         if chunks.is_empty() {
             continue;
         }
-        let (width, dash, opacity) = stroke_attrs(b.stroke);
+        let (width, dash, opacity) = stroke_attrs(b.stroke, pattern);
         let _ = write!(
             s,
             "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{:.3}\" stroke-opacity=\"{:.3}\" stroke-linejoin=\"round\" stroke-linecap=\"round\"{}/>",
@@ -492,7 +516,7 @@ fn emit_labels(
             alpha(l.style.color),
             rgb(l.style.halo),
             alpha(l.style.halo),
-            size * 0.24,
+            size * l.style.halo_width_em,
             v.family,
             v.weight,
             size * v.tracking_em,
@@ -503,13 +527,17 @@ fn emit_labels(
     }
 }
 
-fn svg_head(width: f64, height: f64, scene: &Snapshot) -> String {
+fn svg_head(width: f64, height: f64, scene: &Snapshot, paper: map_types::style::Paint) -> String {
     let sources: Vec<String> = scene.attribution.iter().map(|src| src.0.clone()).collect();
+    // THE PAPER IS DRESS DATA: the page carries its own ground, so a
+    // dark style stands on a dark page wherever the file lands.
     format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.3} {:.3}\"><desc>sources: {}</desc>",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {:.3} {:.3}\"><desc>sources: {}</desc><rect width=\"100%\" height=\"100%\" fill=\"{}\" fill-opacity=\"{:.3}\"/>",
         width,
         height,
-        esc(&sources.join(", "))
+        esc(&sources.join(", ")),
+        rgb(paper.fill),
+        alpha(paper.fill)
     )
 }
 
@@ -813,7 +841,7 @@ struct Chart<'a> {
 use map_types::covers_sphere;
 
 fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
-    let mut s = svg_head(chart.width, chart.height, scene).replace(
+    let mut s = svg_head(chart.width, chart.height, scene, enc.paper).replace(
         "<svg ",
         &format!(
             "<svg data-clat=\"{:.3}\" data-clon=\"{:.3}\" data-zoom=\"{:.3}\" ",
@@ -829,7 +857,8 @@ fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
     };
     let line_of = |pts: &[UnitVec]| (chart.clip_line)(pts);
     let point_of = |p: &UnitVec| (chart.place)(p);
-    let extents = emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &chart.page);
+    let extents =
+        emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &enc.pattern, &chart.page);
     emit_labels(&mut s, scene, &extents, &point_of, chart.width, &chart.page);
     s.push_str("</svg>");
     s
@@ -905,8 +934,15 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     if r_view >= 1.0 {
         let _ = write!(
             chrome,
-            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"rgb(128,128,128)\" fill-opacity=\"0.06\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.5\" stroke-width=\"1\"/>",
-            globe.cx, globe.cy, globe.scale
+            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{}\"/>",
+            globe.cx,
+            globe.cy,
+            globe.scale,
+            rgb(enc.chrome.limb_fill.fill),
+            alpha(enc.chrome.limb_fill.fill),
+            rgb(enc.chrome.limb.color),
+            alpha(enc.chrome.limb.color),
+            enc.chrome.limb.width
         );
     }
     // Chord error stays under ~0.75px at this scale: precision follows
@@ -921,8 +957,11 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     }
     let _ = write!(
         chrome,
-        "<path d=\"{}\" fill=\"none\" stroke=\"rgb(128,128,128)\" stroke-opacity=\"0.22\" stroke-width=\"0.6\"/>",
-        grat
+        "<path d=\"{}\" fill=\"none\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{}\"/>",
+        grat,
+        rgb(enc.chrome.graticule.color),
+        alpha(enc.chrome.graticule.color),
+        enc.chrome.graticule.width
     );
 
     let disc: Vec<(f64, f64)> = (0..=127)

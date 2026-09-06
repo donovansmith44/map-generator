@@ -22,7 +22,7 @@
     )),
     age: (newest: (196, 90, 70, 220), oldest: (196, 90, 70, 40)),
     labeling: (
-        base: (color: (214, 211, 200, 255), halo: (22, 25, 31, 235), size: 11.0),
+        base: (color: (214, 211, 200, 255), halo: (22, 25, 31, 235), size: 11.0, halo_width_em: 0.24),
         territory: (family: "Georgia, 'Times New Roman', serif", weight: 600,
                     italic: false, uppercase: true, tracking_em: 0.18, advance_em: 0.92),
         water:     (family: "Georgia, 'Times New Roman', serif", weight: 400,
@@ -31,7 +31,8 @@
                     italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
         memory:    (family: "Georgia, 'Times New Roman', serif", weight: 400,
                     italic: true, uppercase: false, tracking_em: 0.10, advance_em: 0.56),
-        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
+        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45,
+                memory_scale: 0.85, station_scale: 0.8, city_scale: 0.85),
     ),
     marker: (color: (214, 211, 200, 255), size: 3.5),
     delta: (
@@ -39,4 +40,17 @@
         after:  (color: (196, 90, 70, 255),   width: 1.8, pattern: solid),
         seam:   (color: (240, 140, 80, 255),  width: 2.2, pattern: solid),
     ),
+    // ---- the page and its chrome: dress data, once constants in code ----
+    // The dark dress finally stands on its own dark ground — it was
+    // rendered onto a hardcoded cream page since the day it shipped.
+    paper: (25, 28, 34, 255),
+    chrome: (
+        limb:      (color: (128, 128, 128, 128), width: 1.0, pattern: solid),
+        limb_fill: (128, 128, 128, 15),
+        graticule: (color: (128, 128, 128, 56), width: 0.6, pattern: solid),
+    ),
+    ghost: (stroke_alpha: 0.35, fill_alpha: 0.16, width_factor: 0.7),
+    tint_alpha: 235,
+    pattern: (dashed: (6.0, 4.0), hatched: (2.0, 3.0), zonal_width: 6.0, zonal_alpha: 0.35),
+    river_width: 1.9,
 )

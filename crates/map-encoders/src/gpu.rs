@@ -141,6 +141,7 @@ pub struct LabelResource {
     pub color: Rgba,
     pub halo: Rgba,
     pub size: f64,
+    pub halo_width_em: f64,
     pub voice_family: &'static str,
     pub voice_weight: u16,
     pub voice_italic: bool,
@@ -159,6 +160,15 @@ pub struct MarkerResource {
     pub size: f64,
 }
 
+/// The page dress the retained renderer composes against — resolved
+/// style data riding the manifest, never invented by the renderer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ManifestDress {
+    pub paper: Rgba,
+    pub zonal_width: f64,
+    pub zonal_alpha: f64,
+}
+
 /// The semantic scene manifest (§8): references, not pictures.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneManifest {
@@ -167,6 +177,7 @@ pub struct SceneManifest {
     pub styles: BTreeMap<StyleKey, GpuStyle>,
     pub labels: Vec<LabelResource>,
     pub markers: Vec<MarkerResource>,
+    pub dress: ManifestDress,
 }
 
 /// The encoder's whole answer (§18).
@@ -176,9 +187,22 @@ pub struct EncodedScene {
     pub resources: Vec<GeometryResource>,
 }
 
-/// Retained-scene backend alongside `SvgEncoder` (§18). Stateless:
-/// everything it emits derives from the scene alone.
-pub struct GpuSceneEncoder;
+/// Retained-scene backend alongside `SvgEncoder` (§18). Stateless
+/// over scenes; the page dress is injected config from the query's
+/// style, defaulting to the classical reference values.
+pub struct GpuSceneEncoder {
+    pub paper: map_types::style::Paint,
+    pub pattern: map_types::style::PatternGeometry,
+}
+
+impl Default for GpuSceneEncoder {
+    fn default() -> Self {
+        GpuSceneEncoder {
+            paper: map_types::style::Paint { fill: Rgba(246, 241, 228, 255) },
+            pattern: Default::default(),
+        }
+    }
+}
 
 // ------------------------------------------------------------ hashing
 
@@ -579,6 +603,7 @@ impl GpuSceneEncoder {
                     color: l.style.color,
                     halo: l.style.halo,
                     size: l.style.size,
+                    halo_width_em: l.style.halo_width_em,
                     voice_family: l.voice.family,
                     voice_weight: l.voice.weight,
                     voice_italic: l.voice.italic,
@@ -607,6 +632,11 @@ impl GpuSceneEncoder {
                 styles,
                 labels,
                 markers,
+                dress: ManifestDress {
+                    paper: self.paper.fill,
+                    zonal_width: self.pattern.zonal_width,
+                    zonal_alpha: self.pattern.zonal_alpha,
+                },
             },
             resources,
         }
@@ -695,6 +725,7 @@ impl EncodedScene {
                 "color": [l.color.0, l.color.1, l.color.2, l.color.3],
                 "halo": [l.halo.0, l.halo.1, l.halo.2, l.halo.3],
                 "size": l.size,
+                "haloWidthEm": l.halo_width_em,
                 "voice": {
                     "family": l.voice_family,
                     "weight": l.voice_weight,
@@ -737,7 +768,14 @@ impl EncodedScene {
                 d.bounds.radius
             );
         }
-        s.push_str("]}");
+        // The page dress: resolved style data the renderer composes
+        // against — paper ground and the zonal band's proportions.
+        let d = &m.dress;
+        let _ = write!(
+            s,
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{}}}}}",
+            d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha
+        );
         s
     }
 }

@@ -67,6 +67,9 @@ pub struct LabelStyle {
     /// The casing that keeps text legible over any fill.
     pub halo: Rgba,
     pub size: f64,
+    /// Halo stroke width as a fraction of the label size — dress data,
+    /// once a constant buried in two renderers.
+    pub halo_width_em: f64,
 }
 
 /// The cartographic voice of a label: territories speak in spaced
@@ -117,6 +120,13 @@ pub struct LabelScale {
     pub water_shrink: f64,
     /// water label ink = the water fill dimmed by this factor (0..1)
     pub water_ink: f64,
+    /// extra factor applied to memory-site inscriptions
+    pub memory_scale: f64,
+    /// extra factor applied to journey-station names
+    pub station_scale: f64,
+    /// extra factor applied to settlement names — a city is a note,
+    /// not a shout
+    pub city_scale: f64,
 }
 
 /// The complete labeling dress: base ink plus the three voices plus
@@ -170,6 +180,86 @@ pub struct BoundaryStrokes {
     pub way: Stroke,
 }
 
+/// The page's own ground — the paper the whole map composes against,
+/// and the globe's chrome (limb circle, graticule). Dress data: a dark
+/// style gets a dark page, never a hardcoded cream.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlobeChrome {
+    pub limb: Stroke,
+    pub limb_fill: Paint,
+    pub graticule: Stroke,
+}
+
+/// How the ghost backdrop fades a style — the disclosure dress the
+/// rest of the world wears when one subject is realized. Injectable:
+/// these factors were once constants in viewer code.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GhostDress {
+    /// stroke alpha multiplier (0..=1)
+    pub stroke_alpha: f64,
+    /// fill alpha multiplier (0..=1)
+    pub fill_alpha: f64,
+    /// stroke width multiplier (> 0)
+    pub width_factor: f64,
+}
+
+/// How stroke patterns realize on the page: dash rhythms and the zonal
+/// band's proportions. One source of truth — every terminal encoder
+/// reads THIS, instead of hardcoding the same convention twice and
+/// drifting.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PatternGeometry {
+    pub dashed_on: f64,
+    pub dashed_off: f64,
+    pub hatched_on: f64,
+    pub hatched_off: f64,
+    /// a zonal band is the stroke width times this
+    pub zonal_width: f64,
+    /// at the stroke alpha times this
+    pub zonal_alpha: f64,
+}
+
+/// The classical reference values — what every template declared the
+/// day these became data. Encoders fall back to these when no dress
+/// is injected (tests, bare construction); the served styles always
+/// carry their own.
+impl Default for GlobeChrome {
+    fn default() -> Self {
+        GlobeChrome {
+            limb: Stroke {
+                color: Rgba(128, 128, 128, 128),
+                width: 1.0,
+                pattern: StrokePattern::Solid,
+            },
+            limb_fill: Paint { fill: Rgba(128, 128, 128, 15) },
+            graticule: Stroke {
+                color: Rgba(128, 128, 128, 56),
+                width: 0.6,
+                pattern: StrokePattern::Solid,
+            },
+        }
+    }
+}
+
+impl Default for GhostDress {
+    fn default() -> Self {
+        GhostDress { stroke_alpha: 0.35, fill_alpha: 0.16, width_factor: 0.7 }
+    }
+}
+
+impl Default for PatternGeometry {
+    fn default() -> Self {
+        PatternGeometry {
+            dashed_on: 6.0,
+            dashed_off: 4.0,
+            hatched_on: 2.0,
+            hatched_off: 3.0,
+            zonal_width: 6.0,
+            zonal_alpha: 0.35,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StyleError {
     /// Law 6: Unknown must render distinctly from Line.
@@ -177,6 +267,32 @@ pub enum StyleError {
     /// Covenant rule 5: a frontier is a gradient of control — it must
     /// render zonally, never as a false crisp line.
     FrontierNotZonal,
+    /// A dress factor out of its lawful range (the message names it).
+    DressOutOfRange(&'static str),
+}
+
+/// Everything a Style is made of, by name — the one argument to
+/// `Style::new`, so growing the dress never grows a positional list.
+#[derive(Clone, Copy, Debug)]
+pub struct StyleSpec {
+    pub boundaries: BoundaryStrokes,
+    pub region: Paint,
+    pub water: Paint,
+    pub topo: AgeRamp,
+    pub palette: Option<[Paint; 8]>,
+    pub age: AgeRamp,
+    pub labeling: Labeling,
+    pub marker: MarkerStyle,
+    pub delta: DeltaEmphasis,
+    pub paper: Paint,
+    pub chrome: GlobeChrome,
+    pub ghost: GhostDress,
+    /// the comparison-overlay tint's alpha
+    pub tint_alpha: u8,
+    pub pattern: PatternGeometry,
+    /// rivers stroke at this width, in the water's own fill (a law:
+    /// river ink follows the sea's)
+    pub river_width: f64,
 }
 
 /// A complete style. Constructed only through `new`, which enforces the
@@ -199,28 +315,78 @@ pub struct Style {
     labeling: Labeling,
     marker: MarkerStyle,
     delta: DeltaEmphasis,
+    paper: Paint,
+    chrome: GlobeChrome,
+    ghost: GhostDress,
+    tint_alpha: u8,
+    pattern: PatternGeometry,
+    river_width: f64,
 }
 
 impl Style {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        boundaries: BoundaryStrokes,
-        region: Paint,
-        water: Paint,
-        topo: AgeRamp,
-        palette: Option<[Paint; 8]>,
-        age: AgeRamp,
-        labeling: Labeling,
-        marker: MarkerStyle,
-        delta: DeltaEmphasis,
-    ) -> Result<Self, StyleError> {
+    pub fn new(spec: StyleSpec) -> Result<Self, StyleError> {
+        let StyleSpec {
+            boundaries,
+            region,
+            water,
+            topo,
+            palette,
+            age,
+            labeling,
+            marker,
+            delta,
+            paper,
+            chrome,
+            ghost,
+            tint_alpha,
+            pattern,
+            river_width,
+        } = spec;
         if boundaries.unknown == boundaries.line {
             return Err(StyleError::UnknownIndistinctFromLine);
         }
         if boundaries.frontier.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
-        Ok(Style { boundaries, region, water, topo, palette, age, labeling, marker, delta })
+        let unit = |v: f64, name: &'static str| {
+            if (0.0..=1.0).contains(&v) { Ok(()) } else { Err(StyleError::DressOutOfRange(name)) }
+        };
+        let positive = |v: f64, name: &'static str| {
+            if v > 0.0 && v.is_finite() { Ok(()) } else { Err(StyleError::DressOutOfRange(name)) }
+        };
+        unit(ghost.stroke_alpha, "ghost.stroke_alpha")?;
+        unit(ghost.fill_alpha, "ghost.fill_alpha")?;
+        positive(ghost.width_factor, "ghost.width_factor")?;
+        unit(pattern.zonal_alpha, "pattern.zonal_alpha")?;
+        positive(pattern.zonal_width, "pattern.zonal_width")?;
+        positive(pattern.dashed_on, "pattern.dashed_on")?;
+        positive(pattern.dashed_off, "pattern.dashed_off")?;
+        positive(pattern.hatched_on, "pattern.hatched_on")?;
+        positive(pattern.hatched_off, "pattern.hatched_off")?;
+        positive(river_width, "river_width")?;
+        if !(labeling.base.halo_width_em.is_finite() && labeling.base.halo_width_em >= 0.0) {
+            return Err(StyleError::DressOutOfRange("labeling.base.halo_width_em"));
+        }
+        positive(labeling.scale.memory_scale, "labeling.scale.memory_scale")?;
+        positive(labeling.scale.station_scale, "labeling.scale.station_scale")?;
+        positive(labeling.scale.city_scale, "labeling.scale.city_scale")?;
+        Ok(Style {
+            boundaries,
+            region,
+            water,
+            topo,
+            palette,
+            age,
+            labeling,
+            marker,
+            delta,
+            paper,
+            chrome,
+            ghost,
+            tint_alpha,
+            pattern,
+            river_width,
+        })
     }
 
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
@@ -260,6 +426,24 @@ impl Style {
     pub fn delta_emphasis(&self) -> DeltaEmphasis {
         self.delta
     }
+    pub fn paper(&self) -> Paint {
+        self.paper
+    }
+    pub fn chrome(&self) -> GlobeChrome {
+        self.chrome
+    }
+    pub fn ghost_dress(&self) -> GhostDress {
+        self.ghost
+    }
+    pub fn tint_alpha(&self) -> u8 {
+        self.tint_alpha
+    }
+    pub fn pattern_geometry(&self) -> PatternGeometry {
+        self.pattern
+    }
+    pub fn river_width(&self) -> f64 {
+        self.river_width
+    }
 
     /// IDENTITY IS TOTAL OVER THE DRESS: every field a renderer reads
     /// is hashed. A blind spot here lets two different dresses collide
@@ -289,6 +473,7 @@ impl Style {
         c.u8_(r).u8_(g).u8_(b).u8_(a);
         let Rgba(r, g, b, a) = self.labeling.base.halo;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.labeling.base.size);
+        c.f64_(self.labeling.base.halo_width_em);
         for voice in [
             &self.labeling.territory,
             &self.labeling.water,
@@ -305,11 +490,25 @@ impl Style {
         }
         let sc = &self.labeling.scale;
         c.f64_(sc.unit_area_sr).f64_(sc.min).f64_(sc.max).f64_(sc.water_shrink).f64_(sc.water_ink);
+        c.f64_(sc.memory_scale).f64_(sc.station_scale).f64_(sc.city_scale);
         let Rgba(r, g, b, a) = self.marker.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.marker.size);
         self.delta.before.canon(c);
         self.delta.after.canon(c);
         self.delta.seam.canon(c);
+        self.paper.canon(c);
+        self.chrome.limb.canon(c);
+        self.chrome.limb_fill.canon(c);
+        self.chrome.graticule.canon(c);
+        c.f64_(self.ghost.stroke_alpha).f64_(self.ghost.fill_alpha).f64_(self.ghost.width_factor);
+        c.u8_(self.tint_alpha);
+        c.f64_(self.pattern.dashed_on)
+            .f64_(self.pattern.dashed_off)
+            .f64_(self.pattern.hatched_on)
+            .f64_(self.pattern.hatched_off)
+            .f64_(self.pattern.zonal_width)
+            .f64_(self.pattern.zonal_alpha);
+        c.f64_(self.river_width);
     }
 }
 

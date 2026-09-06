@@ -55,7 +55,7 @@ fn sample_scene() -> Snapshot {
         text: "Judah & <friends>".to_string(),
         at: uv(3.0, 5.0),
         subject: LabelSubject::Free,
-        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
     });
@@ -88,7 +88,7 @@ fn globe_clips_the_far_hemisphere() {
         text: "ANTIPODEAN".to_string(),
         at: uv(-3.0, -175.0),
         subject: LabelSubject::Free,
-        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 },
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
     });
@@ -138,6 +138,7 @@ fn nothing_unseen_speaks() {
                 color: Rgba(10, 10, 10, 255),
                 halo: Rgba(245, 240, 225, 220),
                 size: 12.0,
+                halo_width_em: 0.24,
             },
             face: map_types::scene::LabelFace::Water,
             voice: test_voice(),
@@ -194,7 +195,9 @@ fn globe_zooms_to_a_regional_slice() {
     let disc = out.matches("<circle").count();
     // The only circle is the marker — no limb disc at slice zoom.
     assert_eq!(disc, 1);
-    assert!(out.contains("stroke-opacity=\"0.22\""), "graticule present");
+    // The graticule wears the injected chrome dress (default gray at
+    // alpha 56/255, formatted to three places).
+    assert!(out.contains("stroke-opacity=\"0.220\""), "graticule present");
 }
 
 #[test]
@@ -311,7 +314,7 @@ fn labels_fit_their_territory_and_never_collide() {
         text: "AN IMPOSSIBLY LONG NAME FOR A TINY PLACE".to_string(),
         at: uv(20.03, 20.05),
         subject: LabelSubject::Region(tiny),
-        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0 },
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
     });
@@ -437,6 +440,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         padding: 16.0,
         projection: Projection::Globe { center: Some((32.0, 36.0)), zoom: Some(5.0) },
         smooth: false,
+        ..SvgEncoder::default()
     };
     let svg = enc.encode(&scene).unwrap();
     assert!(svg.contains("data-region=\"0000000000000001\""), "on-page region emitted");
@@ -500,6 +504,7 @@ fn swallowing_geometry_ships_thin() {
         padding: 16.0,
         projection: Projection::Globe { center: Some((32.0, 36.0)), zoom: Some(5.0) },
         smooth: false,
+        ..SvgEncoder::default()
     };
     let svg = enc.encode(&scene).unwrap();
     let start = svg.find("data-region=\"0000000000000001\"").expect("swallowing fill survives");
@@ -546,7 +551,7 @@ fn label_wears_its_declared_voice() {
         text: "philistia".to_string(),
         at: UnitVec::from_lat_lon_deg(31.5, 34.6),
         subject: LabelSubject::Free,
-        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(240, 240, 240, 220), size: 16.0 },
+        style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(240, 240, 240, 220), size: 16.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Territory,
         voice: map_types::style::TypeVoice {
             family: "TestFace, serif",
@@ -816,7 +821,7 @@ fn the_sentinel_keeps_its_holes_on_both_charts() {
 use crate::{EncodedScene, GpuSceneEncoder, ResourceKind, RESOURCE_MAGIC};
 
 fn gpu_encode(scene: &Snapshot) -> EncodedScene {
-    GpuSceneEncoder.encode(scene).unwrap()
+    GpuSceneEncoder::default().encode(scene).unwrap()
 }
 
 /// Law 11 for the retained backend: same scene, same manifest, same

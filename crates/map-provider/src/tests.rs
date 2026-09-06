@@ -6,27 +6,33 @@ use map_types::style::*;
 
 pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
     let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
-    map_types::Style::new(
-        BoundaryStrokes {
+    map_types::Style::new(StyleSpec {
+        boundaries: BoundaryStrokes {
             line: s(Rgba(1, 1, 1, 255), 1.0, StrokePattern::Solid),
             frontier: s(Rgba(2, 2, 2, 255), 1.0, StrokePattern::Zonal),
             disputed: s(Rgba(3, 3, 3, 255), 1.0, StrokePattern::Hatched),
             unknown: s(Rgba(4, 4, 4, 255), 1.0, StrokePattern::Dashed),
             way: s(Rgba(5, 5, 5, 255), 1.0, StrokePattern::Dashed),
         },
-        Paint { fill: Rgba(10, 10, 10, 255) },
-        Paint { fill: Rgba(20, 20, 20, 255) },
-        AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
-        None,
-        AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
-        test_labeling(LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 255), size: 12.0 }),
-        MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
-        DeltaEmphasis {
+        region: Paint { fill: Rgba(10, 10, 10, 255) },
+        water: Paint { fill: Rgba(20, 20, 20, 255) },
+        topo: AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
+        palette: None,
+        age: AgeRamp { newest: Paint { fill: Rgba(1, 1, 1, 255) }, oldest: Paint { fill: Rgba(2, 2, 2, 255) } },
+        labeling: test_labeling(LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 255), size: 12.0, halo_width_em: 0.24 }),
+        marker: MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
+        delta: DeltaEmphasis {
             before: s(Rgba(6, 6, 6, 255), 1.0, StrokePattern::Dashed),
             after: s(Rgba(7, 7, 7, 255), 1.0, StrokePattern::Solid),
             seam: s(Rgba(8, 8, 8, 255), 1.0, StrokePattern::Solid),
         },
-    )
+        paper: Paint { fill: Rgba(246, 241, 228, 255) },
+        chrome: Default::default(),
+        ghost: Default::default(),
+        tint_alpha: 235,
+        pattern: Default::default(),
+        river_width: 1.9,
+    })
     .unwrap()
 }
 
@@ -59,6 +65,9 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
             max: 2.1,
             water_shrink: 0.8,
             water_ink: 0.45,
+            memory_scale: 0.85,
+            station_scale: 0.8,
+            city_scale: 0.85,
         },
     }
 }
@@ -88,21 +97,21 @@ mod canon_provider_laws {
 
     fn style() -> Style {
         let stroke = |r, pattern| Stroke { color: Rgba(r, 0, 0, 255), width: 1.0, pattern };
-        Style::new(
-            BoundaryStrokes {
+        Style::new(StyleSpec {
+            boundaries: BoundaryStrokes {
                 line: stroke(0, StrokePattern::Solid),
                 frontier: stroke(60, StrokePattern::Zonal),
                 disputed: stroke(120, StrokePattern::Hatched),
                 unknown: stroke(180, StrokePattern::Dashed),
                 way: stroke(240, StrokePattern::Dashed),
             },
-            Paint { fill: Rgba(200, 200, 180, 255) },
-            Paint { fill: Rgba(120, 160, 200, 235) },
-            AgeRamp {
+            region: Paint { fill: Rgba(200, 200, 180, 255) },
+            water: Paint { fill: Rgba(120, 160, 200, 235) },
+            topo: AgeRamp {
                 newest: Paint { fill: Rgba(150, 110, 80, 200) },
                 oldest: Paint { fill: Rgba(225, 214, 180, 200) },
             },
-            Some([
+            palette: Some([
                 Paint { fill: Rgba(1, 1, 1, 205) },
                 Paint { fill: Rgba(2, 2, 2, 205) },
                 Paint { fill: Rgba(3, 3, 3, 205) },
@@ -112,18 +121,24 @@ mod canon_provider_laws {
                 Paint { fill: Rgba(7, 7, 7, 205) },
                 Paint { fill: Rgba(8, 8, 8, 205) },
             ]),
-            AgeRamp {
+            age: AgeRamp {
                 newest: Paint { fill: Rgba(220, 40, 40, 255) },
                 oldest: Paint { fill: Rgba(220, 40, 40, 40) },
             },
-            super::test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
-            MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
-            DeltaEmphasis {
+            labeling: super::test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0, halo_width_em: 0.24 }),
+            marker: MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
+            delta: DeltaEmphasis {
                 before: stroke(90, StrokePattern::Dashed),
                 after: stroke(30, StrokePattern::Solid),
                 seam: stroke(250, StrokePattern::Solid),
             },
-        )
+            paper: Paint { fill: Rgba(246, 241, 228, 255) },
+            chrome: Default::default(),
+            ghost: Default::default(),
+            tint_alpha: 235,
+            pattern: Default::default(),
+            river_width: 1.9,
+        })
         .unwrap()
     }
 

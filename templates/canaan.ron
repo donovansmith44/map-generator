@@ -34,7 +34,7 @@
     )),
     age: (newest: (164, 105, 107, 220), oldest: (164, 105, 107, 40)),
     labeling: (
-        base: (color: (32, 36, 43, 255), halo: (242, 236, 220, 210), size: 14.0),
+        base: (color: (32, 36, 43, 255), halo: (242, 236, 220, 210), size: 14.0, halo_width_em: 0.24),
         territory: (family: "Georgia, 'Times New Roman', serif", weight: 600,
                     italic: false, uppercase: true, tracking_em: 0.18, advance_em: 0.92),
         water:     (family: "Georgia, 'Times New Roman', serif", weight: 400,
@@ -43,7 +43,8 @@
                     italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.62),
         memory:    (family: "Georgia, 'Times New Roman', serif", weight: 400,
                     italic: true, uppercase: false, tracking_em: 0.10, advance_em: 0.56),
-        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45),
+        scale: (unit_area_sr: 0.000036, min: 0.85, max: 2.1, water_shrink: 0.8, water_ink: 0.45,
+                memory_scale: 0.85, station_scale: 0.8, city_scale: 0.85),
     ),
     marker: (color: (32, 36, 43, 255), size: 3.2),
     delta: (
@@ -51,4 +52,18 @@
         after:  (color: (164, 105, 107, 255), width: 1.6, pattern: solid),
         seam:   (color: (139, 46, 32, 255),   width: 2.0, pattern: solid),
     ),
+    // ---- the page and its chrome: dress data, once constants in code ----
+    paper: (246, 241, 228, 255),        // the cream paper ground
+    chrome: (
+        limb:      (color: (128, 128, 128, 128), width: 1.0, pattern: solid),
+        limb_fill: (128, 128, 128, 15),
+        graticule: (color: (128, 128, 128, 56), width: 0.6, pattern: solid),
+    ),
+    ghost: (stroke_alpha: 0.35, fill_alpha: 0.16, width_factor: 0.7),
+    tint_alpha: 235,
+    pattern: (dashed: (6.0, 4.0), hatched: (2.0, 3.0), zonal_width: 6.0, zonal_alpha: 0.35),
+    river_width: 1.9,
+    // The reference dress is the declared default — by law, not by
+    // alphabetical accident.
+    default: true,
 )

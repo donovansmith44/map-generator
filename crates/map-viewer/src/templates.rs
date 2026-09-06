@@ -11,8 +11,9 @@
 //! Style tree `Copy` as the scene types require.
 
 use map_types::style::{
-    AgeRamp, BoundaryStrokes, DeltaEmphasis, LabelScale, LabelStyle, Labeling, MarkerStyle, Paint,
-    Rgba, Stroke, StrokePattern, Style, TypeVoice,
+    AgeRamp, BoundaryStrokes, DeltaEmphasis, GhostDress, GlobeChrome, LabelScale, LabelStyle,
+    Labeling, MarkerStyle, Paint, PatternGeometry, Rgba, Stroke, StrokePattern, Style, StyleSpec,
+    TypeVoice,
 };
 
 #[derive(serde::Deserialize)]
@@ -56,6 +57,7 @@ struct TLabel {
     color: [u8; 4],
     halo: [u8; 4],
     size: f64,
+    halo_width_em: f64,
 }
 
 #[derive(serde::Deserialize)]
@@ -66,6 +68,9 @@ struct TScale {
     max: f64,
     water_shrink: f64,
     water_ink: f64,
+    memory_scale: f64,
+    station_scale: f64,
+    city_scale: f64,
 }
 
 #[derive(serde::Deserialize)]
@@ -106,6 +111,31 @@ struct TDelta {
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+struct TChrome {
+    limb: TStroke,
+    limb_fill: [u8; 4],
+    graticule: TStroke,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TGhost {
+    stroke_alpha: f64,
+    fill_alpha: f64,
+    width_factor: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TPatternGeometry {
+    dashed: (f64, f64),
+    hatched: (f64, f64),
+    zonal_width: f64,
+    zonal_alpha: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Template {
     boundaries: TBoundaries,
     region: [u8; 4],
@@ -116,6 +146,21 @@ struct Template {
     labeling: TLabeling,
     marker: TMarker,
     delta: TDelta,
+    /// the page's own ground — the paper everything composes against
+    paper: [u8; 4],
+    /// the globe's chrome: limb circle and graticule
+    chrome: TChrome,
+    /// the ghost backdrop's fade, declared
+    ghost: TGhost,
+    /// the comparison-overlay tint's alpha
+    tint_alpha: u8,
+    /// dash rhythms and the zonal band's proportions
+    pattern: TPatternGeometry,
+    /// rivers stroke at this width, in the water's own fill
+    river_width: f64,
+    /// exactly one template declares itself the default dress
+    #[serde(default)]
+    default: bool,
 }
 
 fn rgba(c: [u8; 4]) -> Rgba {
@@ -157,24 +202,25 @@ fn voice(v: TVoice) -> TypeVoice {
 }
 
 fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
-    Style::new(
-        BoundaryStrokes {
+    Style::new(StyleSpec {
+        boundaries: BoundaryStrokes {
             line: stroke(&t.boundaries.line),
             frontier: stroke(&t.boundaries.frontier),
             disputed: stroke(&t.boundaries.disputed),
             unknown: stroke(&t.boundaries.unknown),
             way: stroke(&t.boundaries.way),
         },
-        paint(t.region),
-        paint(t.water),
-        ramp(&t.topo),
-        t.palette.map(|slots| slots.map(paint)),
-        ramp(&t.age),
-        Labeling {
+        region: paint(t.region),
+        water: paint(t.water),
+        topo: ramp(&t.topo),
+        palette: t.palette.map(|slots| slots.map(paint)),
+        age: ramp(&t.age),
+        labeling: Labeling {
             base: LabelStyle {
                 color: rgba(t.labeling.base.color),
                 halo: rgba(t.labeling.base.halo),
                 size: t.labeling.base.size,
+                halo_width_em: t.labeling.base.halo_width_em,
             },
             territory: voice(t.labeling.territory),
             water: voice(t.labeling.water),
@@ -186,28 +232,57 @@ fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
                 max: t.labeling.scale.max,
                 water_shrink: t.labeling.scale.water_shrink,
                 water_ink: t.labeling.scale.water_ink,
+                memory_scale: t.labeling.scale.memory_scale,
+                station_scale: t.labeling.scale.station_scale,
+                city_scale: t.labeling.scale.city_scale,
             },
         },
-        MarkerStyle { color: rgba(t.marker.color), size: t.marker.size },
-        DeltaEmphasis {
+        marker: MarkerStyle { color: rgba(t.marker.color), size: t.marker.size },
+        delta: DeltaEmphasis {
             before: stroke(&t.delta.before),
             after: stroke(&t.delta.after),
             seam: stroke(&t.delta.seam),
         },
-    )
+        paper: paint(t.paper),
+        chrome: GlobeChrome {
+            limb: stroke(&t.chrome.limb),
+            limb_fill: paint(t.chrome.limb_fill),
+            graticule: stroke(&t.chrome.graticule),
+        },
+        ghost: GhostDress {
+            stroke_alpha: t.ghost.stroke_alpha,
+            fill_alpha: t.ghost.fill_alpha,
+            width_factor: t.ghost.width_factor,
+        },
+        tint_alpha: t.tint_alpha,
+        pattern: PatternGeometry {
+            dashed_on: t.pattern.dashed.0,
+            dashed_off: t.pattern.dashed.1,
+            hatched_on: t.pattern.hatched.0,
+            hatched_off: t.pattern.hatched.1,
+            zonal_width: t.pattern.zonal_width,
+            zonal_alpha: t.pattern.zonal_alpha,
+        },
+        river_width: t.river_width,
+    })
 }
 
-/// Parse one template source into an honest Style; the error names
-/// what went wrong (schema or honesty law) for the loud path.
-pub fn parse_template(src: &str) -> Result<Style, String> {
+/// Parse one template source into an honest Style plus its declared
+/// default flag; the error names what went wrong (schema or honesty
+/// law) for the loud path.
+pub fn parse_template(src: &str) -> Result<(Style, bool), String> {
     let t: Template = ron::from_str(src).map_err(|e| format!("template schema: {e}"))?;
-    build(t).map_err(|e| format!("dishonest template: {e:?}"))
+    let default = t.default;
+    build(t).map(|s| (s, default)).map_err(|e| format!("dishonest template: {e:?}"))
 }
 
 /// Every `*.ron` in the templates directory, alphabetically — the
 /// style book is the directory listing, nothing else. A file that
 /// fails to parse or fails the honesty laws kills startup by name.
-pub fn load_templates(dir: &std::path::Path) -> Vec<(&'static str, Style)> {
+/// THE DEFAULT IS DECLARED (`default: true` in exactly one file),
+/// never an accident of alphabetical order; two claimants refuse to
+/// serve, loudly, by name.
+pub fn load_templates(dir: &std::path::Path) -> Vec<(&'static str, Style, bool)> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("no style templates at {}: {e}", dir.display()))
         .filter_map(Result::ok)
@@ -216,17 +291,25 @@ pub fn load_templates(dir: &std::path::Path) -> Vec<(&'static str, Style)> {
         .collect();
     entries.sort();
     assert!(!entries.is_empty(), "no *.ron templates in {}", dir.display());
-    entries
+    let loaded: Vec<(&'static str, Style, bool)> = entries
         .into_iter()
         .map(|path| {
             let name = path.file_stem().expect("stem").to_string_lossy().into_owned();
             let src = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("template {}: {e}", path.display()));
-            let style = parse_template(&src)
+            let (style, default) = parse_template(&src)
                 .unwrap_or_else(|e| panic!("template {}: {e}", path.display()));
-            (&*Box::leak(name.into_boxed_str()), style)
+            (&*Box::leak(name.into_boxed_str()), style, default)
         })
-        .collect()
+        .collect();
+    let defaults: Vec<&str> =
+        loaded.iter().filter(|(_, _, d)| *d).map(|(n, _, _)| *n).collect();
+    assert!(
+        defaults.len() <= 1,
+        "more than one template claims default: {}",
+        defaults.join(", ")
+    );
+    loaded
 }
 
 #[cfg(test)]
@@ -238,8 +321,12 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates");
         let loaded = super::load_templates(&dir);
         assert!(loaded.len() >= 3, "the style book has its dresses");
-        let names: Vec<_> = loaded.iter().map(|(n, _)| *n).collect();
+        let names: Vec<_> = loaded.iter().map(|(n, _, _)| *n).collect();
         assert!(names.contains(&"canaan") && names.contains(&"parchment") && names.contains(&"slate"));
+        // Exactly one dress declares itself the default — never an
+        // accident of alphabetical order.
+        let defaults: Vec<_> = loaded.iter().filter(|(_, _, d)| *d).map(|(n, _, _)| *n).collect();
+        assert_eq!(defaults.len(), 1, "one declared default, found: {defaults:?}");
     }
 
     /// A dishonest template refuses to become a Style: the honesty

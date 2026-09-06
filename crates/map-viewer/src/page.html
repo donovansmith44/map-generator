@@ -788,6 +788,14 @@ async function gpuSyncInner() {
   }
   const man = await res.json();
   if (gpu.sceneKey !== key) return;
+  // THE PAGE DRESS rides the manifest: the paper ground and the zonal
+  // band's proportions are the style's own declarations — the
+  // renderer composes against them and invents nothing.
+  gpu.dress = man.dress || null;
+  if (gpu.canvas && gpu.dress && gpu.dress.paper) {
+    const [pr, pg, pb, pa] = gpu.dress.paper;
+    gpu.canvas.style.background = `rgba(${pr},${pg},${pb},${pa / 255})`;
+  }
   const meta = new Map(man.resources.map(r => [r.id, r]));
   // The draw list (§64), in manifest paint order. Fills group a
   // region's consecutive rings into ONE even-odd pass (stage 5) —
@@ -1163,13 +1171,16 @@ function glyphAtlasReset() {
 }
 
 // One rasterized run per (text, voice, quantized size, colors). The
-// halo bakes in exactly as the SVG writes it: stroke behind fill at
-// 0.24 em. Returns null only when a single run cannot fit the atlas.
-function glyphEntry(text, voice, sizeCss, color, halo, retried) {
+// halo bakes in exactly as the server writes it: stroke behind fill
+// at the label's own declared halo width (dress data; a centered
+// stroke shows half its width, hence the doubling). Returns null only
+// when a single run cannot fit the atlas.
+function glyphEntry(text, voice, sizeCss, color, halo, haloWidthEm, retried) {
   const dpr = window.devicePixelRatio || 1;
   const px = Math.max(2, Math.round(sizeCss * 2) / 2);  // quantize: bounded atlas
+  const hw = haloWidthEm === undefined ? 0.24 : haloWidthEm;
   const key = [text, voice.family, voice.weight, voice.italic, voice.tracking, px,
-               color.join(), halo.join()].join("|");
+               color.join(), halo.join(), hw].join("|");
   const hit = glyphs.map.get(key);
   if (hit) return hit;
   const ctx = glyphs.ctx;
@@ -1184,14 +1195,14 @@ function glyphEntry(text, voice, sizeCss, color, halo, retried) {
   if (glyphs.y + h > 2048) {
     if (retried) return null;
     glyphAtlasReset();
-    return glyphEntry(text, voice, sizeCss, color, halo, true);
+    return glyphEntry(text, voice, sizeCss, color, halo, haloWidthEm, true);
   }
   const bx = glyphs.x, by = glyphs.y;
   const baseline = by + pad + px * dpr;
   ctx.textAlign = "left";
   ctx.lineJoin = "round";
   ctx.strokeStyle = `rgba(${halo[0]},${halo[1]},${halo[2]},${halo[3] / 255})`;
-  ctx.lineWidth = px * dpr * 0.48;
+  ctx.lineWidth = px * dpr * hw * 2;
   ctx.strokeText(text, bx + pad, baseline);
   ctx.fillStyle = `rgba(${color[0]},${color[1]},${color[2]},${color[3] / 255})`;
   ctx.fillText(text, bx + pad, baseline);
@@ -1312,7 +1323,7 @@ function drawLabels(proj, vb, k, ox, oy, rect) {
     if (!st.draw) continue;
     const d = st.draw;
     const e = glyphEntry(d.text, d.l.voice, d.size * k,
-                         d.l.color, d.l.halo);
+                         d.l.color, d.l.halo, d.l.haloWidthEm);
     if (!e) continue;
     pending.push({ e, d, alpha: st.alpha });
   }
@@ -1558,7 +1569,11 @@ function gpuDraw() {
       continue;
     }
     let w = s.width;
-    if (s.pattern === "zonal") { w *= 6; ca *= 0.35; }  // the server's zonal dress
+    if (s.pattern === "zonal") {
+      // the style's own zonal proportions (classical fallback)
+      w *= (gpu.dress && gpu.dress.zonalWidth) || 6;
+      ca *= (gpu.dress && gpu.dress.zonalAlpha) || 0.35;
+    }
     gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
     gl.uniform1f(loc.uPointSize, 1.0);
     gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * (vb.width / DESIGN_WIDTH) * k * dpr)));

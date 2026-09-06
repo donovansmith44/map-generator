@@ -67,6 +67,11 @@ pub struct App {
     /// /api/resource(s). Immutable entries — equal id, equal bytes —
     /// so concurrent publishes can never disagree.
     resources: std::sync::Mutex<ResourceStore>,
+    /// Every loaded style (bases + derived dresses) by id: the dress
+    /// lookup for encoders — paper, chrome, and pattern geometry ride
+    /// the ENCODER CONFIG, never the scene, so scenes stay pure
+    /// resolved geometry and encoders stay terminal.
+    style_values: BTreeMap<StyleId, Style>,
 }
 
 /// Server-side residency with stage-9 eviction: entries are stamped
@@ -127,73 +132,90 @@ mod templates;
 
 // ------------------------------------------------------------- styles
 
+/// A base style, taken apart by name — the spec every derived dress
+/// starts from.
+fn spec_of(base: &Style) -> map_types::style::StyleSpec {
+    use map_types::EdgeCharacter as E;
+    map_types::style::StyleSpec {
+        boundaries: BoundaryStrokes {
+            line: *base.stroke_for(&E::Line),
+            frontier: *base.stroke_for(&E::Frontier { width_km: 0.0 }),
+            disputed: *base.stroke_for(&E::Disputed { claimants: Vec::new() }),
+            unknown: *base.stroke_for(&E::Unknown),
+            way: *base.stroke_for(&E::Way),
+        },
+        region: base.region_paint(),
+        water: base.water_paint(),
+        topo: base.topo_ramp(),
+        palette: base.palette().copied(),
+        age: base.age_ramp(),
+        labeling: base.labeling(),
+        marker: base.marker_style(),
+        delta: base.delta_emphasis(),
+        paper: base.paper(),
+        chrome: base.chrome(),
+        ghost: base.ghost_dress(),
+        tint_alpha: base.tint_alpha(),
+        pattern: base.pattern_geometry(),
+        river_width: base.river_width(),
+    }
+}
+
 /// Derive a style's ghost: same bones, faded flesh. Patterns survive
-/// (honesty renders even in the background), colors thin out.
+/// (honesty renders even in the background), colors thin out — by the
+/// style's OWN declared ghost dress, not constants in code.
 fn ghosted(base: &Style) -> Style {
+    let g = base.ghost_dress();
     let fade = |s: &Stroke| Stroke {
-        color: Rgba(s.color.0, s.color.1, s.color.2, (f64::from(s.color.3) * 0.35) as u8),
-        width: s.width * 0.7,
+        color: Rgba(s.color.0, s.color.1, s.color.2, (f64::from(s.color.3) * g.stroke_alpha) as u8),
+        width: s.width * g.width_factor,
         pattern: s.pattern,
     };
     let fade_paint = |p: Paint| Paint {
-        fill: Rgba(p.fill.0, p.fill.1, p.fill.2, (f64::from(p.fill.3) * 0.16) as u8),
+        fill: Rgba(p.fill.0, p.fill.1, p.fill.2, (f64::from(p.fill.3) * g.fill_alpha) as u8),
     };
-    use map_types::EdgeCharacter as E;
     let d = base.delta_emphasis();
-    Style::new(
-        BoundaryStrokes {
-            line: fade(base.stroke_for(&E::Line)),
-            frontier: fade(base.stroke_for(&E::Frontier { width_km: 0.0 })),
-            disputed: fade(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
-            unknown: fade(base.stroke_for(&E::Unknown)),
-            way: fade(base.stroke_for(&E::Way)),
-        },
-        fade_paint(base.region_paint()),
-        fade_paint(base.water_paint()),
-        AgeRamp {
-            newest: fade_paint(base.topo_ramp().newest),
-            oldest: fade_paint(base.topo_ramp().oldest),
-        },
-        None, // the ghost is a uniform disclosure, never colorful
-        base.age_ramp(),
-        base.labeling(),
-        base.marker_style(),
-        DeltaEmphasis { before: fade(&d.before), after: fade(&d.after), seam: fade(&d.seam) },
-    )
-    .expect("a faded honest style is still honest")
+    let mut spec = spec_of(base);
+    spec.boundaries = BoundaryStrokes {
+        line: fade(&spec.boundaries.line),
+        frontier: fade(&spec.boundaries.frontier),
+        disputed: fade(&spec.boundaries.disputed),
+        unknown: fade(&spec.boundaries.unknown),
+        way: fade(&spec.boundaries.way),
+    };
+    spec.region = fade_paint(spec.region);
+    spec.water = fade_paint(spec.water);
+    spec.topo =
+        AgeRamp { newest: fade_paint(spec.topo.newest), oldest: fade_paint(spec.topo.oldest) };
+    spec.palette = None; // the ghost is a uniform disclosure, never colorful
+    spec.delta = DeltaEmphasis { before: fade(&d.before), after: fade(&d.after), seam: fade(&d.seam) };
+    Style::new(spec).expect("a faded honest style is still honest")
 }
 
 /// Recolor a style toward one paint — the dress a whole layer wears in
 /// a comparison overlay. Patterns and widths survive (honesty), color
-/// says WHICH layer.
+/// says WHICH layer; the tint's alpha is the style's own declaration.
 fn tinted(base: &Style, paint: Paint) -> Style {
+    let alpha = base.tint_alpha();
     let tint = |s: &Stroke| Stroke {
-        color: Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 235),
+        color: Rgba(paint.fill.0, paint.fill.1, paint.fill.2, alpha),
         width: s.width,
         pattern: s.pattern,
     };
-    use map_types::EdgeCharacter as E;
     let d = base.delta_emphasis();
-    let mut labeling = base.labeling();
-    labeling.base.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
-    Style::new(
-        BoundaryStrokes {
-            line: tint(base.stroke_for(&E::Line)),
-            frontier: tint(base.stroke_for(&E::Frontier { width_km: 0.0 })),
-            disputed: tint(base.stroke_for(&E::Disputed { claimants: Vec::new() })),
-            unknown: tint(base.stroke_for(&E::Unknown)),
-            way: tint(base.stroke_for(&E::Way)),
-        },
-        paint,
-        base.water_paint(),
-        base.topo_ramp(),
-        None, // a comparison layer is ONE tint, that is its meaning
-        base.age_ramp(),
-        labeling,
-        base.marker_style(),
-        DeltaEmphasis { before: tint(&d.before), after: tint(&d.after), seam: tint(&d.seam) },
-    )
-    .expect("a tinted honest style is still honest")
+    let mut spec = spec_of(base);
+    spec.labeling.base.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
+    spec.boundaries = BoundaryStrokes {
+        line: tint(&spec.boundaries.line),
+        frontier: tint(&spec.boundaries.frontier),
+        disputed: tint(&spec.boundaries.disputed),
+        unknown: tint(&spec.boundaries.unknown),
+        way: tint(&spec.boundaries.way),
+    };
+    spec.region = paint;
+    spec.palette = None; // a comparison layer is ONE tint, that is its meaning
+    spec.delta = DeltaEmphasis { before: tint(&d.before), after: tint(&d.after), seam: tint(&d.seam) };
+    Style::new(spec).expect("a tinted honest style is still honest")
 }
 
 // ---------------------------------------------------------- wiring
@@ -240,24 +262,33 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         }
         h.finish()
     };
+    // THE DEFAULT IS DECLARED (template `default: true`), and it leads
+    // the book: parse_style's no-param fallback and the page's initial
+    // pick both take the first entry, so ordering IS the default law.
+    // With no declared default the alphabetical first stands, as ever.
+    let mut loaded = loaded;
+    loaded.sort_by_key(|(name, _, is_default)| (!*is_default, *name));
     let styles: Vec<(&'static str, StyleId)> =
-        loaded.iter().map(|(name, s)| (*name, s.id())).collect();
+        loaded.iter().map(|(name, s, _)| (*name, s.id())).collect();
     let mut ghosts = BTreeMap::new();
     let mut style_table = BTreeMap::new();
-    for (_, base) in &loaded {
+    for (_, base, _) in &loaded {
         let ghost = ghosted(base);
         ghosts.insert(base.id(), ghost.id());
         style_table.insert(ghost.id(), ghost);
         style_table.insert(base.id(), *base);
     }
     let mut overlay_tints = BTreeMap::new();
-    for (_, base) in &loaded {
+    for (_, base, _) in &loaded {
         let ramp = base.age_ramp();
         let (held, current) = (tinted(base, ramp.oldest), tinted(base, ramp.newest));
         overlay_tints.insert(base.id(), (held.id(), current.id()));
         style_table.insert(held.id(), held);
         style_table.insert(current.id(), current);
     }
+    // The dress lookup the encoders read (paper, chrome, pattern
+    // geometry ride the encoder config, never the scene).
+    let style_values = style_table.clone();
     let exp_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
     let atlas = load_exports(
@@ -318,6 +349,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         overlay_tints,
         canon: Some(canon_provider),
         resources: std::sync::Mutex::new(ResourceStore::new()),
+        style_values,
     }
 }
 
@@ -606,6 +638,7 @@ fn build_query(
 }
 
 fn encode(
+    app: &App,
     p: &Params,
     scene: &Snapshot,
     face: Option<(f64, f64)>,
@@ -648,10 +681,17 @@ fn encode(
                 .unwrap_or(1200.0)
                 .clamp(320.0, 8000.0);
             let smooth = p.get("smooth") != Some("0");
-            SvgEncoder { projection, width, smooth, ..SvgEncoder::default() }
-                .encode(scene)
-                .map(|s| (s, "image/svg+xml"))
-                .map_err(|e| e.0)
+            // The page dress rides the encoder config, from the
+            // query's own style (classical defaults on unknown ids).
+            let mut enc = SvgEncoder { projection, width, smooth, ..SvgEncoder::default() };
+            if let Some(st) =
+                parse_style(app, p.get("style")).and_then(|id| app.style_values.get(&id))
+            {
+                enc.paper = st.paper();
+                enc.chrome = st.chrome();
+                enc.pattern = st.pattern_geometry();
+            }
+            enc.encode(scene).map(|s| (s, "image/svg+xml")).map_err(|e| e.0)
         }
     }
 }
@@ -954,7 +994,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 labels: Vec::new(),
                 attribution: scene.attribution,
             };
-            match encode(&p, &scene, None) {
+            match encode(app, &p, &scene, None) {
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => (200, ctype, body, Vec::new()),
             }
@@ -1020,7 +1060,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
 
         "/api/render" => match composed_scene(app, &p) {
             Err(e) => bad(&e),
-            Ok((scene, face, single)) => match encode(&p, &scene, face) {
+            Ok((scene, face, single)) => match encode(app, &p, &scene, face) {
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
@@ -1048,7 +1088,19 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
         "/api/scene" => match composed_scene(app, &p) {
             Err(e) => bad(&e),
             Ok((scene, face, _single)) => {
-                match GpuSceneEncoder.encode(&scene) {
+                // The dress rides the encoder config, from the
+                // query's own style (the base dress on unknown ids).
+                let dress_style = parse_style(app, p.get("style"))
+                    .and_then(|id| app.style_values.get(&id))
+                    .copied();
+                let gpu_enc = match dress_style {
+                    Some(st) => GpuSceneEncoder {
+                        paper: st.paper(),
+                        pattern: st.pattern_geometry(),
+                    },
+                    None => GpuSceneEncoder::default(),
+                };
+                match gpu_enc.encode(&scene) {
                     Err(e) => bad(&e.0),
                     Ok(es) => {
                         // Publish payloads into the content-addressed
@@ -1125,7 +1177,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 (Ok(a), Ok(b)) => a.combine(b),
                 (Err(e), _) | (_, Err(e)) => return bad(&e),
             };
-            match encode(&p, &scene, None) {
+            match encode(app, &p, &scene, None) {
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =

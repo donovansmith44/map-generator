@@ -453,7 +453,7 @@ impl CanonProvider {
             });
             if q.layers.contains(LayerSet::LABELS) {
                 let mut label = style.label_style();
-                label.size *= 0.8;
+                label.size *= style.labeling().scale.station_scale;
                 scene.labels.push(PlacedLabel {
                     text: entry.canonical_name.clone(),
                     at: entry.position,
@@ -528,13 +528,15 @@ impl CanonProvider {
                                 pts,
                                 stroke: map_types::style::Stroke {
                                     color: style.water_paint().fill,
-                                    // RIVER DISPLAY WIDTH ~600 m: paired
-                                    // with the 8 px corridor raster in
+                                    // THE RIVER LAW: river ink follows
+                                    // the sea's fill; the WIDTH is the
+                                    // style's own declaration (paired
+                                    // with the corridor raster in
                                     // tools/plate_trace — one quantity,
                                     // two representations; the stroke on
                                     // the centerline also covers the
-                                    // fill-abutment antialiasing seam.
-                                    width: 1.9,
+                                    // fill-abutment antialiasing seam).
+                                    width: style.river_width(),
                                     pattern: map_types::style::StrokePattern::Solid,
                                 },
                                 sources,
@@ -553,7 +555,7 @@ impl CanonProvider {
                         scene.attribution.extend(sources.iter().cloned());
                         if q.layers.contains(LayerSet::LABELS) {
                             let mut label = style.label_style();
-                            label.size *= 0.85;
+                            label.size *= style.labeling().scale.memory_scale;
                             scene.labels.push(PlacedLabel {
                                 text: m.name.clone(),
                                 at: m.at,
@@ -582,7 +584,7 @@ impl CanonProvider {
                         });
                         if q.layers.contains(LayerSet::LABELS) {
                             let mut label = style.label_style();
-                            label.size *= 0.85; // a city is a note, not a shout
+                            label.size *= style.labeling().scale.city_scale; // a note, not a shout
                             scene.labels.push(PlacedLabel {
                                 text: p.name.clone(),
                                 at: p.at,

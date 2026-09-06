@@ -50,6 +50,9 @@ fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
             max: 2.1,
             water_shrink: 0.8,
             water_ink: 0.45,
+            memory_scale: 0.85,
+            station_scale: 0.8,
+            city_scale: 0.85,
         },
     }
 }
@@ -135,51 +138,50 @@ fn biblical_anchor(at: i32) -> Anchor {
     }
 }
 
-type StyleParts = (
-    BoundaryStrokes,
-    Paint,
-    Paint,
-    AgeRamp,
-    Option<[Paint; 8]>,
-    AgeRamp,
-    crate::style::Labeling,
-    MarkerStyle,
-    DeltaEmphasis,
-);
-
-fn honest_style_parts() -> StyleParts {
+fn honest_style_parts() -> crate::style::StyleSpec {
     let stroke = |r, pattern| Stroke { color: Rgba(r, 0, 0, 255), width: 1.0, pattern };
-    (
-        BoundaryStrokes {
+    crate::style::StyleSpec {
+        boundaries: BoundaryStrokes {
             line: stroke(0, StrokePattern::Solid),
             frontier: stroke(60, StrokePattern::Zonal),
             disputed: stroke(120, StrokePattern::Hatched),
             unknown: stroke(180, StrokePattern::Dashed),
             way: stroke(240, StrokePattern::Dashed),
         },
-        Paint { fill: Rgba(200, 200, 180, 255) },
-        Paint { fill: Rgba(120, 160, 200, 235) },
-        AgeRamp {
+        region: Paint { fill: Rgba(200, 200, 180, 255) },
+        water: Paint { fill: Rgba(120, 160, 200, 235) },
+        topo: AgeRamp {
             newest: Paint { fill: Rgba(150, 110, 80, 200) },
             oldest: Paint { fill: Rgba(225, 214, 180, 200) },
         },
-        None,
-        AgeRamp {
+        palette: None,
+        age: AgeRamp {
             newest: Paint { fill: Rgba(255, 0, 0, 255) },
             oldest: Paint { fill: Rgba(255, 0, 0, 40) },
         },
-        test_labeling(LabelStyle { color: Rgba(20, 20, 20, 255), halo: Rgba(245, 240, 225, 220), size: 12.0 }),
-        MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
-        DeltaEmphasis {
+        labeling: test_labeling(LabelStyle {
+            color: Rgba(20, 20, 20, 255),
+            halo: Rgba(245, 240, 225, 220),
+            size: 12.0,
+            halo_width_em: 0.24,
+        }),
+        marker: MarkerStyle { color: Rgba(0, 0, 0, 255), size: 4.0 },
+        delta: DeltaEmphasis {
             before: stroke(90, StrokePattern::Dashed),
             after: stroke(30, StrokePattern::Solid),
             seam: stroke(250, StrokePattern::Solid),
         },
-    )
+        paper: Paint { fill: Rgba(246, 241, 228, 255) },
+        chrome: Default::default(),
+        ghost: Default::default(),
+        tint_alpha: 235,
+        pattern: Default::default(),
+        river_width: 1.9,
+    }
 }
 
-fn build_style(p: StyleParts) -> Style {
-    Style::new(p.0, p.1, p.2, p.3, p.4, p.5, p.6, p.7, p.8).unwrap()
+fn build_style(p: crate::style::StyleSpec) -> Style {
+    Style::new(p).unwrap()
 }
 
 fn honest_style() -> Style {
@@ -493,24 +495,25 @@ fn law06_provenance_totality_and_honesty() {
 
     let line = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid };
     let zonal = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Zonal };
-    let strokes = |unknown, frontier| BoundaryStrokes { line, frontier, disputed: line, unknown, way: zonal };
-    let rest = (
-        Paint { fill: Rgba(0, 0, 0, 0) },
-        Paint { fill: Rgba(0, 0, 60, 200) },
-        AgeRamp { newest: Paint { fill: Rgba(9, 9, 9, 9) }, oldest: Paint { fill: Rgba(3, 3, 3, 3) } },
-        None,
-        AgeRamp { newest: Paint { fill: Rgba(0, 0, 0, 0) }, oldest: Paint { fill: Rgba(0, 0, 0, 0) } },
-        test_labeling(LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 10.0 }),
-        MarkerStyle { color: Rgba(0, 0, 0, 255), size: 3.0 },
-        DeltaEmphasis { before: line, after: line, seam: line },
-    );
+    let with_strokes = |unknown, frontier| {
+        let mut spec = honest_style_parts();
+        spec.boundaries = BoundaryStrokes { line, frontier, disputed: line, unknown, way: zonal };
+        spec
+    };
     assert_eq!(
-        Style::new(strokes(line, zonal), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5, rest.6, rest.7).unwrap_err(),
+        Style::new(with_strokes(line, zonal)).unwrap_err(),
         StyleError::UnknownIndistinctFromLine
     );
     assert_eq!(
-        Style::new(strokes(zonal, line), rest.0, rest.1, rest.2, rest.3, rest.4, rest.5, rest.6, rest.7).unwrap_err(),
+        Style::new(with_strokes(zonal, line)).unwrap_err(),
         StyleError::FrontierNotZonal
+    );
+    // The dress factors have lawful ranges too.
+    let mut wild = honest_style_parts();
+    wild.ghost.fill_alpha = 1.5;
+    assert_eq!(
+        Style::new(wild).unwrap_err(),
+        StyleError::DressOutOfRange("ghost.fill_alpha")
     );
 }
 
@@ -807,12 +810,26 @@ fn labeling_voice_follows_face() {
         advance_em: 0.6,
     };
     let l = Labeling {
-        base: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 255), size: 10.0 },
+        base: LabelStyle {
+            color: Rgba(0, 0, 0, 255),
+            halo: Rgba(255, 255, 255, 255),
+            size: 10.0,
+            halo_width_em: 0.24,
+        },
         territory: v("serif-t"),
         water: v("serif-w"),
         place: v("sans-p"),
         memory: v("serif-m"),
-        scale: LabelScale { unit_area_sr: 1.0, min: 1.0, max: 1.0, water_shrink: 1.0, water_ink: 0.5 },
+        scale: LabelScale {
+            unit_area_sr: 1.0,
+            min: 1.0,
+            max: 1.0,
+            water_shrink: 1.0,
+            water_ink: 0.5,
+            memory_scale: 0.85,
+            station_scale: 0.8,
+            city_scale: 0.85,
+        },
     };
     assert_eq!(l.voice(LabelFace::Territory).family, "serif-t");
     assert_eq!(l.voice(LabelFace::Water).family, "serif-w");
@@ -1084,27 +1101,41 @@ fn style_identity_sees_every_field() {
 
     // Differ ONLY in the way stroke.
     let mut ways = honest_style_parts();
-    ways.0.way = Stroke { color: Rgba(9, 9, 9, 255), width: 2.5, pattern: StrokePattern::Dashed };
-    let way_style = build_style(ways);
-    assert_ne!(id0, way_style.id(), "the way stroke is part of the dress");
+    ways.boundaries.way =
+        Stroke { color: Rgba(9, 9, 9, 255), width: 2.5, pattern: StrokePattern::Dashed };
+    assert_ne!(id0, build_style(ways).id(), "the way stroke is part of the dress");
 
     // Differ ONLY in a label voice.
     let mut voiced = honest_style_parts();
-    voiced.6.territory.weight = 900;
-    let voice_style = build_style(voiced);
-    assert_ne!(id0, voice_style.id(), "a voice is part of the dress");
+    voiced.labeling.territory.weight = 900;
+    assert_ne!(id0, build_style(voiced).id(), "a voice is part of the dress");
 
     // Differ ONLY in a voice's family.
     let mut familied = honest_style_parts();
-    familied.6.water.family = "'Some Other Serif', serif";
-    let family_style = build_style(familied);
-    assert_ne!(id0, family_style.id(), "the family is part of the dress");
+    familied.labeling.water.family = "'Some Other Serif', serif";
+    assert_ne!(id0, build_style(familied).id(), "the family is part of the dress");
 
     // Differ ONLY in the label scaling law.
     let mut scaled = honest_style_parts();
-    scaled.6.scale.water_ink = 0.9;
-    let scale_style = build_style(scaled);
-    assert_ne!(id0, scale_style.id(), "the scaling law is part of the dress");
+    scaled.labeling.scale.water_ink = 0.9;
+    assert_ne!(id0, build_style(scaled).id(), "the scaling law is part of the dress");
+
+    // The page dress is part of the identity too.
+    let mut papered = honest_style_parts();
+    papered.paper = Paint { fill: Rgba(25, 28, 34, 255) };
+    assert_ne!(id0, build_style(papered).id(), "the paper is part of the dress");
+
+    let mut ghosted = honest_style_parts();
+    ghosted.ghost.fill_alpha = 0.5;
+    assert_ne!(id0, build_style(ghosted).id(), "the ghost fade is part of the dress");
+
+    let mut patterned = honest_style_parts();
+    patterned.pattern.dashed_on = 9.0;
+    assert_ne!(id0, build_style(patterned).id(), "dash rhythm is part of the dress");
+
+    let mut rivered = honest_style_parts();
+    rivered.river_width = 3.3;
+    assert_ne!(id0, build_style(rivered).id(), "the river width is part of the dress");
 
     // And identical parts still agree, of course.
     assert_eq!(id0, build_style(honest_style_parts()).id());
