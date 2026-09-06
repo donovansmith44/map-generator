@@ -96,6 +96,17 @@ pub fn bridge_filtered(
             if rings.is_empty() {
                 continue;
             }
+            // The timeline's own provenance text rides into the canon
+            // note — the frame-edge law reads endurance declarations
+            // (map_canon::ENDURES_MARK) from exactly here.
+            let tl_note = geom
+                .parts
+                .first()
+                .and_then(|part| part.cycle.first())
+                .and_then(|(bid, _)| tl.boundaries.get(bid))
+                .and_then(|bh| bh.versions.first())
+                .map(|(_, b)| b.provenance.clone())
+                .unwrap_or_default();
             let fid = store.insert_feature(Feature::Area(Area {
                 entity: EntityId(format!("{prefix}:{entity_slug}")),
                 name: label,
@@ -107,7 +118,7 @@ pub fn bridge_filtered(
                 Provenance {
                     witness,
                     verses: Vec::new(),
-                    note: format!("bridged from the interval model ({prefix})"),
+                    note: format!("bridged from the interval model ({prefix}): {tl_note}"),
                 },
             );
             rows.push((*iv, entity_slug, fid));

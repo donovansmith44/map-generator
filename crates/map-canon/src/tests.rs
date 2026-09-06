@@ -444,3 +444,42 @@ fn presence_refuses_overlapping_standings() {
     assert!(book.present("moab", &ts(-700)));
     assert!(!book.present("moab", &ts(-950)));
 }
+
+/// THE FRAME-EDGE LAW: a feature standing at the frame's last moment
+/// must carry a written endurance declaration; a silent leak is named.
+#[test]
+fn frame_edge_refuses_undeclared_endurance() {
+    let mut store = CanonStore::default();
+    let bid = store.insert_border(Border(vec![
+        UnitVec::from_lat_lon_deg(10.0, 10.0),
+        UnitVec::from_lat_lon_deg(10.0, 11.0),
+        UnitVec::from_lat_lon_deg(11.0, 11.0),
+    ]));
+    let mk = |store: &mut CanonStore, name: &str, note: &str| {
+        let fid = store.insert_feature(Feature::Area(Area {
+            entity: EntityId(name.to_string()),
+            name: name.to_string(),
+            rings: [bid].into_iter().collect(),
+            holes: Default::default(),
+        }));
+        store.set_provenance(
+            fid,
+            Provenance { witness: Witness::Authored, verses: Vec::new(), note: note.to_string() },
+        );
+        fid
+    };
+    let leaker = mk(&mut store, "the land that lingered", "no one said when it ends");
+    let keeper = mk(
+        &mut store,
+        "the enduring place",
+        "a place-name. ENDURES to the frame's edge: names outlive polities.",
+    );
+    let sid = store.insert_snapshot(Snapshot { features: [leaker, keeper].into_iter().collect() });
+    let mut world = World::default();
+    world.insert(ts(100), sid).unwrap();
+    store.set_layer(LayerKind::ScriptureClaims, world);
+    let leaks = store.validate_frame_edge(LayerKind::ScriptureClaims, &ts(100));
+    assert_eq!(leaks, vec!["the land that lingered".to_string()], "the leak is named; the declared endurance passes");
+    // An empty or absent layer has nothing to refuse.
+    assert!(store.validate_frame_edge(LayerKind::Territory, &ts(100)).is_empty());
+}

@@ -158,6 +158,11 @@ pub struct Snapshot {
 // and compiling history is a fold over `eras()` — "two eras with the
 // tribes absent in the first" stops being code and becomes data.
 
+/// The marker a provenance note carries when a feature's endurance to
+/// the frame's edge was DECLARED (with its reason), never defaulted.
+/// validate_frame_edge refuses any frame-edge feature without it.
+pub const ENDURES_MARK: &str = "ENDURES to the frame's edge";
+
 /// One derived era: a right-open window (the last is open-ended) and
 /// the set of claimants NOT standing in it.
 #[derive(Clone, Debug, PartialEq)]
@@ -466,6 +471,30 @@ impl CanonStore {
     }
     pub fn provenance(&self) -> &BTreeMap<FeatureId, Provenance> {
         &self.provenance
+    }
+
+    /// THE FRAME-EDGE LAW: nothing stands at the end of time uninvited.
+    /// Every feature of `layer` still standing at `edge` must carry a
+    /// WRITTEN endurance justification (the ENDURES_MARK in its
+    /// provenance note) — placed there only by code paths whose data
+    /// declared endurance on purpose. A feature that merely leaked past
+    /// its era, because nobody said when its world ends, is returned
+    /// here by name and the compile refuses it.
+    pub fn validate_frame_edge(&self, layer: LayerKind, edge: &Timestamp) -> Vec<String> {
+        let Some(world) = self.layers.get(&layer) else { return Vec::new() };
+        let Some(sid) = world.state_at(edge) else { return Vec::new() };
+        let mut leaks = Vec::new();
+        for fid in &self.snapshots[&sid].features {
+            let justified = self
+                .provenance
+                .get(fid)
+                .is_some_and(|p| p.note.contains(ENDURES_MARK));
+            if !justified {
+                leaks.push(self.features[fid].name().to_string());
+            }
+        }
+        leaks.sort();
+        leaks
     }
 
     /// Every law, checked; an empty vec is a lawful canon.

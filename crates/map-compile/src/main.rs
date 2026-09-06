@@ -433,6 +433,29 @@ fn build(args: &[String]) {
     eprintln!("background: {} epochs bridged", epochs.len());
 
     // ---- the laws (waived pairs downgrade to warnings)
+    // THE FRAME-EDGE LAW: at the frame's last year, every
+    // ScriptureClaims feature must be gone or carry a WRITTEN
+    // endurance justification (map_canon::ENDURES_MARK). A feature
+    // that merely leaked past its era — because nobody declared when
+    // its world ends — fails the build here, by name.
+    let frame_edge = era_table
+        .iter()
+        .map(|e| e.to_year)
+        .max()
+        .map(ts_or_die)
+        .unwrap_or_else(|| die("eras: empty table"));
+    let leaks =
+        store.validate_frame_edge(map_canon::LayerKind::ScriptureClaims, &frame_edge);
+    if !leaks.is_empty() {
+        die(&format!(
+            "frame-edge law: {} feature(s) stand at the end of time without a declared \
+             endurance: {}",
+            leaks.len(),
+            leaks.join("; ")
+        ));
+    }
+    eprintln!("frame-edge law: ScriptureClaims clean at the frame's last year");
+
     let all_violations = store.validate();
     let (waived, violations): (Vec<_>, Vec<_>) =
         all_violations.into_iter().partition(|v| match v {

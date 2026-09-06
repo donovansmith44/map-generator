@@ -175,7 +175,7 @@ pub fn gather_witnesses(
     // THE NEIGHBORS: attested regions (OpenBible, CC BY 4.0) already
     // spliced onto the tribal rings and the real water at vendor
     // time; the smaller-witness law settles any remaining overlap.
-    for (slug, ring) in load_openbible_regions()? {
+    for (slug, _stands, ring) in load_openbible_regions()? {
         let snapped = snap_ring_to(&ring, &snap_targets, budget);
         if snapped.len() >= 3 {
             regions.push(WitnessRegion {
@@ -352,7 +352,7 @@ pub(crate) fn load_settlements() -> Result<Vec<(String, String, f64, f64)>, Stri
 /// Ammon, Moab, Edom — OpenBible.info's 50% confidence isobands
 /// (data/openbible/LICENSE.md), vendored with shared borders spliced
 /// onto the tribes and the real water.
-fn load_openbible_regions() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
+fn load_openbible_regions() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, String> {
     let text = std::fs::read_to_string(data_path("data/openbible/regions.geojson"))
         .map_err(|e| format!("openbible regions: {e}"))?;
     let v: serde_json::Value =
@@ -360,6 +360,7 @@ fn load_openbible_regions() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
     let mut out = Vec::new();
     for f in v["features"].as_array().into_iter().flatten() {
         let Some(slug) = f["properties"]["region"].as_str() else { continue };
+        let stands_until = f["properties"]["stands_until"].as_str().map(str::to_string);
         let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
         else {
             continue;
@@ -375,7 +376,7 @@ fn load_openbible_regions() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
             })
             .collect();
         if ring.len() >= 3 {
-            out.push((slug.to_string(), ring));
+            out.push((slug.to_string(), stands_until, ring));
         }
     }
     if let Some(expected) = v["expected_features"].as_u64() {
@@ -509,6 +510,21 @@ pub fn bridge_partition(
                 .map_err(|e| format!("presence for {}: {e:?}", cohort.slug))?;
         }
     }
+    // THE PARTITION BASE STANDINGS. Canaan the named territory stands
+    // from the frame's dawn until the monarchy rises — from there the
+    // land is Israel's story (Territory carries it), and the plate
+    // frame no longer names the ground. The attested neighbors end
+    // where their own data says (stands_until in regions.geojson).
+    presence
+        .declare("canaan", t0, Some(resolve_era("united-kingdom")?))
+        .map_err(|e| format!("presence for canaan: {e:?}"))?;
+    for (slug, stands_until, _) in load_openbible_regions()? {
+        if let Some(u) = stands_until {
+            presence
+                .declare(&slug, t0, Some(resolve_era(&u)?))
+                .map_err(|e| format!("presence for {slug}: {e:?}"))?;
+        }
+    }
     // Polity standings come from the rows' own years; a second book
     // keyed by ENTITY catches era-variants that would stand twice at
     // once — the same entity must not wear two witnesses at a moment.
@@ -640,7 +656,8 @@ pub fn bridge_partition(
                 Provenance {
                     witness: Witness::Atlas,
                     verses: Vec::new(),
-                    note: "traditional site beneath the waters (GEN 14:3)".into(),
+                    note: "traditional site beneath the waters (GEN 14:3).                            ENDURES to the frame's edge: a memory is kept, not governed by eras."
+                        .into(),
                 },
             );
             claim_fids.insert(fid);
@@ -657,7 +674,8 @@ pub fn bridge_partition(
             Provenance {
                 witness: Witness::Atlas,
                 verses: Vec::new(),
-                note: "gazetteer settlement (OpenBible-typed, see data/openbible)".into(),
+                note: "gazetteer settlement (OpenBible-typed, see data/openbible).                        ENDURES to the frame's edge: a place-name outlives every polity."
+                    .into(),
             },
         );
         claim_fids.insert(fid);
