@@ -798,9 +798,21 @@ struct SurveySpec {
     circuit: &'static [Waypoint],
 }
 
-const CITY_NOTE: &str = "The text lists cities, not a border line; this circuit is a \
+// The disclosure text lives in ONE macro literal so per-survey notes
+// can prepend their own commentary with concat! and never drift from
+// the shared wording. A LABEL is the territory's name on the map;
+// who governed it and where Scripture says so are PROVENANCE.
+macro_rules! city_note {
+    () => {
+        "The text lists cities, not a border line; this circuit is a \
     disclosed hull through the named places (rendered as Unknown). Coordinates are \
-    approximate traditional identifications (stand-in, see provenance).";
+    approximate traditional identifications (stand-in, see provenance)."
+    };
+    ($commentary:literal) => {
+        concat!($commentary, " ", city_note!())
+    };
+}
+const CITY_NOTE: &str = city_note!();
 
 /// The division of the land, Ussher's traditional year.
 
@@ -902,10 +914,10 @@ const SURVEYS_MORE: &[SurveySpec] = &[
         circuit: EZK_48_OBLATION,
     },
     // ---- the tetrarchies of LUK 3:1 (the 15th year of Tiberius) ----
-    SurveySpec { tag: "NT-JUDAEA", label: "Judaea under Pilate (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_JUDAEA },
-    SurveySpec { tag: "NT-GALILEE", label: "Galilee of Herod the tetrarch (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_GALILEE },
-    SurveySpec { tag: "NT-PEREA", label: "Perea of Herod the tetrarch (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_PEREA },
-    SurveySpec { tag: "NT-ITUREA", label: "Iturea and Trachonitis of Philip (LUK 3)", note: CITY_NOTE, book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_ITUREA },
+    SurveySpec { tag: "NT-JUDAEA", label: "Judea", note: city_note!("Judea under Pontius Pilate (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_JUDAEA },
+    SurveySpec { tag: "NT-GALILEE", label: "Galilee", note: city_note!("Galilee of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_GALILEE },
+    SurveySpec { tag: "NT-PEREA", label: "Perea", note: city_note!("Perea of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_PEREA },
+    SurveySpec { tag: "NT-ITUREA", label: "Iturea and Trachonitis", note: city_note!("Iturea and Trachonitis of Philip the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_ITUREA },
 ];
 
 // ------------------------------------------ journeys (open routes)

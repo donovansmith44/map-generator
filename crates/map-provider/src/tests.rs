@@ -32,6 +32,7 @@ pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
         tint_alpha: 235,
         pattern: Default::default(),
         river_width: 1.9,
+        veil: CLASSICAL_VEIL,
     })
     .unwrap()
 }
@@ -138,6 +139,7 @@ mod canon_provider_laws {
             tint_alpha: 235,
             pattern: Default::default(),
             river_width: 1.9,
+            veil: CLASSICAL_VEIL,
         })
         .unwrap()
     }

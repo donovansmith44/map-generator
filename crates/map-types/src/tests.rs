@@ -177,6 +177,7 @@ fn honest_style_parts() -> crate::style::StyleSpec {
         tint_alpha: 235,
         pattern: Default::default(),
         river_width: 1.9,
+        veil: crate::style::CLASSICAL_VEIL,
     }
 }
 

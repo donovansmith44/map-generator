@@ -765,7 +765,11 @@ async function gpuSyncInner() {
   // did not, punching bare-paper silhouettes through the sea at the
   // margins - and rotation could outrun acquisition. Center is
   // dropped; zoom stays, because the one LOD law reads it.
-  for (const k of ["encoder", "smooth", "projection", "center"]) p.delete(k);
+  // SUBJECT is dropped too: the retained scene is always THE WORLD.
+  // Focus is a VIEW effect (the veil in gpuDraw), never a different
+  // scene — so selecting a region changes no geometry, refetches
+  // nothing, and can never blank the world it highlights.
+  for (const k of ["encoder", "smooth", "projection", "center", "subject"]) p.delete(k);
   // The LOD ladder: sample the half-pixel law at half-octave zoom
   // steps (the discrete levels a LodChain names, spec 36), so a zoom
   // ease reuses resident representations and refinement transitions
@@ -1242,6 +1246,39 @@ function glyphEntry(text, voice, sizeCss, color, halo, haloWidthEm, retried) {
 }
 
 let labelClock = 0;
+// Whether a point on the sphere lies inside the SELECTION — even-odd
+// across each selected region's resident rings, the one containment
+// law again. Cached per (selection, scene): membership is camera-free.
+function selectionContains(p) {
+  for (const it of gpu.drawItems) {
+    if (it.type !== "fill" || !state.selection.includes(it.key)) continue;
+    if (it.whole || !it.ids.length) continue;
+    let inside = false;
+    for (const id of it.ids) {
+      const r = gpu.cache.get(id);
+      if (r && r.state === "gpu" && insideRing(p, r.verts)) inside = !inside;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
+function labelVeilFactor(l) {
+  if (!state.selection.length) return 1;
+  const key = state.selection.join(",") + "|" + (gpu.sceneKey || "");
+  if (gpu.dimKey !== key) { gpu.dimKey = key; gpu.dimCache = new WeakMap(); }
+  let dim = gpu.dimCache.get(l);
+  if (dim === undefined) {
+    // a selected region's own label speaks at full voice; everything
+    // anchored outside the selection dims by the veil's own ink
+    dim = !state.selection.includes(l.subject) && !selectionContains(l.anchor);
+    gpu.dimCache.set(l, dim);
+  }
+  if (!dim) return 1;
+  const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 96];
+  return 1 - v[3] / 255;
+}
+
 function drawLabels(proj, vb, k, ox, oy, rect) {
   const list = (gpu.manifest && gpu.manifest.labels) || [];
   if (!list.length || !glyphs.ctx) return;
@@ -1349,7 +1386,7 @@ function drawLabels(proj, vb, k, ox, oy, rect) {
     const e = glyphEntry(d.text, d.l.voice, d.size * k,
                          d.l.color, d.l.halo, d.l.haloWidthEm);
     if (!e) continue;
-    pending.push({ e, d, alpha: st.alpha });
+    pending.push({ e, d, alpha: st.alpha * labelVeilFactor(d.l) });
   }
   if (glyphs.dirty) {
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
@@ -1614,6 +1651,54 @@ function gpuDraw() {
     if (morphing) gl.uniform1f(loc.uMorph, 1.0);
   }
   gl.bindVertexArray(null);
+  // THE FOCUS VEIL: selection is a VIEW effect over the world scene.
+  // Stencil parity marks the chosen regions' interiors (the same
+  // even-odd law the fills draw), then the dress's veil paint lands
+  // only where parity is even — outside the selection — so the
+  // chosen ground keeps its full color, the world dims but stays
+  // legible beneath, and geometry is identical by construction.
+  if (state.selection.length) {
+    const draws = [];
+    for (const it of gpu.drawItems) {
+      if (it.type !== "fill" || !state.selection.includes(it.key)) continue;
+      if (it.whole || !it.ids.length) continue;
+      const rings = it.ids.map(resident);
+      if (rings.some(r => !r)) continue;
+      for (const r of rings) {
+        for (const d of visibleFillDraws(r, proj, camKey)) draws.push(d);
+      }
+    }
+    if (draws.length) {
+      gl.uniform1f(loc.uFrontMin, -1.1);
+      gl.enable(gl.STENCIL_TEST);
+      gl.colorMask(false, false, false, false);
+      gl.stencilFunc(gl.ALWAYS, 0, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
+      for (const d of draws) {
+        gl.bindVertexArray(d.vao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, d.count);
+      }
+      gl.colorMask(true, true, true, true);
+      gl.stencilFunc(gl.EQUAL, 0, 0xff);   // even parity = outside
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+      const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 96];
+      gl.uniform4f(loc.uColor, v[0] / 255, v[1] / 255, v[2] / 255, v[3] / 255);
+      if (proj.mode === 0) {
+        gl.uniform1i(loc.uMode, 3);
+        gl.bindVertexArray(gpu.discVao);
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, gpu.discCount);
+      } else {
+        gl.uniform1i(loc.uMode, 2);
+        gl.bindVertexArray(gpu.pageVao);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      gl.uniform1i(loc.uMode, proj.mode);
+      gl.disable(gl.STENCIL_TEST);
+      gl.clear(gl.STENCIL_BUFFER_BIT);
+      gl.uniform1f(loc.uFrontMin, frameFrontMin);
+      gl.bindVertexArray(null);
+    }
+  }
   drawLabels(proj, vb, k, ox, oy, rect);
 }
 
@@ -1860,11 +1945,43 @@ function setupPlateNav() {
 
 async function setSelection(keys, opts) {
   state.selection = keys;
-  if (!(opts && opts.keepView)) resetView();
+  // Focus no longer mints a scene, so the camera answer is local:
+  // land on the selection's own bounding cap (resident metadata,
+  // no fetch), or fall back to the world landing.
+  if (!(opts && opts.keepView)) {
+    if (!focusCamera(keys)) resetView();
+  }
   await loadSubjects();
   await loadMappedTimes();
   drawScrubber();
   render();
+}
+
+// Aim the camera at a selection from the resident manifest bounds:
+// anchor at the widest ring's cap, reach out to cover every ring.
+function focusCamera(keys) {
+  if (!keys.length || !gpu.scene) return false;
+  const caps = [];
+  for (const key of keys) {
+    for (const id of gpu.scene.regionRings.get(key) || []) {
+      const m = gpu.scene.meta.get(id);
+      if (m && m.bounds && !m.whole) caps.push(m.bounds);
+    }
+  }
+  if (!caps.length) return false;
+  const anchor = caps.reduce((a, b) => (b.radius > a.radius ? b : a));
+  const [x, y, z] = anchor.center;
+  let reach = anchor.radius;
+  for (const b of caps) {
+    const d = Math.acos(Math.max(-1, Math.min(1,
+      x * b.center[0] + y * b.center[1] + z * b.center[2])));
+    reach = Math.max(reach, d + b.radius);
+  }
+  const lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
+  const lon = Math.atan2(y, x) * 180 / Math.PI;
+  const zoom = Math.max(2, Math.min(90, reach * 180 / Math.PI * 1.4));
+  state.setCamera(lat, lon, zoom);
+  return true;
 }
 
 async function loadMappedTimes() {

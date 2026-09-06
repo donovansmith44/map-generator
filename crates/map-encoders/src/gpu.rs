@@ -167,6 +167,8 @@ pub struct ManifestDress {
     pub paper: Rgba,
     pub zonal_width: f64,
     pub zonal_alpha: f64,
+    /// the focus veil: what the world outside a selection wears
+    pub veil: Rgba,
 }
 
 /// The semantic scene manifest (§8): references, not pictures.
@@ -193,6 +195,7 @@ pub struct EncodedScene {
 pub struct GpuSceneEncoder {
     pub paper: map_types::style::Paint,
     pub pattern: map_types::style::PatternGeometry,
+    pub veil: map_types::style::Paint,
 }
 
 impl Default for GpuSceneEncoder {
@@ -200,6 +203,7 @@ impl Default for GpuSceneEncoder {
         GpuSceneEncoder {
             paper: map_types::style::Paint { fill: Rgba(246, 241, 228, 255) },
             pattern: Default::default(),
+            veil: map_types::style::CLASSICAL_VEIL,
         }
     }
 }
@@ -636,6 +640,7 @@ impl GpuSceneEncoder {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
                     zonal_alpha: self.pattern.zonal_alpha,
+                    veil: self.veil.fill,
                 },
             },
             resources,
@@ -773,8 +778,9 @@ impl EncodedScene {
         let d = &m.dress;
         let _ = write!(
             s,
-            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{}}}}}",
-            d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"veil\":[{},{},{},{}]}}}}",
+            d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha,
+            d.veil.0, d.veil.1, d.veil.2, d.veil.3
         );
         s
     }

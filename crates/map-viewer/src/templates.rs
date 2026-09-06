@@ -158,6 +158,8 @@ struct Template {
     pattern: TPatternGeometry,
     /// rivers stroke at this width, in the water's own fill
     river_width: f64,
+    /// the focus veil: what the world outside a selection wears
+    veil: [u8; 4],
     /// exactly one template declares itself the default dress
     #[serde(default)]
     default: bool,
@@ -264,6 +266,7 @@ fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
             zonal_alpha: t.pattern.zonal_alpha,
         },
         river_width: t.river_width,
+        veil: paint(t.veil),
     })
 }
 

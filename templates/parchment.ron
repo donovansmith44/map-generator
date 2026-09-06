@@ -57,4 +57,6 @@
     tint_alpha: 235,
     pattern: (dashed: (6.0, 4.0), hatched: (2.0, 3.0), zonal_width: 6.0, zonal_alpha: 0.35),
     river_width: 1.9,
+    // the focus veil: the classical dark ink over parchment
+    veil: (20, 18, 14, 96),
 )
