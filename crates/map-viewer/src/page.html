@@ -420,6 +420,8 @@ const GPU_VS = `#version 300 es
 precision highp float;
 in vec3 aPos;
 in vec3 aPrev;                        // refinement parent position (§38)
+in float aArc;                        // cumulative arc length, radians (strokes)
+uniform float uArcScale;              // radians -> viewBox px at the camera
 uniform float uMorph;                 // 0 = parent shape, 1 = own shape
 uniform int uMode;                    // 0 globe, 1 flat
 uniform vec3 uEast, uNorth, uCenter;  // globe basis at the camera target
@@ -432,7 +434,9 @@ uniform vec2 uOrigin;                 // letterbox origin, css px
 uniform vec2 uCss;                    // canvas css size
 uniform float uPointSize;
 out float vFront;
+out float vArc;
 void main() {
+  vArc = aArc * uArcScale;
   if (uMode == 3) {
     // The globe's sentinel dress: the LIMB DISC (the SVG's own
     // whole_world for the orthographic chart) - unit-circle coords
@@ -491,11 +495,22 @@ void main() {
 const GPU_FS = `#version 300 es
 precision mediump float;
 in float vFront;
+in float vArc;
 uniform vec4 uColor;
 uniform float uFrontMin;
+uniform vec2 uDash;                    // on/off lengths, viewBox px; 0 = solid
 out vec4 o;
 void main() {
   if (vFront < uFrontMin) discard;  // behind the limb / past the seam
+  // THE DASH LAW, finally on the GPU: a dashed stroke is a DISCLOSED
+  // interpolation and must read as one — for months the canvas drew
+  // every dash rhythm solid and stand-in hulls wore confident
+  // borders. Fragments in the off-beat discard by arc length; fills
+  // and markers ride through with vArc = 0 (attribute unbound).
+  if (uDash.x > 0.0) {
+    float period = uDash.x + uDash.y;
+    if (mod(vArc, period) > uDash.x) discard;
+  }
   o = vec4(uColor.rgb * uColor.a, uColor.a);  // premultiplied over the page
 }`;
 
@@ -519,11 +534,12 @@ function gpuInit() {
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   const loc = {};
-  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor","uMorph","uFrontMin"]) {
+  for (const n of ["uMode","uEast","uNorth","uCenter","uScale","uC","uFlat","uPadding","uK","uOrigin","uCss","uPointSize","uColor","uMorph","uFrontMin","uDash","uArcScale"]) {
     loc[n] = gl.getUniformLocation(prog, n);
   }
   loc.aPos = gl.getAttribLocation(prog, "aPos");
   loc.aPrev = gl.getAttribLocation(prog, "aPrev");
+  loc.aArc = gl.getAttribLocation(prog, "aArc");
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gpu.canvas = canvas; gpu.gl = gl; gpu.prog = prog; gpu.loc = loc;
@@ -626,12 +642,31 @@ function gpuUpload(bytes, offset) {
   // plain shape; a refinement rebinds this attribute (§38).
   gl.enableVertexAttribArray(gpu.loc.aPrev);
   gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
+  // Cumulative chord length per vertex, radians (≈ arc at these
+  // segment sizes) — the dash rhythm's ruler. Fills never read it
+  // (their VAOs leave aArc unbound, which reads a constant 0).
+  const arcs = new Float32Array(count);
+  let acc = 0;
+  for (let i = 1; i < count; i++) {
+    acc += Math.hypot(
+      verts[i * 3] - verts[i * 3 - 3],
+      verts[i * 3 + 1] - verts[i * 3 - 2],
+      verts[i * 3 + 2] - verts[i * 3 - 1]);
+    arcs[i] = acc;
+  }
+  const abuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, abuf);
+  gl.bufferData(gl.ARRAY_BUFFER, arcs, gl.STATIC_DRAW);
+  if (gpu.loc.aArc >= 0) {
+    gl.enableVertexAttribArray(gpu.loc.aArc);
+    gl.vertexAttribPointer(gpu.loc.aArc, 1, gl.FLOAT, false, 0, 0);
+  }
   gl.bindVertexArray(null);
   // The CPU copy stays resident beside the GPU buffer: extents, hit
   // testing, and refinement correspondence all read it (§59, §38).
   // The bounding cap (limb.js) settles most rings' visibility in one
   // dot product per frame, so only limb straddlers ever pay to clip.
-  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, bytes: len, verts, cap: ringCap(verts) });
+  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, abuf, bytes: len, verts, cap: ringCap(verts) });
   return len;
 }
 
@@ -1067,6 +1102,7 @@ function gpuEvict() {
     if (retained.has(id) || r.state !== "gpu") continue;
     gl.deleteVertexArray(r.vao);
     gl.deleteBuffer(r.buf);
+    if (r.abuf) gl.deleteBuffer(r.abuf);
     dropClipScratch(r);
     gpu.cache.delete(id);
     total -= r.bytes || 0;
@@ -1557,6 +1593,11 @@ function gpuDraw() {
   // Strokes and markers keep the limb discard; fills override it per
   // item (their geometry is clipped, so parity needs every fragment).
   const frameFrontMin = proj.mode === 1 ? -1.1 : 0.0;
+  // The dash ruler: radians of arc -> viewBox px at the camera
+  // (globe: px per projected sin-unit ≈ px per radian near center;
+  // flat: px per degree times degrees per radian).
+  gl.uniform1f(loc.uArcScale, proj.mode === 0 ? proj.scale : proj.scaleY * 180 / Math.PI);
+  gl.uniform2f(loc.uDash, 0, 0);
   const camKey = proj.mode === 0 ? camKeyOf(proj.C) : "flat";
   // A driver CAPABILITY, not frame state — and getParameter is a
   // synchronous pipeline flush: queried per frame it stalls JS behind
@@ -1612,6 +1653,7 @@ function gpuDraw() {
         }
         gl.uniform1i(loc.uMode, proj.mode);
       };
+      gl.uniform2f(loc.uDash, 0, 0);     // fills are never dashed
       gl.uniform1f(loc.uFrontMin, -1.1); // parity needs every fragment
       gl.enable(gl.STENCIL_TEST);
       gl.colorMask(false, false, false, false);
@@ -1641,6 +1683,7 @@ function gpuDraw() {
     let [cr, cg, cb, ca] = s.color;
     ca *= it.alpha !== undefined ? it.alpha : 1;
     if (s.kind === "marker") {
+      gl.uniform2f(loc.uDash, 0, 0);
       gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
       gl.uniform1f(loc.uPointSize, Math.max(2, s.size * 2 * (vb.width / DESIGN_WIDTH) * k * dpr));
       gl.bindVertexArray(r.vao);
@@ -1656,6 +1699,18 @@ function gpuDraw() {
     gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
     gl.uniform1f(loc.uPointSize, 1.0);
     gl.lineWidth(Math.max(widthRange[0], Math.min(widthRange[1], w * (vb.width / DESIGN_WIDTH) * k * dpr)));
+    // The dash rhythm is the dress's own PatternGeometry, riding the
+    // manifest — the same values the SVG oracle strokes with.
+    const dr = gpu.dress || {};
+    if (s.pattern === "dashed") {
+      const d = dr.dashed || [6, 4];
+      gl.uniform2f(loc.uDash, d[0], d[1]);
+    } else if (s.pattern === "hatched") {
+      const d = dr.hatched || [2, 3];
+      gl.uniform2f(loc.uDash, d[0], d[1]);
+    } else {
+      gl.uniform2f(loc.uDash, 0, 0);
+    }
     // Continuous refinement (§R6): the finer representation eases
     // from its parent's shape; at the end the parent may release.
     const morphing = !!it.morph;
@@ -1687,6 +1742,7 @@ function gpuDraw() {
       }
     }
     if (draws.length) {
+      gl.uniform2f(loc.uDash, 0, 0);   // the veil is never dashed
       gl.uniform1f(loc.uFrontMin, -1.1);
       gl.enable(gl.STENCIL_TEST);
       gl.colorMask(false, false, false, false);

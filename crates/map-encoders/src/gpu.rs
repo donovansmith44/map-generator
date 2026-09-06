@@ -167,6 +167,10 @@ pub struct ManifestDress {
     pub paper: Rgba,
     pub zonal_width: f64,
     pub zonal_alpha: f64,
+    /// dash rhythms, viewBox px — the SAME PatternGeometry every
+    /// terminal encoder reads, so GL dashes match the SVG oracle's
+    pub dashed: (f64, f64),
+    pub hatched: (f64, f64),
     /// the focus veil: what the world outside a selection wears
     pub veil: Rgba,
 }
@@ -638,6 +642,8 @@ impl GpuSceneEncoder {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
                     zonal_alpha: self.pattern.zonal_alpha,
+                    dashed: (self.pattern.dashed_on, self.pattern.dashed_off),
+                    hatched: (self.pattern.hatched_on, self.pattern.hatched_off),
                     // one veil for every dress and every place — the
                     // focus law, never a per-template value
                     veil: map_types::style::VEIL.fill,
@@ -778,8 +784,9 @@ impl EncodedScene {
         let d = &m.dress;
         let _ = write!(
             s,
-            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"veil\":[{},{},{},{}]}}}}",
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}]}}}}",
             d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha,
+            d.dashed.0, d.dashed.1, d.hatched.0, d.hatched.1,
             d.veil.0, d.veil.1, d.veil.2, d.veil.3
         );
         s
