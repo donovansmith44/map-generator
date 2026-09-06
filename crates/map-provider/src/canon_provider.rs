@@ -363,10 +363,16 @@ impl CanonProvider {
             return;
         }
         // The area's outline rides as a stroke too — atlas/authored
-        // territory in the Line dress, background scholarship dashed.
-        let character = match layer {
-            LayerKind::Background => map_types::EdgeCharacter::Unknown,
-            _ => map_types::EdgeCharacter::Line,
+        // territory in the Line dress, background scholarship dashed,
+        // and a CLAIM always in the Unknown dress: its hull is a
+        // disclosed stand-in whatever layer carries it.
+        let character = if a.tenure == map_canon::Tenure::Claimed {
+            map_types::EdgeCharacter::Unknown
+        } else {
+            match layer {
+                LayerKind::Background => map_types::EdgeCharacter::Unknown,
+                _ => map_types::EdgeCharacter::Line,
+            }
         };
         if layer != LayerKind::Relief && layer != LayerKind::Water {
             for ring in &outer {
@@ -412,12 +418,23 @@ impl CanonProvider {
             }
         }
         scene.attribution.extend(sources.iter().cloned());
+        // THE TENURE LAW: a Claimed area keeps its shape in the scene
+        // — hit testing, selection, and the focus veil still know its
+        // interior — but its paint is fully transparent. A promise, a
+        // vision, or a city-derived hull renders as boundary and
+        // name, never as ground; the promise's unpossessed remainder
+        // once painted itself as a phantom state.
+        let mut paint = self.area_paint(layer, &a.entity, style);
+        if a.tenure == map_canon::Tenure::Claimed {
+            let map_types::style::Rgba(r, g, b, _) = paint.fill;
+            paint = map_types::style::Paint { fill: map_types::style::Rgba(r, g, b, 0) };
+        }
         scene.regions.push(StyledRegion {
             region: rid_of(&a.entity),
             entity: Some(a.entity.0.clone()),
             outer,
             holes,
-            paint: self.area_paint(layer, &a.entity, style),
+            paint,
             sources,
         });
     }

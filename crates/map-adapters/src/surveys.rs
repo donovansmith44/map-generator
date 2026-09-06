@@ -1342,7 +1342,16 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
     tl.regions.insert(
         region_id,
         RegionHistory {
-            class: Default::default(),
+            // THE TENURE LAW at its source: NO SURVEY HOLDS GROUND.
+            // Grade says how the SHAPE is known (a text-traced border
+            // vs a city-derived hull); tenure says whether the ground
+            // is possessed — and they are orthogonal: NUM 34 recites
+            // its border verse by verse, yet it is a PROMISE, and
+            // painting it as territory once put a phantom state
+            // northeast of Phoenicia. Every survey is a Claim; ground
+            // is held only by the partition's cohorts and the
+            // scholarship layers. No per-survey choice exists.
+            class: map_types::RegionClass::Claim,
             label_history: vec![(valid, s.label.to_string())],
             geom_history: vec![(
                 valid,
@@ -1508,7 +1517,11 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
     tl.regions.insert(
         region_id,
         RegionHistory {
-            class: Default::default(),
+            // Every era hull is authored through named places ("the
+            // places are Scripture's, the hull is not" — ERA_NOTE),
+            // so every era region is a CLAIM under the tenure law:
+            // boundary and name, never territory fill.
+            class: map_types::RegionClass::Claim,
             label_history: vec![(whole, e.label.to_string())],
             geom_history,
         },

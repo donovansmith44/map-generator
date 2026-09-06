@@ -603,7 +603,7 @@ pub fn bridge_partition(
                 name: spec.name,
                 rings: bundle.rings,
                 holes: bundle.holes,
-            }));
+            tenure: map_canon::Tenure::Held,}));
             store.set_provenance(
                 fid,
                 Provenance {

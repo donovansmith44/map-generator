@@ -242,7 +242,12 @@ fn build(args: &[String]) {
         LayerKind::ScriptureClaims,
         Witness::Authored,
         "authored",
-        Some(map_types::RegionClass::Land),
+        // No class filter: the scripture timeline carries Land
+        // (border-text surveys) AND Claim (city-derived hulls,
+        // visions, era extents) — the tenure law downstream decides
+        // how each renders, and a filter here would silently erase
+        // the claims' boundaries and names.
+        None,
         &drops,
         &BTreeMap::new(),
     )

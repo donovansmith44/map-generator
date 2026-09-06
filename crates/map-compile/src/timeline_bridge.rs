@@ -112,6 +112,14 @@ pub fn bridge_filtered(
                 name: label,
                 rings,
                 holes,
+                // The tenure law: a Claim-class region (a promise, a
+                // vision, a city-derived stand-in) never becomes held
+                // ground in the canon — boundary and name only.
+                tenure: if hist.class == RegionClass::Claim {
+                    map_canon::Tenure::Claimed
+                } else {
+                    map_canon::Tenure::Held
+                },
             }));
             store.set_provenance(
                 fid,

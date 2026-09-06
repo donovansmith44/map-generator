@@ -132,6 +132,7 @@ mod compile_laws {
                 name: name.into(),
                 rings: [bid].into_iter().collect(),
                 holes: Default::default(),
+                tenure: map_canon::Tenure::Held,
             }))
         };
         let old = mk(&mut store, "Assyria", 3.0);

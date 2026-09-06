@@ -101,6 +101,7 @@ pub fn to_bytes(store: &CanonStore) -> Result<Vec<u8>, String> {
                 "name": a.name,
                 "rings": a.rings.iter().map(|r| hex(r.0)).collect::<Vec<_>>(),
                 "holes": a.holes.iter().map(|r| hex(r.0)).collect::<Vec<_>>(),
+                "tenure": match a.tenure { Tenure::Held => "held", Tenure::Claimed => "claimed" },
             }),
             Feature::Way(r) => json!({
                 "kind": "way",
@@ -225,7 +226,16 @@ pub fn from_bytes(bytes: &[u8]) -> Result<CanonStore, String> {
                 .collect()
         };
         let feature = match kind {
-            "area" => Feature::Area(Area { entity, name, rings: ids("rings")?, holes: ids("holes")? }),
+            "area" => Feature::Area(Area {
+                entity,
+                name,
+                rings: ids("rings")?,
+                holes: ids("holes")?,
+                tenure: match f.get("tenure").and_then(|t| t.as_str()) {
+                    Some("claimed") => Tenure::Claimed,
+                    _ => Tenure::Held,
+                },
+            }),
             "way" => {
                 let legs = f
                     .get("legs")

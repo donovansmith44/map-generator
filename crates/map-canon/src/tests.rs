@@ -43,7 +43,7 @@ fn area(store: &mut CanonStore, ent: &str, ring: Border) -> FeatureId {
         name: ent.to_string(),
         rings: BTreeSet::from([b]),
         holes: BTreeSet::new(),
-    }))
+    tenure: Tenure::Held,}))
 }
 
 // ------------------------------------------- one home per fact
@@ -166,7 +166,7 @@ fn dangling_borders_are_named() {
         name: "Nowhere".to_string(),
         rings: BTreeSet::from([ghost]),
         holes: BTreeSet::new(),
-    }));
+    tenure: Tenure::Held,}));
     let snap = store.insert_snapshot(Snapshot { features: BTreeSet::from([f]) });
     let mut world = World::default();
     world.insert(ts(0 - 1), snap).unwrap();
@@ -307,6 +307,16 @@ fn route_legs_carry_ordered_spans() {
 fn canon_roundtrips_deterministically() {
     let mut store = CanonStore::default();
     let f = area(&mut store, "egypt", square(25.0, 26.0, 8.0));
+    // a CLAIMED area must survive the trip — Held is the default, so
+    // only a non-default tenure can catch a reader that drops it
+    let promise_ring = store.insert_border(square(30.0, 34.0, 4.0));
+    let promise = store.insert_feature(Feature::Area(Area {
+        entity: entity("promise"),
+        name: "a promise".to_string(),
+        rings: BTreeSet::from([promise_ring]),
+        holes: BTreeSet::new(),
+        tenure: Tenure::Claimed,
+    }));
     let road = store.insert_border(Border(vec![uv(31.0, 35.0), uv(33.0, 36.0)]));
     let way = store.insert_feature(Feature::Way(Route {
         entity: entity("walk"),
@@ -318,7 +328,7 @@ fn canon_roundtrips_deterministically() {
             span: (ts_day(-2092, 3, 1), ts(-2091)),
         }],
     }));
-    let snap = store.insert_snapshot(Snapshot { features: BTreeSet::from([f, way]) });
+    let snap = store.insert_snapshot(Snapshot { features: BTreeSet::from([f, way, promise]) });
     let mut world = World::default();
     world.insert(ts(-2092), snap).unwrap();
     store.set_layer(LayerKind::Territory, world);
@@ -461,7 +471,7 @@ fn frame_edge_refuses_undeclared_endurance() {
             name: name.to_string(),
             rings: [bid].into_iter().collect(),
             holes: Default::default(),
-        }));
+        tenure: Tenure::Held,}));
         store.set_provenance(
             fid,
             Provenance { witness: Witness::Authored, verses: Vec::new(), note: note.to_string() },

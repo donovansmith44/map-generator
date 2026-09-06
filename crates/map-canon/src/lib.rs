@@ -53,6 +53,17 @@ content_id!(
 #[derive(Clone, Debug, PartialEq)]
 pub struct Border(pub Vec<UnitVec>);
 
+/// HOW AN AREA RELATES TO ITS GROUND — the type that keeps a promise
+/// from wearing a country's dress. Held ground fills; a Claim (a
+/// promise, a vision, a city-derived stand-in) renders as its
+/// disclosed boundary and its name, never as territory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tenure {
+    #[default]
+    Held,
+    Claimed,
+}
+
 /// A named territorial (or claim) shape: rings + holes by reference.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Area {
@@ -60,6 +71,7 @@ pub struct Area {
     pub name: String,
     pub rings: BTreeSet<BorderId>,
     pub holes: BTreeSet<BorderId>,
+    pub tenure: Tenure,
 }
 
 /// One leg of a journey: a way between two places, walked over a span

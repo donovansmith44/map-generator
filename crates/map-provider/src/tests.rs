@@ -156,7 +156,7 @@ mod canon_provider_laws {
             name: "Assyria".into(),
             rings: BTreeSet::from([b]),
             holes: BTreeSet::new(),
-        }));
+        tenure: map_canon::Tenure::Held,}));
         store.set_provenance(assyria, Provenance {
             witness: Witness::Atlas,
             verses: vec!["2KI.15.19".into()],
@@ -201,7 +201,7 @@ mod canon_provider_laws {
             name: "the sea".into(),
             rings: BTreeSet::from([sea]),
             holes: BTreeSet::new(),
-        }));
+        tenure: map_canon::Tenure::Held,}));
         store.set_provenance(water, Provenance {
             witness: Witness::NaturalEarth,
             verses: vec![],
@@ -313,6 +313,66 @@ mod canon_provider_laws {
         );
     }
 
+    /// THE TENURE LAW: a Claimed area (a promise, a vision, a
+    /// city-derived hull) keeps its shape in the scene — selection
+    /// and the veil still know its interior — but paints NO ground:
+    /// fully transparent fill, Unknown-dressed outline. Held ground
+    /// is untouched.
+    #[test]
+    fn a_claim_is_boundary_and_name_never_ground() {
+        let mut store = CanonStore::default();
+        let square = |lat0: f64, lon0: f64, d: f64| {
+            Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+        };
+        let mut area = |store: &mut CanonStore, name: &str, b, tenure| {
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId(name.to_string()),
+                name: name.to_string(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure,
+            }));
+            store.set_provenance(fid, Provenance {
+                witness: Witness::Authored,
+                verses: vec![],
+                note: "t".into(),
+            });
+            fid
+        };
+        let held_b = store.insert_border(square(30.0, 30.0, 4.0));
+        let claim_b = store.insert_border(square(30.0, 40.0, 4.0));
+        let held = area(&mut store, "held", held_b, map_canon::Tenure::Held);
+        let claim = area(&mut store, "claim", claim_b, map_canon::Tenure::Claimed);
+        let sid = store.insert_snapshot(Snapshot { features: BTreeSet::from([held, claim]) });
+        let mut world = World::default();
+        world.insert(ts(-4004), sid).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, world);
+        let s = style();
+        let style_id = s.id();
+        let p = CanonProvider::new(store, BTreeMap::from([(style_id, s)]), None);
+        let scene = p.render(&world_q(style_id, -1000)).unwrap();
+        let region = |name: &str| {
+            scene.regions.iter().find(|r| r.entity.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("{name} present — the shape survives"))
+        };
+        assert_ne!(region("held").paint.fill.3, 0, "held ground fills");
+        assert_eq!(region("claim").paint.fill.3, 0, "a claim paints no ground");
+        assert!(
+            scene.labels.iter().any(|l| l.text == "claim"),
+            "the claim keeps its name"
+        );
+        let claim_stroke = scene
+            .boundaries
+            .iter()
+            .find(|b| b.pts.first().map(|p| p.angle_to(&uv(30.0, 40.0)) < 1e-6).unwrap_or(false))
+            .expect("the claim keeps its boundary");
+        assert_eq!(
+            claim_stroke.stroke.pattern,
+            StrokePattern::Dashed,
+            "the claim's outline wears the Unknown dress"
+        );
+    }
+
     /// RELIEF IS THE STAGE, NEVER A SHROUD: a background-scholarship
     /// region paints after the relief band that shares its ground.
     /// (Background once ranked beneath Relief, and the opaque bands
@@ -330,7 +390,7 @@ mod canon_provider_laws {
                 name: entity.to_string(),
                 rings: BTreeSet::from([b]),
                 holes: BTreeSet::new(),
-            }));
+            tenure: map_canon::Tenure::Held,}));
             store.set_provenance(fid, Provenance {
                 witness: if entity == "band" { Witness::NaturalEarth } else { Witness::Basemap },
                 verses: vec![],
@@ -593,7 +653,7 @@ mod scaling_laws {
                 name: (*id).to_string(),
                 rings: [b].into(),
                 holes: Default::default(),
-            })));
+            tenure: map_canon::Tenure::Held,})));
         }
         let sid = store.insert_snapshot(Snapshot { features: feats });
         let mut world = World::default();
@@ -743,7 +803,7 @@ mod scaling_laws {
             name: "sea".into(),
             rings: [big, islet].into(),
             holes: [pond].into(),
-        }));
+        tenure: map_canon::Tenure::Held,}));
         let sid = store.insert_snapshot(Snapshot { features: [fid].into() });
         let mut world = World::default();
         world.insert(TimePoint::year_only(Year::new(-4004).unwrap()), sid).unwrap();

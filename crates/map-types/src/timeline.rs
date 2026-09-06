@@ -77,6 +77,13 @@ pub enum RegionClass {
     /// A hypsometric elevation band (phase 5): band index orders from
     /// lowest to highest; the style's topo ramp picks the tint.
     Terrain(u8),
+    /// A CLAIM: a circuit that bounds a promise, vision, or
+    /// city-derived stand-in — a shape the text gives without giving
+    /// its ground. A claim renders as its disclosed boundary and its
+    /// name, NEVER as territory fill; painting it as ground once put
+    /// a phantom teal state northeast of Phoenicia (the promise's
+    /// unpossessed remainder wearing a country's dress).
+    Claim,
 }
 
 #[derive(Clone, Debug, PartialEq)]
