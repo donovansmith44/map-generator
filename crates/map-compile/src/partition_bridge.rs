@@ -14,8 +14,8 @@
 use std::collections::BTreeSet;
 
 use map_canon::{
-    Area, Border, CanonStore, EntityId, Feature, LayerKind, PathLine, Provenance, Snapshot,
-    Timestamp, Witness, World,
+    Area, Border, CanonStore, EntityId, Feature, LayerKind, PathLine, PresenceBook, Provenance,
+    Snapshot, Timestamp, Witness, World,
 };
 use map_partition::{
     build, cycle_area, winding, FaceKind, PartitionConfig, WitnessPolyline,
@@ -147,14 +147,14 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
         snap_targets.push((pl.pts.clone(), false));
     }
     let budget = 3.0 / 6371.0; // the vendored witness's declared accuracy
-    for (slug, parent, ring) in load_tribal_rings()? {
-        let snapped = snap_ring_to(&ring, &snap_targets, budget);
+    for cohort in load_tribal_rings()? {
+        let snapped = snap_ring_to(&cohort.ring, &snap_targets, budget);
         if snapped.len() >= 3 {
             regions.push(WitnessRegion {
-                id: slug,
+                id: cohort.slug,
                 kind: FaceKind::LandClaim,
                 rings: vec![snapped],
-                parent,
+                parent: cohort.parent,
             });
         }
     }
@@ -243,15 +243,38 @@ fn bundle_faces(
     bundles
 }
 
-fn pretty_name(who: &str) -> String {
-    match who {
-        "canaan" => "Canaan".to_string(),
-        "jordan" => "the Jordan".to_string(),
-        w if w.starts_with("sea-of-galilee") => "the Sea of Galilee".to_string(),
-        w if w.starts_with("dead-sea") => "the Dead Sea".to_string(),
-        w if w.starts_with("great-sea") => "the Great Sea".to_string(),
-        w => w
-            .split('-')
+/// Display names are DATA (data/atlas-vendor/names.json): exact ids,
+/// then prefix matches for suffixed witnesses, then the generic
+/// title-cased slug. No entity is named in code.
+struct NameBook {
+    exact: std::collections::BTreeMap<String, String>,
+    prefix: Vec<(String, String)>,
+}
+
+fn load_names() -> Result<NameBook, String> {
+    let text = std::fs::read_to_string(data_path("data/atlas-vendor/names.json"))
+        .map_err(|e| format!("names: {e}"))?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("names: {e}"))?;
+    let entries = |key: &str| -> Vec<(String, String)> {
+        v[key]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(k, val)| Some((k.clone(), val.as_str()?.to_string())))
+            .collect()
+    };
+    Ok(NameBook { exact: entries("exact").into_iter().collect(), prefix: entries("prefix") })
+}
+
+impl NameBook {
+    fn name_of(&self, who: &str) -> String {
+        if let Some(n) = self.exact.get(who) {
+            return n.clone();
+        }
+        if let Some((_, n)) = self.prefix.iter().find(|(p, _)| who.starts_with(p.as_str())) {
+            return n.clone();
+        }
+        who.split('-')
             .map(|part| {
                 let mut cs = part.chars();
                 match cs.next() {
@@ -260,7 +283,7 @@ fn pretty_name(who: &str) -> String {
                 }
             })
             .collect::<Vec<_>>()
-            .join(" "),
+            .join(" ")
     }
 }
 
@@ -317,19 +340,37 @@ fn load_openbible_regions() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
             out.push((slug.to_string(), ring));
         }
     }
-    if out.len() != 6 {
-        return Err(format!("openbible: expected 6 neighbor regions, found {}", out.len()));
+    if let Some(expected) = v["expected_features"].as_u64() {
+        if out.len() as u64 != expected {
+            return Err(format!(
+                "openbible: the file declares {expected} regions, found {}",
+                out.len()
+            ));
+        }
     }
     Ok(out)
+}
+
+/// One subdivision claimant from vendored data: its slug, its parent
+/// (subdivision nests where the parent claims), WHEN IT STANDS (era
+/// ids resolved through the vendored era table — the presence algebra
+/// eats these), and its ring.
+pub(crate) struct CohortRing {
+    pub slug: String,
+    pub parent: Option<String>,
+    /// (stands_from, stands_until) as era ids; None = stands always.
+    pub stands: Option<(String, Option<String>)>,
+    pub ring: Vec<UnitVec>,
 }
 
 /// The tribal allotments: open data traced from the Wikimedia Commons
 /// twelve-tribes map (CC BY-SA 3.0, see data/wikimedia/LICENSE.md),
 /// georeferenced through that map's own city markers. Shorelines were
-/// adopted from the real water at vendor time; parents ride in the
-/// data (west-bank tribes nest in canaan, Simeon in Judah, the east
-/// bank stands alone).
-fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, String> {
+/// adopted from the real water at vendor time; parents AND standings
+/// ride in the data — the code knows no tribe and no era by name.
+/// The expected feature count is the file's own declared integrity
+/// pin, not a constant here.
+fn load_tribal_rings() -> Result<Vec<CohortRing>, String> {
     let text = std::fs::read_to_string(data_path("data/wikimedia/tribes12.geojson"))
         .map_err(|e| format!("tribes12: {e}"))?;
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("tribes12: {e}"))?;
@@ -337,6 +378,9 @@ fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, St
     for f in v["features"].as_array().into_iter().flatten() {
         let Some(slug) = f["properties"]["tribe"].as_str() else { continue };
         let parent = f["properties"]["parent"].as_str().map(str::to_string);
+        let stands = f["properties"]["stands_from"].as_str().map(|from| {
+            (from.to_string(), f["properties"]["stands_until"].as_str().map(str::to_string))
+        });
         let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
         else {
             continue;
@@ -352,22 +396,28 @@ fn load_tribal_rings() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, St
             })
             .collect();
         if ring.len() >= 3 {
-            out.push((slug.to_string(), parent, ring));
+            out.push(CohortRing { slug: slug.to_string(), parent, stands, ring });
         }
     }
-    if out.len() != 13 {
-        return Err(format!("tribes12: expected 13 tribal rings, found {}", out.len()));
+    if let Some(expected) = v["expected_features"].as_u64() {
+        if out.len() as u64 != expected {
+            return Err(format!(
+                "tribes12: the file declares {expected} rings, found {}",
+                out.len()
+            ));
+        }
     }
     Ok(out)
 }
 
 /// Build the partition and bridge it into the store. Returns a
-/// human-readable summary line.
+/// human-readable summary line. `resolve_era` turns an era id from
+/// the vendored data into its opening Timestamp (the compiler's era
+/// table) — WHO STANDS WHEN arrives entirely as data.
 pub fn bridge_partition(
     store: &mut CanonStore,
     t0: Timestamp,
-    allotment_from: Timestamp,
-    kingdom_from: Timestamp,
+    resolve_era: &dyn Fn(&str) -> Result<Timestamp, String>,
 ) -> Result<String, String> {
     let (regions, polylines) = gather_witnesses()?;
     let part = build(&regions, &polylines, &PartitionConfig::default())
@@ -380,30 +430,41 @@ pub fn bridge_partition(
     let prov = |note: String| Provenance { witness: Witness::Authored, verses: Vec::new(), note };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    // THE ALLOTMENT COHORT: the tribes begin at the conquest, not at
-    // creation — their identity comes from the same vendored data
-    // their rings do, and their features join the world at
-    // `allotment_from` while everything else stands from t0.
-    let tribal_slugs: BTreeSet<String> =
-        load_tribal_rings()?.into_iter().map(|(slug, _, _)| slug).collect();
-    let mut allotment_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    // ONE Area per entity, PER ERA: a face is named by its first
-    // claimant PRESENT in the era — with the tribes absent, their
-    // ground falls to the next claimant (Canaan whole, as the
-    // pre-conquest plate names itself). Canaan stays one entity whose
-    // geometry changes at the boundary, so the transition machinery
-    // morphs it shrinking as the tribes rise. Content addressing
-    // dedups everything an era does not change (water, neighbors).
-    let eras: [(&BTreeSet<String>, bool); 2] =
-        [(&tribal_slugs, false), (&BTreeSet::new(), true)];
-    let mut before_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    for (absent, is_allotment_era) in eras {
-        for (who, bundle) in bundle_faces(store, &part, absent) {
+    // WHO STANDS WHEN comes from the data: each cohort ring declares
+    // its standing as era ids, the presence algebra derives the eras,
+    // and history compiles as a fold over them. The code below knows
+    // no tribe, no conquest, and no kingdom — only the laws:
+    //   - a face is named by its first claimant PRESENT in the era
+    //     (an absent claimant's ground falls to the next in the
+    //     face's own specificity chain);
+    //   - one Area per entity per era, so an entity whose ground
+    //     changes at a cut morphs through the transition machinery;
+    //   - content addressing dedups every era that repeats a state
+    //     (a claimant leaving restores the SAME features it displaced).
+    let names = load_names()?;
+    let mut presence = PresenceBook::default();
+    for cohort in load_tribal_rings()? {
+        if let Some((from_era, until_era)) = &cohort.stands {
+            let from = resolve_era(from_era)?;
+            let until = match until_era {
+                Some(u) => Some(resolve_era(u)?),
+                None => None,
+            };
+            presence
+                .declare(&cohort.slug, from, until)
+                .map_err(|e| format!("presence for {}: {e:?}", cohort.slug))?;
+        }
+    }
+    let mut era_overlays: Vec<(BTreeSet<map_canon::FeatureId>, Timestamp, Option<Timestamp>)> =
+        Vec::new();
+    for era in presence.eras(t0) {
+        let mut era_land: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+        for (who, bundle) in bundle_faces(store, &part, &era.absent) {
             if bundle.rings.is_empty() {
                 continue;
             }
             let entity = EntityId(format!("partition:{who}"));
-            let name = pretty_name(&who);
+            let name = names.name_of(&who);
             let fid = store.insert_feature(Feature::Area(Area {
                 entity,
                 name,
@@ -413,17 +474,14 @@ pub fn bridge_partition(
             store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
             match bundle.kind {
                 FaceKind::LandClaim => {
-                    if is_allotment_era {
-                        allotment_fids.insert(fid);
-                    } else {
-                        before_fids.insert(fid);
-                    }
+                    era_land.insert(fid);
                 }
                 _ => {
                     water_fids.insert(fid);
                 }
             }
         }
+        era_overlays.push((era_land, era.from, era.until));
     }
 
     for r in &part.rivers {
@@ -503,27 +561,13 @@ pub fn bridge_partition(
     }
 
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0, None)?;
-    // THE ALLOTMENT SPAN: the tribes stand from the conquest until
-    // the monarchy rises — the Territory layer's own israel polity
-    // begins at the united-kingdom era, so the tribal confederation
-    // yields exactly where the atlas says the kingdom takes over.
-    // Canaan-whole is the scripture-frame on either side of the span;
-    // content addressing makes its return the SAME features.
-    overlay_features(
-        store,
-        LayerKind::ScriptureClaims,
-        &before_fids,
-        t0,
-        Some(allotment_from),
-    )?;
-    overlay_features(
-        store,
-        LayerKind::ScriptureClaims,
-        &allotment_fids,
-        allotment_from,
-        Some(kingdom_from),
-    )?;
-    overlay_features(store, LayerKind::ScriptureClaims, &before_fids, kingdom_from, None)?;
+    // The era windows apply in chronological order after the claims —
+    // the same overlay sequence the canon has always been built with,
+    // so intermediate snapshots (content-addressed, all retained)
+    // reproduce byte for byte.
+    for (fids, from, until) in &era_overlays {
+        overlay_features(store, LayerKind::ScriptureClaims, fids, *from, *until)?;
+    }
     overlay_features(store, LayerKind::Water, &water_fids, t0, None)?;
 
     Ok(format!(

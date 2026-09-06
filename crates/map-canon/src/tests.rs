@@ -358,3 +358,89 @@ fn slivers_are_tolerated_deep_overlaps_are_not() {
         "a one-degree interpenetration is war"
     );
 }
+
+// -------------------- the presence algebra: WHO STANDS WHEN
+// The temporal half of the claim algebra. A PresenceBook maps each
+// claimant to disjoint right-open standings; an undeclared claimant
+// stands always. ERAS ARE DERIVED, never enumerated: the cuts are the
+// standing edges, and between consecutive cuts the presence function
+// is constant — so history compiles as a fold over derived eras, and
+// hardcoding "two eras, the tribes absent in the first" becomes
+// unwritable rather than merely discouraged.
+
+#[test]
+fn presence_defaults_to_always_standing() {
+    let book = PresenceBook::default();
+    assert!(book.present("canaan", &ts(-4000)));
+    assert!(book.present("anyone-at-all", &ts(1000)));
+    // One era, nothing absent, open-ended, starting at t0.
+    let eras = book.eras(ts(-4004));
+    assert_eq!(eras.len(), 1);
+    assert_eq!(eras[0].from, ts(-4004));
+    assert_eq!(eras[0].until, None);
+    assert!(eras[0].absent.is_empty());
+}
+
+#[test]
+fn presence_spans_are_right_open_and_derive_eras() {
+    let mut book = PresenceBook::default();
+    book.declare("judah", ts(-1400), Some(ts(-1050))).unwrap();
+    assert!(!book.present("judah", &ts(-1500)));
+    assert!(book.present("judah", &ts(-1400)), "from is inclusive");
+    assert!(book.present("judah", &ts(-1200)));
+    assert!(!book.present("judah", &ts(-1050)), "until is exclusive");
+    assert!(!book.present("judah", &ts(-900)));
+
+    let eras = book.eras(ts(-4004));
+    assert_eq!(eras.len(), 3, "before, standing, after");
+    assert_eq!(eras[0].from, ts(-4004));
+    assert_eq!(eras[0].until, Some(ts(-1400)));
+    assert!(eras[0].absent.contains("judah"));
+    assert_eq!(eras[1].from, ts(-1400));
+    assert_eq!(eras[1].until, Some(ts(-1050)));
+    assert!(eras[1].absent.is_empty());
+    assert_eq!(eras[2].from, ts(-1050));
+    assert_eq!(eras[2].until, None);
+    assert!(eras[2].absent.contains("judah"));
+}
+
+#[test]
+fn presence_is_constant_within_every_derived_era() {
+    // The constancy law, checked over a book with staggered cohorts.
+    let mut book = PresenceBook::default();
+    book.declare("a", ts(-1400), Some(ts(-1050))).unwrap();
+    book.declare("b", ts(-1200), None).unwrap();
+    book.declare("c", ts(-1400), Some(ts(-1200))).unwrap();
+    let names = ["a", "b", "c", "undeclared"];
+    let eras = book.eras(ts(-4004));
+    // Eras tile [t0, infinity): contiguous, ordered, first at t0.
+    assert_eq!(eras[0].from, ts(-4004));
+    for w in eras.windows(2) {
+        assert_eq!(w[0].until, Some(w[1].from), "eras are contiguous");
+    }
+    assert_eq!(eras.last().unwrap().until, None);
+    for era in &eras {
+        // sample inside the era (its start, and a midpoint when bounded)
+        for who in names {
+            let at_start = book.present(who, &era.from);
+            assert_eq!(
+                at_start,
+                !era.absent.contains(who),
+                "the absent set IS the presence function at {:?} for {who}",
+                era.from
+            );
+        }
+    }
+}
+
+#[test]
+fn presence_refuses_overlapping_standings() {
+    let mut book = PresenceBook::default();
+    book.declare("moab", ts(-1400), Some(ts(-1000))).unwrap();
+    assert!(book.declare("moab", ts(-1200), Some(ts(-800))).is_err(), "overlap refused");
+    assert!(book.declare("moab", ts(-900), Some(ts(-950))).is_err(), "backwards refused");
+    // A second, disjoint standing is lawful (a claimant can return).
+    book.declare("moab", ts(-800), None).unwrap();
+    assert!(book.present("moab", &ts(-700)));
+    assert!(!book.present("moab", &ts(-950)));
+}

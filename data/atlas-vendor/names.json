@@ -1,0 +1,12 @@
+{
+  "_note": "Display names for partition entities. `exact` matches a witness id outright; `prefix` matches suffixed ids (great-sea-1 ...). Anything unlisted falls back to title-cased slug words.",
+  "exact": {
+    "canaan": "Canaan",
+    "jordan": "the Jordan"
+  },
+  "prefix": {
+    "sea-of-galilee": "the Sea of Galilee",
+    "dead-sea": "the Dead Sea",
+    "great-sea": "the Great Sea"
+  }
+}

@@ -147,6 +147,115 @@ pub struct Snapshot {
     pub features: BTreeSet<FeatureId>,
 }
 
+// -------------------- the presence algebra: WHO STANDS WHEN
+// The temporal half of the claim algebra. The spatial half already
+// has its laws (the partition: faces as atoms, claims ordered by
+// specificity, subdivision to fixpoint); this is the piece history
+// compiles through. A claimant's standing is a set of disjoint
+// right-open [from, until) spans; an undeclared claimant stands
+// always. ERAS ARE DERIVED, never enumerated: the cuts are exactly
+// the standing edges, presence is constant between consecutive cuts,
+// and compiling history is a fold over `eras()` — "two eras with the
+// tribes absent in the first" stops being code and becomes data.
+
+/// One derived era: a right-open window (the last is open-ended) and
+/// the set of claimants NOT standing in it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Era {
+    pub from: Timestamp,
+    pub until: Option<Timestamp>,
+    pub absent: BTreeSet<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PresenceError {
+    /// until must come strictly after from.
+    BackwardsSpan,
+    /// a claimant's standings must be disjoint.
+    OverlappingSpans,
+}
+
+/// WHO STANDS WHEN: each claimant's standings, disjoint and sorted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PresenceBook {
+    spans: BTreeMap<String, Vec<(Timestamp, Option<Timestamp>)>>,
+}
+
+impl PresenceBook {
+    /// Declare a standing [from, until). Refuses backwards spans and
+    /// overlaps with the claimant's existing standings — a claimant
+    /// may return (disjoint spans), never stand twice at once.
+    pub fn declare(
+        &mut self,
+        who: &str,
+        from: Timestamp,
+        until: Option<Timestamp>,
+    ) -> Result<(), PresenceError> {
+        if let Some(u) = &until {
+            if *u <= from {
+                return Err(PresenceError::BackwardsSpan);
+            }
+        }
+        let spans = self.spans.entry(who.to_string()).or_default();
+        for (f, u) in spans.iter() {
+            let new_ends_before_existing = until.as_ref().is_some_and(|nu| *nu <= *f);
+            let existing_ends_before_new = u.as_ref().is_some_and(|eu| *eu <= from);
+            if !(new_ends_before_existing || existing_ends_before_new) {
+                return Err(PresenceError::OverlappingSpans);
+            }
+        }
+        spans.push((from, until));
+        spans.sort_by_key(|(f, _)| *f);
+        Ok(())
+    }
+
+    /// Totality: every claimant has an answer at every time. No entry
+    /// means the claimant stands always.
+    pub fn present(&self, who: &str, t: &Timestamp) -> bool {
+        match self.spans.get(who) {
+            None => true,
+            Some(spans) => spans
+                .iter()
+                .any(|(f, u)| *t >= *f && u.as_ref().map_or(true, |until| *t < *until)),
+        }
+    }
+
+    /// The derived eras from `t0`: contiguous right-open windows tiling
+    /// [t0, infinity), each carrying the absent set — the claimants not
+    /// standing there. Presence is constant within an era because the
+    /// cuts are exactly the standing edges.
+    pub fn eras(&self, t0: Timestamp) -> Vec<Era> {
+        let mut cuts: BTreeSet<Timestamp> = BTreeSet::new();
+        cuts.insert(t0);
+        for spans in self.spans.values() {
+            for (f, u) in spans {
+                if *f > t0 {
+                    cuts.insert(*f);
+                }
+                if let Some(u) = u {
+                    if *u > t0 {
+                        cuts.insert(*u);
+                    }
+                }
+            }
+        }
+        let cuts: Vec<Timestamp> = cuts.into_iter().collect();
+        cuts.iter()
+            .enumerate()
+            .map(|(i, from)| {
+                let until = cuts.get(i + 1).copied();
+                let absent = self
+                    .spans
+                    .keys()
+                    .filter(|who| !self.present(who, from))
+                    .cloned()
+                    .collect();
+                Era { from: *from, until, absent }
+            })
+            .collect()
+    }
+}
+
 /// The layers of the canon. Within Territory, overlap at a moment is a
 /// contradiction; across layers, overlap is meaning.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
