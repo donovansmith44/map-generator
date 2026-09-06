@@ -518,15 +518,20 @@ impl CanonProvider {
             _ => None,
         };
         let only: Option<&BTreeSet<EntityId>> = pieces.or(subject_only.as_ref());
-        // Paint rank per region: the stage under everything, claims
-        // over it, water above every claim (a lake is never buried),
-        // recorded at push time because the scene type carries no
-        // layer.
+        // Paint rank per region: RELIEF is the stage under everything
+        // — it is the ground itself, not a claim — and every named
+        // region paints over it, background scholarship included.
+        // (Background once ranked beneath Relief, and the opaque
+        // bands entombed the whole non-Biblical world: Berbers, Saami,
+        // Ainu stood as labels on bare land, and in bible mode even
+        // the ghost disclosure was buried.) Water stays above every
+        // claim — a lake is never buried. Recorded at push time
+        // because the scene type carries no layer.
         let mut paint_rank: BTreeMap<map_types::RegionId, u8> = BTreeMap::new();
         for layer in layers_wanted(q.layers) {
             let rank = match layer {
-                LayerKind::Background => 0u8,
-                LayerKind::Relief => 1,
+                LayerKind::Relief => 0u8,
+                LayerKind::Background => 1,
                 // the scripture-frame (Canaan, the allotments, the
                 // nations) lies beneath the POLITICAL layer: eras
                 // hand off between them, and when both speak at once

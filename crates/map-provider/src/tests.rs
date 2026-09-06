@@ -315,6 +315,54 @@ mod canon_provider_laws {
         );
     }
 
+    /// RELIEF IS THE STAGE, NEVER A SHROUD: a background-scholarship
+    /// region paints after the relief band that shares its ground.
+    /// (Background once ranked beneath Relief, and the opaque bands
+    /// entombed the whole non-Biblical world — cultures stood as
+    /// labels on bare land.)
+    #[test]
+    fn scholarship_is_never_buried_by_relief() {
+        let mut store = CanonStore::default();
+        let square = |lat0: f64, lon0: f64, d: f64| {
+            Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+        };
+        let mut layer_with = |store: &mut CanonStore, layer, entity: &str, b| {
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId(entity.to_string()),
+                name: entity.to_string(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+            }));
+            store.set_provenance(fid, Provenance {
+                witness: if entity == "band" { Witness::NaturalEarth } else { Witness::Basemap },
+                verses: vec![],
+                note: "t".into(),
+            });
+            let sid = store.insert_snapshot(Snapshot { features: BTreeSet::from([fid]) });
+            let mut world = World::default();
+            world.insert(ts(-4004), sid).unwrap();
+            store.set_layer(layer, world);
+        };
+        let band = store.insert_border(square(30.0, 30.0, 10.0));
+        let culture = store.insert_border(square(33.0, 33.0, 4.0));
+        layer_with(&mut store, LayerKind::Relief, "band", band);
+        layer_with(&mut store, LayerKind::Background, "culture", culture);
+        let s = style();
+        let sid = s.id();
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, s)]), None);
+        let mut q = world_q(sid, -1000);
+        q.layers = q.layers.with(LayerSet::RELIEF);
+        let scene = p.render(&q).unwrap();
+        let idx_of = |w: &str| {
+            scene.regions.iter().position(|r| r.sources.contains(&SourceId::new(w)))
+                .unwrap_or_else(|| panic!("{w} region present"))
+        };
+        assert!(
+            idx_of("witness:basemap") > idx_of("witness:natural-earth"),
+            "the culture paints over its relief band"
+        );
+    }
+
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
     /// stations appear as reached, named from the gazetteer; outside
     /// the span, no way at all.
