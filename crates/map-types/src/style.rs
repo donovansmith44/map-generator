@@ -247,10 +247,13 @@ impl Default for GhostDress {
     }
 }
 
-/// The classical focus veil — dark warm ink at ~38%, the reference
-/// value encoders fall back to when no dress is injected. Served
-/// styles always declare their own.
-pub const CLASSICAL_VEIL: Paint = Paint { fill: Rgba(20, 18, 14, 96) };
+/// THE FOCUS VEIL — one law, everywhere. When a selection stands,
+/// the world outside it dims under THIS ink: the same veil over
+/// every dress, every era, every location. Deliberately NOT a
+/// per-template value — focus is a property of attention, not of
+/// costume, so no dress and no place gets its own veil. Dark warm
+/// ink at ~56% coverage: the background darkens but stays legible.
+pub const VEIL: Paint = Paint { fill: Rgba(20, 18, 14, 143) };
 
 impl Default for PatternGeometry {
     fn default() -> Self {
@@ -298,11 +301,6 @@ pub struct StyleSpec {
     /// rivers stroke at this width, in the water's own fill (a law:
     /// river ink follows the sea's)
     pub river_width: f64,
-    /// THE FOCUS VEIL: what the world OUTSIDE a selection wears — a
-    /// translucent ink laid over everything but the chosen ground, so
-    /// selection reads as foreground light, never as a blanked world.
-    /// Dress data like the paper: a dark style veils darker.
-    pub veil: Paint,
 }
 
 /// A complete style. Constructed only through `new`, which enforces the
@@ -331,7 +329,6 @@ pub struct Style {
     tint_alpha: u8,
     pattern: PatternGeometry,
     river_width: f64,
-    veil: Paint,
 }
 
 impl Style {
@@ -352,7 +349,6 @@ impl Style {
             tint_alpha,
             pattern,
             river_width,
-            veil,
         } = spec;
         if boundaries.unknown == boundaries.line {
             return Err(StyleError::UnknownIndistinctFromLine);
@@ -398,7 +394,6 @@ impl Style {
             tint_alpha,
             pattern,
             river_width,
-            veil,
         })
     }
 
@@ -447,9 +442,6 @@ impl Style {
     }
     pub fn ghost_dress(&self) -> GhostDress {
         self.ghost
-    }
-    pub fn veil(&self) -> Paint {
-        self.veil
     }
     pub fn tint_alpha(&self) -> u8 {
         self.tint_alpha
@@ -525,7 +517,6 @@ impl Style {
             .f64_(self.pattern.zonal_width)
             .f64_(self.pattern.zonal_alpha);
         c.f64_(self.river_width);
-        self.veil.canon(c);
     }
 }
 

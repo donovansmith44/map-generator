@@ -32,7 +32,6 @@ pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
         tint_alpha: 235,
         pattern: Default::default(),
         river_width: 1.9,
-        veil: CLASSICAL_VEIL,
     })
     .unwrap()
 }
@@ -139,7 +138,6 @@ mod canon_provider_laws {
             tint_alpha: 235,
             pattern: Default::default(),
             river_width: 1.9,
-            veil: CLASSICAL_VEIL,
         })
         .unwrap()
     }
@@ -641,22 +639,52 @@ mod scaling_laws {
         );
     }
 
-    /// THE VIEWPORT CULL: an area whose every border cap misses the
-    /// camera never leaves the provider; one inside always does.
+    /// THE WORLD BEYOND THE CAMERA STAYS WHOLE — AND COARSE. A far
+    /// area is never culled (the retained world has no holes to punch)
+    /// but ships at the hemisphere's derived detail, while the ground
+    /// under the camera refines at the query's own tolerance.
     #[test]
-    fn the_world_beyond_the_camera_stays_home() {
+    fn the_world_beyond_the_camera_arrives_coarse() {
         let p = provider(store_with(&[
-            ("near", dense_ring(31.0, 34.0, 2.0, 8)),
-            ("far", dense_ring(-40.0, -120.0, 2.0, 8)),
+            ("near", dense_ring(28.0, 30.0, 10.0, 64)),
+            ("far", dense_ring(-45.0, -120.0, 10.0, 64)),
         ]));
         let view = Bbox {
             center: UnitVec::from_lat_lon_deg(32.0, 35.0),
             radius: 10f64.to_radians(),
         };
-        let scene = p.render(&q(0.0, Some(view))).unwrap();
-        let names: Vec<_> = scene.regions.iter().filter_map(|r| r.entity.clone()).collect();
-        assert!(names.contains(&"near".to_string()), "the near area renders");
-        assert!(!names.contains(&"far".to_string()), "the far area stays home");
+        let fine = 1e-4;
+        // mirror of the provider's derivation: the same page at the
+        // hemisphere's 90° half-extent
+        let floor = (fine * (std::f64::consts::FRAC_PI_2 / (view.radius / 1.8))).min(0.01);
+        let pts_of = |scene: &map_types::Snapshot, name: &str| -> usize {
+            scene
+                .regions
+                .iter()
+                .find(|r| r.entity.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("{name} present — the world stays whole"))
+                .outer
+                .iter()
+                .map(|ring| ring.points().len())
+                .sum()
+        };
+        let with_view = p.render(&q(fine, Some(view))).unwrap();
+        let fine_all = p.render(&q(fine, None)).unwrap();
+        let coarse_all = p.render(&q(floor, None)).unwrap();
+        assert_eq!(
+            pts_of(&with_view, "near"),
+            pts_of(&fine_all, "near"),
+            "inside the cap: the query's own detail"
+        );
+        assert_eq!(
+            pts_of(&with_view, "far"),
+            pts_of(&coarse_all, "far"),
+            "beyond the cap: exactly the derived hemisphere floor"
+        );
+        assert!(
+            pts_of(&coarse_all, "far") < pts_of(&fine_all, "far"),
+            "the floor genuinely coarsens this geometry"
+        );
     }
 
     /// The whole-sphere sentinel is never culled: its cap covers the

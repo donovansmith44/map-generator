@@ -158,7 +158,6 @@ fn spec_of(base: &Style) -> map_types::style::StyleSpec {
         tint_alpha: base.tint_alpha(),
         pattern: base.pattern_geometry(),
         river_width: base.river_width(),
-        veil: base.veil(),
     }
 }
 
@@ -1098,7 +1097,6 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     Some(st) => GpuSceneEncoder {
                         paper: st.paper(),
                         pattern: st.pattern_geometry(),
-                        veil: st.veil(),
                     },
                     None => GpuSceneEncoder::default(),
                 };

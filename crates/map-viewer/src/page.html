@@ -769,7 +769,7 @@ async function gpuSyncInner() {
   // Focus is a VIEW effect (the veil in gpuDraw), never a different
   // scene — so selecting a region changes no geometry, refetches
   // nothing, and can never blank the world it highlights.
-  for (const k of ["encoder", "smooth", "projection", "center", "subject"]) p.delete(k);
+  for (const k of ["encoder", "smooth", "projection", "subject"]) p.delete(k);
   // The LOD ladder: sample the half-pixel law at half-octave zoom
   // steps (the discrete levels a LodChain names, spec 36), so a zoom
   // ease reuses resident representations and refinement transitions
@@ -777,6 +777,24 @@ async function gpuSyncInner() {
   const zRaw = parseFloat(p.get("zoom"));
   if (isFinite(zRaw) && zRaw > 0) {
     p.set("zoom", Math.pow(2, Math.round(Math.log2(zRaw) * 2) / 2).toFixed(4));
+  }
+  // THE CAMERA'S GROUND RIDES THE KEY, coarsely. The server refines
+  // only inside the view cap; the world beyond arrives WHOLE at the
+  // hemisphere's own derived detail — so a zoom refetches the ground
+  // it looks at, never every antipodal island. Center quantizes to
+  // the demand envelope's own granularity (40% of the view radius —
+  // the same fraction the envelope already declares), so tiny pans
+  // reuse the resident scene and real walks re-demand.
+  const c0 = p.get("center");
+  p.delete("center");
+  const zq = parseFloat(p.get("zoom"));
+  if (c0 && isFinite(zq)) {
+    const [la, lo] = c0.split(",").map(parseFloat);
+    if (isFinite(la) && isFinite(lo)) {
+      const g = Math.max(0.1, zq * 0.4);
+      p.set("center",
+        (Math.round(la / g) * g).toFixed(2) + "," + (Math.round(lo / g) * g).toFixed(2));
+    }
   }
   const key = p.toString();
   if (gpu.sceneKey === key && gpu.manifest) return;
@@ -1275,7 +1293,7 @@ function labelVeilFactor(l) {
     gpu.dimCache.set(l, dim);
   }
   if (!dim) return 1;
-  const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 96];
+  const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 143];
   return 1 - v[3] / 255;
 }
 
@@ -1681,7 +1699,7 @@ function gpuDraw() {
       gl.colorMask(true, true, true, true);
       gl.stencilFunc(gl.EQUAL, 0, 0xff);   // even parity = outside
       gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
-      const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 96];
+      const v = (gpu.dress && gpu.dress.veil) || [20, 18, 14, 143];
       gl.uniform4f(loc.uColor, v[0] / 255, v[1] / 255, v[2] / 255, v[3] / 255);
       if (proj.mode === 0) {
         gl.uniform1i(loc.uMode, 3);

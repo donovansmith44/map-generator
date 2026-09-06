@@ -195,7 +195,6 @@ pub struct EncodedScene {
 pub struct GpuSceneEncoder {
     pub paper: map_types::style::Paint,
     pub pattern: map_types::style::PatternGeometry,
-    pub veil: map_types::style::Paint,
 }
 
 impl Default for GpuSceneEncoder {
@@ -203,7 +202,6 @@ impl Default for GpuSceneEncoder {
         GpuSceneEncoder {
             paper: map_types::style::Paint { fill: Rgba(246, 241, 228, 255) },
             pattern: Default::default(),
-            veil: map_types::style::CLASSICAL_VEIL,
         }
     }
 }
@@ -640,7 +638,9 @@ impl GpuSceneEncoder {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
                     zonal_alpha: self.pattern.zonal_alpha,
-                    veil: self.veil.fill,
+                    // one veil for every dress and every place — the
+                    // focus law, never a per-template value
+                    veil: map_types::style::VEIL.fill,
                 },
             },
             resources,

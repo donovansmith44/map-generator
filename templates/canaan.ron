@@ -68,10 +68,8 @@
     tint_alpha: 235,
     pattern: (dashed: (6.0, 4.0), hatched: (2.0, 3.0), zonal_width: 6.0, zonal_alpha: 0.35),
     river_width: 1.9,
-    // The focus veil: dark warm ink over the cream world when a
-    // selection stands — the background dims but stays legible.
-    veil: (32, 27, 20, 110),
     // The reference dress is the declared default — by law, not by
-    // alphabetical accident.
+    // alphabetical accident. (The focus veil is deliberately NOT
+    // here: one veil law for every dress — map_types::style::VEIL.)
     default: true,
 )
