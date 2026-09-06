@@ -40,60 +40,6 @@ pub struct CompileReport {
 /// at era boundaries (each era's beginning, and the year after each
 /// era's end); at every moment the snapshot holds the areas whose era
 /// contains that moment.
-pub fn compile_polities(store: &mut CanonStore, rows: &[PolityRow]) -> Result<CompileReport, String> {
-    let mut features: Vec<(i32, i32, map_canon::FeatureId)> = Vec::new();
-    for row in rows {
-        if row.to_year < row.from_year {
-            return Err(format!("polity '{}': era runs backward", row.id));
-        }
-        let mut rings = BTreeSet::new();
-        for ring in &row.rings {
-            if ring.len() < 3 {
-                return Err(format!("polity '{}': a ring with {} points", row.id, ring.len()));
-            }
-            let pts: Vec<UnitVec> = ring.iter().map(|(lat, lon)| uv(*lat, *lon)).collect();
-            rings.insert(store.insert_border(Border(pts)));
-        }
-        let fid = store.insert_feature(Feature::Area(Area {
-            entity: EntityId(row.id.clone()),
-            name: row.name.clone(),
-            rings,
-            holes: BTreeSet::new(),
-        }));
-        let mut verses = row.transition_verses.clone();
-        verses.extend(row.fall_verses.iter().cloned());
-        store.set_provenance(
-            fid,
-            Provenance {
-                witness: Witness::Atlas,
-                verses,
-                note: format!("atlas polity era {}..{}", row.from_year, row.to_year),
-            },
-        );
-        features.push((row.from_year, row.to_year, fid));
-    }
-
-    let mut edges: BTreeSet<i32> = BTreeSet::new();
-    for (from, to, _) in &features {
-        edges.insert(*from);
-        edges.insert(year_after(*to));
-    }
-    let mut world = World::default();
-    for edge in edges {
-        let active: BTreeSet<_> = features
-            .iter()
-            .filter(|(from, to, _)| *from <= edge && edge <= *to)
-            .map(|(_, _, fid)| *fid)
-            .collect();
-        let sid = store.insert_snapshot(Snapshot { features: active });
-        world
-            .insert(ts(edge)?, sid)
-            .map_err(|_| format!("territory: contradiction at {edge}"))?;
-    }
-    store.set_layer(LayerKind::Territory, world);
-    Ok(CompileReport { polity_eras: rows.len(), ..Default::default() })
-}
-
 /// Atlas narratives + their dated leg events → the Journeys layer.
 /// Stations are events at gazetteer places; a leg spans from the end
 /// of one event to the start of the next. A place the gazetteer cannot

@@ -137,9 +137,12 @@ fn build(args: &[String]) {
     let mut store = map_canon::CanonStore::default();
     let mut report_md = String::from("# Canon compile report\n\n");
 
-    // ---- atlas witness: Territory
+    // ---- atlas witness: the polity rows feed the sphere partition
+    // below (Territory is partition-derived now — flush against the
+    // water and every neighboring claim; the old hand-rolled era fold
+    // retired into the presence algebra).
     let polities = parse_polities(&read("polities.json")).unwrap_or_else(|e| die(&e));
-    let rep = compile_polities(&mut store, &polities).unwrap_or_else(|e| die(&e));
+    let rep = CompileReport { polity_eras: polities.len(), ..Default::default() };
     eprintln!("territory: {} polity eras", rep.polity_eras);
     report_md.push_str(&format!("- Territory: {} atlas polity eras\n", rep.polity_eras));
 
@@ -332,9 +335,13 @@ fn build(args: &[String]) {
             .ok_or_else(|| format!("eras: no {id} era"))?;
         Ok(ts_or_die(era.from_year))
     };
-    let summary =
-        map_compile::partition_bridge::bridge_partition(&mut store, tp0, &resolve_era)
-            .unwrap_or_else(|e| die(&format!("partition: {e}")));
+    let summary = map_compile::partition_bridge::bridge_partition(
+        &mut store,
+        tp0,
+        &resolve_era,
+        &polities,
+    )
+    .unwrap_or_else(|e| die(&format!("partition: {e}")));
     eprintln!("{summary}");
     report_md.push_str(&format!("- {summary}
 "));

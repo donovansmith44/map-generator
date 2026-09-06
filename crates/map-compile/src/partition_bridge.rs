@@ -23,9 +23,23 @@ use map_partition::{
 };
 use map_types::UnitVec;
 
+use crate::vendor::PolityRow;
+
+fn ts_year(y: i32) -> Result<Timestamp, String> {
+    use atlas_graph_types::covenant::{TimePoint, Year};
+    Year::new(y).map(TimePoint::year_only).map_err(|_| format!("no such year {y}"))
+}
+
+/// The year after y, minding the missing year zero.
+fn year_after(y: i32) -> i32 {
+    if y == -1 { 1 } else { y + 1 }
+}
+
 /// Assemble the partition's witnesses from every source. Public so
 /// the law suite builds exactly what the compiler builds.
-pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
+pub fn gather_witnesses(
+    polities: &[PolityRow],
+) -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
     let canaan = map_adapters::plate_canaan_ring();
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
@@ -172,6 +186,30 @@ pub fn gather_witnesses() -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), 
             });
         }
     }
+    // THE BORDERING WORLD: every atlas polity era enters as a witness
+    // of its own — one per (polity, era) so geometry may change at a
+    // cut — and joins the ONE arrangement. Water-over-land trims each
+    // ring flush at the seas and lakes by law; smaller and deeper
+    // witnesses (tribes, neighbors) outrank empire-sized claims by
+    // specificity; WHO STANDS WHEN is declared by the rows' own years.
+    for row in polities {
+        let rings: Vec<Vec<UnitVec>> = row
+            .rings
+            .iter()
+            .filter(|r| r.len() >= 3)
+            .map(|r| r.iter().map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon)).collect())
+            .collect();
+        if rings.is_empty() {
+            continue;
+        }
+        regions.push(WitnessRegion {
+            id: format!("{}@{}", row.id, row.from_year),
+            kind: FaceKind::LandClaim,
+            rings,
+            parent: None,
+        });
+    }
+
     Ok((regions, polylines))
 }
 
@@ -418,8 +456,9 @@ pub fn bridge_partition(
     store: &mut CanonStore,
     t0: Timestamp,
     resolve_era: &dyn Fn(&str) -> Result<Timestamp, String>,
+    polities: &[PolityRow],
 ) -> Result<String, String> {
-    let (regions, polylines) = gather_witnesses()?;
+    let (regions, polylines) = gather_witnesses(polities)?;
     let part = build(&regions, &polylines, &PartitionConfig::default())
         .map_err(|e| format!("partition build: {e:?}"))?;
 
@@ -442,6 +481,21 @@ pub fn bridge_partition(
     //   - content addressing dedups every era that repeats a state
     //     (a claimant leaving restores the SAME features it displaced).
     let names = load_names()?;
+    // THE COHORT BOOK: how each witness's bundles enter the canon —
+    // its entity (era-variants of one polity collapse to ONE entity,
+    // so the transition machinery morphs the empire growing), its
+    // display name, its layer, its witness kind, and its verses.
+    #[derive(Clone)]
+    struct CohortSpec {
+        entity: EntityId,
+        name: String,
+        layer: LayerKind,
+        witness: Witness,
+        verses: Vec<String>,
+        note_prefix: String,
+    }
+    let mut specs: std::collections::BTreeMap<String, CohortSpec> =
+        std::collections::BTreeMap::new();
     let mut presence = PresenceBook::default();
     for cohort in load_tribal_rings()? {
         if let Some((from_era, until_era)) = &cohort.stands {
@@ -455,33 +509,83 @@ pub fn bridge_partition(
                 .map_err(|e| format!("presence for {}: {e:?}", cohort.slug))?;
         }
     }
-    let mut era_overlays: Vec<(BTreeSet<map_canon::FeatureId>, Timestamp, Option<Timestamp>)> =
-        Vec::new();
+    // Polity standings come from the rows' own years; a second book
+    // keyed by ENTITY catches era-variants that would stand twice at
+    // once — the same entity must not wear two witnesses at a moment.
+    let mut entity_disjoint = PresenceBook::default();
+    for row in polities {
+        let wid = format!("{}@{}", row.id, row.from_year);
+        let from = ts_year(row.from_year)?;
+        let until = ts_year(year_after(row.to_year))?;
+        presence
+            .declare(&wid, from, Some(until))
+            .map_err(|e| format!("presence for {wid}: {e:?}"))?;
+        entity_disjoint
+            .declare(&row.id, from, Some(until))
+            .map_err(|e| format!("polity '{}': eras overlap in time ({e:?})", row.id))?;
+        let mut verses = row.transition_verses.clone();
+        verses.extend(row.fall_verses.iter().cloned());
+        specs.insert(
+            wid,
+            CohortSpec {
+                entity: EntityId(row.id.clone()),
+                name: row.name.clone(),
+                layer: LayerKind::Territory,
+                witness: Witness::Atlas,
+                verses,
+                note_prefix: format!("atlas polity era {}..{}", row.from_year, row.to_year),
+            },
+        );
+    }
+    let mut era_overlays: Vec<(
+        LayerKind,
+        BTreeSet<map_canon::FeatureId>,
+        Timestamp,
+        Option<Timestamp>,
+    )> = Vec::new();
     for era in presence.eras(t0) {
-        let mut era_land: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+        let mut per_layer: std::collections::BTreeMap<LayerKind, BTreeSet<map_canon::FeatureId>> =
+            std::collections::BTreeMap::new();
         for (who, bundle) in bundle_faces(store, &part, &era.absent) {
             if bundle.rings.is_empty() {
                 continue;
             }
-            let entity = EntityId(format!("partition:{who}"));
-            let name = names.name_of(&who);
+            let spec = specs.get(&who).cloned().unwrap_or_else(|| CohortSpec {
+                entity: EntityId(format!("partition:{who}")),
+                name: names.name_of(&who),
+                layer: LayerKind::ScriptureClaims,
+                witness: Witness::Authored,
+                verses: Vec::new(),
+                note_prefix: "sphere-partition entity".to_string(),
+            });
             let fid = store.insert_feature(Feature::Area(Area {
-                entity,
-                name,
+                entity: spec.entity,
+                name: spec.name,
                 rings: bundle.rings,
                 holes: bundle.holes,
             }));
-            store.set_provenance(fid, prov(format!("sphere-partition entity ({})", bundle.note)));
-            match bundle.kind {
-                FaceKind::LandClaim => {
-                    era_land.insert(fid);
-                }
-                _ => {
-                    water_fids.insert(fid);
-                }
+            store.set_provenance(
+                fid,
+                Provenance {
+                    witness: spec.witness,
+                    verses: spec.verses,
+                    note: format!("{} ({})", spec.note_prefix, bundle.note),
+                },
+            );
+            let layer = match bundle.kind {
+                FaceKind::LandClaim => spec.layer,
+                _ => LayerKind::Water,
+            };
+            per_layer.entry(layer).or_default().insert(fid);
+        }
+        for (layer, fids) in per_layer {
+            if layer == LayerKind::Water {
+                // water stands outside time: overlaid once, below
+                water_fids.extend(fids);
+            } else {
+                era_overlays.push((layer, fids, era.from, era.until));
             }
         }
-        era_overlays.push((era_land, era.from, era.until));
     }
 
     for r in &part.rivers {
@@ -561,12 +665,11 @@ pub fn bridge_partition(
     }
 
     overlay_features(store, LayerKind::ScriptureClaims, &claim_fids, t0, None)?;
-    // The era windows apply in chronological order after the claims —
-    // the same overlay sequence the canon has always been built with,
-    // so intermediate snapshots (content-addressed, all retained)
-    // reproduce byte for byte.
-    for (fids, from, until) in &era_overlays {
-        overlay_features(store, LayerKind::ScriptureClaims, fids, *from, *until)?;
+    // The era windows apply in chronological order after the claims,
+    // each into its cohort's own layer (tribal cohorts into
+    // ScriptureClaims, polity cohorts into Territory).
+    for (layer, fids, from, until) in &era_overlays {
+        overlay_features(store, *layer, fids, *from, *until)?;
     }
     overlay_features(store, LayerKind::Water, &water_fids, t0, None)?;
 

@@ -110,26 +110,49 @@ mod compile_laws {
         vec![(lat0, lon0), (lat0, lon0 + d), (lat0 + d, lon0 + d), (lat0 + d, lon0)]
     }
 
-    /// Polity eras become Territory moments: the world changes exactly
-    /// at era boundaries, and after the last era the ground is clear.
+    /// Polity eras become Territory moments THROUGH THE ALGEBRA now:
+    /// PresenceBook derives the eras, the overlay lays each window,
+    /// and the world changes exactly at the standing edges — clear
+    /// ground after the last era.
     #[test]
     fn polity_eras_become_territory_moments() {
-        let rows = vec![
-            PolityRow {
-                id: "assyria".into(), name: "Assyria".into(),
-                from_year: -1900, to_year: -912,
-                rings: vec![ring(35.0, 42.0, 3.0)],
-                color_key: Some(1), transition_verses: vec![], fall_verses: vec![],
-            },
-            PolityRow {
-                id: "neo-assyria".into(), name: "Neo-Assyrian Empire".into(),
-                from_year: -911, to_year: -609,
-                rings: vec![ring(35.0, 42.0, 5.0)],
-                color_key: Some(1), transition_verses: vec!["2KI.15.19".into()], fall_verses: vec![],
-            },
-        ];
+        use map_canon::PresenceBook;
+        let mut book = PresenceBook::default();
+        book.declare("assyria@-1900", ts(-1900), Some(ts(-911))).unwrap();
+        book.declare("neo-assyria@-911", ts(-911), Some(ts(-608))).unwrap();
         let mut store = map_canon::CanonStore::default();
-        compile_polities(&mut store, &rows).expect("compiles");
+        let mk = |store: &mut map_canon::CanonStore, name: &str, d: f64| {
+            let ring_pts: Vec<map_types::UnitVec> = ring(35.0, 42.0, d)
+                .into_iter()
+                .map(|(lat, lon)| map_types::UnitVec::from_lat_lon_deg(lat, lon))
+                .collect();
+            let bid = store.insert_border(map_canon::Border(ring_pts));
+            store.insert_feature(Feature::Area(map_canon::Area {
+                entity: map_canon::EntityId("assyria".into()),
+                name: name.into(),
+                rings: [bid].into_iter().collect(),
+                holes: Default::default(),
+            }))
+        };
+        let old = mk(&mut store, "Assyria", 3.0);
+        let neo = mk(&mut store, "Neo-Assyrian Empire", 5.0);
+        for era in book.eras(ts(-1900)) {
+            let mut fids = std::collections::BTreeSet::new();
+            if !era.absent.contains("assyria@-1900") {
+                fids.insert(old);
+            }
+            if !era.absent.contains("neo-assyria@-911") {
+                fids.insert(neo);
+            }
+            crate::partition_bridge::overlay_features_for_law_span(
+                &mut store,
+                LayerKind::Territory,
+                &fids,
+                era.from,
+                era.until,
+            )
+            .unwrap();
+        }
         let world = &store.layers()[&LayerKind::Territory];
         let moments: Vec<_> = world.moments().keys().copied().collect();
         assert_eq!(moments, vec![ts(-1900), ts(-911), ts(-608)], "era edges, then clear ground");
@@ -350,8 +373,10 @@ mod waiver_laws {
 /// the world sums to 4π.
 #[test]
 fn plate_partition_face_census() {
+    // The plate core alone (no polity cohorts): the census law holds
+    // for the arrangement's heart independent of the bordering world.
     let (regions, polylines) =
-        crate::partition_bridge::gather_witnesses().expect("witnesses gather");
+        crate::partition_bridge::gather_witnesses(&[]).expect("witnesses gather");
     let p = map_partition::build(&regions, &polylines, &map_partition::PartitionConfig::default())
         .expect("plate partition builds");
     for (i, f) in p.faces.iter().enumerate() {
