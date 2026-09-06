@@ -4,11 +4,16 @@
 // Colors are [r, g, b, a].
 (
     boundaries: (
-        // invisible territorial strokes: the fills abut, plate-style
+        // invisible territorial strokes: the fills abut, plate-style —
+        // EXCEPT the honesty strokes. An Unknown border is a disclosed
+        // interpolation (a city-derived hull, a schematic vision) and
+        // must read as one even in the plate dress: muted warm ink,
+        // dashed. Hiding it made stand-in circuits look like confident
+        // borders.
         line:     (color: (0, 0, 0, 0), width: 0.8, pattern: solid),
         frontier: (color: (0, 0, 0, 0), width: 0.8, pattern: zonal),
         disputed: (color: (0, 0, 0, 0), width: 0.9, pattern: solid),
-        unknown:  (color: (0, 0, 0, 0), width: 0.7, pattern: dashed),
+        unknown:  (color: (120, 116, 105, 160), width: 0.9, pattern: dashed),
         way:      (color: (139, 46, 32, 255), width: 2.0, pattern: dashed),
     ),
     region: (237, 227, 205, 255),   // cream land
