@@ -646,4 +646,43 @@ mod scaling_laws {
             "a sub-tolerance territory survives a coarse query (got {names:?})"
         );
     }
+
+    /// The counterpart law: only a feature's IDENTITY holds the
+    /// never-erased protection. A feature with a resolvable ring
+    /// sheds its sub-resolution DETAIL rings and holes at a coarse
+    /// query — an ocean's thousands of speck islands once shipped
+    /// unsimplified at the coarsest zoom — and ships them all again
+    /// at a fine one.
+    #[test]
+    fn detail_below_the_resolvable_limit_stays_home() {
+        let mut store = CanonStore::default();
+        let mut ring = |pts: Vec<UnitVec>| store.insert_border(Border(pts));
+        let big = ring(dense_ring(30.0, 30.0, 8.0, 16));
+        let islet = ring(dense_ring(20.0, 50.0, 0.05, 8));
+        let pond = ring(dense_ring(33.0, 33.0, 0.05, 8));
+        let fid = store.insert_feature(Feature::Area(Area {
+            entity: EntityId("sea".into()),
+            name: "sea".into(),
+            rings: [big, islet].into(),
+            holes: [pond].into(),
+        }));
+        let sid = store.insert_snapshot(Snapshot { features: [fid].into() });
+        let mut world = World::default();
+        world.insert(TimePoint::year_only(Year::new(-4004).unwrap()), sid).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, world);
+        let p = provider(store);
+
+        let sea_of = |lod: f64| {
+            let scene = p.render(&q(lod, None)).unwrap();
+            let r = scene
+                .regions
+                .iter()
+                .find(|r| r.entity.as_deref() == Some("sea"))
+                .expect("the sea renders")
+                .clone();
+            (r.outer.len(), r.holes.len())
+        };
+        assert_eq!(sea_of(0.0), (2, 1), "fine: every ring ships");
+        assert_eq!(sea_of(0.05), (1, 0), "coarse: identity ships, specks stay home");
+    }
 }

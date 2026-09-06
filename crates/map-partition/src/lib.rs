@@ -416,6 +416,59 @@ impl Partition {
             .collect()
     }
 
+    /// THE UNION OF A FACE SET, AS ITS BOUNDARY CYCLES. The interior
+    /// seams of the union do not exist in the result — they are
+    /// artifacts of the whole-frame arrangement, not geometry of any
+    /// one era's territory. Pure topology, no float comparisons: a
+    /// half-edge lies on the union's boundary iff its face is in the
+    /// set and its twin's is not; cycles chain by walking `next` and
+    /// hopping `twin(·).next` to rotate across interior seams at each
+    /// vertex. Orientation is inherited from the face cycles (interior
+    /// stays on the same side), so the caller's area-sign split into
+    /// outer rings and holes carries over, and the area law holds:
+    /// Σ cycle_area(dissolve(S)) = Σ area(f in S).
+    pub fn dissolve_rings(&self, set: &std::collections::BTreeSet<FaceId>) -> Vec<Vec<UnitVec>> {
+        let on_boundary = |h: HalfId| {
+            let hh = &self.halves[h];
+            set.contains(&hh.face) && !set.contains(&self.halves[hh.twin].face)
+        };
+        let mut seen = vec![false; self.halves.len()];
+        let mut out = Vec::new();
+        for &f in set {
+            for cy in &self.faces[f].cycles {
+                for &h0 in cy {
+                    if !on_boundary(h0) || seen[h0] {
+                        continue;
+                    }
+                    let mut ring = Vec::new();
+                    let mut h = h0;
+                    // A cycle can visit each half at most once; more
+                    // steps means the half-edge laws are broken, and
+                    // corruption must be loud, not infinite.
+                    let mut fuel = self.halves.len() + 1;
+                    loop {
+                        seen[h] = true;
+                        ring.push(self.vertices[self.halves[h].origin]);
+                        let mut n = self.halves[h].next;
+                        while !on_boundary(n) {
+                            n = self.halves[self.halves[n].twin].next;
+                            fuel -= 1;
+                            assert!(fuel > 0, "dissolve: rotation does not close");
+                        }
+                        h = n;
+                        fuel -= 1;
+                        assert!(fuel > 0, "dissolve: cycle does not close");
+                        if h == h0 {
+                            break;
+                        }
+                    }
+                    out.push(ring);
+                }
+            }
+        }
+        out
+    }
+
     /// Every structural law, checked. Empty = lawful.
     pub fn validate(&self) -> Vec<String> {
         let mut out = Vec::new();

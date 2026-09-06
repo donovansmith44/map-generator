@@ -6,7 +6,7 @@ use std::f64::consts::PI;
 use map_types::UnitVec;
 
 use crate::build::{build, build_with, WitnessBorder, WitnessPolyline, WitnessRegion, WitnessSeed};
-use crate::{cycle_area, tri_area, winding, FaceKind, Partition, PartitionConfig, RiverSystem, Watershed};
+use crate::{compensated_sum, cycle_area, tri_area, winding, FaceKind, Partition, PartitionConfig, RiverSystem, Watershed};
 
 fn uv(lat: f64, lon: f64) -> UnitVec {
     UnitVec::from_lat_lon_deg(lat, lon)
@@ -573,3 +573,116 @@ fn watershed_classification_is_typed_and_measured() {
     }
 }
 
+
+// ------------------------------------------------- the dissolve laws
+
+/// THE BOUNDARY CENSUS: the dissolve law stated through the
+/// partition's own structure. An edge bounds the union iff EXACTLY
+/// one of its sides lies in the set; the dissolved cycles must spend
+/// one segment per boundary edge — no seam walked, none skipped.
+fn assert_boundary_census(p: &Partition, set: &std::collections::BTreeSet<usize>, rings: &[Vec<UnitVec>]) {
+    let boundary_edges = p
+        .edges
+        .iter()
+        .filter(|e| {
+            set.contains(&p.halves[e.half_ab].face) != set.contains(&p.halves[e.half_ba].face)
+        })
+        .count();
+    let segments: usize = rings.iter().map(|r| r.len()).sum();
+    assert_eq!(segments, boundary_edges, "one segment per boundary edge");
+}
+
+/// A singleton dissolve is the face itself: same cycles, same area.
+#[test]
+fn dissolve_of_one_face_is_the_face() {
+    let p = build(
+        &[region("judah", FaceKind::LandClaim, vec![square(10.0, 10.0, 15.0, 15.0)])],
+        &[],
+        &cfg(),
+    )
+    .unwrap();
+    let (fi, face) = p
+        .faces
+        .iter()
+        .enumerate()
+        .find(|(_, f)| f.kind == FaceKind::LandClaim)
+        .expect("the claim");
+    let set: std::collections::BTreeSet<usize> = [fi].into();
+    let rings = p.dissolve_rings(&set);
+    assert_eq!(rings.len(), face.cycles.len());
+    let a = compensated_sum(rings.iter().map(|r| cycle_area(r)));
+    assert!((a - face.area).abs() < 1e-12, "area preserved: {a} vs {}", face.area);
+    assert_boundary_census(&p, &set, &rings);
+}
+
+/// Two faces sharing a border dissolve into ONE cycle; the interior
+/// seam is gone, and the union's area is the sum of the parts.
+#[test]
+fn dissolve_erases_the_interior_seam() {
+    let p = build(
+        &[
+            region("west", FaceKind::LandClaim, vec![square(10.0, 10.0, 15.0, 15.0)]),
+            region("east", FaceKind::LandClaim, vec![square(10.0, 15.0, 15.0, 20.0)]),
+        ],
+        &[],
+        &cfg(),
+    )
+    .unwrap();
+    let set: std::collections::BTreeSet<usize> = p
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.kind == FaceKind::LandClaim)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(set.len(), 2);
+    let rings = p.dissolve_rings(&set);
+    assert_eq!(rings.len(), 1, "one outer boundary, no seam: {}", rings.len());
+    let want = compensated_sum(set.iter().map(|&i| p.faces[i].area));
+    let got = compensated_sum(rings.iter().map(|r| cycle_area(r)));
+    assert!((got - want).abs() < 1e-12, "area preserved: {got} vs {want}");
+    assert_boundary_census(&p, &set, &rings);
+}
+
+/// Dissolving a face-with-a-hole set keeps the hole: an annulus made
+/// of a big claim minus an inner lake dissolves to outer + inner
+/// cycles with opposite area signs, and the area law still holds.
+#[test]
+fn dissolve_keeps_holes_and_area() {
+    let p = build(
+        &[
+            region("land", FaceKind::LandClaim, vec![square(10.0, 10.0, 20.0, 20.0)]),
+            region("lake", FaceKind::Lake, vec![square(13.0, 13.0, 17.0, 17.0)]),
+        ],
+        &[],
+        &cfg(),
+    )
+    .unwrap();
+    // the land face alone (water excluded): its dissolve is itself,
+    // outer + hole; then land ∪ lake dissolves to the outer square only.
+    let land: std::collections::BTreeSet<usize> = p
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.kind == FaceKind::LandClaim)
+        .map(|(i, _)| i)
+        .collect();
+    let both: std::collections::BTreeSet<usize> = p
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.kind != FaceKind::Background)
+        .map(|(i, _)| i)
+        .collect();
+    let land_rings = p.dissolve_rings(&land);
+    assert_eq!(land_rings.len(), 2, "outer + hole");
+    let signs: Vec<bool> = land_rings.iter().map(|r| cycle_area(r) > 0.0).collect();
+    assert!(signs.contains(&true) && signs.contains(&false), "opposite orientations");
+    assert_boundary_census(&p, &land, &land_rings);
+    let both_rings = p.dissolve_rings(&both);
+    assert_eq!(both_rings.len(), 1, "the lake seam dissolves away");
+    let want = compensated_sum(both.iter().map(|&i| p.faces[i].area));
+    let got = compensated_sum(both_rings.iter().map(|r| cycle_area(r)));
+    assert!((got - want).abs() < 1e-12);
+    assert_boundary_census(&p, &both, &both_rings);
+}

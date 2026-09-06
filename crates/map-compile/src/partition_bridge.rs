@@ -241,7 +241,20 @@ fn bundle_faces(
     part: &map_partition::Partition,
     absent: &BTreeSet<String>,
 ) -> std::collections::BTreeMap<String, Bundle> {
-    let mut bundles: std::collections::BTreeMap<String, Bundle> =
+    // Pass 1: gather each entity's face SET. Pass 2: DISSOLVE the set
+    // into its boundary cycles (map_partition::dissolve_rings). The
+    // whole-frame arrangement dices every territory with every other
+    // era's borders — the sea alone once arrived as ~6,800 face rings
+    // — but those interior seams are artifacts of the arrangement,
+    // not geometry of the era's territory. The union's geometry IS
+    // its boundary; the renderer draws cycles, not dice.
+    struct Gather {
+        kind: FaceKind,
+        biggest: f64,
+        faces: BTreeSet<usize>,
+        note: String,
+    }
+    let mut gathers: std::collections::BTreeMap<String, Gather> =
         std::collections::BTreeMap::new();
     for (fi, face) in part.faces.iter().enumerate() {
         if face.kind == FaceKind::Background {
@@ -250,33 +263,44 @@ fn bundle_faces(
         let Some(who) = face.claims.iter().find(|c| !absent.contains(*c)).cloned() else {
             continue; // every claimant is yet to come: unnamed ground
         };
-        let rings_pts = part.face_rings(fi);
-        let entry = bundles.entry(who).or_insert_with(|| Bundle {
+        let entry = gathers.entry(who).or_insert_with(|| Gather {
             kind: face.kind.clone(),
             biggest: face.area,
-            rings: BTreeSet::new(),
-            holes: BTreeSet::new(),
+            faces: BTreeSet::new(),
             note: String::new(),
         });
         if face.area > entry.biggest {
             entry.biggest = face.area;
             entry.kind = face.kind.clone();
         }
-        for ring in &rings_pts {
-            if ring.len() < 3 {
-                continue;
-            }
-            let bid = store.insert_border(Border(ring.clone()));
-            if cycle_area(ring) > 0.0 {
-                entry.rings.insert(bid);
-            } else {
-                entry.holes.insert(bid);
-            }
-        }
+        entry.faces.insert(fi);
         entry.note.push_str(&format!(
             "face {fi}: claims {:?} conflicts {:?} area {:.3e} sr; ",
             face.claims, face.conflicts, face.area
         ));
+    }
+    let mut bundles: std::collections::BTreeMap<String, Bundle> =
+        std::collections::BTreeMap::new();
+    for (who, g) in gathers {
+        let mut bundle = Bundle {
+            kind: g.kind,
+            biggest: g.biggest,
+            rings: BTreeSet::new(),
+            holes: BTreeSet::new(),
+            note: g.note,
+        };
+        for ring in part.dissolve_rings(&g.faces) {
+            if ring.len() < 3 {
+                continue;
+            }
+            let bid = store.insert_border(Border(ring.clone()));
+            if cycle_area(&ring) > 0.0 {
+                bundle.rings.insert(bid);
+            } else {
+                bundle.holes.insert(bid);
+            }
+        }
+        bundles.insert(who, bundle);
     }
     bundles
 }

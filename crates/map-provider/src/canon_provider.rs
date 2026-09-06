@@ -67,6 +67,15 @@ pub fn rid_of(entity: &EntityId) -> RegionId {
     RegionId(ContentHash(hash64(&format!("entity:{}", entity.0))))
 }
 
+/// The verdict of fidelity on one ring — the two outcomes an LOD
+/// tolerance can hand it, as a type, so no call site can confuse
+/// "thinned" with "unresolvable". A below-limit ring carries its
+/// unsimplified geometry; only a feature's identity may ship it.
+enum RingFidelity {
+    Survives(Ring),
+    BelowLimit(Ring),
+}
+
 fn bid_of(entity: &EntityId) -> BoundaryId {
     BoundaryId(ContentHash(hash64(&format!("entity:{}", entity.0))))
 }
@@ -221,17 +230,19 @@ impl CanonProvider {
     /// select ∘ SIMPLIFY ∘ style — the stage the canon provider had
     /// dropped: geometry leaves here at the query's level of detail,
     /// and a border whose cap misses the viewport never leaves at all.
-    fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Ring> {
+    /// The verdict is TYPED: a ring either SURVIVES the tolerance or
+    /// falls BELOW the resolvable limit. A below-limit ring still
+    /// carries its unsimplified geometry — whether it ships is the
+    /// FEATURE's question (identity is kept, detail is not), answered
+    /// where the feature is assembled, never here per-ring.
+    fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<RingFidelity> {
         if self.border_culled(id, q) {
             return None;
         }
         let b = self.store.borders().get(&id)?;
-        // fidelity may thin a ring, never erase it: a ring the
-        // tolerance would collapse ships unsimplified instead, so a
-        // small territory is present at every level of detail
         match Ring::new(map_types::simplify_polyline(&b.0, q.lod)) {
-            Ok(r) => Some(r),
-            Err(_) => Ring::new(b.0.clone()).ok(),
+            Ok(r) => Some(RingFidelity::Survives(r)),
+            Err(_) => Ring::new(b.0.clone()).ok().map(RingFidelity::BelowLimit),
         }
     }
 
@@ -298,15 +309,39 @@ impl CanonProvider {
     ) {
         let _ = t;
         let sources = self.sources_of(fid);
+        // THE IDENTITY LAW, sharpened: fidelity may thin a feature,
+        // never erase it — but only the feature's IDENTITY holds that
+        // protection. If every outer ring falls below the resolvable
+        // limit, the widest one (by its measured cap) ships
+        // unsimplified: a small territory is present at every level
+        // of detail. When any outer ring survives, the collapsed rest
+        // are sub-resolution DETAIL — an ocean's thousands of speck
+        // islands once shipped unsimplified at the coarsest zoom this
+        // way — and the half-pixel law governs them: they do not ship.
         let mut outer = Vec::new();
-        let mut holes = Vec::new();
+        let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
         for r in &a.rings {
-            if let Some(ring) = self.ring_points(*r, q) {
+            match self.ring_points(*r, q) {
+                Some(RingFidelity::Survives(ring)) => outer.push(ring),
+                Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
+                None => {}
+            }
+        }
+        if outer.is_empty() {
+            let widest = below.into_iter().max_by(|(a_id, _), (b_id, _)| {
+                let ra = self.border_cap.get(a_id).map(|c| c.1).unwrap_or(0.0);
+                let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
+                ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Some((_, ring)) = widest {
                 outer.push(ring);
             }
         }
+        // A hole can never carry identity — its parent ring is the
+        // feature's presence — so a below-limit hole is always detail.
+        let mut holes = Vec::new();
         for h in &a.holes {
-            if let Some(ring) = self.ring_points(*h, q) {
+            if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, q) {
                 holes.push(ring);
             }
         }
@@ -776,7 +811,12 @@ impl MapProvider for CanonProvider {
                             if let Feature::Area(a) = f {
                                 let tint = mix(ramp.oldest, ramp.newest, toward);
                                 for r in &a.rings {
-                                    if let Some(ring) = self.ring_points(*r, q) {
+                                    // an age-tinted outline of a ring
+                                    // below the resolvable limit says
+                                    // nothing: detail, not identity
+                                    if let Some(RingFidelity::Survives(ring)) =
+                                        self.ring_points(*r, q)
+                                    {
                                         scene.boundaries.push(StyledBoundary {
                                             boundary: bid_of(&a.entity),
                                             pts: ring.points().to_vec(),
