@@ -1,0 +1,18 @@
+{
+    "id": "ab_haran",
+    "label": "Sojourn in Haran; the call of Abram",
+    "places": [
+        {
+            "id": "haran"
+        }
+    ],
+    "verses": [
+        "GEN.11.31",
+        "GEN.12.1",
+        "GEN.12.4"
+    ],
+    "when": {
+        "from_year": -2092,
+        "to_year": -2091
+    }
+}

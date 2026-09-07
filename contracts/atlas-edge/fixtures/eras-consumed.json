@@ -1,0 +1,62 @@
+[
+    {
+        "from_year": -4004,
+        "id": "primeval",
+        "name": "Primeval",
+        "to_year": -2167
+    },
+    {
+        "from_year": -2166,
+        "id": "patriarchs",
+        "name": "Patriarchs",
+        "to_year": -1877
+    },
+    {
+        "from_year": -1876,
+        "id": "egypt-exodus",
+        "name": "Egypt & Exodus",
+        "to_year": -1407
+    },
+    {
+        "from_year": -1406,
+        "id": "conquest-judges",
+        "name": "Conquest & Judges",
+        "to_year": -1051
+    },
+    {
+        "from_year": -1050,
+        "id": "united-kingdom",
+        "name": "United Kingdom",
+        "to_year": -932
+    },
+    {
+        "from_year": -931,
+        "id": "divided-kingdom",
+        "name": "Divided Kingdom",
+        "to_year": -587
+    },
+    {
+        "from_year": -586,
+        "id": "exile",
+        "name": "Exile",
+        "to_year": -539
+    },
+    {
+        "from_year": -538,
+        "id": "return",
+        "name": "Return & Second Temple",
+        "to_year": -6
+    },
+    {
+        "from_year": -5,
+        "id": "gospels",
+        "name": "Gospels",
+        "to_year": 29
+    },
+    {
+        "from_year": 30,
+        "id": "early-church",
+        "name": "Early Church",
+        "to_year": 100
+    }
+]
