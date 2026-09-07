@@ -20,6 +20,7 @@
 - Port **8080** belongs to the atlas API (CDC provider verification target). Never bind to it.
 - Stage 0 makes NO visual change; the golden gate (`node crates/map-viewer/tests/golden.js --check`, run from `C:\Users\donov\.claude\jobs\c6946bce\tmp` so playwright-core resolves) must still hold at the end.
 - Diagnosis only: scenarios that fail against today's server are RECORDED, not fixed, in this stage. `@target`-tagged scenarios are *expected* red.
+- **Whole-body assertions (owner decree):** a scenario pins the ENTIRE answer — fixture equality for our API (don't-cares masked explicitly in the scenario text), the entire CONSUMED PROJECTION for the atlas edge. Existential poke-assertions ("some entry equals…", "is an array", "has at least N") are forbidden: a check satisfiable by the failure mode isn't a check. Relational algebra scenarios (A equals B, subset) compare whole bodies against each other.
 - Haskell commands below run from `contracts/runner/` unless stated. If `ghc`/`cabal` are missing: `ghcup install ghc 9.6.7 && ghcup install cabal latest && ghcup set ghc 9.6.7` (ghcup itself from https://www.haskell.org/ghcup/ — its Windows installer works in Git Bash).
 
 ---
@@ -1537,26 +1538,29 @@ git commit -m "@property holes: registry-typed, deterministic seeds, failing bin
 `contracts/map-api/meta/contract.feature`:
 ```gherkin
 Feature: the contract endpoint — a server declares what it speaks
-  A consumer refuses version skew instead of discovering it.
+  A consumer refuses version skew instead of discovering it. The whole
+  body is pinned; the graph pin varies with the compiled canon by
+  design, so it is masked HERE, visibly, and shape-checked instead.
 
-  Scenario: the server declares its contract version
+  Scenario: the contract declaration is exactly its blessed body
     When I GET /api/contract
-    Then the response field version equals 0.1.0
-
-  Scenario: the contract carries the graph pin
-    When I GET /api/contract
-    Then the response field graphPin matches sixteen hex characters
+    Then the response equals fixture "contract" masking graphPin as sixteen hex characters
 ```
 
 `contracts/map-api/fact/subjects.feature`:
 ```gherkin
 Feature: subjects — what can be asked about at a moment
-  The picker's feed: enumeration precedes every question.
+  The picker's feed: enumeration precedes every question. The WHOLE
+  list is the answer — a subjects feed that also carried a leaked era's
+  ghost would pass any existential poke; it cannot pass the fixture.
 
-  Scenario: the twelve tribes era lists Judah
+  Scenario: the twelve tribes era, whole
     When I GET /api/subjects?year=-1405
-    Then the response is a JSON array
-    And some entry field label equals Judah
+    Then the response equals fixture "subjects-1405"
+
+  Scenario: the tetrarchies era, whole
+    When I GET /api/subjects?year=59
+    Then the response equals fixture "subjects-59"
 
   @property
   Scenario: subjects are deterministic at any year
@@ -1583,18 +1587,20 @@ Feature: changes — the narrative between two instants
 ```gherkin
 Feature: the census — every disposition, queryable
   The instrument whose absence let a phantom state ship: for any year,
-  every standing feature's tenure in one table. A policy change is a
-  census diff read by a person, before any pixel moves.
+  every standing feature's tenure in one table, pinned WHOLE. The
+  promise-as-claim at 1050 BC and Judea-as-held at AD 59 live inside
+  these fixtures — and so does everything else standing in those
+  years, which is the point: a leaked feature fails the fixture.
 
-  Scenario: the promise is a claim at 1050 BC
+  Scenario: the whole census at 1050 BC
     When I GET /api/census?year=-1050
-    Then some entry field name equals the land promised (NUM 34) with field tenure equal to claimed
+    Then the response equals fixture "census-1050"
 
-  Scenario: Judea holds ground at AD 59
+  Scenario: the whole census at AD 59
     When I GET /api/census?year=59
-    Then some entry field name equals Judea with field tenure equal to held
+    Then the response equals fixture "census-59"
 
-  Scenario: the census is the whole world, not a sample
+  Scenario: the whole census at the conquest
     When I GET /api/census?year=-1405
     Then the response equals fixture "census-1405"
 
@@ -1605,36 +1611,56 @@ Feature: the census — every disposition, queryable
     Then first equals second
 ```
 
-- [ ] **Step 2: Add the three missing generic steps these features use**
+- [ ] **Step 2: Add the two missing generic steps (GET-as binding; whole-body-with-mask)**
+
+WHY these and only these: the whole-body law forbids existential pokes, so the
+fact tier needs exactly (a) binding a response under a name and (b) fixture
+equality where declared don't-care fields are masked — with the mask VISIBLE
+in the scenario text and shape-checked, never silently dropped.
 
 Failing tests first (append to `Spec.hs`):
 ```haskell
   describe "fact-tier steps" $ do
-    it "some-entry-field-equals finds a row" $ do
-      let arr = "[{\"label\":\"Judah\"},{\"label\":\"Asher\"}]"
-          fake _ = pure (Right (arr, fromJust (A.decodeStrict arr)))
-          w = World "http://x" fake "" mempty False
-      Just get <- pure (firstMatch When "I GET /api/subjects?year=-1405")
-      Right w1 <- get w
-      Just chk <- pure (firstMatch Then "some entry field label equals Judah")
-      r <- chk w1
-      r `shouldSatisfy` isRight
-    it "matches-hex asserts the shape" $ do
-      let o = "{\"graphPin\":\"0123456789abcdef\"}"
-          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
-          w = World "http://x" fake "" mempty False
-      Just get <- pure (firstMatch When "I GET /api/contract")
-      Right w1 <- get w
-      Just chk <- pure (firstMatch Then "the response field graphPin matches sixteen hex characters")
-      r <- chk w1
-      r `shouldSatisfy` isRight
     it "GET-as binds under a name" $ do
       let fake _ = pure (Right ("[]", fromJust (A.decodeStrict "[]")))
           w = World "http://x" fake "" mempty False
       Just get <- pure (firstMatch When "I GET /api/subjects?year=-1405 as first")
       Right w1 <- get w
       Map.member "first" (bound w1) `shouldBe` True
+    it "masked fixture equality: body pinned whole, mask shape-checked" $ do
+      let o = "{\"version\":\"0.1.0\",\"graphPin\":\"0123456789abcdef\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = World "http://x" fake "test/fixtures" mempty False
+      -- test/fixtures/contract.json holds {"version":"0.1.0","graphPin":"MASKED"}
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "a masked field with the WRONG shape still fails" $ do
+      let o = "{\"version\":\"0.1.0\",\"graphPin\":\"nope\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = World "http://x" fake "test/fixtures" mempty False
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      r `shouldSatisfy` isLeft
+    it "an unmasked difference anywhere in the body fails" $ do
+      let o = "{\"version\":\"9.9.9\",\"graphPin\":\"0123456789abcdef\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = World "http://x" fake "test/fixtures" mempty False
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      r `shouldSatisfy` isLeft
 ```
+(also create `contracts/runner/test/fixtures/contract.json` with exactly
+`{"version":"0.1.0","graphPin":"MASKED"}`.)
 
 Then implement, appending to `allSteps` in `Steps.hs`:
 ```haskell
@@ -1643,40 +1669,42 @@ Then implement, appending to `allSteps` in `Steps.hs`:
       \(FixtureRefFreeText path, BindName n) w -> do
         r <- getUrl (baseUrl w <> path) w
         pure (r >>= bindLast n)
-  , mkStep Then (lit "some entry field " *> ((,) <$> capUntil @FixtureRefFreeText " equals "
-                                                 <*> capRest @FixtureRefFreeText)) $
-      \(FixtureRefFreeText k, FixtureRefFreeText v) w ->
-        pure (someEntry w k v Nothing)
-  , mkStep Then (lit "some entry field " *> ((,,,) <$> capUntil @FixtureRefFreeText " equals "
-                                                   <*> capUntil @FixtureRefFreeText " with field "
-                                                   <*> capUntil @FixtureRefFreeText " equal to "
-                                                   <*> capRest @FixtureRefFreeText)) $
-      \(FixtureRefFreeText k, FixtureRefFreeText v, FixtureRefFreeText k2, FixtureRefFreeText v2) w ->
-        pure (someEntry w k v (Just (k2, v2)))
-  , mkStep Then (lit "the response field " *> (capUntil @FixtureRefFreeText " matches sixteen hex characters")) $
-      \(FixtureRefFreeText k) w ->
-        pure $ case Map.lookup "_last" (bound w) of
-          Nothing -> Left "no response"
-          Just (_, v) -> case field k v of
-            Right (String s)
-              | T.length s == 16 && T.all (`elem` ("0123456789abcdef" :: String)) s -> Right w
-              | otherwise -> Left (k <> " is not 16 hex chars: " <> s)
-            other -> Left (T.pack (show (() <$ other)))
+  , mkStep Then (lit "the response equals fixture " *> ((,,) <$> capUntil @FixtureRef " masking "
+                                                             <*> capUntil @FixtureRefFreeText " as "
+                                                             <*> capRest @MaskShape)) $
+      \(FixtureRef f, FixtureRefFreeText masked, shape) w -> do
+        fx <- loadFixture w f
+        pure $ do
+          expected <- fx
+          (_, actual) <- maybe (Left "no response") Right (Map.lookup "_last" (bound w))
+          -- 1. the masked field must exist and satisfy its declared shape
+          mv <- field masked actual
+          checkShape shape masked mv
+          -- 2. the WHOLE remaining body must equal the fixture, where the
+          --    fixture writes the literal string "MASKED" at the masked key
+          let actual' = setField masked (String "MASKED") actual
+          if actual' == expected then Right w
+          else Left ("body differs from fixture " <> f <> " outside the mask")
 ```
-with the helper (bottom of `Steps.hs`):
+with, at the bottom of `Steps.hs`:
 ```haskell
-someEntry :: World -> Text -> Text -> Maybe (Text, Text) -> Either Text World
-someEntry w k v extra = case Map.lookup "_last" (bound w) of
-  Nothing -> Left "no response"
-  Just (_, Array rows) ->
-    if any hit (V.toList rows) then Right w
-    else Left ("no entry with " <> k <> " = " <> v)
-  Just _ -> Left "response is not an array"
-  where
-    hit row = fieldIs row k v && maybe True (\(k2, v2) -> fieldIs row k2 v2) extra
-    fieldIs row key val = case field key row of
-      Right (String s) -> s == val
-      _ -> False
+data MaskShape = SixteenHex deriving (Eq, Show)
+instance FromCapture MaskShape where
+  capName _ = "mask-shape"
+  universe _ = Enumerated ["sixteen hex characters"]
+  renderCap SixteenHex = "sixteen hex characters"
+  parseCap t | T.strip t == "sixteen hex characters" = Right SixteenHex
+             | otherwise = Left "unknown mask shape (shapes: sixteen hex characters)"
+
+checkShape :: MaskShape -> Text -> Value -> Either Text ()
+checkShape SixteenHex k (String s)
+  | T.length s == 16 && T.all (`elem` ("0123456789abcdef" :: String)) s = Right ()
+  | otherwise = Left (k <> " is not 16 hex chars: " <> s)
+checkShape SixteenHex k _ = Left (k <> " is not a string")
+
+setField :: Text -> Value -> Value -> Value
+setField k v (Object o) = Object (KM.insert (K.fromText k) v o)
+setField _ _ other = other
 ```
 
 - [ ] **Step 3: Prove the suite is total and undrifted**
@@ -1693,7 +1721,7 @@ Expected: `check` reports totality (fix any orphan by adjusting feature wording 
 
 ```bash
 git add contracts/map-api contracts/runner
-git commit -m "map-api v0.1 fact+meta features; some-entry and hex steps; vocab stamped"
+git commit -m "map-api v0.1 fact+meta features: whole bodies pinned, masks declared in-scenario"
 ```
 
 ---
@@ -1718,9 +1746,13 @@ Feature: the scene — a picture composed from pieces
   rest are always present — a wart this contract records rather than
   hides, retired when the pieces parameter lands.
 
-  Scenario: a scene with no labels is still a scene
-    When I render pieces ground, water, fills, borders, journeys at year -1405 in style canaan as noLabels
-    Then noLabels's labels are empty
+  Scenario: the twelve tribes scene, whole
+    When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in style canaan
+    Then the response equals fixture "scene-1405-full"
+
+  Scenario: a scene with no labels is still a scene — pinned whole
+    When I render pieces ground, water, fills, borders, journeys at year -1405 in style canaan
+    Then the response equals fixture "scene-1405-nolabels"
 
   Scenario: omission is subtractive, not destructive
     When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in style canaan as full
@@ -1873,124 +1905,154 @@ git commit -m "scene algebra features: v0.1 truths green-by-design, target laws 
 - Consumes: the generic steps (Tasks 5/10) plus two new array-shape steps below.
 - Produces: the consumer-driven contract for everything `map-compile/src/vendor.rs` parsers require — nothing more (a CDC states the consumer's needs, not the provider's abilities).
 
-- [ ] **Step 1: Write the features exactly**
+- [ ] **Step 1: Write the features exactly — whole-body over the CONSUMED PROJECTION**
+
+The CDC principle under the whole-body law: we pin the ENTIRE projection of
+their response onto the fields our parsers read — every value included — and
+nothing outside it. They may add fields or reorder freely; they may not move
+one coordinate we consume without the fixture saying so.
 
 `polities.feature`:
 ```gherkin
 Feature: polities — the eras of governed ground we vendor
-  Our parse_polities requires: an object with a polities array; each row
-  carries id, name, from, to (integers, from <= to), and rings — arrays
-  of at least three [lat, lon] pairs. This is everything we read.
+  Our parse_polities reads: per row, id, name, from, to, and rings.
+  The consumed projection of the whole book is pinned — all rows, all
+  coordinates. A silently moved border fails here before it can move
+  a pixel of ours.
 
-  Scenario: the polity book has the rows our compiler needs
+  Scenario: the whole polity book, as we consume it
     When I GET /api/polities?from=-4004&to=2000
-    Then the response field polities is an array of at least 10 entries
-    And every polities entry has fields id, name, from, to, rings
-
-  Scenario: assyria is present with its era ordered
-    When I GET /api/polities?from=-4004&to=2000
-    Then some polities entry field id equals assyria
+    Then the consumed projection polities equals fixture "polities-consumed"
 ```
 
 `narratives.feature`:
 ```gherkin
 Feature: narratives — the journeys we vendor
-  Our parse_narratives requires: id, name, color, and ordered legs.
+  Our parse_narratives reads: per row, id, name, color, and ordered legs.
 
-  Scenario: narratives carry ordered legs
+  Scenario: the whole narrative book, as we consume it
     When I GET /api/narratives
-    Then the response field narratives is an array of at least 5 entries
-    And every narratives entry has fields id, name, color, legs
+    Then the consumed projection narratives equals fixture "narratives-consumed"
 ```
 
 `events.feature`:
 ```gherkin
 Feature: events — a leg's when, where, and why
-  Our parse_event requires: id; optional when carrying from_year and
-  to_year; places; verses.
+  Our parse_event reads: id; optional when (from_year, to_year);
+  places; verses.
 
-  Scenario: a known leg event parses whole
+  Scenario: a known leg event, as we consume it
     When I GET /api/event/ab_haran
-    Then the response field id equals ab_haran
-    And the response equals fixture "event-ab-haran"
+    Then the consumed projection event equals fixture "event-ab-haran-consumed"
 ```
 
 `eras.feature`:
 ```gherkin
 Feature: eras — the named periods that resolve standings
-  Our parse_eras requires id and from_year per era; era ids are how
+  Our parse_eras reads id and from_year per era; era ids are how
   vendored data declares WHO STANDS WHEN without hardcoded years.
 
-  Scenario: the era table carries the patriarchs
+  Scenario: the whole era table, as we consume it
     When I GET /api/eras
-    Then the response field eras is an array of at least 5 entries
-    And some eras entry field id equals patriarchs
+    Then the consumed projection eras equals fixture "eras-consumed"
 ```
 
 `landmarks.feature`:
 ```gherkin
 Feature: landmarks — named waters and places we label by
-  Our parse_landmarks requires name and kind per row.
+  Our parse_landmarks reads name and kind per row.
 
-  Scenario: the Sea of Galilee is a water landmark
+  Scenario: the whole landmark list, as we consume it
     When I GET /api/landmarks
-    Then some landmarks entry field name equals Sea of Galilee
+    Then the consumed projection landmarks equals fixture "landmarks-consumed"
 ```
 
 `land-mask.feature`:
 ```gherkin
 Feature: the land mask — the coastline our partition builds on
-  Our parse_land_mask requires non-empty rings with at least ten points
-  in the first — a mask that thin is not a coastline.
+  Our parse_land_mask reads the rings, whole.
 
-  Scenario: the mask is substantial
+  Scenario: the whole mask, as we consume it
     When I GET /api/land-mask
-    Then the response field rings is an array of at least 1 entries
+    Then the consumed projection land-mask equals fixture "land-mask-consumed"
 ```
 
-- [ ] **Step 2: Add the two nested-array steps (test-first, pure transports)**
+- [ ] **Step 2: Add the projection step and the typed projection registry (test-first, pure transports)**
 
-Tests in the Task-10 style, then in `Steps.hs`:
+A PROJECTION is a declared field-tree: applied to their response, it keeps
+exactly the consumed fields (recursively, through arrays) and drops the rest.
+The projected value is then compared WHOLE against the fixture. Failing test
+first (Task-10 style, pure transport): project a two-field-plus-extras object
+through the `eras` projection and assert equality with the filtered fixture;
+a second test asserts a CHANGED consumed value fails; a third asserts an
+ADDED unconsumed field still passes.
+
+In `Steps.hs`:
 ```haskell
-  , mkStep Then (lit "the response field " *> ((,) <$> capUntil @FixtureRefFreeText " is an array of at least "
-                                                   <*> (capUntil @CountCap " entries"))) $
-      \(FixtureRefFreeText k, CountCap n) w ->
-        pure $ case (field k =<< lastV w) of
-          Right (Array a) | V.length a >= n -> Right w
-          Right (Array a) -> Left (k <> " has " <> tshow (V.length a) <> " entries, wanted >= " <> tshow n)
-          other -> Left (T.pack (show (() <$ other)))
-  , mkStep Then (lit "every " *> ((,) <$> capUntil @FixtureRefFreeText " entry has fields "
-                                      <*> capRest @FixtureRefFreeText)) $
-      \(FixtureRefFreeText k, FixtureRefFreeText fieldsCsv) w ->
-        pure $ case (field k =<< lastV w) of
-          Right (Array a) ->
-            let wanted = map T.strip (T.splitOn "," fieldsCsv)
-                missing row = [ f | f <- wanted, Left _ <- [field f row] ]
-                bad = [ m | row <- V.toList a, let m = missing row, not (null m) ]
-            in if null bad then Right w
-               else Left ("entries missing fields: " <> T.pack (show (take 3 bad)))
-          other -> Left (T.pack (show (() <$ other)))
-  , mkStep Then (lit "some " *> ((,,) <$> capUntil @FixtureRefFreeText " entry field "
-                                      <*> capUntil @FixtureRefFreeText " equals "
-                                      <*> capRest @FixtureRefFreeText)) $
-      \(FixtureRefFreeText arr, FixtureRefFreeText k, FixtureRefFreeText v) w ->
-        pure $ case (field arr =<< lastV w) of
-          Right rows@(Array _) ->
-            someEntryIn rows k v
-          other -> Left (T.pack (show (() <$ other)))
+-- WHAT WE CONSUME, as data — one entry per atlas endpoint, mirroring
+-- vendor.rs's parsers field for field. Changing a parser without
+-- changing its projection here (and re-blessing) fails the CDC suite:
+-- the contract and the consumer cannot drift apart.
+data Proj = Keep | Fields [(Text, Proj)] | Each Proj
+
+projections :: Map Text Proj
+projections = Map.fromList
+  [ ("polities",  Fields [("polities", Each (Fields
+                    [("id", Keep), ("name", Keep), ("from", Keep), ("to", Keep), ("rings", Keep)]))])
+  , ("narratives", Fields [("narratives", Each (Fields
+                    [("id", Keep), ("name", Keep), ("color", Keep), ("legs", Keep)]))])
+  , ("event",     Fields [("id", Keep), ("when", Fields [("from_year", Keep), ("to_year", Keep)])
+                         ,("places", Keep), ("verses", Keep)])
+  , ("eras",      Fields [("eras", Each (Fields [("id", Keep), ("from_year", Keep)]))])
+  , ("landmarks", Fields [("landmarks", Each (Fields [("name", Keep), ("kind", Keep)]))])
+  , ("land-mask", Fields [("rings", Keep)])
+  ]
+
+project :: Proj -> Value -> Value
+project Keep v = v
+project (Each p) (Array a) = Array (fmap (project p) a)
+project (Each _) v = v
+project (Fields fs) (Object o) = Object (KM.fromList
+  [ (K.fromText k, project p fv)
+  | (k, p) <- fs, Just fv <- [KM.lookup (K.fromText k) o] ])
+project (Fields _) v = v
+
+  -- appended to allSteps:
+  , mkStep Then (lit "the consumed projection " *> ((,) <$> capUntil @ProjName " equals fixture "
+                                                        <*> capRest @FixtureRef)) $
+      \(ProjName pn, FixtureRef f) w -> do
+        fx <- loadFixture w f
+        pure $ do
+          expected <- fx
+          (_, actual) <- maybe (Left "no response") Right (Map.lookup "_last" (bound w))
+          p <- maybe (Left ("unknown projection " <> pn)) Right (Map.lookup pn projections)
+          let got = project p actual
+          if got == expected then Right w
+          else Left ("consumed projection " <> pn <> " differs from fixture " <> f)
 ```
-with `lastV w = maybe (Left "no response") (Right . snd) (Map.lookup "_last" (bound w))`, `tshow = T.pack . show`, `someEntryIn` factored from Task 10's `someEntry`, and:
+with the projection-name capture (its universe IS the registry — the
+Vocabulary block lists every projection automatically):
 ```haskell
-newtype CountCap = CountCap Int deriving (Eq, Show)
-instance FromCapture CountCap where
-  capName _ = "count"
-  universe _ = Described "a whole number of entries"
-  renderCap (CountCap n) = T.pack (show n)
-  parseCap t = case reads (T.unpack (T.strip t)) of
-    [(n, "")] | n >= (0 :: Int) -> Right (CountCap n)
-    _ -> Left "not a count"
+newtype ProjName = ProjName Text deriving (Eq, Show)
+instance FromCapture ProjName where
+  capName _ = "projection"
+  universe _ = Enumerated (Map.keys projections)
+  renderCap (ProjName p) = p
+  parseCap t = let s = T.strip t in
+    if s `Map.member` projections then Right (ProjName s)
+    else Left ("'" <> s <> "' is not a projection."
+              <> didYouMean (Map.keys projections) s
+              <> "\n  Projections are: " <> T.intercalate ", " (Map.keys projections))
 ```
-IMPORTANT provider note for the implementer: verify the actual atlas response shapes against the committed live-captured fixtures in `crates/map-compile/fixtures/` (`polities.json`, `narratives.json`, `eras.json` etc.) BEFORE finalizing field names in the features — if `narratives.json`'s top level is a bare array rather than `{"narratives": [...]}`, write the feature to match the fixture (the fixture is the captured truth; `vendor.rs::parse_narratives` is the authority). Adjust `eras`/`landmarks`/`land-mask` the same way. The features must state what the parsers ACTUALLY read.
+Blessing writes the PROJECTED value as the fixture (adjust `blessOrCompare`
+usage: this step, in bless mode, writes `project p actual`, not the raw body).
+IMPORTANT provider note for the implementer: verify the actual atlas response
+shapes against the committed live-captured fixtures in
+`crates/map-compile/fixtures/` (`polities.json`, `narratives.json`, etc.)
+BEFORE finalizing the projection trees — if `narratives.json`'s top level is
+a bare array rather than `{"narratives": [...]}`, the projection is
+`Each (Fields …)` at the top. `vendor.rs`'s parsers are the authority; the
+projections must state what they ACTUALLY read, field for field.
 
 - [ ] **Step 3: Totality + vocab for atlas-edge; runner tests green**
 
@@ -2184,13 +2246,22 @@ From `contracts/runner/` (server from Task 13 still running):
 ```
 cabal run contract-runner -- run --base-url http://127.0.0.1:8090 ../map-api --bless
 ```
-Expected: fixture-referencing scenarios write `changes-conquest.json`, `changes-empty.json`, `census-1405.json`; the table prints (reds among `@target` are fine and expected here).
+Expected: fixture-referencing scenarios write `contract.json` (with the masked
+field holding the literal `"MASKED"`), `subjects-1405.json`, `subjects-59.json`,
+`changes-conquest.json`, `changes-empty.json`, `census-1050.json`,
+`census-59.json`, `census-1405.json`, `scene-1405-full.json`,
+`scene-1405-nolabels.json`; the table prints (reds among `@target` are fine and
+expected here). Bless mode for the MASKED step writes the actual body with the
+masked field replaced by `"MASKED"` — implement that in `blessOrCompare`'s
+masked variant, test-first, when wiring Task 10's step.
 
 - [ ] **Step 2: Bless atlas-edge fixtures (atlas API on :8080 must be up; if it is down, SKIP and record that in the diagnosis instead of failing the task)**
 
 ```
 cabal run contract-runner -- run --base-url http://127.0.0.1:8080 ../atlas-edge --bless
 ```
+Expected: the six `*-consumed.json` projection fixtures (projected values, not
+raw bodies).
 
 - [ ] **Step 3: Eyeball every blessed fixture** — open each; confirm it is the real content (a census with hundreds of rows, a conquest change list naming tribes) and not an error body. A blessed error is a lie that will pass forever.
 
@@ -2246,4 +2317,5 @@ git push
 
 - **Spec coverage:** runner with three extensions (Tasks 1–9), map-api v0.1 features with laws-as-scenarios (10–11), CDC suite (12), `/api/contract` + `/api/census` (13), diagnosis (15), pre-release VERSION 0.1.0 (Task 1), golden-gate closure (15.3). Vocabulary drift (8) and property fuzzing (9) both land. ✓
 - **Placeholder scan:** no TBDs; the two deliberate deferrals (DocString parsing, `transportRaw`) are named with their arrival points. ✓
-- **Type consistency:** `FromCapture`/`Universe` names match across Tasks 3/4/8/9; `StepDef`/`mkStep` across 5/6/7/8; `runWithProperties` stub (6) replaced in 9; `Tenure::{Held,Claimed}` matches the canon as committed today; `census` signature identical in test (13.1) and impl (13.3). One knowing simplification: Task 11's `combining` step fixes year -1405 for the union render while holes generate `<someYear>` — the implementer must thread the scenario's bound year through `World.bound` (store `"_year"` on render steps and read it in the combine step); noted here so it is built, not discovered.
+- **Type consistency:** `FromCapture`/`Universe` names match across Tasks 3/4/8/9; `StepDef`/`mkStep` across 5/6/7/8; `runWithProperties` stub (6) replaced in 9; `Tenure::{Held,Claimed}` matches the canon as committed today; `census` signature identical in test (13.1) and impl (13.3).
+- **Whole-body law (owner correction, applied):** no existential or shape-poke assertions remain in any feature — our API pins whole bodies with in-scenario masks; the atlas edge pins whole consumed projections via the typed `Proj` registry mirroring `vendor.rs`. The `labels-are-empty` and `subset` steps from Task 5 survive only where they serve RELATIONAL algebra scenarios; `labels-are-empty` is currently unused by any feature and may be dropped by the implementer along with its test, or kept for the algebra work — either is acceptable, dead orphan DEFINITIONS are not flagged by totality (only orphan steps are). One knowing simplification: Task 11's `combining` step fixes year -1405 for the union render while holes generate `<someYear>` — the implementer must thread the scenario's bound year through `World.bound` (store `"_year"` on render steps and read it in the combine step); noted here so it is built, not discovered.
