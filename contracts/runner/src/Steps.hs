@@ -4,6 +4,7 @@ import Data.Aeson (Value (..), eitherDecodeStrict)
 import qualified Data.Aeson.Key as K
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString as BS
+import Data.Char (isSpace)
 import qualified Data.Map.Strict as Map
 import Data.Set (member)
 import Data.Text (Text)
@@ -93,6 +94,20 @@ blessOrCompare fname w = case Map.lookup "_last" (bound w) of
 -- there is no shadowing left to reintroduce — a true structural match
 -- always wins over a mere claim, by construction.
 --
+-- That "not load-bearing" claim used to rest on nothing but the fact that
+-- today's allSteps happens not to contain a genuine double-match — an
+-- aspiration, not a guarantee: if a later append DID introduce two
+-- definitions that both truly MATCH the same body, Run.runScenario's old
+-- `case ... of (f:_) -> ...` silently ran the head of the list and never
+-- told anyone, which is exactly the kind of order-dependent shadowing this
+-- whole comment claims doesn't happen any more. Fix 2 (post-Task-7 review)
+-- closes that gap in CODE: runScenario now refuses to run anything when
+-- two or more definitions truly match, failing loudly and naming every
+-- competing sketch, regardless of which one is first in this list. So the
+-- claim above is no longer aspirational — a later append that collides can
+-- reorder itself however it likes and will still be caught, at both
+-- `check` time (Check.hs's VAmbiguous) and `run` time (this refusal).
+--
 -- Specific-before-generic remains good practice for ERROR QUALITY, though:
 -- when NO definition matches and only claims remain, runScenario and
 -- Check report the FIRST ClaimError in list order, so listing the more
@@ -105,8 +120,8 @@ blessOrCompare fname w = case Map.lookup "_last" (bound w) of
 allSteps :: [StepDef]
 allSteps =
   [ -- generic wire steps
-    mkStep When (lit "I GET " *> capRest @FixtureRefFreeText) $
-      \(FixtureRefFreeText path) w -> getUrl (baseUrl w <> path) w
+    mkStep When (lit "I GET " *> capRest @UrlPath) $
+      \(UrlPath path) w -> getUrl (baseUrl w <> path) w
   , mkStep Then (lit "the response equals fixture " *> capRest @FixtureRef) $
       \(FixtureRef f) w -> blessOrCompare f w
   , mkStep Then (lit "the response field " *> ((,) <$> capUntil @FixtureRefFreeText " equals "
@@ -141,7 +156,7 @@ allSteps =
             | otherwise -> Left (a <> " and " <> b <> " differ")
           _ -> Left "unbound scene name"
   , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s resources are a subset of "
-                                <*> capRest @BindName)) $
+                                <*> capUntil @BindName "'s resources")) $
       \(BindName a, BindName b) w ->
         pure $ case (resourceIds =<< scene a w, resourceIds =<< scene b w) of
           (Right ia, Right ib)
@@ -167,13 +182,45 @@ allSteps =
       Right (Array rs) -> traverse (field "id") (V.toList rs)
       other -> Left ("no resources array: " <> T.pack (show (() <$ other)))
 
--- free-text capture (paths, field names, expected strings): Described universe
+-- free-text capture (field names, expected strings): Described universe.
+-- NOT used for URLs any more (see UrlPath below) — this capture can never
+-- fail to parse, so it has no discriminating power, which is exactly
+-- right for a field name or an expected value (spaces are legitimate
+-- there) and exactly wrong for a URL (fix 7: it silently swallowed
+-- " as first" as part of a GET path, making an undefined "as"-binding
+-- step invisible to the totality check).
 newtype FixtureRefFreeText = FixtureRefFreeText Text deriving (Eq, Show)
 instance FromCapture FixtureRefFreeText where
   capName _ = "text"
-  universe _ = Described "free text (a path, field name, or expected value)"
+  universe _ = Described "free text (a field name or expected value)"
   renderCap (FixtureRefFreeText t) = t
   parseCap = Right . FixtureRefFreeText . T.strip
+
+-- R23 fix 7 (controller ruling): the plain GET step used to capture its
+-- URL with FixtureRefFreeText, whose parseCap can NEVER fail — so a line
+-- like "I GET /api/subjects?year=<someYear> as first" (meant for a not-
+-- yet-written "I GET {url} as {name}" binding step) silently matched the
+-- plain GET step instead, with " as first" swallowed into the "url". A
+-- capture that cannot fail has no discriminating power, so the totality
+-- law had nothing to catch: a check satisfiable by the failure mode is no
+-- check at all (see MEMORY: verify-distinct-not-nonnull). Fixed by TYPE:
+-- a URL path is, as a genuine property of URLs, a token with no raw
+-- whitespace in it. Rejecting whitespace here is not a special case for
+-- " as " — any embedded space (a stray "as SOMETHING", a typo, a copy-
+-- paste artifact) now fails to parse, making the line a bad-value rather
+-- than a clean, silent match. When the real "I GET {url} as {name}" step
+-- is added in a later phase, this is what lets it become the line's
+-- unique match instead of creating a fresh ambiguity with this one.
+newtype UrlPath = UrlPath Text deriving (Eq, Show)
+instance FromCapture UrlPath where
+  capName _ = "url"
+  universe _ = Described "a URL path with no embedded whitespace, e.g. /api/subjects?year=-1405"
+  renderCap (UrlPath t) = t
+  parseCap t =
+    let s = T.strip t
+    in if T.any isSpace s
+         then Left ("'" <> s <> "' is not a URL path: a URL path cannot contain whitespace")
+         else Right (UrlPath s)
 
 newtype BindName = BindName Text deriving (Eq, Show)
 instance FromCapture BindName where

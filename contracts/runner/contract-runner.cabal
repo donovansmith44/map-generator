@@ -50,5 +50,5 @@ test-suite spec
     hs-source-dirs:   test
     main-is:          Spec.hs
     build-depends:    base, contract-runner, hspec, QuickCheck, text,
-                      containers, aeson, bytestring
+                      containers, aeson, bytestring, directory, filepath
     default-language: GHC2021

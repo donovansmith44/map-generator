@@ -13,6 +13,7 @@ import World
 import Steps
 import Run
 import qualified Check
+import Control.Exception (try)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromJust, listToMaybe)
@@ -22,6 +23,13 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.Text.IO as TIO
+import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import System.Directory
+  (getTemporaryDirectory, createDirectoryIfMissing, removeDirectoryRecursive, removeFile)
+import System.Exit (ExitCode)
+import System.FilePath ((</>))
+import System.IO (stdout, openTempFile, hClose, hFlush, hSetEncoding, utf8)
 
 main :: IO ()
 main = hspec $ do
@@ -213,18 +221,23 @@ main = hspec $ do
           e `shouldSatisfy` T.isInfixOf "wanted"
           e `shouldSatisfy` T.isInfixOf "http://wrong"
         Right _ -> expectationFailure "expected a field mismatch to fail"
+    -- Fix 8 (post-Task-7 review): the FEATURE is the law and the step
+    -- serves it. The real corpus (map-api's scene.feature) writes this as
+    -- "noWater's resources are a subset of full's resources" -- a bind
+    -- name on BOTH sides, not a bare name on the right -- so the step's
+    -- pattern (and this test) now match that wording exactly.
     it "the subset step passes when one scene's resources are a genuine subset of the other's" $ do
       let wSub = w0 { bound = Map.fromList
             [ ("sceneA", (BS.empty, sceneVal ["r1", "r2"]))
             , ("sceneB", (BS.empty, sceneVal ["r1", "r2", "r3"])) ] }
-          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB"
+          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB's resources"
       r <- run wSub
       r `shouldSatisfy` isRight
     it "the subset step reports Left when a resource is genuinely absent from the other scene" $ do
       let wSub = w0 { bound = Map.fromList
             [ ("sceneA", (BS.empty, sceneVal ["r1", "r9"]))
             , ("sceneB", (BS.empty, sceneVal ["r1", "r2", "r3"])) ] }
-          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB"
+          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB's resources"
       r <- run wSub
       case r of
         Left e  -> e `shouldSatisfy` T.isInfixOf "absent from"
@@ -345,6 +358,39 @@ main = hspec $ do
                 e `shouldSatisfy` T.isInfixOf "I GET /boom"
               _ -> expectationFailure "should have failed"
           [] -> expectationFailure "expected at least one scenario"
+    -- Fix 2 (post-Task-7 review): runScenario used to silently run the
+    -- FIRST Matched action when two or more definitions truly matched --
+    -- `case [f | Matched f <- results] of (f:_) -> ...` -- which is
+    -- exactly the shadowing the three-state Claim refactor set out to
+    -- remove, just relocated from `check` time to `run` time. It survives
+    -- wherever `check` hasn't (yet) been run: a developer running `run`
+    -- directly against a fresh feature file. This drives that path with a
+    -- synthetic ambiguous pair (mirroring the totality test below) and
+    -- asserts the scenario fails LOUDLY, naming both competing sketches,
+    -- instead of quietly succeeding by picking one.
+    it "runScenario refuses to run anything when two or more definitions \
+       \truly MATCH the same body, naming the competing sketches instead \
+       \of silently picking one" $ do
+      let dupDefs =
+            [ mkStep When (lit "I do " *> capRest @FixtureRefFreeText) (\_ w' -> pure (Right w'))
+            , mkStep When (lit "I do the thing") (\() w' -> pure (Right w'))
+            ]
+          w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+      case parseFeature "dup2.feature" $ T.unlines
+             [ "Feature: dup2"
+             , "  Scenario: s"
+             , "    When I do the thing" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          [sc] -> do
+            v <- runScenario dupDefs w sc
+            case v of
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "I do {text}"
+                e `shouldSatisfy` T.isInfixOf "I do the thing"
+                e `shouldSatisfy` T.isInfixOf "ambiguous"
+              _ -> expectationFailure "expected ambiguity to fail loudly, not silently pick one"
+          scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
 
   describe "totality" $ do
     it "names the orphan steps" $ do
@@ -426,13 +472,26 @@ main = hspec $ do
               v `shouldBe` Passed
             scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
     it "genuine ambiguity -- two definitions that both fully MATCH the same \
-       \body -- is still detected and fatal" $ do
+       \body -- is still detected and fatal, and NAMES the competing \
+       \definitions (fix 1)" $ do
       -- No such case survives in the real allSteps after R23 (that's the
       -- whole point), so this constructs a small StepDef list where two
       -- definitions both actually match, to prove real ambiguity is still
       -- caught and not accidentally dissolved along with the two fakes.
+      --
+      -- Fix 1 (post-Task-7 review): the two definitions here used to share
+      -- one IDENTICAL sketch, and the assertion only checked
+      -- `length sketches == 2` with the scenario name wildcarded -- a
+      -- shape that would still pass if VAmbiguous were built from every
+      -- keyword-matching definition, from the errored ones, or from a
+      -- constant pair, i.e. it verified a COUNT, not that ambiguity
+      -- actually NAMES the competing definitions. These two definitions
+      -- now have genuinely DISTINCT sketches (one via a literal, one via
+      -- a capture) that both still fully match "I do the thing", and the
+      -- whole triple -- scenario name, step body, and both sketches -- is
+      -- asserted in one equality.
       let dupDefs =
-            [ mkStep When (lit "I do the thing") (\() w -> pure (Right w))
+            [ mkStep When (lit "I do " *> capRest @FixtureRefFreeText) (\_ w -> pure (Right w))
             , mkStep When (lit "I do the thing") (\() w -> pure (Right w))
             ]
       case parseFeature "dup.feature" $ T.unlines
@@ -440,11 +499,8 @@ main = hspec $ do
              , "  Scenario: s"
              , "    When I do the thing" ] of
         Left e -> expectationFailure (T.unpack e)
-        Right f -> case Check.ambiguous dupDefs f of
-          [(_, b, sketches)] -> do
-            b `shouldBe` "I do the thing"
-            length sketches `shouldBe` 2
-          other -> expectationFailure ("expected exactly one ambiguous step, got " <> show other)
+        Right f -> Check.ambiguous dupDefs f `shouldBe`
+          [("s", "I do the thing", ["I do {text}", "I do the thing"])]
     it "a step whose shape matches but whose value doesn't parse is its own \
        \value-error class, reported by check and NOT silently skipped by \
        \runScenario when nothing else matches" $ do
@@ -477,6 +533,127 @@ main = hspec $ do
                 Failed e -> e `shouldSatisfy` T.isInfixOf "not a piece"
                 _ -> expectationFailure "expected the bad piece name to fail, not pass"
             scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
+    -- Fix 3 (post-Task-7 review): the "real allSteps is unambiguous" pin
+    -- only covered four line shapes (the two collisions above plus the
+    -- value-error case); four definitions -- the fixture-equality step,
+    -- the generic "{name} equals {name}" step, the resources-subset step,
+    -- and labels-are-empty -- had NO coverage at all. This feeds one
+    -- exemplar body per definition in the real allSteps (built directly
+    -- as AST, not parsed text, so keyword sequencing is irrelevant) and
+    -- asserts no orphan, ambiguity, or value-error anywhere across the
+    -- whole set. The length equality is the actual re-trigger: append a
+    -- ninth step definition without adding its exemplar here and this
+    -- test fails on the count alone, regardless of which shape the new
+    -- step happens to collide with.
+    it "every definition in the real allSteps has a genuine, unambiguous \
+       \exemplar -- covering the whole step set, not just four shapes \
+       \(fix 3)" $ do
+      let exemplars =
+            [ (When, "I GET /foo")
+            , (Then, "the response equals fixture \"foo\"")
+            , (Then, "the response field scene equals http://x/foo")
+            , (When, "I render pieces fills at year -1405 in style canaan as sceneA")
+            , (When, "I render pieces fills at year -1405 in style canaan")
+            , (Then, "sceneA equals sceneB")
+            , (Then, "sceneA's resources are a subset of sceneB's resources")
+            , (Then, "sceneA's labels are empty")
+            ]
+          steps = [ Step k b Nothing | (k, b) <- exemplars ]
+          f = Feature "exemplars" [] [] [] [Scenario "s" [] steps]
+      length exemplars `shouldBe` length allSteps
+      Check.orphans allSteps f `shouldBe` []
+      Check.ambiguous allSteps f `shouldBe` []
+      Check.valueErrors allSteps f `shouldBe` []
+    -- Fix 5 (post-Task-7 review): checkDir's AMBIGUOUS and BAD-VALUE print
+    -- paths (the `label`/`describe` branches other than ORPHAN) had never
+    -- actually executed under test -- every existing totality test calls
+    -- Check.orphans/ambiguous/valueErrors directly, never checkDir itself.
+    -- This drives the real checkDir over a real temp directory (a
+    -- synthetic ambiguous pair, reusing the fix-1/2 shape, alongside a
+    -- real bad-piece-name line from allSteps) and asserts BOTH tagged
+    -- lines actually appear in stdout. checkDir calls exitFailure, so the
+    -- resulting ExitCode exception is caught via `try` rather than killing
+    -- the test process.
+    it "checkDir's AMBIGUOUS and BAD-VALUE print paths actually execute \
+       \and are visible in its output (fix 5)" $ do
+      tmpBase <- getTemporaryDirectory
+      let dir = tmpBase </> "contract-runner-checkdir-test"
+          dupDefs =
+            [ mkStep When (lit "I do " *> capRest @FixtureRefFreeText) (\_ w -> pure (Right w))
+            , mkStep When (lit "I do the thing") (\() w -> pure (Right w))
+            ]
+          feat = T.unlines
+            [ "Feature: probe"
+            , "  Scenario: ambiguous case"
+            , "    When I do the thing"
+            , "  Scenario: bad value case"
+            , "    When I render pieces bogus at year -1405 in style canaan" ]
+      createDirectoryIfMissing True dir
+      TIO.writeFile (dir </> "probe.feature") feat
+      (out, result) <- captureStdout (Check.checkDir (dupDefs ++ allSteps) dir)
+      removeDirectoryRecursive dir
+      result `shouldSatisfy` isLeft
+      out `shouldSatisfy` T.isInfixOf "AMBIGUOUS"
+      out `shouldSatisfy` T.isInfixOf "I do {text}"
+      out `shouldSatisfy` T.isInfixOf "I do the thing"
+      out `shouldSatisfy` T.isInfixOf "BAD-VALUE"
+      out `shouldSatisfy` T.isInfixOf "not a piece"
+    -- Fix 7 (post-Task-7 review, structural -- closes a FALSE GREEN in the
+    -- law): the real corpus's "When I GET /api/subjects?year=<someYear>
+    -- as first" used to come back CLEAN, even though no "I GET {url} as
+    -- {name}" binding step exists yet. Cause: the plain GET step captured
+    -- its URL with FixtureRefFreeText, whose parseCap is
+    -- `Right . FixtureRefFreeText . T.strip` -- it can NEVER fail, so it
+    -- silently swallowed " as first" as part of the URL and registered a
+    -- full Matched. A capture that cannot fail has no discriminating
+    -- power, so the totality law had nothing to catch -- a check
+    -- satisfiable by the failure mode, which this project forbids (see
+    -- MEMORY: verify-distinct-not-nonnull). UrlPath fixes this BY TYPE: a
+    -- URL path cannot contain a raw space, a genuine property of the
+    -- type, not a special case for " as ". This proves the hole closes:
+    -- the line is now a value error (nothing fully matches), not a clean
+    -- match. When the real GET-as step is added in a later phase, this is
+    -- what will make IT the unique match rather than creating a fresh
+    -- ambiguity with the plain GET step.
+    it "a GET line with a stray \" as name\" is a value error, not a \
+       \silent clean match, now that UrlPath rejects embedded whitespace \
+       \(fix 7)" $ do
+      let body = "I GET /api/subjects?year=-1405 as first"
+      case parseFeature "getas.feature" $ T.unlines
+             [ "Feature: f", "  Scenario: s", "    When " <> body ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
+          case Check.valueErrors allSteps f of
+            [(_, b, errs)] -> do
+              b `shouldBe` body
+              errs `shouldSatisfy` (not . null)
+              mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "whitespace") errs
+            other -> expectationFailure
+                       ("expected exactly one value-error step, got " <> show other)
+
+-- Fix 5's stdout-capture helper: redirects the process's real stdout to a
+-- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,
+-- the same technique `System.IO.Silently` uses), then restores it and
+-- returns what was written plus `act`'s own `try` result. Needed because
+-- checkDir writes straight to stdout and calls exitFailure -- there is no
+-- other way to observe its output from inside a test.
+captureStdout :: IO a -> IO (T.Text, Either ExitCode a)
+captureStdout act = do
+  tmpDir <- getTemporaryDirectory
+  (path, h) <- openTempFile tmpDir "capture.txt"
+  hSetEncoding h utf8
+  old <- hDuplicate stdout
+  hDuplicateTo h stdout
+  result <- try act
+  hFlush stdout
+  hDuplicateTo old stdout
+  hClose old
+  hClose h
+  txt <- TIO.readFile path
+  removeFile path
+  pure (txt, result)
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

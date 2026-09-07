@@ -8,6 +8,7 @@ import Options.Applicative
 import System.Directory (listDirectory, doesDirectoryExist)
 import System.Exit (exitFailure, exitSuccess)
 import System.FilePath ((</>), takeExtension)
+import System.IO (stdout, stderr, hSetEncoding, utf8)
 import Run
 import Steps (allSteps)
 import World
@@ -46,6 +47,17 @@ featureFiles dir = do
 
 main :: IO ()
 main = do
+  -- Fix 6: this is a Windows-first project, and Windows consoles default
+  -- to a legacy code page that can't encode characters like an em dash —
+  -- `checkDir`'s BAD-VALUE line crashed with
+  -- "commitAndReleaseBuffer: invalid argument (cannot encode character
+  -- '\8212')" before this landed. Force UTF-8 on both output handles at
+  -- the entry point so ALL of this runner's output (check, run, vocab) is
+  -- safe regardless of the console's code page, rather than requiring
+  -- every caller to `chcp 65001` first — the Stage 0 diagnosis document is
+  -- generated straight from this output.
+  hSetEncoding stdout utf8
+  hSetEncoding stderr utf8
   c <- execParser (info (cmd <**> helper) fullDesc)
   case c of
     CmdRun base dir bless runs -> do

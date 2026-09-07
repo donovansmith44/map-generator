@@ -50,8 +50,17 @@ classify defs (Step k body _) = case (matched, errored) of
   where
     -- property holes (e.g. <someYear>) must be substituted with a
     -- registered example value before matching, or every @property step
-    -- looks like an orphan. Task 9 wires this to Prop.substituteExamples;
-    -- until a hole name is registered, the step is an orphan — loudly.
+    -- looks wrong. Task 9 wires this to Prop.substituteExamples; until a
+    -- hole name is registered, the raw hole text (e.g. "<somePieces>")
+    -- reaches a definition's capture unparsed. Fix 4 (post-Task-7 review):
+    -- this was documented as making the step "an orphan" — that's not
+    -- what the real corpus shows. A hole like "<somePieces>" still matches
+    -- the literal shape of "I render pieces ... at year ... in style ...",
+    -- so both render overloads CLAIM it; the hole text just fails to parse
+    -- as a Piece. With nothing left to actually MATCH, that's a bad-value
+    -- (VValueError), not an orphan (VOrphan is for a shape nobody claims
+    -- at all) — still fatal, still loud, but a different, correctly-named
+    -- class. See `classify` above for the three-way split.
     dehole = id
     results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
     matched = [ sk | (sk, Matched _) <- results ]
@@ -115,4 +124,8 @@ checkDir defs dir = do
       b <> " matches " <> T.pack (show (length sketches)) <> " definitions: "
         <> T.intercalate " | " sketches
     describe b (VValueError errs) =
-      b <> " — " <> T.intercalate "; " [ sk <> ": " <> e | (sk, e) <- errs ]
+      -- Fix 6 (belt-and-braces, alongside app/Main.hs's hSetEncoding):
+      -- plain ASCII here, not an em dash — this string reaches a Windows
+      -- console at whatever code page it's running under, and a literal
+      -- U+2014 crashed `commitAndReleaseBuffer` before either fix landed.
+      b <> " -- " <> T.intercalate "; " [ sk <> ": " <> e | (sk, e) <- errs ]

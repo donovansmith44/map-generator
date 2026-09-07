@@ -26,18 +26,31 @@ runScenario defs w0 sc = go w0 (scSteps sc)
       -- collisions this resolves). Only when NOTHING matches do we fall
       -- back to the best claimed error; only when nothing matches OR
       -- claims is the step genuinely undefined.
-      let results = [ defRun d body | d <- defs, defKw d == k ]
-      in case [ f | Matched f <- results ] of
-        (f : _) -> do
+      --
+      -- Fix 2 (post-Task-7 review): two or more definitions truly
+      -- MATCHING the same body is exactly the ambiguity Check.hs's
+      -- totality law is fatal about at `check` time — silently running
+      -- the head of `matches` here would let that same shadowing back in
+      -- at `run` time, on any feature file `check` hasn't (yet) been run
+      -- against. So `run` refuses it too, naming every competing sketch,
+      -- instead of picking one.
+      let cands   = [ d | d <- defs, defKw d == k ]
+          results = [ (defSketch d, defRun d body) | d <- cands ]
+          matches = [ (sk, f) | (sk, Matched f) <- results ]
+      in case matches of
+        [(_, f)] -> do
           r <- try (f w) :: IO (Either SomeException (Either Text World))
           case r of
             Left ex          -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 "
                                               <> T.pack (show ex)))
             Right (Left e)   -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 " <> e))
             Right (Right w') -> go w' rest
-        [] -> case [ e | ClaimError e <- results ] of
+        [] -> case [ e | (_, ClaimError e) <- results ] of
           (e : _) -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 " <> e))
           []      -> pure (Failed ("undefined step: " <> kwText k <> " " <> body))
+        _ -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 ambiguous: matches "
+                          <> T.pack (show (length matches)) <> " definitions: "
+                          <> T.intercalate " | " (map fst matches)))
     kwText Given = "Given"; kwText When = "When"; kwText Then = "Then"
 
 runFeatureFiles :: [StepDef] -> World -> [FilePath] -> IO [ScenarioResult]
