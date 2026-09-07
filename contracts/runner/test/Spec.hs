@@ -2317,6 +2317,284 @@ main = hspec $ do
               _ -> pure ()
           [] -> expectationFailure "expected at least one scenario"
 
+  -- ---------- Stage 1 Task 4: forAllShrink's semantics ----------
+  -- Spec §4 asks for `forAllShrink`; §3.2 is the bill for not having it
+  -- (a composition counterexample naming fifteen pieces where the true
+  -- answer was one word, narrowed by hand). Shrinking here attaches to
+  -- the GROUP, not the hole: a candidate replaces every member of one
+  -- group at once, because a candidate that replaced only half of a
+  -- correlated pair could hand the law a binding the DRAW could never
+  -- have produced -- a counterexample that is not an example of
+  -- anything. So the correlation laws are pinned over shrink candidates
+  -- with exactly the bar the draw laws are pinned with.
+  describe "property shrinking (Stage 1 Task 4)" $ do
+    let pieces  = Prop.holeRegistry Map.! "somePieces"
+        piece   = Prop.holeRegistry Map.! "somePiece"
+        years   = Prop.holeRegistry Map.! "someYear"
+        nested  = Prop.holeRegistry Map.! "someSubset"
+        styles  = Prop.holeRegistry Map.! "someStyle"
+        iterations = [0 .. 49 :: Int]
+        -- One solo group's candidate renderings, in the shrinker's own
+        -- order -- the order the greedy loop will try them in.
+        soloCands g h rendered =
+          [ m Map.! h | m <- Prop.groupShrink g (Map.singleton h rendered) ]
+        setOf i who = (\(PieceSet s) -> s) <$> drawnAs @PieceSet
+                        ["someSubset", "someSuperset"] who i
+    it "a solo group's shrink offers strictly smaller renderings, in its \
+       \own order, and eventually none" $ do
+      -- Whole-body: the complete candidate list, not "some candidate"
+      -- (MEMORY: whole-body-assertions). Drop-one-at-a-time means every
+      -- subset is reachable by repetition and every step is strictly
+      -- smaller, which is what makes the greedy loop terminate.
+      soloCands pieces "somePieces" "borders, ground, water"
+        `shouldBe` ["borders, water", "borders, ground", "ground, water"]
+      soloCands pieces "somePieces" "none" `shouldBe` []
+    it "somePiece is registered as its own solo group and shrinks toward \
+       \the earliest piece" $ do
+      -- Registered here for Task 12's strengthened omission law; pinned
+      -- now so it cannot be registered without a working shrinker.
+      Prop.groupName piece `shouldBe` "somePiece"
+      Prop.groupMembers piece `shouldBe` ["somePiece"]
+      soloCands piece "somePiece" "fills" `shouldBe` ["ground", "water"]
+      soloCands piece "somePiece" "ground" `shouldBe` []
+    it "every year candidate is a legal year of THIS calendar: never 0, \
+       \never outside the frame, never equal to its input, and either \
+       \-1405 or strictly nearer zero" $ do
+      -- Year's shrink is the one that moves toward a landmark (-1405)
+      -- rather than only toward zero, so "strictly smaller" is stated as
+      -- the disjunction the shrinker actually guarantees -- not a weaker
+      -- "is different" that a looping shrinker would satisfy too.
+      let bad = [ (y, v)
+                | y <- [-4004, -1405, -703, -100, -1, 1, 54, 100 :: Int]
+                , v <- map (read . T.unpack)
+                         (soloCands years "someYear" (T.pack (show y))) :: [Int]
+                , not (v /= 0 && v >= -4004 && v <= 100 && v /= y
+                       && (v == -1405 || abs v < abs y)) ]
+      bad `shouldBe` []
+      -- and it is not the empty shrinker dressed up as a lawful one
+      soloCands years "someYear" "54" `shouldSatisfy` (not . null)
+      soloCands years "someYear" "-4004" `shouldSatisfy` (not . null)
+      -- -1405 is the frame's landmark and the BOTTOM of the year order:
+      -- nothing is smaller, so nothing is offered. See the cycle law
+      -- below for why offering anything here is a bug, not a courtesy.
+      soloCands years "someYear" "-1405" `shouldBe` []
+    it "no year, anywhere in the frame, shrinks to a year of equal or \
+       \greater RANK -- the well-founded order that rules out the \
+       \-1405 <-> -1400 cycle, checked over the WHOLE frame rather than \
+       \over a few sampled years" $ do
+      -- The cycle was real, not hypothetical: the first draft of this
+      -- shrinker offered -1405 from every year AND ordinary
+      -- integer-shrinks from -1405, so -1405 offered -1400 and -1400
+      -- offered -1405 back. Against the live server, where both years
+      -- genuinely fail the identity law, the greedy loop ping-ponged
+      -- until the FUEL ran out and reported wherever it stopped as
+      -- "minimal". A shrinker that needs the fuel bound to terminate is
+      -- the mis-written shrinker the fuel bound exists to survive.
+      let ranked y = Prop.yearRank (Year y)
+      [ (y, y')
+        | y <- [-4004 .. 100 :: Int], y /= 0
+        , y' <- map (read . T.unpack) (soloCands years "someYear" (T.pack (show y)))
+        , ranked y' >= ranked y ] `shouldBe` []
+    it "every shrink candidate of every group RANKS strictly below the \
+       \bindings it came from -- the one law that makes the greedy loop \
+       \terminate, owed by every group, present and future" $
+      [ (Prop.groupName g, i, Prop.groupRank g cand, Prop.groupRank g drawn)
+      | g <- Prop.holeGroups
+      , i <- iterations
+      , let drawn = Prop.drawGroup g i
+      , cand <- Prop.groupShrink g drawn
+      , Prop.groupRank g cand >= Prop.groupRank g drawn ] `shouldBe` []
+    prop "the nested pair's order is well-founded over the WHOLE \
+         \generator, not only over the iterations the runner happens to \
+         \draw" $
+      forAll Prop.genNestedPieces $ \(sub, super) ->
+        let env = Map.fromList [ ("someSubset", renderCap sub)
+                               , ("someSuperset", renderCap super) ]
+        in [ Prop.groupRank nested c
+           | c <- Prop.groupShrink nested env
+           , Prop.groupRank nested c >= Prop.groupRank nested env ] == []
+    it "every shrink candidate of every group still satisfies that \
+       \group's own correlation law -- a candidate the DRAW could never \
+       \have produced is not a counterexample, it is a bug in the \
+       \shrinker" $ do
+      let violations =
+            [ (Prop.groupName g, i, cand)
+            | g <- Prop.holeGroups
+            , i <- iterations
+            , cand <- Prop.groupShrink g (Prop.drawGroup g i)
+            , not (Prop.groupLaw g cand) ]
+      violations `shouldBe` []
+    it "every DRAW satisfies its group's law too -- the same predicate, \
+       \stated once on the group and owed by both the generator and the \
+       \shrinker" $
+      [ (Prop.groupName g, i)
+      | g <- Prop.holeGroups, i <- iterations
+      , not (Prop.groupLaw g (Prop.drawGroup g i)) ] `shouldBe` []
+    it "a shrunk (subset, superset) pair is STILL nested, and strictly \
+       \smaller, at every iteration" $ do
+      let cands i = [ ( fmap (\(PieceSet s) -> s) (parseCap (m Map.! "someSubset"))
+                      , fmap (\(PieceSet s) -> s) (parseCap (m Map.! "someSuperset")) )
+                    | m <- Prop.groupShrink nested (Prop.drawGroup nested i) ]
+          drawnSize i = (+) <$> (Set.size <$> setOf i "someSubset")
+                            <*> (Set.size <$> setOf i "someSuperset")
+      -- every candidate parses back through the very captures the corpus
+      -- parses it with (an unparseable rendering is not a candidate)
+      [ (i, pr) | i <- iterations, pr@(lft, rgt) <- cands i
+                , isLeft lft || isLeft rgt ] `shouldBe` []
+      [ (i, sub, sup)
+        | i <- iterations, (Right sub, Right sup) <- cands i
+        , not (sub `Set.isSubsetOf` sup) ] `shouldBe` []
+      -- and the total size strictly decreases, which is why the greedy
+      -- loop over this group terminates
+      [ (i, Set.size sub + Set.size sup)
+        | i <- iterations, (Right sub, Right sup) <- cands i
+        , not (either (const False) (> Set.size sub + Set.size sup) (drawnSize i)) ]
+        `shouldBe` []
+    it "the nested pair offers candidates exactly when there is something \
+       \left to remove -- so \"every candidate is nested\" above is not \
+       \vacuously true of an empty list" $
+      [ (i, null (Prop.groupShrink nested (Prop.drawGroup nested i)))
+      | i <- iterations ]
+        `shouldBe`
+      [ (i, either (const True) Set.null (setOf i "someSuperset")) | i <- iterations ]
+    it "the style pair does not shrink: a dress has no smaller dress, and \
+       \shrinking one half of the pair would make the two equal -- which \
+       \is exactly the collision dress-locality exists to rule out" $
+      [ Prop.groupShrink styles (Prop.drawGroup styles i) | i <- iterations ]
+        `shouldBe` map (const []) iterations
+    it "a property failing on ONE piece shrinks to that one piece" $ do
+      -- A fake transport that fails only when `journeys` is actually ON
+      -- in the rendered URL. NOTE (and the brief's own warning): today's
+      -- Steps.sceneUrl expresses journeys NEGATIVELY -- "&journeys=0"
+      -- appears when the piece is ABSENT -- so the predicate is written
+      -- against what the URL really says, not against the piece name.
+      -- Task 11 changes this wire; re-check the predicate then.
+      --
+      -- The generated piece sets are large; the MINIMAL failing set is
+      -- exactly {journeys}, and that is what the report must name.
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces <somePieces> at year -1405 in style canaan as only"
+            , "    Then only equals only" ]
+          fake url
+            | "journeys=0" `T.isInfixOf` url =
+                pure (Right (okBody, fromJust (A.decodeStrict okBody)))
+            | otherwise = pure (Left "boom: journeys")
+          w = mkWorld "http://x" fake ""
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps w 50 sc
+            case lawVerdict r of
+              -- the whole binding line, not a prefix of it: "somePieces
+              -- = journeys" is an infix of "somePieces = journeys,
+              -- labels" too, so a prefix test would pass on an
+              -- unshrunken report.
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "\n    with somePieces = journeys\n"
+                -- shrinking SHARPENS the report, it never hides what was
+                -- actually generated
+                e `shouldSatisfy` T.isInfixOf "\n    (shrunk from somePieces = "
+              other -> expectationFailure ("expected a failure, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+    it "shrinking does not turn a PASSING property into a failure" $ do
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces <somePieces> at year <someYear> in style canaan as only"
+            , "    Then only equals only" ]
+          fake _ = pure (Right (okBody, fromJust (A.decodeStrict okBody)))
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps (mkWorld "http://x" fake "") 20 sc
+            r `shouldBe` LawRun Passed 0
+          [] -> expectationFailure "expected at least one scenario"
+    it "shrinking consumes no fresh randomness: the same failing run twice \
+       \yields the byte-identical minimal counterexample" $ do
+      -- The diagnosis depends on reproducible runs. Candidates are
+      -- derived purely from the CURRENT rendered values (parse ->
+      -- shrink -> re-render), never from a new draw, so a second run of
+      -- the same seeds walks the identical path to the identical
+      -- minimum.
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces <somePieces> at year <someYear> in style canaan as only"
+            , "    Then only equals only" ]
+          fake url
+            | "journeys=0" `T.isInfixOf` url =
+                pure (Right (okBody, fromJust (A.decodeStrict okBody)))
+            | otherwise = pure (Left "boom: journeys")
+          w = mkWorld "http://x" fake ""
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r1 <- Prop.runScenarioProperty allSteps w 30 sc
+            r2 <- Prop.runScenarioProperty allSteps w 30 sc
+            r1 `shouldBe` r2
+            -- and it really did shrink: two identical PASSES would
+            -- satisfy the equality above while proving nothing
+            case lawVerdict r1 of
+              Failed e -> e `shouldSatisfy` T.isInfixOf "(shrunk from "
+              other -> expectationFailure ("expected a failure, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+    it "the report omits the \"(shrunk from ...)\" tail when nothing \
+       \shrank -- the tail states a FACT about the run, it is not \
+       \decoration" $ do
+      -- Over the style pair alone there is no smaller binding, so the
+      -- minimal env IS the drawn env and there is nothing to quote.
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces none at year -1405 in style <someStyle> as a"
+            , "    And I render pieces none at year -1405 in style <someOtherStyle> as b"
+            , "    Then a equals b" ]
+          fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
+            where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
+          w = mkWorld "http://x" fake ""
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps w 10 sc
+            case lawVerdict r of
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "\n    with someOtherStyle = "
+                e `shouldSatisfy` (not . T.isInfixOf "(shrunk from")
+              other -> expectationFailure ("expected a failure, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+    it "a counterexample never grows a hole the scenario did not mention: \
+       \a group can only be shrunk when the env carries ALL of its \
+       \members, because half a correlated pair cannot be re-bound \
+       \lawfully" $ do
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces <someSubset> at year -1405 in style canaan as only"
+            , "    Then only equals nothing" ]
+          fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
+            where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
+          w = mkWorld "http://x" fake ""
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps w 5 sc
+            case lawVerdict r of
+              Failed e -> e `shouldSatisfy` (not . T.isInfixOf "someSuperset")
+              other -> expectationFailure ("expected a failure, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+
   -- ---------- the sweep: the skip discipline ----------
   describe "the sweep: preconditioned laws skip, and a law that never ran \
            \is never green" $ do
@@ -2772,6 +3050,14 @@ activeInUrl url =
   ++ [ "water"    | not ("topo=0" `T.isInfixOf` url) ]
   ++ [ "labels"   | not ("labels=0" `T.isInfixOf` url) ]
   ++ [ "journeys" | not ("journeys=0" `T.isInfixOf` url) ]
+
+-- The smallest scene-shaped body the scene steps will accept: every
+-- top-level collection present and empty. Used by the shrinking tests,
+-- where WHICH body comes back is irrelevant -- what is under test is
+-- whether the transport answered at all, and the fake decides that from
+-- the URL.
+okBody :: BS.ByteString
+okBody = "{\"features\":[],\"resources\":[],\"labels\":[],\"markers\":[]}"
 
 -- A scene body carrying exactly these resource ids and nothing else.
 idsValue :: [T.Text] -> A.Value

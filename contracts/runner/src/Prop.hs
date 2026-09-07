@@ -62,19 +62,90 @@ data HoleGroup = HoleGroup
     -- the generator because that is where the members' types are still
     -- known; a group can mix types freely without the registry needing
     -- to know about it.
+  , groupShrink  :: Map Text Text -> [Map Text Text]
+    -- ^ Spec §4's other half of a hole's contract: from the bindings a
+    -- failing iteration actually used, the strictly smaller bindings
+    -- worth trying instead. The GROUP is the unit here for the same
+    -- reason it is the unit of drawing -- a candidate that re-bound only
+    -- half of a correlated pair could hand the law a binding no draw
+    -- could ever have produced, and a counterexample that is not an
+    -- example of anything is worse than a large one. So a candidate
+    -- replaces EVERY member at once and owes `groupLaw` below, exactly
+    -- as `groupDraw` does.
+    --
+    -- Rendered in, rendered out: candidates are derived from the CURRENT
+    -- values (parse -> shrink -> re-render), never from a fresh draw, so
+    -- shrinking consumes no randomness and the same failing run always
+    -- walks the same path to the same minimum.
+  , groupRank    :: Map Text Text -> Int
+    -- ^ How BIG this group's bindings are, as a natural number. Every
+    -- candidate `groupShrink` offers must have a strictly smaller rank
+    -- than the bindings it came from; since the rank is a bounded
+    -- natural, no sequence of shrinks can go on forever, and none can
+    -- return to a value it has already left. That is what makes the
+    -- greedy loop terminate -- see `shrinkToMinimal`, where the fuel
+    -- bound is then a backstop against a mis-written shrinker rather
+    -- than the thing that ends a normal run.
+  , groupLaw     :: Map Text Text -> Bool
+    -- ^ The relationship this group establishes, as a predicate over
+    -- rendered bindings. Declared on the group rather than restated in
+    -- the test file so that a NEW correlated group cannot be added
+    -- without saying what it correlates -- the relationship is then owed
+    -- by the generator and the shrinker alike, and one test pins both.
+    -- `const True` for a solo group, which establishes nothing.
   }
 
--- The degenerate group: one hole, drawn on its own, exactly as before.
-solo :: FromCapture a => Text -> Gen a -> HoleGroup
-solo n g = HoleGroup n [n] (Map.singleton n . renderCap <$> g)
+-- What it means for one of a group's drawn values to be SMALLER, as one
+-- value rather than two loose functions: a shrinking ORDER is a rank
+-- together with the candidates it admits, and the pairing is the whole
+-- content of the contract ("every candidate ranks strictly lower"). Kept
+-- together so a shrinker cannot be written, or changed, without saying
+-- what it is shrinking WITH RESPECT TO -- which is exactly the step the
+-- first draft of this task skipped, and it cost a real cycle: -1405 and
+-- -1400 each offered the other, and only the fuel bound stopped the
+-- loop (see `yearRank`).
+data Order a = Order
+  { rankOf     :: a -> Int
+  , shrinkWith :: a -> [a]
+  }
+
+-- The degenerate group: one hole, drawn on its own, exactly as before,
+-- and shrunk on its own -- a solo group correlates nothing, so its law
+-- is trivially true and its candidates are just its member's.
+solo :: FromCapture a => Text -> Gen a -> Order a -> HoleGroup
+solo n g o = HoleGroup n [n] (Map.singleton n . renderCap <$> g) sh rk (const True)
+  where
+    sh env = [ Map.singleton n (renderCap a')
+             | Right a <- [bound1 n env], a' <- shrinkWith o a ]
+    -- An unreadable binding ranks 0 and shrinks to nothing: it is the
+    -- bottom of the order in both, so the two answers agree instead of
+    -- one of them quietly claiming progress the other cannot make.
+    rk env = either (const 0) (rankOf o) (bound1 n env)
 
 -- A two-member correlated group: ONE generator produces both values, so
 -- whatever relation it establishes between them is true BY CONSTRUCTION
--- of every draw, not true on average or true after a retry.
-pair :: (FromCapture a, FromCapture b) => Text -> Text -> Text -> Gen (a, b) -> HoleGroup
-pair gname n1 n2 g = HoleGroup gname [n1, n2] $ do
-  (a, b) <- g
-  pure (Map.fromList [(n1, renderCap a), (n2, renderCap b)])
+-- of every draw, not true on average or true after a retry -- and ONE
+-- shrinker produces both replacements, so the same is true of every
+-- candidate.
+pair :: (FromCapture a, FromCapture b)
+     => Text -> Text -> Text
+     -> Gen (a, b) -> Order (a, b) -> (Map Text Text -> Bool)
+     -> HoleGroup
+pair gname n1 n2 g o lawful = HoleGroup gname [n1, n2] draw sh rk lawful
+  where
+    draw = rend <$> g
+    rend (a, b) = Map.fromList [(n1, renderCap a), (n2, renderCap b)]
+    both env = (,) <$> bound1 n1 env <*> bound1 n2 env
+    sh env = [ rend smaller | Right ab <- [both env], smaller <- shrinkWith o ab ]
+    rk env = either (const 0) (rankOf o) (both env)
+
+-- One hole's current binding, parsed back through the very capture the
+-- corpus parses it with. Parsing back is what keeps a shrinker honest in
+-- both directions: a value it cannot read is not a value it may shrink,
+-- and a rendering that does not parse is not a candidate.
+bound1 :: FromCapture a => Text -> Map Text Text -> Either Text a
+bound1 n env =
+  maybe (Left ("no binding for " <> n)) Right (Map.lookup n env) >>= parseCap
 
 -- A possibly-empty subset of every piece. R6/the scene's own algebra:
 -- the empty scene is the monoid identity, and `sublistOf` genuinely
@@ -144,6 +215,112 @@ genNestedPieces = do
   sub <- sublistOf (Set.toList super)
   pure (PieceSet (Set.fromList sub), PieceSet super)
 
+-- ---------- the shrinkers ----------
+--
+-- Spec §4: a hole carries a Gen AND a shrink. The shrinker is part of
+-- the hole's contract, not a decoration -- §3.2's composition
+-- counterexample named fifteen pieces where the true answer was one
+-- word, and closing that gap cost a manual narrowing pass.
+
+-- Drop one piece at a time: every subset is reachable by repeated
+-- application, and each candidate is strictly smaller -- by CARDINALITY,
+-- which is the rank.
+pieceSetOrder :: Order PieceSet
+pieceSetOrder = Order (\(PieceSet s) -> Set.size s) shr
+  where shr (PieceSet s) = [ PieceSet (Set.delete p s) | p <- Set.toList s ]
+
+-- The order a year shrinks along, and the ONE place "a smaller year"
+-- is decided.
+--
+-- -1405 is the frame's landmark -- the year every fixture, every golden
+-- view and every conversation in this project is anchored to -- so it is
+-- the MINIMUM of the order, rank 0; every other year ranks by magnitude
+-- above it. Two consequences, and both are the point:
+--
+--   * any year may jump straight to -1405, however far away it is,
+--     because the landmark is smaller than everything;
+--   * -1405 shrinks to NOTHING. It is the bottom, so there is nothing
+--     below it to offer.
+--
+-- The second is not a limitation, it is the fix. The first draft of this
+-- shrinker (this task's brief) offered -1405 from every year AND offered
+-- ordinary integer-shrinks from -1405 -- so -1405 offered -1400 and
+-- -1400 offered -1405 back. Against the live server, where both of those
+-- years genuinely fail the identity law, the greedy loop ping-ponged
+-- between them until the FUEL ran out, and the reported "minimal"
+-- counterexample was wherever the fuel happened to stop. A shrinker that
+-- needs the fuel bound to terminate is exactly the mis-written shrinker
+-- the fuel bound exists to survive, not a shrinker (MEMORY:
+-- types-over-tricks -- the fix belongs in the order, not in a bigger
+-- fuel tank).
+--
+-- Year 0 is excluded by the same law that excludes it from the generator
+-- and from `Capture.parseCap` -- it does not exist in this calendar.
+yearRank :: Year -> Int
+yearRank (Year y) = if y == -1405 then 0 else 1 + abs y
+
+yearOrder :: Order Year
+yearOrder = Order yearRank shr
+  where
+    shr y0@(Year y) =
+      [ y' | y' <- map Year ([-1405 | y /= -1405] ++ shrink y)
+           , inFrame y', yearRank y' < yearRank y0 ]
+    inFrame (Year v) = v /= 0 && v >= -4004 && v <= 100
+
+-- Toward the earliest constructor; the rank is the constructor's index,
+-- so Ground (minBound, rank 0) is the bottom and offers nothing.
+pieceOrder :: Order Piece
+pieceOrder = Order fromEnum (\p -> takeWhile (< p) [minBound .. maxBound])
+
+-- The nested pair, shrunk WITHOUT ever breaking the nesting.
+--
+-- Removing a piece from the superset removes it from the subset too (a
+-- subset cannot keep what its superset no longer has); removing one from
+-- the subset alone is always safe. Both moves strictly reduce
+-- |subset| + |superset|, which is the measure that makes the greedy
+-- loop terminate over this group.
+--
+-- Note what is NOT offered: a candidate that shrank one half in
+-- isolation. That is the whole reason shrinking attaches to the group --
+-- `someSubset` shrunk alone would still be nested (a smaller set of a
+-- superset is still inside it), but `someSuperset` shrunk alone would
+-- routinely stop containing its partner, and the subtractive law would
+-- then be handed a counterexample that no draw could ever have produced.
+nestedOrder :: Order (PieceSet, PieceSet)
+nestedOrder = Order rk shr
+  where
+    rk (PieceSet sub, PieceSet super) = Set.size sub + Set.size super
+    shr (PieceSet sub, PieceSet super) =
+         [ (PieceSet (Set.delete p sub), PieceSet (Set.delete p super))
+         | p <- Set.toList super ]
+      ++ [ (PieceSet (Set.delete p sub), PieceSet super) | p <- Set.toList sub ]
+
+-- The nesting, as a predicate over the group's RENDERED bindings -- owed
+-- by every draw and every shrink candidate alike. An unparseable or
+-- missing binding is a violation, not a pass: "I could not check it" and
+-- "it holds" must never be the same answer (MEMORY:
+-- verify-distinct-not-nonnull).
+nestedLaw :: Map Text Text -> Bool
+nestedLaw env = case (bound1 "someSubset" env, bound1 "someSuperset" env) of
+  (Right (PieceSet sub), Right (PieceSet super)) -> sub `Set.isSubsetOf` super
+  _ -> False
+
+-- Distinctness, likewise: the relationship dress-locality depends on.
+distinctStyleLaw :: Map Text Text -> Bool
+distinctStyleLaw env = case (bound1 "someStyle" env, bound1 "someOtherStyle" env) of
+  (Right a, Right b) -> a /= (b :: StyleName)
+  _ -> False
+
+-- Styles do not shrink. A dress is not made of smaller dresses, and the
+-- only "smaller" move available -- collapsing one style onto the other --
+-- is exactly the collision `genStylePair` exists to rule out. Returning
+-- no candidates is the honest answer, and it is pinned as such rather
+-- than left to be discovered as an empty list nobody meant; the flat
+-- rank says the same thing in the order's own terms (every dress pair is
+-- the same size, so none is smaller than another).
+stylePairOrder :: Order (StyleName, StyleName)
+stylePairOrder = Order (const 0) (const [])
+
 -- The one and only place a hole name is given meaning. EXPLICIT and
 -- TYPED, no name-sniffing/inference: a hole not listed here has no
 -- generator, and `runScenarioProperty`/`substituteExamples` must treat
@@ -153,14 +330,21 @@ genNestedPieces = do
 -- them independent (that is what fix 7cd31bd restored), and independence
 -- is now the structural consequence of being in different groups rather
 -- than a property of the seeding formula alone.
+--
+-- `somePiece` (singular) is registered for Task 12's strengthened
+-- omission law; it is here now, with its shrinker, so that task inherits
+-- a hole that already narrows instead of one that has to be taught to.
 holeGroups :: [HoleGroup]
 holeGroups =
-  [ solo "someYear"   genYear
-  , solo "somePieces" genPieces
-  , solo "someA"      genPieces
-  , solo "someB"      genPieces
-  , pair "stylePair"     "someStyle"  "someOtherStyle" genStylePair
-  , pair "nestedPieces"  "someSubset" "someSuperset"   genNestedPieces
+  [ solo "someYear"   genYear   yearOrder
+  , solo "somePieces" genPieces pieceSetOrder
+  , solo "somePiece"  (elements [minBound .. maxBound] :: Gen Piece) pieceOrder
+  , solo "someA"      genPieces pieceSetOrder
+  , solo "someB"      genPieces pieceSetOrder
+  , pair "stylePair"    "someStyle"  "someOtherStyle"
+      genStylePair    stylePairOrder distinctStyleLaw
+  , pair "nestedPieces" "someSubset" "someSuperset"
+      genNestedPieces nestedOrder    nestedLaw
   ]
 
 -- Every hole name, mapped to the group that draws it. A partition of the
@@ -282,8 +466,16 @@ bindingsFor :: [Text] -> Int -> Map Text Text
 bindingsFor hs i =
   Map.restrictKeys drawn (Set.fromList hs)
   where
-    groups = Map.fromList [ (groupName g, g) | h <- hs, Just g <- [Map.lookup h holeRegistry] ]
-    drawn  = Map.unions [ drawGroup g i | g <- Map.elems groups ]
+    drawn = Map.unions [ drawGroup g i | g <- groupsOf hs ]
+
+-- The groups these hole names belong to, each ONCE, in a fixed order
+-- (by group name). Both the drawer and the shrinker ask this, so a
+-- scenario's groups are enumerated by one rule rather than two -- and
+-- the order being fixed is part of shrinking's determinism, since the
+-- greedy loop takes the FIRST candidate that still fails.
+groupsOf :: [Text] -> [HoleGroup]
+groupsOf hs = Map.elems
+  (Map.fromList [ (groupName g, g) | h <- hs, Just g <- [Map.lookup h holeRegistry] ])
 
 -- Run one @property-tagged scenario N times over generated bindings. A
 -- scenario with no holes at all is a harmless (if wasteful) degenerate
@@ -315,9 +507,104 @@ runScenarioProperty defs w n sc =
             -- not exercise the law: "12 skipped" without a single
             -- example of WHY is a number nobody can act on.
             Skipped why -> loop (i + 1) (skips + 1) (why <> withBindings env)
-            Failed e -> pure (LawRun (Failed (e <> withBindings env)) skips)
-    withBindings env = "\n    with " <> T.intercalate ", "
-      [ h <> " = " <> val | (h, val) <- Map.toList env ]
+            -- Spec §4's forAllShrink: the FIRST failing draw is a
+            -- starting point, not the report. Narrow it to a local
+            -- minimum before saying anything, so the diagnosis names the
+            -- smallest binding that still breaks the law rather than the
+            -- first one that happened to.
+            Failed _ -> do
+              (minEnv, minMsg) <- shrinkToMinimal defs w sc env
+              pure . flip LawRun skips . Failed $
+                minMsg <> withBindings minEnv
+                  -- The original counterexample stays visible: shrinking
+                  -- must SHARPEN the report, never hide what was
+                  -- actually generated. Omitted when nothing shrank,
+                  -- because the tail states a fact about the run.
+                  <> (if minEnv == env then ""
+                        else "\n    (shrunk from " <> renderBindings env <> ")")
+    withBindings env = "\n    with " <> renderBindings env
+
+-- One binding environment as the report writes it. Shared by the "with"
+-- line and the "(shrunk from ...)" tail so the two are always in the
+-- same shape and the same (key) order -- a reader comparing them is
+-- comparing values, not formatting.
+renderBindings :: Map Text Text -> Text
+renderBindings env =
+  T.intercalate ", " [ h <> " = " <> val | (h, val) <- Map.toList env ]
+
+-- forAllShrink's semantics over IO: from a known-failing binding
+-- environment, repeatedly try replacing ONE GROUP with ONE strictly
+-- smaller binding for all of its members at once; keep the first
+-- replacement that still fails; stop at a local minimum.
+--
+-- Why the semantics and not the combinator: QuickCheck's `forAllShrink`
+-- wants a pure `Testable`, our scenario body is IO, and -- decisively --
+-- this runner's reproducibility rests on `holeSeed`, a pure function of
+-- (group name, iteration) that `quickCheckWith`'s replay machinery would
+-- take over. Same guarantee, same determinism, no second seeding regime.
+--
+-- Deterministic (the candidate order is `groupsOf`'s, then the
+-- shrinker's own, and no candidate consumes fresh randomness);
+-- terminating (every candidate has a strictly smaller `groupRank` than
+-- the bindings it replaces, and rank is a bounded natural, so the total
+-- rank of the environment strictly decreases at every accepted step).
+-- The fuel bound is a hard stop, not a tuning knob -- it exists so a
+-- mis-written shrinker that returns a value of equal or greater rank
+-- cannot loop forever. It is never what ends a well-formed run, and the
+-- rank law in Spec.hs is what keeps that true.
+--
+-- A candidate that SKIPS or PASSES is not a smaller counterexample and
+-- is discarded: shrinking may only ever move between failures.
+shrinkToMinimal
+  :: [StepDef] -> World -> Scenario -> Map Text Text -> IO (Map Text Text, Text)
+shrinkToMinimal defs w sc env0 = do
+  -- The starting message is re-derived rather than handed in, so that
+  -- EVERY message this function can report -- the original included --
+  -- comes from the same code path. The fallback is not "no text
+  -- available": a draw that failed once and passes on an identical
+  -- re-run is a finding in its own right (determinism is a law here),
+  -- and the report says so instead of showing an empty reason.
+  e0 <- failureOf env0
+  go (1000 :: Int) env0
+     (maybe "the failing draw did not reproduce on re-run -- this law is \
+            \not deterministic" id e0)
+  where
+    failureOf env = do
+      v <- runScenario defs w (substitute env sc)
+      pure $ case v of Failed e -> Just e; _ -> Nothing
+    -- Only a group whose members are ALL bound here can be shrunk: half
+    -- a correlated pair cannot be re-bound lawfully (its partner's value
+    -- is not in evidence), and inventing the partner would report a hole
+    -- the scenario never mentioned. A solo group is always complete, so
+    -- this costs nothing in the ordinary case.
+    --
+    -- The rank filter is not a second opinion about what a shrinker
+    -- meant: it is where "smaller" is CHECKED rather than assumed. A
+    -- candidate that does not rank strictly below what it replaces is
+    -- not a shrink, and admitting it is how a loop like this stops
+    -- terminating. Spec.hs's rank law is what makes such a shrinker
+    -- LOUD; this is what makes it harmless in the meantime. (A strictly
+    -- smaller rank also implies the bindings really changed, since rank
+    -- is a function of them -- so no separate "is it different?" test is
+    -- needed here.)
+    candidates env =
+      [ next
+      | g <- groupsOf (Map.keys env)
+      , all (`Map.member` env) (groupMembers g)
+      , slice <- groupShrink g env
+      , let next = Map.union slice env
+      , groupRank g next < groupRank g env
+      ]
+    go fuel env msg
+      | fuel <= 0 = pure (env, msg)
+      | otherwise = attempt (candidates env)
+      where
+        attempt [] = pure (env, msg)
+        attempt (c : cs) = do
+          r <- failureOf c
+          case r of
+            Just msg' -> go (fuel - 1) c msg'
+            Nothing   -> attempt cs
 
 -- For the totality check ONLY (Check.dehole, applied only when the
 -- enclosing scenario is @property-tagged — see Check.hs): every
