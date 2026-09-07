@@ -780,7 +780,7 @@ fn rings_overlap(ra: &[UnitVec], rb: &[UnitVec]) -> bool {
 /// One row of THE CENSUS: the queryable image of every disposition at
 /// an instant — the instrument that makes a policy change reviewable
 /// as a table diff before any pixel moves.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CensusRow {
     pub entity: String,
     pub name: String,
@@ -832,6 +832,50 @@ pub fn census(store: &CanonStore, at: &Timestamp) -> Vec<CensusRow> {
     }
     rows.sort_by(|a, b| (a.layer, &a.entity).cmp(&(b.layer, &b.entity)));
     rows
+}
+
+/// What changed between two instants of the disposition table. Spec §6
+/// stratum 3 judges Stages 1-3 with this: Stage 1's diff IS the identity
+/// unification (reviewed name by name); Stages 2 and 3 must produce an
+/// EMPTY one. Rows are matched on (layer, entity) -- the pair that names
+/// WHO is disposed WHERE -- so a row whose name, kind, or tenure moved
+/// is a Changed, not a Removed+Added pair that hides what actually moved.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CensusChange {
+    Added(CensusRow),
+    Removed(CensusRow),
+    Changed { from: CensusRow, to: CensusRow },
+}
+
+pub fn census_diff(store: &CanonStore, from: &Timestamp, to: &Timestamp) -> Vec<CensusChange> {
+    let key = |r: &CensusRow| (r.layer, r.entity.clone());
+    let a: BTreeMap<_, _> = census(store, from).into_iter().map(|r| (key(&r), r)).collect();
+    let b: BTreeMap<_, _> = census(store, to).into_iter().map(|r| (key(&r), r)).collect();
+    let mut out = Vec::new();
+    for (k, ra) in &a {
+        match b.get(k) {
+            None => out.push(CensusChange::Removed(ra.clone())),
+            Some(rb) if rb != ra =>
+                out.push(CensusChange::Changed { from: ra.clone(), to: rb.clone() }),
+            Some(_) => {}
+        }
+    }
+    for (k, rb) in &b {
+        if !a.contains_key(k) {
+            out.push(CensusChange::Added(rb.clone()));
+        }
+    }
+    out.sort_by(|x, y| census_change_sort_key(x).cmp(&census_change_sort_key(y)));
+    out
+}
+
+fn census_change_sort_key(c: &CensusChange) -> (&'static str, &'static str, String) {
+    let (tag, r) = match c {
+        CensusChange::Added(r) => ("added", r),
+        CensusChange::Changed { to, .. } => ("changed", to),
+        CensusChange::Removed(r) => ("removed", r),
+    };
+    (tag, r.layer, r.entity.clone())
 }
 
 pub mod persist;

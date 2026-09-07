@@ -589,6 +589,91 @@ fn the_census_is_total_and_sorted() {
     assert!(census(&store, &ts(-2000)).is_empty(), "before the first moment: empty, not error");
 }
 
+// -------------------- census_diff: the instrument spec §6 stratum 3
+// judges Stages 1-3 with (Task 7). No shared `fixture_store()` builder
+// exists in this module today -- every census test above builds its
+// own store inline -- so this test does the same, choosing two
+// instants that genuinely differ: Egypt's tenure moves Held->Claimed
+// (a Changed row), Shiloh drops off the map between t1 and t2
+// (Removed), and Zion appears at t2 (Added). A reflexivity-only test
+// would pass against `census_diff = const vec![]`; this one cannot.
+
+fn changed_from(d: &[CensusChange], r: &CensusRow) -> bool {
+    d.iter().any(|c| matches!(c, CensusChange::Changed { from, .. } if from == r))
+}
+
+fn changed_to(d: &[CensusChange], r: &CensusRow) -> bool {
+    d.iter().any(|c| matches!(c, CensusChange::Changed { to, .. } if to == r))
+}
+
+#[test]
+fn census_diff_is_empty_against_itself_and_names_every_real_change() {
+    let mut store = CanonStore::default();
+    let t1 = ts(-1405);
+    let t2 = ts(-1050);
+
+    // t1: Egypt (held) and Shiloh (a point) stand.
+    let egypt_ring = square(25.0, 26.0, 8.0);
+    let egypt_held = area(&mut store, "egypt", egypt_ring.clone());
+    let shiloh = store.insert_feature(Feature::Point(Landmark {
+        entity: entity("shiloh"),
+        name: "shiloh".to_string(),
+        at: uv(32.0, 35.0),
+    }));
+    let s1 = store.insert_snapshot(Snapshot { features: BTreeSet::from([egypt_held, shiloh]) });
+
+    // t2: Egypt is now Claimed under a new name (same ground, but the
+    // name AND tenure moved -- a genuine Changed row, not a
+    // Removed+Added pair). Note: `feature_bytes` for Area hashes
+    // entity/name/rings/holes but NOT tenure, so a tenure-only edit
+    // would collide on the SAME content id as the Held feature and
+    // silently keep the first insert (content addressing dedup) --
+    // the name must move too for this to mint a genuinely distinct
+    // feature id.
+    let egypt_ring_id = store.insert_border(egypt_ring);
+    let egypt_claimed = store.insert_feature(Feature::Area(Area {
+        entity: entity("egypt"),
+        name: "egypt (under tribute)".to_string(),
+        rings: BTreeSet::from([egypt_ring_id]),
+        holes: BTreeSet::new(),
+        tenure: Tenure::Claimed,
+    }));
+    let zion = area(&mut store, "zion", square(31.0, 35.0, 1.0));
+    let s2 = store.insert_snapshot(Snapshot { features: BTreeSet::from([egypt_claimed, zion]) });
+
+    let mut world = World::default();
+    world.insert(t1, s1).unwrap();
+    world.insert(t2, s2).unwrap();
+    store.set_layer(LayerKind::Territory, world);
+
+    // Reflexivity: an instant differs from itself in nothing. This one
+    // is cheap and it is the law Stages 2 and 3 are judged by.
+    assert_eq!(census_diff(&store, &t1, &t1), Vec::new());
+
+    // Discrimination: the diff is NOT empty where the census differs,
+    // and it accounts for the difference exactly -- every row present
+    // at t1 and absent at t2 appears once as Removed, and vice versa.
+    let a = census(&store, &t1);
+    let b = census(&store, &t2);
+    let d = census_diff(&store, &t1, &t2);
+    assert_eq!(d.is_empty(), a == b, "a non-empty diff iff the censuses differ");
+    assert!(!d.is_empty(), "t1 and t2 were chosen to genuinely differ");
+
+    let removed: Vec<_> = d.iter().filter_map(|c| match c {
+        CensusChange::Removed(r) => Some(r.clone()), _ => None }).collect();
+    let added: Vec<_> = d.iter().filter_map(|c| match c {
+        CensusChange::Added(r) => Some(r.clone()), _ => None }).collect();
+    for r in &a { if !b.contains(r) && !changed_from(&d, r) { assert!(removed.contains(r)); } }
+    for r in &b { if !a.contains(r) && !changed_to(&d, r) { assert!(added.contains(r)); } }
+
+    // And name the exact three changes, not just their shape.
+    assert!(d.iter().any(|c| matches!(c, CensusChange::Removed(r) if r.entity == "shiloh")));
+    assert!(d.iter().any(|c| matches!(c, CensusChange::Added(r) if r.entity == "zion")));
+    assert!(d.iter().any(|c| matches!(c,
+        CensusChange::Changed { from, to } if from.entity == "egypt" && from.tenure == "held" && to.tenure == "claimed"
+    )));
+}
+
 // -------------------- Registry: one identity per real thing (Task 13)
 // Spec §2 equation 1: no witness mints an entity; every witness
 // references the registry. Unification is a WRITTEN act with a typed

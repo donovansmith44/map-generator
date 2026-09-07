@@ -872,6 +872,38 @@ pub fn route(
     (status, ctype, body.into_bytes(), headers)
 }
 
+/// One census row's wire shape, shared by the single-instant and the
+/// `to=` diff paths so the two can never disagree about what a row
+/// looks like on the wire.
+fn census_row_json(r: &map_canon::CensusRow) -> serde_json::Value {
+    serde_json::json!({
+        "entity": r.entity,
+        "name": r.name,
+        "layer": r.layer,
+        "kind": r.kind,
+        "tenure": r.tenure,
+    })
+}
+
+/// One census change's wire shape (the `to=` diff path): `{"change":
+/// "added"|"removed"|"changed", "from"?: row, "to"?: row}`, built from
+/// the shared `census_row_json` above.
+fn census_change_json(c: &map_canon::CensusChange) -> serde_json::Value {
+    let (tag, from, to) = match c {
+        map_canon::CensusChange::Added(r) => ("added", None, Some(r)),
+        map_canon::CensusChange::Removed(r) => ("removed", Some(r), None),
+        map_canon::CensusChange::Changed { from, to } => ("changed", Some(from), Some(to)),
+    };
+    let mut obj = serde_json::json!({ "change": tag });
+    if let Some(r) = from {
+        obj["from"] = census_row_json(r);
+    }
+    if let Some(r) = to {
+        obj["to"] = census_row_json(r);
+    }
+    obj
+}
+
 fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String, Vec<(String, String)>) {
     let p = Params::parse(query);
     let bad = |msg: &str| (400u16, "text/plain", msg.to_string(), Vec::new());
@@ -926,17 +958,25 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             let Some(canon) = app.canon.as_ref() else {
                 return bad("census requires the canon (run map-compile build)");
             };
+            // Additive: `to=` asks for the DIFF between two instants.
+            // Without it the route answers exactly as it did before --
+            // no blessed census fixture moves.
+            if let Some(to) = p.year("to") {
+                let changes: Vec<serde_json::Value> =
+                    map_canon::census_diff(canon.store(), &year, &to)
+                        .iter()
+                        .map(census_change_json)
+                        .collect();
+                return (
+                    200,
+                    "application/json",
+                    serde_json::Value::Array(changes).to_string(),
+                    Vec::new(),
+                );
+            }
             let rows: Vec<serde_json::Value> = map_canon::census(canon.store(), &year)
                 .into_iter()
-                .map(|r| {
-                    serde_json::json!({
-                        "entity": r.entity,
-                        "name": r.name,
-                        "layer": r.layer,
-                        "kind": r.kind,
-                        "tenure": r.tenure,
-                    })
-                })
+                .map(|r| census_row_json(&r))
                 .collect();
             (200, "application/json", serde_json::Value::Array(rows).to_string(), Vec::new())
         }
@@ -1311,6 +1351,54 @@ fn handle(app: &App, mut stream: TcpStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `/api/census?to=` wire shape, pinned at the pure-function
+    /// level: no route-level HTTP test idiom exists in this crate today
+    /// (every existing test here exercises a pure helper, not `route`/
+    /// `route_text`, which need a fully loaded `App` with a compiled
+    /// canon on disk) -- so `census_row_json`/`census_change_json`,
+    /// the exact functions BOTH the plain and the `to=` path call, are
+    /// exercised directly. This is what keeps the two paths from ever
+    /// disagreeing about a row's shape.
+    #[test]
+    fn census_row_and_change_json_shapes_are_pinned() {
+        let row = |tenure: &'static str| map_canon::CensusRow {
+            entity: "egypt".to_string(),
+            name: "egypt".to_string(),
+            layer: "territory",
+            kind: "area",
+            tenure,
+        };
+        assert_eq!(
+            census_row_json(&row("held")),
+            serde_json::json!({
+                "entity": "egypt", "name": "egypt", "layer": "territory",
+                "kind": "area", "tenure": "held",
+            })
+        );
+
+        let added = map_canon::CensusChange::Added(row("held"));
+        assert_eq!(
+            census_change_json(&added),
+            serde_json::json!({ "change": "added", "to": census_row_json(&row("held")) })
+        );
+
+        let removed = map_canon::CensusChange::Removed(row("held"));
+        assert_eq!(
+            census_change_json(&removed),
+            serde_json::json!({ "change": "removed", "from": census_row_json(&row("held")) })
+        );
+
+        let changed = map_canon::CensusChange::Changed { from: row("held"), to: row("claimed") };
+        assert_eq!(
+            census_change_json(&changed),
+            serde_json::json!({
+                "change": "changed",
+                "from": census_row_json(&row("held")),
+                "to": census_row_json(&row("claimed")),
+            })
+        );
+    }
 
     /// The regression that shipped: URLSearchParams encodes ':' as
     /// %3A, and an undecoded server rejected every region query.
