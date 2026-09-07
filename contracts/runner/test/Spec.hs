@@ -18,6 +18,7 @@ import qualified Prop
 import Control.Exception (try, bracket, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
+import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Maybe (fromJust, listToMaybe)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
@@ -176,7 +177,7 @@ main = hspec $ do
         fake url = pure (Right (raw, v))
           where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
                 v   = fromJust (A.decodeStrict raw)
-        w0 = World "http://x" fake "test/fixtures" mempty False
+        w0 = mkWorld "http://x" fake "test/fixtures"
         sceneVal :: [T.Text] -> A.Value
         sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
         labelsVal :: [T.Text] -> A.Value
@@ -272,6 +273,375 @@ main = hspec $ do
         Left e  -> e `shouldSatisfy` T.isInfixOf "has labels"
         Right _ -> expectationFailure "expected non-empty labels to fail"
 
+  describe "fact-tier steps (Task 10): GET-as binding, masked whole-body fixture equality" $ do
+    it "GET-as binds under a name" $ do
+      let fake _ = pure (Right ("[]", fromJust (A.decodeStrict "[]")))
+          w = mkWorld "http://x" fake ""
+      Just get <- pure (firstMatch When "I GET /api/subjects?year=-1405 as first")
+      Right w1 <- get w
+      Map.member "first" (bound w1) `shouldBe` True
+    it "masked fixture equality: body pinned whole, mask shape-checked" $ do
+      let o = "{\"version\":\"0.1.0\",\"graphPin\":\"0123456789abcdef\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "a masked field with the WRONG shape still fails, naming the shape violation" $ do
+      let o = "{\"version\":\"0.1.0\",\"graphPin\":\"nope\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "not 16 hex"
+        Right _ -> expectationFailure "expected a wrongly-shaped mask value to fail"
+    it "an unmasked difference anywhere in the body fails, naming the fixture" $ do
+      let o = "{\"version\":\"9.9.9\",\"graphPin\":\"0123456789abcdef\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "differs from fixture"
+        Right _ -> expectationFailure "expected an unmasked body difference to fail"
+    it "a masked field that is simply missing fails, naming the field" $ do
+      let o = "{\"version\":\"0.1.0\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/contract")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+      r <- chk w1
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "no field graphPin"
+        Right _ -> expectationFailure "expected a missing masked field to fail"
+    it "bless mode writes the body with the masked field replaced by MASKED, never the actual secret value" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bless-mask-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          o = "{\"version\":\"0.1.0\",\"graphPin\":\"0123456789abcdef\"}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = (mkWorld "http://x" fake dir) { blessMode = True }
+      createDirectoryIfMissing True dir
+      (`finally` removeDirectoryRecursive dir) $ do
+        Just get <- pure (firstMatch When "I GET /api/contract")
+        Right w1 <- get w
+        Just chk <- pure (firstMatch Then
+          "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+        r <- chk w1
+        r `shouldSatisfy` isRight
+        written <- BS.readFile (dir </> "contract.json")
+        (A.decodeStrict written :: Maybe A.Value) `shouldBe`
+          A.decodeStrict "{\"version\":\"0.1.0\",\"graphPin\":\"MASKED\"}"
+
+  describe "scene algebra steps (Task 11): piece attribution, composition, dress-locality, resource identity" $ do
+    it "every feature entry carries a piece field: passes when every entry has one" $ do
+      let v = A.object ["features" A..= ([ A.object ["piece" A..= ("ground" :: T.Text)]
+                                          , A.object ["piece" A..= ("water" :: T.Text)] ] :: [A.Value])]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("_last", (BS.empty, v))] }
+          run = fromJust $ firstMatch Then "every feature entry carries a piece field"
+      r <- run w
+      r `shouldSatisfy` isRight
+    it "every feature entry carries a piece field: an entry missing it fails honestly \
+       \(the v0.1 wart), naming it -- @target: matched and honestly red, not an orphan" $ do
+      let v = A.object ["features" A..= ([A.object ["kind" A..= ("x" :: T.Text)]] :: [A.Value])]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("_last", (BS.empty, v))] }
+          run = fromJust $ firstMatch Then "every feature entry carries a piece field"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "piece attribution"
+        Right _ -> expectationFailure "expected the v0.1 wart to fail honestly, not silently pass"
+
+    it "combining threads the SAME bound year into the union render -- not a \
+       \hardcoded one (the plan's own self-review flag)" $ do
+      -- The fake REJECTS any request not carrying "year=-77": if the
+      -- combine step hardcoded a different year (as the plan's own
+      -- sketch originally did, at -1405), this test would fail on that
+      -- mismatch rather than merely coincidentally passing.
+      let fake url
+            | "year=-77" `T.isInfixOf` url = pure (Right (raw, val))
+            | otherwise = pure (Left ("wrong year threaded into union render url: " <> url))
+            where
+              raw = TE.encodeUtf8 url
+              active :: [T.Text]
+              active = [ "ground" | "relief=1" `T.isInfixOf` url ]
+                    ++ [ "water"  | not ("topo=0" `T.isInfixOf` url) ]
+              val = A.object ["resources" A..= [ A.object ["id" A..= p] | p <- active ]]
+          w0 = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When "I render pieces ground at year -77 in style canaan as sceneA")
+      Right w1 <- r1 w0
+      Just r2 <- pure (firstMatch When "I render pieces water at year -77 in style canaan as sceneB")
+      Right w2 <- r2 w1
+      Just chk <- pure (firstMatch Then "combining sceneA and sceneB equals rendering ground plus water")
+      r <- chk w2
+      r `shouldSatisfy` isRight
+    it "combining reports Left naming the algebra failure when the union's \
+       \resources are genuinely not the union of its parts'" $ do
+      let fake url
+            | not ("year=-77" `T.isInfixOf` url) = pure (Left "wrong year")
+            | otherwise = pure (Right (TE.encodeUtf8 url, val))
+            where
+              isUnion = "relief=1" `T.isInfixOf` url && not ("topo=0" `T.isInfixOf` url)
+              activePieces :: [T.Text]
+              activePieces = [ "ground" | "relief=1" `T.isInfixOf` url ]
+                          ++ [ "water"  | not ("topo=0" `T.isInfixOf` url) ]
+              -- the union render alone gets an extra id absent from
+              -- either part -- a genuine, detectable violation of the
+              -- union law, not merely a coincidental fixture mismatch.
+              ids = if isUnion then activePieces ++ ["bogus"] else activePieces
+              val = A.object ["resources" A..= [ A.object ["id" A..= p] | p <- ids ]]
+          w0 = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When "I render pieces ground at year -77 in style canaan as sceneA")
+      Right w1 <- r1 w0
+      Just r2 <- pure (firstMatch When "I render pieces water at year -77 in style canaan as sceneB")
+      Right w2 <- r2 w1
+      Just chk <- pure (firstMatch Then "combining sceneA and sceneB equals rendering ground plus water")
+      r <- chk w2
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "not the union of its parts"
+        Right _ -> expectationFailure "expected a genuinely non-union result to fail"
+
+    it "dress-locality: two restyled scenes with identical resource ids pass" $ do
+      let sceneVal :: [T.Text] -> A.Value
+          sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList
+                    [ ("dressed", (BS.empty, sceneVal ["r1", "r2"]))
+                    , ("redressed", (BS.empty, sceneVal ["r1", "r2"])) ] }
+          run = fromJust $ firstMatch Then "dressed and redressed differ only in dress, never in geometry"
+      r <- run w
+      r `shouldSatisfy` isRight
+    it "dress-locality: a genuine geometry-id difference fails, naming that dress is not local" $ do
+      let sceneVal :: [T.Text] -> A.Value
+          sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList
+                    [ ("dressed", (BS.empty, sceneVal ["r1", "r2"]))
+                    , ("redressed", (BS.empty, sceneVal ["r1", "r9"])) ] }
+          run = fromJust $ firstMatch Then "dressed and redressed differ only in dress, never in geometry"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "dress is not local"
+        Right _ -> expectationFailure "expected differing geometry ids to fail"
+
+    it "fetching a scene's first resource twice: identical bytes pass" $ do
+      let sceneVal = A.object ["resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])]
+          rawGet _ = pure (Right "same-bytes")
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", (BS.empty, sceneVal))], transportRaw = rawGet }
+          run = fromJust $ firstMatch Then "fetching scene's first resource twice yields identical bytes"
+      r <- run w
+      r `shouldSatisfy` isRight
+    it "fetching a scene's first resource twice: two different payloads for the \
+       \same id fails, naming the id" $ do
+      let sceneVal = A.object ["resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])]
+      counter <- newIORef (0 :: Int)
+      let rawGet _ = do
+            n <- readIORef counter
+            modifyIORef counter (+ 1)
+            pure (Right (if n == (0 :: Int) then "bytes-A" else "bytes-B"))
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", (BS.empty, sceneVal))], transportRaw = rawGet }
+          run = fromJust $ firstMatch Then "fetching scene's first resource twice yields identical bytes"
+      r <- run w
+      case r of
+        Left e  -> do
+          e `shouldSatisfy` T.isInfixOf "r1"
+          e `shouldSatisfy` T.isInfixOf "two different payloads"
+        Right _ -> expectationFailure "expected two different payloads for the same id to fail"
+    it "fetching a scene's first resource twice: an unbound scene fails, naming it" $ do
+      let w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
+          run = fromJust $ firstMatch Then "fetching ghost's first resource twice yields identical bytes"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "ghost"
+        Right _ -> expectationFailure "expected an unbound scene name to fail"
+
+    it "a batch fetch equal to its concatenated singles passes" $ do
+      let sceneVal = A.object ["resources" A..=
+            ([A.object ["id" A..= ("r1" :: T.Text)], A.object ["id" A..= ("r2" :: T.Text)]] :: [A.Value])]
+          rawGet url
+            | "ids=r1,r2" `T.isInfixOf` url = pure (Right "AB")
+            | "id=r1" `T.isInfixOf` url     = pure (Right "A")
+            | "id=r2" `T.isInfixOf` url     = pure (Right "B")
+            | otherwise                     = pure (Left ("unexpected url: " <> url))
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", (BS.empty, sceneVal))], transportRaw = rawGet }
+          run = fromJust $ firstMatch Then
+            "fetching scene's first two resources as a batch equals fetching them singly"
+      r <- run w
+      r `shouldSatisfy` isRight
+    it "a batch fetch that genuinely differs from its concatenated singles fails, \
+       \naming the mismatch" $ do
+      let sceneVal = A.object ["resources" A..=
+            ([A.object ["id" A..= ("r1" :: T.Text)], A.object ["id" A..= ("r2" :: T.Text)]] :: [A.Value])]
+          rawGet url
+            | "ids=r1,r2" `T.isInfixOf` url = pure (Right "WRONG")
+            | "id=r1" `T.isInfixOf` url     = pure (Right "A")
+            | "id=r2" `T.isInfixOf` url     = pure (Right "B")
+            | otherwise                     = pure (Left ("unexpected url: " <> url))
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", (BS.empty, sceneVal))], transportRaw = rawGet }
+          run = fromJust $ firstMatch Then
+            "fetching scene's first two resources as a batch equals fetching them singly"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "batch bytes differ"
+        Right _ -> expectationFailure "expected a genuine batch/singles mismatch to fail"
+
+  describe "consumed projection (Task 12): a declared field-tree over what we consume" $ do
+    it "projects a two-field-plus-extras object through the eras projection, \
+       \keeping exactly what parse_eras reads and dropping the rest" $ do
+      let raw = A.toJSON ([ A.object
+              [ "id" A..= ("e1" :: T.Text), "name" A..= ("Alpha" :: T.Text)
+              , "from_year" A..= (1 :: Int), "to_year" A..= (9 :: Int)
+              , "notes" A..= ("drop me" :: T.Text) ] ] :: [A.Value])
+          expected = A.toJSON ([ A.object
+              [ "id" A..= ("e1" :: T.Text), "name" A..= ("Alpha" :: T.Text)
+              , "from_year" A..= (1 :: Int), "to_year" A..= (9 :: Int) ] ] :: [A.Value])
+      case Map.lookup "eras" projections of
+        Just p  -> project p raw `shouldBe` expected
+        Nothing -> expectationFailure "no 'eras' projection registered"
+    it "a CHANGED consumed value changes the projection -- it is not blind \
+       \to the fields it keeps" $ do
+      let mk fy = A.toJSON ([ A.object
+              [ "id" A..= ("e1" :: T.Text), "name" A..= ("Alpha" :: T.Text)
+              , "from_year" A..= (fy :: Int), "to_year" A..= (9 :: Int) ] ] :: [A.Value])
+      case Map.lookup "eras" projections of
+        Just p  -> project p (mk (1 :: Int)) `shouldNotBe` project p (mk 2)
+        Nothing -> expectationFailure "no 'eras' projection registered"
+    it "an ADDED unconsumed field still passes -- the projection drops what \
+       \it doesn't read, not merely what happens to be absent" $ do
+      let row extra = A.object $
+            [ "id" A..= ("e1" :: T.Text), "name" A..= ("Alpha" :: T.Text)
+            , "from_year" A..= (1 :: Int), "to_year" A..= (9 :: Int) ] ++ extra
+      case Map.lookup "eras" projections of
+        Just p  -> project p (A.toJSON [row []])
+                     `shouldBe` project p (A.toJSON [row ["brand-new-field" A..= True]])
+        Nothing -> expectationFailure "no 'eras' projection registered"
+    -- Corrects the plan's own sketch (R9): vendor.rs derives EventRow's
+    -- `label` from `title`, falling back to `label` -- it is not two
+    -- separate raw fields both kept as-is -- and `verses` is not a
+    -- top-level field at all; it is gathered by flattening
+    -- witnesses[].verse_groups[].verses. Verified directly against
+    -- crates/map-compile/src/vendor.rs's parse_event (lines 163-198).
+    it "the event projection derives 'label' from 'title' and flattens \
+       \verses out of witnesses[].verse_groups[].verses" $ do
+      let raw = A.object
+            [ "id" A..= ("ab_haran" :: T.Text)
+            , "title" A..= ("Sojourn in Haran; the call of Abram" :: T.Text)
+            , "kind" A..= ("event" :: T.Text)
+            , "when" A..= A.object [ "from_year" A..= ((-2092) :: Int)
+                                    , "to_year" A..= ((-2091) :: Int) ]
+            , "places" A..= [ A.object [ "id" A..= ("haran" :: T.Text)
+                                        , "name" A..= ("Haran" :: T.Text) ] ]
+            , "witnesses" A..=
+                [ A.object [ "book" A..= ("GEN" :: T.Text), "verse_groups" A..=
+                    [ A.object [ "chapter" A..= (11 :: Int)
+                               , "verses" A..= (["GEN.11.31"] :: [T.Text]) ]
+                    , A.object [ "chapter" A..= (12 :: Int)
+                               , "verses" A..= (["GEN.12.1", "GEN.12.4"] :: [T.Text]) ]
+                    ] ] ]
+            ]
+          expected = A.object
+            [ "id" A..= ("ab_haran" :: T.Text)
+            , "label" A..= ("Sojourn in Haran; the call of Abram" :: T.Text)
+            , "when" A..= A.object [ "from_year" A..= ((-2092) :: Int)
+                                    , "to_year" A..= ((-2091) :: Int) ]
+            , "places" A..= [A.object ["id" A..= ("haran" :: T.Text)]]
+            , "verses" A..= (["GEN.11.31", "GEN.12.1", "GEN.12.4"] :: [T.Text])
+            ]
+      case Map.lookup "event" projections of
+        Just p  -> project p raw `shouldBe` expected
+        Nothing -> expectationFailure "no 'event' projection registered"
+    it "the event projection falls back to 'label' when 'title' is absent, \
+       \and an event with no witnesses projects empty verses (not an \
+       \absent key)" $ do
+      let raw = A.object
+            [ "id" A..= ("e2" :: T.Text)
+            , "label" A..= ("Fallback Label" :: T.Text)
+            , "places" A..= ([] :: [A.Value])
+            ]
+          expected = A.object
+            [ "id" A..= ("e2" :: T.Text)
+            , "label" A..= ("Fallback Label" :: T.Text)
+            , "places" A..= ([] :: [A.Value])
+            , "verses" A..= ([] :: [T.Text])
+            ]
+      case Map.lookup "event" projections of
+        Just p  -> project p raw `shouldBe` expected
+        Nothing -> expectationFailure "no 'event' projection registered"
+    it "a projection name outside the registry fails to parse, naming the \
+       \real endpoints" $
+      case parseCap @ProjName "erass" of
+        Left e  -> do
+          e `shouldSatisfy` T.isInfixOf "not a projection"
+          e `shouldSatisfy` T.isInfixOf "eras"
+        Right _ -> expectationFailure "accepted a non-projection name"
+
+    it "the consumed-projection step passes when the response's consumed \
+       \fields equal the fixture, with every unconsumed extra filtered" $ do
+      let o = "[{\"id\":\"e9\",\"name\":\"Beta\",\"from_year\":10,\"to_year\":90,\"extra\":true}]"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/eras")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the consumed projection eras equals fixture \"eras-single-test-consumed\"")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "the consumed-projection step fails, naming the projection and \
+       \fixture, when a CONSUMED value genuinely differs" $ do
+      let o = "[{\"id\":\"e9\",\"name\":\"Beta\",\"from_year\":11,\"to_year\":90}]"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/eras")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the consumed projection eras equals fixture \"eras-single-test-consumed\"")
+      r <- chk w1
+      case r of
+        Left e  -> do
+          e `shouldSatisfy` T.isInfixOf "eras"
+          e `shouldSatisfy` T.isInfixOf "eras-single-test-consumed"
+        Right _ -> expectationFailure "expected a genuinely changed consumed value to fail"
+    it "bless mode writes the PROJECTED value, not the raw response -- the \
+       \unconsumed extra field must not survive into the fixture" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bless-projection-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          o = "[{\"id\":\"e9\",\"name\":\"Beta\",\"from_year\":10,\"to_year\":90,\"extra\":true}]"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = (mkWorld "http://x" fake dir) { blessMode = True }
+      createDirectoryIfMissing True dir
+      (`finally` removeDirectoryRecursive dir) $ do
+        Just get <- pure (firstMatch When "I GET /api/eras")
+        Right w1 <- get w
+        Just chk <- pure (firstMatch Then
+          "the consumed projection eras equals fixture \"eras-consumed-bless-test\"")
+        r <- chk w1
+        r `shouldSatisfy` isRight
+        written <- BS.readFile (dir </> "eras-consumed-bless-test.json")
+        (A.decodeStrict written :: Maybe A.Value) `shouldBe`
+          A.decodeStrict "[{\"id\":\"e9\",\"name\":\"Beta\",\"from_year\":10,\"to_year\":90}]"
+
   describe "runner" $ do
     it "runs a scenario to Passed and reports @target failures as expected-red" $ do
       let feat = T.unlines
@@ -286,7 +656,7 @@ main = hspec $ do
             , "    Then the response field missing equals nope"
             ]
           fake _ = pure (Right ("{\"x\":1}", fromJust (A.decodeStrict "{\"x\":1}")))
-          w = World "http://x" fake "test/fixtures" mempty False
+          w = mkWorld "http://x" fake "test/fixtures"
       -- (Deviation from the brief's literal `let Right f = ...` / `head`:
       -- both trigger -Wincomplete-uni-patterns / -Wx-partial under this
       -- project's -Wall. Restructured as a case/list-pattern to keep the
@@ -298,7 +668,7 @@ main = hspec $ do
           r1 `shouldBe` Passed
           r2 `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
     it "an undefined step fails naming the orphan" $ do
-      let w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+      let w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
       case parseFeature "t.feature"
              "Feature: t\n  Scenario: s\n    When I do something nobody defined" of
         Left e -> expectationFailure (T.unpack e)
@@ -326,7 +696,7 @@ main = hspec $ do
                 pure (Right ("{\"ok\":\"yes\"}", fromJust (A.decodeStrict "{\"ok\":\"yes\"}")))
             | otherwise =
                 pure (Right ("{\"x\":1}", fromJust (A.decodeStrict "{\"x\":1}")))
-          w = World "http://x" fake "test/fixtures" mempty False
+          w = mkWorld "http://x" fake "test/fixtures"
       results <- runFeatureFiles allSteps w
         [ "test/features/classification.feature", "test/features/badparse.feature" ]
       case results of
@@ -363,7 +733,7 @@ main = hspec $ do
     -- failure branch includes, even though this stage's whole deliverable
     -- is a legible diagnosis of which step failed.
     it "an exception thrown while running a step is reported with the step's keyword and body" $ do
-      let w = World "http://x" (\_ -> error "boom") "" mempty False
+      let w = mkWorld "http://x" (\_ -> error "boom") ""
       case parseFeature "t.feature" "Feature: t\n  Scenario: s\n    When I GET /boom" of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -392,7 +762,7 @@ main = hspec $ do
             [ mkStep When (lit "I do " *> capRest @FixtureRefFreeText) (\_ w' -> pure (Right w'))
             , mkStep When (lit "I do the thing") (\() w' -> pure (Right w'))
             ]
-          w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+          w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
       case parseFeature "dup2.feature" $ T.unlines
              [ "Feature: dup2"
              , "  Scenario: s"
@@ -442,7 +812,7 @@ main = hspec $ do
       let fake url = pure (Right (raw, v))
             where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
                   v   = fromJust (A.decodeStrict raw)
-          w0 = World "http://x" fake "test/fixtures" mempty False
+          w0 = mkWorld "http://x" fake "test/fixtures"
       case parseFeature "c1.feature" $ T.unlines
              [ "Feature: c1"
              , "  Scenario: s"
@@ -473,7 +843,7 @@ main = hspec $ do
       let fake url = pure (Right (raw, v))
             where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
                   v   = fromJust (A.decodeStrict raw)
-          w0 = World "http://x" fake "test/fixtures" mempty False
+          w0 = mkWorld "http://x" fake "test/fixtures"
       case parseFeature "c2.feature" $ T.unlines
              [ "Feature: c2"
              , "  Scenario: s"
@@ -545,7 +915,7 @@ main = hspec $ do
                        ("expected exactly one value-error step, got " <> show other)
           case ftScenarios f of
             [sc] -> do
-              v <- runScenario allSteps (World "http://x" (\_ -> pure (Left "no")) "" mempty False) sc
+              v <- runScenario allSteps (mkWorld "http://x" (\_ -> pure (Left "no")) "") sc
               case v of
                 Failed e -> e `shouldSatisfy` T.isInfixOf "not a piece"
                 _ -> expectationFailure "expected the bad piece name to fail, not pass"
@@ -577,13 +947,21 @@ main = hspec $ do
        \a count (fix 3)" $ do
       let exemplars =
             [ (When, "I GET /foo")
+            , (When, "I GET /foo as bar")
             , (Then, "the response equals fixture \"foo\"")
+            , (Then, "the response equals fixture \"foo\" masking bar as sixteen hex characters")
             , (Then, "the response field scene equals http://x/foo")
             , (When, "I render pieces fills at year -1405 in style canaan as sceneA")
             , (When, "I render pieces fills at year -1405 in style canaan")
             , (Then, "sceneA equals sceneB")
             , (Then, "sceneA's resources are a subset of sceneB's resources")
             , (Then, "sceneA's labels are empty")
+            , (Then, "every feature entry carries a piece field")
+            , (Then, "combining sceneA and sceneB equals rendering fills plus ground")
+            , (Then, "sceneA and sceneB differ only in dress, never in geometry")
+            , (Then, "fetching sceneA's first resource twice yields identical bytes")
+            , (Then, "fetching sceneA's first two resources as a batch equals fetching them singly")
+            , (Then, "the consumed projection eras equals fixture \"foo\"")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [Scenario "s" [] steps]
@@ -678,7 +1056,7 @@ main = hspec $ do
     -- Fix 7 (post-Task-7 review, structural -- closes a FALSE GREEN in the
     -- law): the real corpus's "When I GET /api/subjects?year=<someYear>
     -- as first" used to come back CLEAN, even though no "I GET {url} as
-    -- {name}" binding step exists yet. Cause: the plain GET step captured
+    -- {name}" binding step existed yet. Cause: the plain GET step captured
     -- its URL with FixtureRefFreeText, whose parseCap is
     -- `Right . FixtureRefFreeText . T.strip` -- it can NEVER fail, so it
     -- silently swallowed " as first" as part of the URL and registered a
@@ -687,28 +1065,33 @@ main = hspec $ do
     -- satisfiable by the failure mode, which this project forbids (see
     -- MEMORY: verify-distinct-not-nonnull). UrlPath fixes this BY TYPE: a
     -- URL path cannot contain a raw space, a genuine property of the
-    -- type, not a special case for " as ". This proves the hole closes:
-    -- the line is now a value error (nothing fully matches), not a clean
-    -- match. When the real GET-as step is added in a later phase, this is
-    -- what will make IT the unique match rather than creating a fresh
-    -- ambiguity with the plain GET step.
-    it "a GET line with a stray \" as name\" is a value error, not a \
-       \silent clean match, now that UrlPath rejects embedded whitespace \
-       \(fix 7)" $ do
+    -- type, not a special case for " as ". Before Task 10 added the real
+    -- "I GET {url} as {name}" step, this line was a value error (nothing
+    -- fully matched); Task 10 now supplies that step, so it is time for
+    -- this test to prove the OTHER half of fix 7's own prediction: the
+    -- new step becomes the line's unique, clean match (not a fresh
+    -- ambiguity with the plain GET step, whose UrlPath capture still
+    -- rejects the embedded space and only ever ClaimErrors here) --
+    -- driven through runScenario, not just Check, to prove the binding
+    -- actually happens.
+    it "a GET line with \" as name\" is the GET-as step's unique, clean \
+       \match (Task 10 closes the hole fix 7 predicted), and the binding \
+       \genuinely happens" $ do
       let body = "I GET /api/subjects?year=-1405 as first"
+          fake _ = pure (Right ("[]", fromJust (A.decodeStrict "[]")))
+          w = mkWorld "http://x" fake ""
       case parseFeature "getas.feature" $ T.unlines
              [ "Feature: f", "  Scenario: s", "    When " <> body ] of
         Left e -> expectationFailure (T.unpack e)
         Right f -> do
           Check.orphans allSteps f `shouldBe` []
           Check.ambiguous allSteps f `shouldBe` []
-          case Check.valueErrors allSteps f of
-            [(_, b, errs)] -> do
-              b `shouldBe` body
-              errs `shouldSatisfy` (not . null)
-              mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "whitespace") errs
-            other -> expectationFailure
-                       ("expected exactly one value-error step, got " <> show other)
+          Check.valueErrors allSteps f `shouldBe` []
+          case ftScenarios f of
+            [sc] -> do
+              v <- runScenario allSteps w sc
+              v `shouldBe` Passed
+            scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
 
   describe "vocabulary drift" $ do
     it "derives the expected table from the steps' capture types" $ do
@@ -997,7 +1380,7 @@ main = hspec $ do
             , "    Then a equals b" ]
           fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
             where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
-          w = World "http://x" fake "" mempty False
+          w = mkWorld "http://x" fake ""
       case parseFeature "t.feature" feat of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -1013,7 +1396,7 @@ main = hspec $ do
             , "    When I GET /api/echo?y=<someYear>"
             , "    Then the response field neverThere equals nope" ]
           fake _ = pure (Right ("{}", A.object []))
-          w = World "http://x" fake "" mempty False
+          w = mkWorld "http://x" fake ""
       case parseFeature "t.feature" feat of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -1031,7 +1414,7 @@ main = hspec $ do
             , "  @property"
             , "  Scenario: mystery"
             , "    When I GET /api/echo?y=<someMysteryHole>" ]
-          w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+          w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
       case parseFeature "t.feature" feat of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -1053,7 +1436,7 @@ main = hspec $ do
             , "    When I GET /api/echo?y=<someYear>"
             , "    Then the response field neverThere equals nope" ]
           fake _ = pure (Right ("{}", A.object []))
-          w = World "http://x" fake "" mempty False
+          w = mkWorld "http://x" fake ""
       case parseFeature "t.feature" feat of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -1089,7 +1472,7 @@ main = hspec $ do
             , "    When I render pieces <somePieces> at year 0 in style canaan as a" ]
           fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
             where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
-          w = World "http://x" fake "" mempty False
+          w = mkWorld "http://x" fake ""
       case parseFeature "t.feature" feat of
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
@@ -1232,6 +1615,19 @@ captureStdout act = do
                   try act `finally` hFlush stdout)
     txt <- TIO.readFile path
     pure (txt, result)
+
+-- Task 11 added `transportRaw` to `World`; touching all ~14 existing
+-- `World base transport dir mempty False` construction sites with a new
+-- positional sixth argument would be pure mechanical churn with no
+-- test-relevant content. This smart constructor supplies the two fields
+-- every one of those sites already left at the same values (`bound =
+-- mempty`, `blessMode = False`), plus a `transportRaw` that fails
+-- loudly, naming itself, so a test that starts exercising the two
+-- binary-resource steps without being updated gets a clear signal
+-- rather than a silent wrong answer.
+mkWorld :: T.Text -> (T.Text -> IO (Either T.Text (BS.ByteString, A.Value))) -> FilePath -> World
+mkWorld base tr dir = World base tr dir mempty False
+  (\_ -> pure (Left "no raw transport configured for this test"))
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

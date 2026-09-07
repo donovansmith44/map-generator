@@ -13,11 +13,17 @@ import Pattern
 import Network.HTTP.Client
 
 data World = World
-  { baseUrl    :: Text
-  , transport  :: Text -> IO (Either Text (ByteString, Value))
-  , fixtureDir :: FilePath
-  , bound      :: Map Text (ByteString, Value)
-  , blessMode  :: Bool
+  { baseUrl      :: Text
+  , transport    :: Text -> IO (Either Text (ByteString, Value))
+  , fixtureDir   :: FilePath
+  , bound        :: Map Text (ByteString, Value)
+  , blessMode    :: Bool
+  -- Task 11: /api/resource and /api/resources return BINARY bodies, not
+  -- JSON -- `transport` above decodes JSON and would `Left` on them. A
+  -- second, parallel transport that skips the decode entirely, for the
+  -- two byte-identity steps that need raw bytes rather than a parsed
+  -- Value.
+  , transportRaw :: Text -> IO (Either Text ByteString)
   }
 
 -- `transport` is a function and has no Show instance, so World cannot
@@ -43,6 +49,15 @@ httpTransport mgr url = do
   pure $ case eitherDecodeStrict raw of
     Right v -> Right (raw, v)
     Left e  -> Left (T.pack e <> " for " <> url)
+
+-- Same request as `httpTransport`, minus the JSON decode -- for the two
+-- steps (Task 11) that fetch /api/resource and /api/resources, whose
+-- bodies are binary geometry, not JSON.
+httpTransportRaw :: Manager -> Text -> IO (Either Text ByteString)
+httpTransportRaw mgr url = do
+  req <- parseRequest (T.unpack url)
+  resp <- httpLbs req mgr
+  pure (Right (BL.toStrict (responseBody resp)))
 
 -- R23 (controller ruling): a step definition's answer to "does this line
 -- belong to me" is not a yes/no Maybe — it's one of THREE outcomes, and

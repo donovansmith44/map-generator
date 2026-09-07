@@ -4,6 +4,9 @@ Feature: events — a leg's when, where, and why
   contributing only its id); and verses — not a top-level field, but
   gathered from witnesses[].verse_groups[].verses.
 
+  Vocabulary:
+    | projection | any of: eras, event, land-mask, landmarks, narratives, polities |
+
   Scenario: a known leg event, as we consume it
     When I GET /api/event/ab_haran
     Then the consumed projection event equals fixture "event-ab-haran-consumed"

@@ -4,6 +4,9 @@ Feature: polities — the eras of governed ground we vendor
   coordinates. A silently moved border fails here before it can move
   a pixel of ours.
 
+  Vocabulary:
+    | projection | any of: eras, event, land-mask, landmarks, narratives, polities |
+
   Scenario: the whole polity book, as we consume it
     When I GET /api/polities?from=-4004&to=2000
     Then the consumed projection polities equals fixture "polities-consumed"
