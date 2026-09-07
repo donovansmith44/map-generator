@@ -79,8 +79,20 @@ drift defs f =
 -- the same point the parser would have accepted one, if there is no
 -- block yet -- and leaves every other line byte-for-byte untouched.
 
--- A table row, by the same shape Gherkin.Parse's `tableRow` accepts:
--- "|"-wrapped, non-empty inside.
+-- A table row, by the same shape Gherkin.Parse's (private, unexported)
+-- `tableRow` accepts: "|"-wrapped, non-empty inside. Deliberately
+-- duplicated rather than shared: `tableRow` lives in `Gherkin.Parse`'s own
+-- `where` clause, and widening that module's exports just to share an
+-- 8-character predicate would be a worse trade than the duplication.
+-- The coupling runs BOTH ways and is currently inert, not just one-way:
+-- if `Gherkin.Parse`'s row grammar ever changes, this must change with
+-- it, or `vocabRegion` could mis-locate an existing block's extent; and
+-- conversely, this module can't unilaterally recognize a WIDER row shape
+-- than the parser does, since `spliceVocab` only ever runs on text that
+-- `parseFeature` has already accepted (see `vocabDir`'s `one`) — a row
+-- shape the parser wouldn't recognize can't reach here parsed as a
+-- feature in the first place, which is what makes today's duplication
+-- inert rather than a live drift risk.
 isTableRow :: Text -> Bool
 isTableRow l =
   let s = T.strip l in "|" `T.isPrefixOf` s && "|" `T.isSuffixOf` s && T.length s > 1
@@ -172,22 +184,53 @@ spliceVocab rows ls = case vocabRegion ls of
   Left i       -> take i ls ++ renderRows rows ++ drop i ls
   Right (s, e) -> take s ls ++ renderRows rows ++ drop e ls
 
+-- `T.lines`/`T.unlines` are not inverse: `T.lines "a\nb"` and
+-- `T.lines "a\nb\n"` are BOTH `["a", "b"]` (the trailing-newline-or-not
+-- distinction is thrown away on the way in), while `T.unlines` always
+-- reappends one on the way out. Splicing through `T.lines` and
+-- reassembling with a blanket `T.unlines` would therefore silently ADD a
+-- trailing newline to any corpus file that lacked one, which is exactly
+-- the kind of stray byte the surgical requirement forbids -- true today
+-- only because all twelve corpus files happen to already end in "\n"
+-- (verified directly, and now pinned by a test below rather than left as
+-- an untested aside). `joinLines` carries that one bit explicitly instead
+-- of relying on `T.unlines`'s fixed opinion, so the reassembled text
+-- has a trailing newline if and only if the ORIGINAL did.
+joinLines :: Bool -> [Text] -> Text
+joinLines hadTrailingNewline ls =
+  T.intercalate "\n" ls <> (if hadTrailingNewline then "\n" else "")
+
 vocabDir :: [StepDef] -> FilePath -> Bool -> IO ()
 vocabDir defs dir writeMode = do
   files <- featureFilesLocal dir
   results <- mapM one files
-  let parseErrs = [ e | Left e <- results ]
+  let parseErrs = [ e | ParseErr e <- results ]
   if not (null parseErrs)
+    -- Fatal in BOTH modes, not just verify: a malformed feature file must
+    -- never let --write silently rewrite every OTHER file in the
+    -- directory and then report success anyway (the brief's original
+    -- stub did exactly that -- see task-8-report.md's "Deviations").
     then mapM_ TIO.putStrLn parseErrs >> exitFailure
     else if writeMode
-      then TIO.putStrLn "vocabulary: rewritten"
+      -- Say what actually happened, not what the command merely attempted:
+      -- an unconditional "rewritten" is itself a small false claim on the
+      -- (common, e.g. a second consecutive run) case where every table was
+      -- already correct and nothing on disk changed.
+      then
+        let changed = length [ () | Written True <- results ]
+            total = length results
+        in TIO.putStrLn $ if changed == 0
+             then "vocabulary: already matches its types across "
+                  <> T.pack (show total) <> " file(s); nothing rewritten"
+             else "vocabulary: rewrote " <> T.pack (show changed) <> " of "
+                  <> T.pack (show total) <> " file(s)"
       else
-        let driftMsgs = concat [ ds | Right ds <- results ]
+        let driftMsgs = concat [ ds | DriftReport ds <- results ]
         in if null driftMsgs
              then TIO.putStrLn "vocabulary: every table matches its types"
              else mapM_ TIO.putStrLn driftMsgs >> exitFailure
   where
-    one :: FilePath -> IO (Either Text [Text])
+    one :: FilePath -> IO Outcome
     one p = do
       -- NOT TIO.readFile: verified empirically that this toolchain's
       -- default text-handle decoder is NOT UTF-8 (it silently mangles a
@@ -200,16 +243,18 @@ vocabDir defs dir writeMode = do
       raw <- BS.readFile p
       let src = TE.decodeUtf8 raw
       case parseFeature p src of
-        Left e -> pure (Left (T.pack p <> ": " <> e))
+        Left e -> pure (ParseErr (T.pack p <> ": " <> e))
         Right f
           | writeMode -> do
               let vocab = expectedVocab defs f
-                  newSrc = T.unlines (spliceVocab vocab (T.lines src))
+                  hadTrailingNewline = "\n" `T.isSuffixOf` src
+                  newSrc = joinLines hadTrailingNewline (spliceVocab vocab (T.lines src))
+                  changed = newSrc /= src
               -- Only touch the file when something actually changed: an
               -- already-correct table is left with its original mtime,
               -- and no risk of an accidental no-op rewrite hitting the
               -- newline-translation hazard below for nothing.
-              if newSrc /= src
+              if changed
                 -- NOT TIO.writeFile: GHC's text handles default to native
                 -- newline translation, which on Windows turns every "\n"
                 -- into "\r\n" on output -- rewriting every line ending in
@@ -221,5 +266,12 @@ vocabDir defs dir writeMode = do
                 -- byte-for-byte identical.
                 then BS.writeFile p (TE.encodeUtf8 newSrc)
                 else pure ()
-              pure (Right [])
-          | otherwise -> pure (Right (map ((T.pack p <> ": ") <>) (drift defs f)))
+              pure (Written changed)
+          | otherwise -> pure (DriftReport (map ((T.pack p <> ": ") <>) (drift defs f)))
+
+-- One file's outcome, so `vocabDir` can report honestly instead of a
+-- fixed string: a parse failure is always fatal; a write either did or
+-- didn't actually change the file (so the summary can say how many files
+-- were genuinely touched, not just that the command ran); a verify pass
+-- reports its drift messages (empty means clean).
+data Outcome = ParseErr Text | Written Bool | DriftReport [Text]

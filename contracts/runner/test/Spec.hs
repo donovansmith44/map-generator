@@ -786,7 +786,14 @@ main = hspec $ do
       -- own --write path does for the real corpus.
       BS.writeFile path (TE.encodeUtf8 original)
       (`finally` removeDirectoryRecursive dir) $ do
-        Vocab.vocabDir allSteps dir True
+        -- Review round 2, fix 3: --write must say what actually happened,
+        -- not a fixed "rewritten" string -- this file genuinely changes on
+        -- the first run (the table was wrong) and genuinely does NOT
+        -- change on a second consecutive run (idempotent), and the two
+        -- messages must say so honestly rather than claiming the same
+        -- "rewritten" both times.
+        (out1, _) <- captureStdout (Vocab.vocabDir allSteps dir True)
+        out1 `shouldBe` "vocabulary: rewrote 1 of 1 file(s)\n"
         -- decodeUtf8, not TIO.readFile: same encoding trap as the write
         -- side above -- this toolchain's default text-handle decoder is
         -- not UTF-8, so reading the em dash back through it would show a
@@ -797,11 +804,164 @@ main = hspec $ do
         case parseFeature path rewritten of
           Left e -> expectationFailure (T.unpack e)
           Right f -> ftVocab f `shouldBe` Vocab.expectedVocab allSteps f
+        (out2, _) <- captureStdout (Vocab.vocabDir allSteps dir True)
+        out2 `shouldBe`
+          "vocabulary: already matches its types across 1 file(s); nothing rewritten\n"
         -- and re-running in verify mode against the now-correct file
         -- reports clean, with no exception (exitFailure) along the way
         (out, result) <- captureStdout (Vocab.vocabDir allSteps dir False)
         result `shouldSatisfy` isRight
         out `shouldBe` "vocabulary: every table matches its types\n"
+    -- Review finding (round 2), gap 1: the REMOVAL path had no test.
+    -- `renderRows []` deletes an existing block entirely, and the same
+    -- backOverBlanks folding used for insertion/replacement must also
+    -- apply here so the file ends up with exactly the SAME shape it would
+    -- have had if the block had never been stamped in the first place --
+    -- not proven anywhere until now. This step's only capture is UrlPath
+    -- (Described, excluded), so expectedVocab is [], and the fixture
+    -- starts with a stale, WRONG block that must be removed outright.
+    it "--write REMOVES an existing block entirely when the steps' true \
+       \vocabulary is empty, leaving the file exactly as if no block had \
+       \ever been stamped" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-removal-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "removal.feature"
+          withStaleBlock = T.unlines
+            [ "@smoke"
+            , "Feature: t \8212 removal case"
+            , "  Prose the owner wrote by hand."
+            , ""
+            , "  Vocabulary:"
+            , "    | pieces | stale nonsense left over from a deleted step |"
+            , ""
+            , "  Scenario: s"
+            , "    When I GET /api/whatever"
+            ]
+          -- what the file would look like if it had never had a block:
+          -- a single blank line between the prose and the Scenario, same
+          -- as `withStaleBlock` minus the block and its extra blank.
+          withoutBlock = T.unlines
+            [ "@smoke"
+            , "Feature: t \8212 removal case"
+            , "  Prose the owner wrote by hand."
+            , ""
+            , "  Scenario: s"
+            , "    When I GET /api/whatever"
+            ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 withStaleBlock)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        -- full ordered-line equality against the "never had a block"
+        -- canonical text, not just a "no row survives" spot check: this
+        -- pins the exact blank-line count too, not merely the rows' fate.
+        T.lines rewritten `shouldBe` T.lines withoutBlock
+        case parseFeature path rewritten of
+          Left e -> expectationFailure (T.unpack e)
+          Right f -> ftVocab f `shouldBe` []
+    -- Review finding (round 2), gap 2: a feature with NO preamble prose at
+    -- all -- "Scenario:" immediately after "Feature:" -- had no test.
+    -- `backOverBlanks` walks back from the boundary and finds nothing
+    -- blank immediately before it (the previous line IS "Feature: ..."),
+    -- so insertion should land directly after the Feature line with
+    -- exactly the block's own one leading blank, and nothing after the
+    -- rows (there was no blank there to reuse).
+    it "--write inserts the block directly after Feature: when there is no \
+       \preamble at all, with one leading blank and none trailing" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-nopreamble-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "nopreamble.feature"
+          original = T.unlines
+            [ "Feature: t"
+            , "  Scenario: s"
+            , "    When I render pieces fills at year -1405 in style canaan"
+            ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 original)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        case parseFeature path rewritten of
+          Left e -> expectationFailure (T.unpack e)
+          Right f -> do
+            let vocab = Vocab.expectedVocab allSteps f
+            vocab `shouldSatisfy` (not . null)
+            T.lines rewritten `shouldBe`
+              [ "Feature: t"
+              , ""
+              , "  Vocabulary:" ]
+              ++ [ "    | " <> k <> " | " <> v <> " |" | (k, v) <- vocab ]
+              ++ [ "  Scenario: s"
+                 , "    When I render pieces fills at year -1405 in style canaan"
+                 ]
+    -- Review finding (round 2), gap 3: `T.lines`/`joinLines` faithfully
+    -- preserving (rather than always adding) a trailing newline was
+    -- documented as true of today's corpus but never actually pinned by a
+    -- test. This fixture has NO trailing newline at all; the rewritten
+    -- file must not gain one it never had.
+    it "--write never ADDS a trailing newline to a file that didn't have one" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-notrailingnl-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "notrailingnl.feature"
+          -- built with intercalate, deliberately with NO trailing "\n"
+          original = T.intercalate "\n"
+            [ "Feature: t"
+            , "  Scenario: s"
+            , "    When I render pieces fills at year -1405 in style canaan"
+            ]
+      original `shouldSatisfy` (not . T.isSuffixOf "\n")
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 original)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        rewritten `shouldSatisfy` (not . T.isSuffixOf "\n")
+        case parseFeature path rewritten of
+          Left e -> expectationFailure (T.unpack e)
+          Right f -> ftVocab f `shouldBe` Vocab.expectedVocab allSteps f
+    -- Review finding (round 2), gap 4: the deviation making a parse error
+    -- fatal in BOTH modes (not just verify, unlike the brief's literal
+    -- stub -- see task-8-report.md) had no test proving --write actually
+    -- exits non-zero on a bad file, rather than silently rewriting every
+    -- OTHER file in the directory and reporting success anyway. Mixes one
+    -- genuinely valid feature (which COULD be rewritten) with one that
+    -- fails to parse at all (no "Feature:" line), and asserts the run
+    -- fails loudly, naming the bad file, instead of printing any
+    -- "rewritten" success message.
+    it "--write exits non-zero and names the bad file when one feature in \
+       \the directory fails to parse, rather than reporting success" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-parseerr-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          goodPath = dir </> "good.feature"
+          badPath = dir </> "bad.feature"
+          good = T.unlines
+            [ "Feature: t"
+            , "  Scenario: s"
+            , "    When I render pieces fills at year -1405 in style canaan"
+            ]
+          bad = T.unlines [ "this is not a feature file at all" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile goodPath (TE.encodeUtf8 good)
+      BS.writeFile badPath (TE.encodeUtf8 bad)
+      (`finally` removeDirectoryRecursive dir) $ do
+        (out, result) <- captureStdout (Vocab.vocabDir allSteps dir True)
+        result `shouldSatisfy` isLeft
+        out `shouldSatisfy` T.isInfixOf "bad.feature"
+        out `shouldSatisfy` (not . T.isInfixOf "rewrote")
+        out `shouldSatisfy` (not . T.isInfixOf "nothing rewritten")
 
   describe "@property scenarios" $ do
     it "substitutes holes and runs N times, all green on a law that holds" $ do
