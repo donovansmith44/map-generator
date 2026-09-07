@@ -39,7 +39,36 @@ satisfiable by its own failure mode, which is the thing this project forbids
     mutation committed by accident.
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
-                 BATCH C caught (7/7), tree restored.
+                 BATCH C caught (8/8), tree restored.
+
+KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
+-----------------------------------------------------------
+Under BATCH A every test still RUNS and finishes; what does not finish in
+any reasonable time is hspec's FAILURE REPORT.  Its `shouldBe` formatter
+diffs the two values character by character, and BATCH A's mutations
+redden assertions whose values are enormous -- a 200-element `[True,...]`
+list, and a `LawRun` carrying a full shrunk counterexample.  Measured:
+the suite completes all 273 examples and then sits in the report for
+6m41s+ without producing a summary line.
+
+This is NOT caused by fix round 1: it reproduces identically at c86fd0a
+(the step-phase commit), where the run likewise finishes every test and
+then hangs printing a `LawRun` diff.  BATCH C, whose failing assertions
+are all short, runs to completion in the ordinary time -- so a single
+batch can be verified on its own today:
+
+    python -c "import os; src=open('mutation-evidence.py').read().replace(
+      'if __name__ == \"__main__\":
+    main()',''); ns={'__name__':'me',
+      '__file__':os.path.abspath('mutation-evidence.py')};
+      exec(compile(src,'m','exec'),ns); ns['require_clean']();
+      o={p:ns['read'](p) for p in ns['SRC'].values()}
+      ..."
+
+The real fix is to make the reddened assertions report SMALL values (a
+count and the first few offenders rather than a 200-element list), which
+is a change to Spec.hs's assertions and belongs with whoever owns them.
+Recorded rather than worked around.
 """
 
 import os
@@ -59,10 +88,19 @@ SRC = {name: os.path.join(RUNNER, "src", name) for name in ("Prop.hs", "Run.hs",
 # ---------------------------------------------------------------------------
 BATCH_A = [
     (
+        # The search text carries the `pure` line as well as the draw.
+        # Until the step phase, "d <- chooseInt (1, n - 1)" occurred once
+        # in this file; `genDetailPair` rotates by the identical
+        # expression, so the bare line now matches twice and this script
+        # correctly refused to run rather than mutating the wrong
+        # generator. That refusal is the artifact working -- see the
+        # module docstring.
         "A1: genStylePair's rotation may be ZERO, so the two styles can collide",
         "Prop.hs",
-        "  d <- chooseInt (1, n - 1)\n",
-        "  d <- chooseInt (0, n - 1)\n",
+        "  d <- chooseInt (1, n - 1)\n"
+        "  pure (styleAt i, styleAt (i + d))",
+        "  d <- chooseInt (0, n - 1)\n"
+        "  pure (styleAt i, styleAt (i + d))",
     ),
     (
         "A2: genNestedPieces draws its subset INDEPENDENTLY instead of from inside "
@@ -81,6 +119,20 @@ EXPECT_A = [
     "the subtractive law runs GREEN over 100 iterations",
     "the dress-locality law runs GREEN over 100 iterations",
 ]
+
+# NOT ADDED, and the reason is worth keeping: the step phase's three new
+# correlated pairs (detail, center, year) cannot be mutated the way A1
+# mutates the style pair.  A1 works because there are three styles, so a
+# rotation that "may be zero" collides one draw in three.  The centre
+# pair rotates modulo 647,316,000 and the year pair modulo 4104, so the
+# same mutation collides one draw in 647 million -- it was applied,
+# measured, and caught NOTHING (273 examples, 0 failures), which makes it
+# a mutation in name only.  Mutating those generators honestly means
+# pinning the rotation to zero outright, which is a different shape of
+# edit; left undone rather than committed as decoration.  Their
+# distinctness is pinned directly instead, over 200 iterations each, by
+# the three "<someX> and <someOtherX> are DISTINCT at every iteration"
+# tests.
 
 # ---------------------------------------------------------------------------
 # BATCH B -- the SKIP DISCIPLINE and the three new steps.  Each mutation makes
@@ -173,12 +225,16 @@ BATCH_C = [
         "C5: the bogus-id law treats ANY other status -- a 500, a dead route -- "
         "as the law being met (the round-1 bug, restored)",
         "Steps.hs",
-        "  | otherwise =
-"
-        "      StepFailed (\"the batch answered HTTP \" <> tshow code <> \", which is an error, not a \
-"
-        "                  \refusal: a server that fell over has not met this law\")",
-        "  | otherwise = StepOk w",
+        # The 4xx guard, widened to swallow every non-2xx status -- which
+        # is exactly what the old `(Left _, _) -> StepOk w` did, since
+        # transportRaw's Left was produced for all of them. A 500 whose
+        # body happens not to name the id then lands in the "refused but
+        # nameless" red rather than green, so the guard is widened to
+        # accept the body unconditionally too.
+        r'''  | code >= 400 && code < 500 =
+      if TE.encodeUtf8 bogusResourceId `BS.isInfixOf` body''',
+        r'''  | code < 200 || code >= 300 =
+      if True''',
     ),
     (
         "C6: the vertex ladder checks only its FIRST rung, so ultra-vs-fine is "
@@ -196,6 +252,13 @@ EXPECT_C = [
     "a fade-out region still standing in the later scene is red",
     "a fade-in region that was ALREADY in the earlier scene is red",
     "a 5xx is NOT the law being met",
+    # C5 widens the 4xx guard AND drops the body check, so it also
+    # retires the law that a refusal must NAME what it refused. Listed
+    # because this script fails on an unexpected collateral failure just
+    # as it fails on an uncaught mutation -- an EXTRA is either a law
+    # this mutation legitimately breaks (say so, as here) or evidence
+    # that the mutation is broader than its label claims.
+    "a 4xx that does NOT name it is a different red",
     "the vertex ladder's SECOND rung is load-bearing",
 ]
 
