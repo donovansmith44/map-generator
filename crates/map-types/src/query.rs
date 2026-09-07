@@ -12,7 +12,7 @@ use atlas_graph_types::covenant::TimePoint;
 use crate::boundary::AtlasPlaceRef;
 use crate::geom::{Bbox, Lod, UnitVec};
 use crate::ident::{BoundaryId, Canon, ChangeEventId, MapAddressed, MapKind, RegionId, StyleId};
-use crate::style::LayerSet;
+use crate::piece::PieceSet;
 use crate::timeline::{canon_time_point, Interval};
 
 /// Anything the system can be asked to draw — from a point in space, to
@@ -50,7 +50,12 @@ pub struct RenderQuery {
     /// None = auto-frame to the subject's own extent.
     pub viewport: Option<Bbox>,
     pub lod: Lod,
-    pub layers: LayerSet,
+    /// WHICH PIECES the caller wants. A subset of the scene's own
+    /// vocabulary (spec §3), not a render flag bitset: `LayerSet`,
+    /// which this replaces, lumped Background, Territory and
+    /// ScriptureClaims under one GEOMETRY bit, so fills, borders and
+    /// claims could not be selected apart.
+    pub pieces: PieceSet,
     pub style: StyleId,
 }
 
@@ -95,7 +100,9 @@ impl MapAddressed for RenderQuery {
         }
         c.opt(&self.viewport, |c, v| v.canon(c));
         self.lod.canon(&mut c);
-        c.u8_(self.layers.bits());
+        // Canon has no u16_ and this task invents no new Canon method:
+        // the ten-bit set widens into the u64 lane, losslessly.
+        c.u64_(u64::from(self.pieces.bits()));
         c.u64_(self.style.0 .0);
         c.done()
     }

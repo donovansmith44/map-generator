@@ -20,7 +20,7 @@ use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, GpuSceneEncoder, JsonTransitionEncoder, SvgEncoder};
 use map_types::style::*;
 use map_types::{
-    ChangeKind, Interval, LayerSet, Lod, MapAddressed, MapProvider, Monoid, RegionId,
+    ChangeKind, Interval, Lod, MapAddressed, MapProvider, Monoid, Piece, PieceSet, RegionId,
     RenderQuery, RenderSubject, Snapshot, StyleId, TimeSelector,
 };
 use map_types::SceneEncoder as _;
@@ -32,6 +32,20 @@ const LIMB_JS: &str = include_str!("limb.js");
 /// pipeline on this machine — the workbench stays clear of them.
 /// Override with MAP_VIEWER_PORT.
 const DEFAULT_PORT: u16 = 8090;
+
+/// WHAT THE OLD `LayerSet::GEOMETRY` BIT MEANT, as pieces: the three
+/// land layers (Background, Territory, ScriptureClaims), whose
+/// elements are fills, borders, claims — and the point markers that
+/// stand in them, which the GEOMETRY bit carried along silently
+/// because the scene type had no way to say so. Named once so every
+/// legacy call site says the same thing.
+fn geometry_pieces() -> PieceSet {
+    PieceSet::empty()
+        .with(Piece::Fills)
+        .with(Piece::Borders)
+        .with(Piece::Claims)
+        .with(Piece::Markers)
+}
 
 pub struct App {
     pub provider: Arc<dyn MapProvider + Send + Sync>,
@@ -600,19 +614,25 @@ fn build_query(
             Lod(auto_lod(zoom, width))
         }
     };
-    let mut layers = if p.get("labels") == Some("0") {
-        LayerSet::GEOMETRY
-    } else {
-        LayerSet::GEOMETRY.with(LayerSet::LABELS)
-    };
+    // TODAY'S LEGACY FLAGS, spoken in pieces. Byte-identical behavior:
+    // the old GEOMETRY bit meant the three land layers, whose elements
+    // are fills, borders, claims and the point markers standing in
+    // them; the other four bits were already one piece each. A
+    // `pieces=` request parameter is a LATER task (the name collides
+    // with the composable-scene entity list) — this is the same
+    // question, asked through the honest type.
+    let mut pieces = geometry_pieces();
+    if p.get("labels") != Some("0") {
+        pieces = pieces.with(Piece::Labels);
+    }
     if p.get("topo") != Some("0") {
-        layers = layers.with(LayerSet::TOPOGRAPHY); // the seas, on by default
+        pieces = pieces.with(Piece::Water); // the seas, on by default
     }
     if p.get("relief") == Some("1") {
-        layers = layers.with(LayerSet::RELIEF); // hypsometric bands, opt-in
+        pieces = pieces.with(Piece::Ground); // hypsometric bands, opt-in
     }
     if p.get("journeys") != Some("0") {
-        layers = layers.with(LayerSet::JOURNEYS); // itineraries, on by default
+        pieces = pieces.with(Piece::Journeys); // itineraries, on by default
     }
     // THE VIEWPORT: when the caller pins a camera, the provider can
     // cull the world to it — one spherical cap, generous margin, both
@@ -626,7 +646,7 @@ fn build_query(
             radius: (zoom.clamp(0.05, 90.0) * 1.8).to_radians().min(std::f64::consts::PI),
         })
     });
-    Some(RenderQuery { subject, time, viewport, lod, layers, style: parse_style(app, p.get("style"))? })
+    Some(RenderQuery { subject, time, viewport, lod, pieces, style: parse_style(app, p.get("style"))? })
 }
 
 fn encode(
@@ -785,7 +805,7 @@ fn composed_scene(
                     time: TimeSelector::At(backdrop_at),
                     viewport: q.viewport.clone(),
                     lod: q.lod,
-                    layers: LayerSet::GEOMETRY,
+                    pieces: geometry_pieces(),
                     style,
                 };
                 match app.provider.render(&ghost_q) {
@@ -1000,7 +1020,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 None => return bad("bad query"),
             };
             q.time = TimeSelector::At(year);
-            q.layers = LayerSet::GEOMETRY.with(LayerSet::TOPOGRAPHY).with(LayerSet::RELIEF);
+            q.pieces = geometry_pieces().with(Piece::Water).with(Piece::Ground);
             let scene = match app.provider.render(&q) {
                 Ok(s) => s,
                 Err(e) => return bad(&format!("{e:?}")),
@@ -1068,11 +1088,11 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 time: TimeSelector::At(at),
                 viewport: None,
                 lod: Lod(0.0),
-                layers: LayerSet::GEOMETRY
-                    .with(LayerSet::LABELS)
-                    .with(LayerSet::TOPOGRAPHY)
-                    .with(LayerSet::RELIEF)
-                    .with(LayerSet::JOURNEYS),
+                pieces: geometry_pieces()
+                    .with(Piece::Labels)
+                    .with(Piece::Water)
+                    .with(Piece::Ground)
+                    .with(Piece::Journeys),
                 style: app.styles.first().map(|(_, sid)| *sid).expect("a style"),
             };
             match canon.render_pieces(&q, &set) {
@@ -1353,18 +1373,20 @@ mod tests {
         use atlas_graph_types::covenant::ContentHash;
         use map_types::{RegionId, Ring, StyledRegion, UnitVec};
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
-        let region = |n: u64, src: &str| StyledRegion {
+        let region = |n: u64, src: &str, piece: Piece| StyledRegion {
             region: RegionId(ContentHash(n)),
             entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(1, 2, 3, 200) },
             sources: [SourceId::new(src)].into(),
+            piece,
         };
         let mut scene = Snapshot::empty();
-        scene.regions.push(region(1, "witness:natural-earth")); // the sea
-        scene.regions.push(region(2, "natural-earth")); // legacy tag, same stage
-        scene.regions.push(region(3, "witness:basemap")); // a scholarship claim
+        // the stage is Water; a scholarship claim is a Fill
+        scene.regions.push(region(1, "witness:natural-earth", Piece::Water)); // the sea
+        scene.regions.push(region(2, "natural-earth", Piece::Water)); // legacy tag, same stage
+        scene.regions.push(region(3, "witness:basemap", Piece::Fills)); // a scholarship claim
         let kept = scripture_only(&scene);
         let ids: Vec<u64> = kept.regions.iter().map(|r| r.region.0 .0).collect();
         assert_eq!(ids, vec![1, 2], "the stage stays; the claim ghosts");
@@ -1384,6 +1406,7 @@ mod tests {
             style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
             sources: src.map(SourceId::new).into_iter().collect(),
             place: None,
+            piece: Piece::Markers,
         };
         scene.markers.push(mk(Some(SCRIPTURE_SOURCE)));
         scene.markers.push(mk(Some("natural-earth")));
@@ -1410,6 +1433,7 @@ mod tests {
             holes: vec![],
             paint: Paint { fill: Rgba(210, 190, 150, 255) },
             sources: Default::default(),
+            piece: Piece::Fills,
         };
         let boundary = |n: u64| StyledBoundary {
             boundary: BoundaryId(ContentHash(n)),
@@ -1420,6 +1444,7 @@ mod tests {
                 pattern: StrokePattern::Dashed,
             },
             sources: Default::default(),
+            piece: Piece::Borders,
         };
 
         let mut backdrop = Snapshot::empty();

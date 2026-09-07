@@ -21,10 +21,10 @@ use map_types::scene::{LabelSubject, StyledMarker};
 use map_types::style::Paint;
 use map_types::Monoid;
 use map_types::{
-    slerp, Bbox, BoundaryId, ChangeEvent, ChangeKind, GazetteerExport, LayerSet, Lod, MapError,
-    MapProvider, PlacedLabel, RegionId, RenderQuery, RenderSubject, Ring, Snapshot, Style, StyleId,
-    StyledBoundary, StyledRegion, SubjectListing, TimeSelector, TransitionScript, TransitionStep,
-    UnitVec,
+    slerp, Bbox, BoundaryId, ChangeEvent, ChangeKind, GazetteerExport, Lod, MapError, MapProvider,
+    Piece, PieceSet, PlacedLabel, RegionId, RenderQuery, RenderSubject, Ring, Snapshot, Style,
+    StyleId, StyledBoundary, StyledRegion, SubjectListing, TimeSelector, TransitionScript,
+    TransitionStep, UnitVec,
 };
 
 /// The scripture tag consumers filter on (bible mode): atlas and
@@ -88,21 +88,56 @@ fn year_index(y: i32) -> i32 {
     }
 }
 
-fn layers_wanted(bits: LayerSet) -> Vec<LayerKind> {
-    let mut out = Vec::new();
-    if bits.contains(LayerSet::GEOMETRY) {
-        out.extend([LayerKind::Background, LayerKind::Territory, LayerKind::ScriptureClaims]);
+/// THE ATTRIBUTION FUNCTION, region half: a piece is determined by the
+/// layer a feature lives in and the KIND of element it produces. Total
+/// by construction — a new LayerKind fails to compile until it declares
+/// which piece its regions belong to.
+fn piece_of_region(l: LayerKind) -> Option<Piece> {
+    match l {
+        LayerKind::Relief => Some(Piece::Ground),
+        LayerKind::Water => Some(Piece::Water),
+        LayerKind::Background | LayerKind::Territory => Some(Piece::Fills),
+        LayerKind::ScriptureClaims => Some(Piece::Claims),
+        LayerKind::Journeys => None, // a way is a line, never a face
     }
-    if bits.contains(LayerSet::TOPOGRAPHY) {
-        out.push(LayerKind::Water);
+}
+
+/// The boundary half of the same total function.
+fn piece_of_boundary(l: LayerKind) -> Option<Piece> {
+    match l {
+        LayerKind::Relief => None, // relief bands draw no outline today
+        LayerKind::Water => Some(Piece::Water),
+        LayerKind::Background | LayerKind::Territory => Some(Piece::Borders),
+        LayerKind::ScriptureClaims => Some(Piece::Claims),
+        LayerKind::Journeys => Some(Piece::Journeys),
     }
-    if bits.contains(LayerSet::RELIEF) {
-        out.push(LayerKind::Relief);
-    }
-    if bits.contains(LayerSet::JOURNEYS) {
-        out.push(LayerKind::Journeys);
-    }
-    out
+}
+
+/// Which layers can contribute anything to this piece set. A layer is
+/// visited when ANY of its pieces is wanted; the per-element `piece`
+/// stamp then does the fine-grained filtering, so fills, borders and
+/// claims are genuinely separable for the first time.
+///
+/// The ORDER is the order the old `LayerSet` walk produced — layer
+/// visit order is boundary and label paint order, and this task moves
+/// no pixels.
+fn layers_wanted(pieces: PieceSet) -> Vec<LayerKind> {
+    [
+        LayerKind::Background,
+        LayerKind::Territory,
+        LayerKind::ScriptureClaims,
+        LayerKind::Water,
+        LayerKind::Relief,
+        LayerKind::Journeys,
+    ]
+    .into_iter()
+    .filter(|l| {
+        piece_of_region(*l).is_some_and(|p| pieces.contains(p))
+            || piece_of_boundary(*l).is_some_and(|p| pieces.contains(p))
+            || (pieces.contains(Piece::Markers) && *l == LayerKind::Territory)
+            || (pieces.contains(Piece::Journeys) && *l == LayerKind::Journeys)
+    })
+    .collect()
 }
 
 fn witness_source(w: Witness) -> SourceId {
@@ -373,17 +408,22 @@ impl CanonProvider {
                 _ => map_types::EdgeCharacter::Line,
             }
         };
-        if layer != LayerKind::Relief && layer != LayerKind::Water {
-            for ring in &outer {
-                scene.boundaries.push(StyledBoundary {
-                    boundary: bid_of(&a.entity),
-                    pts: ring.points().to_vec(),
-                    stroke: *style.stroke_for(&character),
-                    sources: sources.clone(),
-                });
+        // The outline ships only if ITS piece is wanted — an area's
+        // fill and its border are separable for the first time.
+        if let Some(piece) = piece_of_boundary(layer).filter(|p| q.pieces.contains(*p)) {
+            if layer != LayerKind::Relief && layer != LayerKind::Water {
+                for ring in &outer {
+                    scene.boundaries.push(StyledBoundary {
+                        boundary: bid_of(&a.entity),
+                        pts: ring.points().to_vec(),
+                        stroke: *style.stroke_for(&character),
+                        sources: sources.clone(),
+                        piece,
+                    });
+                }
             }
         }
-        if q.layers.contains(LayerSet::LABELS) && layer != LayerKind::Relief {
+        if q.pieces.contains(Piece::Labels) && layer != LayerKind::Relief {
             if let Some(at) =
                 self.label_anchor.get(&fid).copied().or_else(|| centroid(&outer)) {
                 let labeling = style.labeling();
@@ -413,6 +453,7 @@ impl CanonProvider {
                     style: label,
                     face,
                     voice: labeling.voice(face),
+                    piece: Piece::Labels,
                 });
             }
         }
@@ -428,6 +469,9 @@ impl CanonProvider {
             let map_types::style::Rgba(r, g, b, _) = paint.fill;
             paint = map_types::style::Paint { fill: map_types::style::Rgba(r, g, b, 0) };
         }
+        // Likewise the face: `piece_of_region` says None only for
+        // Journeys, which never reaches here (a way is a line).
+        let Some(piece) = piece_of_region(layer).filter(|p| q.pieces.contains(*p)) else { return };
         scene.regions.push(StyledRegion {
             region: rid_of(&a.entity),
             entity: Some(a.entity.0.clone()),
@@ -435,6 +479,7 @@ impl CanonProvider {
             holes,
             paint,
             sources,
+            piece,
         });
     }
 
@@ -493,11 +538,17 @@ impl CanonProvider {
         }
         let sources = self.sources_of(fid);
         scene.attribution.extend(sources.iter().cloned());
+        // A way and its stations are one piece: the road IS the
+        // journey, and so is every station standing on it.
+        if !q.pieces.contains(Piece::Journeys) {
+            return;
+        }
         scene.boundaries.push(StyledBoundary {
             boundary: bid_of(&route.entity),
             pts,
             stroke: *style.stroke_for(&map_types::EdgeCharacter::Way),
             sources: sources.clone(),
+            piece: Piece::Journeys,
         });
         let mut station_places: Vec<&atlas_graph_types::covenant::PlaceId> = Vec::new();
         if let Some(first) = route.legs.first() {
@@ -514,8 +565,9 @@ impl CanonProvider {
                 style: style.marker_style(),
                 sources: sources.clone(),
                 place: Some(map_types::AtlasPlaceRef(pid.clone())),
+                piece: Piece::Journeys,
             });
-            if q.layers.contains(LayerSet::LABELS) {
+            if q.pieces.contains(Piece::Labels) {
                 let mut label = style.label_style();
                 label.size *= style.labeling().scale.station_scale;
                 scene.labels.push(PlacedLabel {
@@ -525,6 +577,7 @@ impl CanonProvider {
                     style: label,
                     face: map_types::scene::LabelFace::Place,
                     voice: style.labeling().place,
+                    piece: Piece::Labels,
                 });
             }
         }
@@ -557,7 +610,7 @@ impl CanonProvider {
         // claim — a lake is never buried. Recorded at push time
         // because the scene type carries no layer.
         let mut paint_rank: BTreeMap<map_types::RegionId, u8> = BTreeMap::new();
-        for layer in layers_wanted(q.layers) {
+        for layer in layers_wanted(q.pieces) {
             let rank = match layer {
                 LayerKind::Relief => 0u8,
                 LayerKind::Background => 1,
@@ -586,6 +639,16 @@ impl CanonProvider {
                     // the water color — never a filled area, so it can
                     // neither gap nor balloon.
                     Feature::Line(l) => {
+                        // A river is a BOUNDARY of the layer it lives
+                        // in (Water, today) — the attribution table
+                        // named no row for lines because the same total
+                        // function already answers: a line's piece is
+                        // its layer's boundary piece.
+                        let Some(line_piece) =
+                            piece_of_boundary(layer).filter(|p| q.pieces.contains(*p))
+                        else {
+                            continue;
+                        };
                         // read the border directly: a line is an OPEN
                         // path and may be as short as two points —
                         // simplified and viewport-culled like any ring.
@@ -609,6 +672,7 @@ impl CanonProvider {
                                     pattern: map_types::style::StrokePattern::Solid,
                                 },
                                 sources,
+                                piece: line_piece,
                             });
                         }
                     }
@@ -622,7 +686,7 @@ impl CanonProvider {
                         // memory voice, no marker — nothing "stands"
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
-                        if q.layers.contains(LayerSet::LABELS) {
+                        if q.pieces.contains(Piece::Labels) {
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.memory_scale;
                             scene.labels.push(PlacedLabel {
@@ -634,6 +698,7 @@ impl CanonProvider {
                                 style: label,
                                 face: map_types::scene::LabelFace::Memory,
                                 voice: style.labeling().memory,
+                                piece: Piece::Labels,
                             });
                         }
                     }
@@ -645,13 +710,20 @@ impl CanonProvider {
                         }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
-                        scene.markers.push(StyledMarker {
-                            at: p.at,
-                            style: style.marker_style(),
-                            sources,
-                            place: Some(map_types::AtlasPlaceRef(PlaceId::new(p.entity.0.clone()))),
-                        });
-                        if q.layers.contains(LayerSet::LABELS) {
+                        // A standing place is the Markers piece,
+                        // whatever layer carries it.
+                        if q.pieces.contains(Piece::Markers) {
+                            scene.markers.push(StyledMarker {
+                                at: p.at,
+                                style: style.marker_style(),
+                                sources,
+                                place: Some(map_types::AtlasPlaceRef(PlaceId::new(
+                                    p.entity.0.clone(),
+                                ))),
+                                piece: Piece::Markers,
+                            });
+                        }
+                        if q.pieces.contains(Piece::Labels) {
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.city_scale; // a note, not a shout
                             scene.labels.push(PlacedLabel {
@@ -663,6 +735,7 @@ impl CanonProvider {
                                 style: label,
                                 face: map_types::scene::LabelFace::Place,
                                 voice: style.labeling().place,
+                                piece: Piece::Labels,
                             });
                         }
                     }
@@ -690,13 +763,16 @@ impl CanonProvider {
                 .ok_or_else(|| MapError::UnknownPlace(place.0 .0.clone()))?;
             let sources = BTreeSet::from([SourceId::new(SCRIPTURE_SOURCE)]);
             scene.attribution.extend(sources.iter().cloned());
-            scene.markers.push(StyledMarker {
-                at: entry.position,
-                style: style.marker_style(),
-                sources,
-                place: Some(map_types::AtlasPlaceRef(place.0.clone())),
-            });
-            if q.layers.contains(LayerSet::LABELS) {
+            if q.pieces.contains(Piece::Markers) {
+                scene.markers.push(StyledMarker {
+                    at: entry.position,
+                    style: style.marker_style(),
+                    sources,
+                    place: Some(map_types::AtlasPlaceRef(place.0.clone())),
+                    piece: Piece::Markers,
+                });
+            }
+            if q.pieces.contains(Piece::Labels) {
                 scene.labels.push(PlacedLabel {
                     text: entry.canonical_name.clone(),
                     at: entry.position,
@@ -704,6 +780,7 @@ impl CanonProvider {
                     style: style.label_style(),
                     face: map_types::scene::LabelFace::Place,
                     voice: style.labeling().place,
+                    piece: Piece::Labels,
                 });
             }
         }
@@ -828,7 +905,7 @@ impl MapProvider for CanonProvider {
                 let style = self.style(q.style)?;
                 let ramp = style.age_ramp();
                 let mut seen: BTreeSet<FeatureId> = BTreeSet::new();
-                for layer in layers_wanted(q.layers) {
+                for layer in layers_wanted(q.pieces) {
                     let Some(world) = self.store.layers().get(&layer) else { continue };
                     let moments: Vec<Timestamp> = world
                         .moments()
@@ -843,6 +920,16 @@ impl MapProvider for CanonProvider {
                             continue;
                         }
                         let toward = i as f64 / n as f64;
+                        // An age-tinted outline is still an outline: the
+                        // same total function attributes it. (The table
+                        // named no row for the accumulation tail; the
+                        // push site is the authority, and it pushes
+                        // boundaries.)
+                        let Some(age_piece) =
+                            piece_of_boundary(layer).filter(|p| q.pieces.contains(*p))
+                        else {
+                            continue;
+                        };
                         for (fid, f) in self.active(layer, t) {
                             if !seen.insert(fid) {
                                 continue;
@@ -867,6 +954,7 @@ impl MapProvider for CanonProvider {
                                                 pattern: map_types::style::StrokePattern::Solid,
                                             },
                                             sources: self.sources_of(fid),
+                                            piece: age_piece,
                                         });
                                     }
                                 }

@@ -39,6 +39,13 @@ pub struct StyledRegion {
     pub holes: Vec<Ring>,
     pub paint: Paint,
     pub sources: BTreeSet<SourceId>,
+    /// WHICH PIECE this element belongs to. The scene type used to carry
+    /// no such notion, so the provider recorded paint rank at push time
+    /// and threw the rest away — which is why the encoder could only
+    /// group markers by paint, why one points buffer held every piece's
+    /// markers, and why omitting journeys changed the bytes of a buffer
+    /// other pieces were using (diagnosis §3.2).
+    pub piece: crate::piece::Piece,
 }
 
 /// One border arc, styled — JOS 15 as a drawn line, alone if asked.
@@ -48,6 +55,13 @@ pub struct StyledBoundary {
     pub pts: Vec<UnitVec>,
     pub stroke: Stroke,
     pub sources: BTreeSet<SourceId>,
+    /// WHICH PIECE this element belongs to. The scene type used to carry
+    /// no such notion, so the provider recorded paint rank at push time
+    /// and threw the rest away — which is why the encoder could only
+    /// group markers by paint, why one points buffer held every piece's
+    /// markers, and why omitting journeys changed the bytes of a buffer
+    /// other pieces were using (diagnosis §3.2).
+    pub piece: crate::piece::Piece,
 }
 
 /// A styled point — a place in period dress, or a raw point. Carries
@@ -62,6 +76,13 @@ pub struct StyledMarker {
     /// one — selection follows markers by their place (law 10's
     /// spirit), never by guessing from position.
     pub place: Option<crate::boundary::AtlasPlaceRef>,
+    /// WHICH PIECE this element belongs to. The scene type used to carry
+    /// no such notion, so the provider recorded paint rank at push time
+    /// and threw the rest away — which is why the encoder could only
+    /// group markers by paint, why one points buffer held every piece's
+    /// markers, and why omitting journeys changed the bytes of a buffer
+    /// other pieces were using (diagnosis §3.2).
+    pub piece: crate::piece::Piece,
 }
 
 /// What a label is attached to — selection (law 10) follows labels by
@@ -88,6 +109,13 @@ pub struct PlacedLabel {
     pub face: LabelFace,
     /// the fully resolved typographic dress, straight from the style
     pub voice: crate::style::TypeVoice,
+    /// WHICH PIECE this element belongs to. The scene type used to carry
+    /// no such notion, so the provider recorded paint rank at push time
+    /// and threw the rest away — which is why the encoder could only
+    /// group markers by paint, why one points buffer held every piece's
+    /// markers, and why omitting journeys changed the bytes of a buffer
+    /// other pieces were using (diagnosis §3.2).
+    pub piece: crate::piece::Piece,
 }
 
 /// The scene. Later entries paint over earlier ones — overlay order is
@@ -133,6 +161,9 @@ impl MapAddressed for Snapshot {
             c.seq(&srcs, |c, s| {
                 c.str_(&s.0);
             });
+            // Two scenes differing only in attribution are genuinely
+            // different answers, so the pid must see the piece.
+            c.str_(r.piece.name());
         });
         c.seq(&self.boundaries, |c, b| {
             c.u64_(b.boundary.0 .0);
@@ -142,6 +173,7 @@ impl MapAddressed for Snapshot {
             c.seq(&srcs, |c, s| {
                 c.str_(&s.0);
             });
+            c.str_(b.piece.name());
         });
         c.seq(&self.markers, |c, m| {
             m.at.canon(c);
@@ -155,6 +187,7 @@ impl MapAddressed for Snapshot {
                 None => c.str_(""),
                 Some(p) => c.str_(&p.0 .0),
             };
+            c.str_(m.piece.name());
         });
         c.seq(&self.labels, |c, l| {
             c.str_(&l.text);
@@ -169,6 +202,7 @@ impl MapAddressed for Snapshot {
             c.u8_(r).u8_(g).u8_(bl).u8_(a);
             let crate::style::Rgba(r, g, bl, a) = l.style.halo;
             c.u8_(r).u8_(g).u8_(bl).u8_(a).f64_(l.style.size);
+            c.str_(l.piece.name());
         });
         let sources: Vec<_> = self.attribution.iter().collect();
         c.seq(&sources, |c, s| {
@@ -182,6 +216,19 @@ impl MapAddressed for Snapshot {
 }
 
 impl Snapshot {
+    /// Spec §3 law 1: `scene(q \ P)` equals `scene(q)` minus exactly P's
+    /// contribution. With every element attributed, that is a filter —
+    /// the law becomes a definition rather than a hope.
+    pub fn restrict(&self, keep: crate::piece::PieceSet) -> Snapshot {
+        Snapshot {
+            regions: self.regions.iter().filter(|r| keep.contains(r.piece)).cloned().collect(),
+            boundaries: self.boundaries.iter().filter(|b| keep.contains(b.piece)).cloned().collect(),
+            markers: self.markers.iter().filter(|m| keep.contains(m.piece)).cloned().collect(),
+            labels: self.labels.iter().filter(|l| keep.contains(l.piece)).cloned().collect(),
+            attribution: self.attribution.clone(),
+        }
+    }
+
     /// Select one subject's contribution out of a scene. Law 10
     /// (selection coherence): a provider must make rendering a subject
     /// alone agree with selecting it out of the world — this is the

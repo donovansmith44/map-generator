@@ -539,33 +539,8 @@ impl Style {
     }
 }
 
-/// Which layers a query wants. Bit-set, closed vocabulary.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LayerSet(u8);
-
-impl LayerSet {
-    pub const GEOMETRY: LayerSet = LayerSet(1);
-    pub const TOPOGRAPHY: LayerSet = LayerSet(2);
-    pub const LABELS: LayerSet = LayerSet(4);
-    /// Hypsometric elevation bands (phase 5). CONTRACT NOTE (for the
-    /// C5 freeze): joined the vocabulary when relief landed.
-    pub const RELIEF: LayerSet = LayerSet(8);
-    /// Journeys: Way boundaries and their stations — an itinerary
-    /// layer over the same globe, never part of the territorial
-    /// GEOMETRY. CONTRACT NOTE (C5 freeze): joined the vocabulary when
-    /// the whole-Bible route book landed.
-    pub const JOURNEYS: LayerSet = LayerSet(16);
-
-    pub fn empty() -> Self {
-        LayerSet(0)
-    }
-    pub fn with(self, other: LayerSet) -> Self {
-        LayerSet(self.0 | other.0)
-    }
-    pub fn contains(self, other: LayerSet) -> bool {
-        self.0 & other.0 == other.0
-    }
-    pub fn bits(self) -> u8 {
-        self.0
-    }
-}
+// `LayerSet` lived here: a five-flag u8 whose GEOMETRY bit lumped
+// Background, Territory and ScriptureClaims together, so fills,
+// borders and claims could not be selected apart. It is replaced by
+// `crate::piece::PieceSet` — the scene's own vocabulary, ten pieces,
+// every one selectable.

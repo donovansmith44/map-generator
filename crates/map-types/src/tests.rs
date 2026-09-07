@@ -195,6 +195,7 @@ fn marker_scene(tag: u8) -> Snapshot {
         style: MarkerStyle { color: Rgba(tag, tag, tag, 255), size: 3.0 },
         sources: Default::default(),
         place: None,
+        piece: crate::piece::Piece::Markers,
     });
     sc.attribution.insert(SourceId::new(format!("src-{tag}")));
     sc
@@ -272,10 +273,21 @@ fn law01_query_determinism() {
         time: TimeSelector::At(tp(-586)),
         viewport: None,
         lod: Lod(0.001),
-        layers: LayerSet::GEOMETRY.with(LayerSet::LABELS),
+        pieces: crate::piece::PieceSet::empty()
+            .with(crate::piece::Piece::Fills)
+            .with(crate::piece::Piece::Borders)
+            .with(crate::piece::Piece::Claims)
+            .with(crate::piece::Piece::Markers)
+            .with(crate::piece::Piece::Labels),
         style: StyleId(ContentHash(7)),
     };
     assert_eq!(q.map_pid(), q.clone().map_pid());
+
+    // The piece set is part of the query's identity: a query for a
+    // different set of pieces is a different question.
+    let mut fewer = q.clone();
+    fewer.pieces = fewer.pieces.without(crate::piece::Piece::Labels);
+    assert_ne!(q.map_pid(), fewer.map_pid());
 
     let mut coarser = q.clone();
     coarser.lod = Lod(0.01);
@@ -628,6 +640,7 @@ fn law10_selection_coherence() {
             holes: vec![],
             paint: style.region_paint(),
             sources: [SourceId::new("historical-source")].into(),
+            piece: crate::piece::Piece::Fills,
         });
         sc.labels.push(PlacedLabel {
             text: name.to_string(),
@@ -643,6 +656,7 @@ fn law10_selection_coherence() {
                 tracking_em: 0.0,
                 advance_em: 0.62,
             },
+            piece: crate::piece::Piece::Labels,
         });
         sc.attribution.insert(SourceId::new("historical-source"));
         sc
@@ -1139,4 +1153,47 @@ fn style_identity_sees_every_field() {
 
     // And identical parts still agree, of course.
     assert_eq!(id0, build_style(honest_style_parts()).id());
+}
+
+// ==================== THE PIECE: the scene's vocabulary as a type
+
+/// PieceSet is a MONOID over pieces, with/without are inverse, and
+/// every one of the 2^10 subsets round-trips through render/parse —
+/// including the empty one, which is a legal query, not an error.
+#[test]
+fn piece_set_is_a_monoid_over_pieces_and_round_trips() {
+    use crate::piece::{Piece, PieceSet};
+
+    // identity
+    assert_eq!(PieceSet::empty().union(PieceSet::all()), PieceSet::all());
+    assert_eq!(PieceSet::all().union(PieceSet::empty()), PieceSet::all());
+    // associativity, over every triple of singletons
+    for a in Piece::ALL { for b in Piece::ALL { for c in Piece::ALL {
+        let (sa, sb, sc) = (PieceSet::empty().with(a), PieceSet::empty().with(b), PieceSet::empty().with(c));
+        assert_eq!(sa.union(sb).union(sc), sa.union(sb.union(sc)));
+    }}}
+    // with/without are inverse on every piece, from every starting set
+    for p in Piece::ALL {
+        assert!(PieceSet::empty().with(p).contains(p));
+        assert!(!PieceSet::all().without(p).contains(p));
+        assert_eq!(PieceSet::all().without(p).with(p), PieceSet::all());
+    }
+    // every set round-trips through its rendering, INCLUDING the empty one
+    let mut s = PieceSet::empty();
+    assert_eq!(PieceSet::parse(&s.render()), Ok(s), "the empty set is a set");
+    for p in Piece::ALL {
+        s = s.with(p);
+        assert_eq!(PieceSet::parse(&s.render()), Ok(s));
+    }
+    // and the whole 2^10 lattice, so no subset is unreachable
+    for bits in 0u16..1024 {
+        let set = Piece::ALL.iter().enumerate()
+            .filter(|(i, _)| bits & (1 << i) != 0)
+            .fold(PieceSet::empty(), |acc, (_, p)| acc.with(*p));
+        assert_eq!(PieceSet::parse(&set.render()), Ok(set), "bits {bits}");
+        assert_eq!(set.iter().count(), bits.count_ones() as usize);
+    }
+    // a wrong name is refused BY NAME -- not silently dropped
+    assert!(PieceSet::parse("ground, topografy").is_err());
+    assert!(PieceSet::parse("ground, topografy").unwrap_err().contains("topografy"));
 }

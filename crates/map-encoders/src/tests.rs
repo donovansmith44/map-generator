@@ -38,18 +38,21 @@ fn sample_scene() -> Snapshot {
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
         sources: sources.clone(),
+        piece: map_types::Piece::Fills,
     });
     s.boundaries.push(StyledBoundary {
         boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(2)),
         pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
         stroke: Stroke { color: Rgba(90, 60, 40, 255), width: 1.5, pattern: StrokePattern::Dashed },
         sources: sources.clone(),
+        piece: map_types::Piece::Borders,
     });
     s.markers.push(StyledMarker {
         at: uv(4.0, 5.0),
         style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
         sources: Default::default(),
         place: None,
+        piece: map_types::Piece::Markers,
     });
     s.labels.push(PlacedLabel {
         text: "Judah & <friends>".to_string(),
@@ -58,6 +61,7 @@ fn sample_scene() -> Snapshot {
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
+        piece: map_types::Piece::Labels,
     });
     s.attribution = sources;
     s
@@ -91,6 +95,7 @@ fn globe_clips_the_far_hemisphere() {
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(245, 240, 225, 220), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
+        piece: map_types::Piece::Labels,
     });
     let enc = SvgEncoder {
         projection: Projection::Globe { center: Some((3.0, 5.0)), zoom: None },
@@ -125,6 +130,7 @@ fn nothing_unseen_speaks() {
             holes: vec![],
             paint: Paint { fill: Rgba(120, 150, 200, 255) },
             sources: Default::default(),
+            piece: map_types::Piece::Water,
         }
     }
     fn name(id: u64, text: &str, lat: f64, lon: f64) -> PlacedLabel {
@@ -142,6 +148,7 @@ fn nothing_unseen_speaks() {
             },
             face: map_types::scene::LabelFace::Water,
             voice: test_voice(),
+            piece: map_types::Piece::Labels,
         }
     }
     let mut scene = Snapshot::empty();
@@ -232,6 +239,7 @@ fn flat_zooms_to_a_window() {
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
         sources: [SourceId::new("test")].into(),
+        piece: map_types::Piece::Fills,
     };
     let scene = Snapshot {
         regions: vec![region(1, 31.0, 35.0), region(2, 31.0, 155.0)],
@@ -280,6 +288,7 @@ fn geodesics_curve_not_chord() {
         pts: vec![uv(10.0, 0.0), uv(10.0, 60.0)],
         stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
         sources: BTreeSet::new(),
+        piece: map_types::Piece::Borders,
     });
     let out = SvgEncoder {
         projection: Projection::Globe { center: Some((10.0, 30.0)), zoom: Some(45.0) },
@@ -309,6 +318,7 @@ fn labels_fit_their_territory_and_never_collide() {
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
         sources: BTreeSet::new(),
+        piece: map_types::Piece::Fills,
     });
     scene.labels.push(PlacedLabel {
         text: "AN IMPOSSIBLY LONG NAME FOR A TINY PLACE".to_string(),
@@ -317,6 +327,7 @@ fn labels_fit_their_territory_and_never_collide() {
         style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Place,
         voice: test_voice(),
+        piece: map_types::Piece::Labels,
     });
     let out = SvgEncoder::default().encode(&scene).unwrap();
     assert!(!out.contains("IMPOSSIBLY"), "a label that cannot fit is dropped");
@@ -415,6 +426,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         holes: vec![],
         paint: Paint { fill: Rgba(10 + n as u8, 20, 30, 200) },
         sources: [SourceId::new("test")].into(),
+        piece: map_types::Piece::Fills,
     };
     let square = |lat0: f64, lon0: f64, d: f64| {
         vec![
@@ -488,12 +500,14 @@ fn swallowing_geometry_ships_thin() {
             holes: vec![],
             paint: Paint { fill: Rgba(10, 20, 30, 200) },
             sources: [SourceId::new("test")].into(),
+            piece: map_types::Piece::Fills,
         }],
         boundaries: vec![StyledBoundary {
             boundary: map_types::BoundaryId(ContentHash(2)),
             pts: circle,
             stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
             sources: [SourceId::new("test")].into(),
+            piece: map_types::Piece::Borders,
         }],
         markers: vec![],
         labels: vec![],
@@ -527,6 +541,7 @@ fn markers_with_places_are_clickable() {
         place: Some(map_types::AtlasPlaceRef(
             atlas_graph_types::covenant::PlaceId::new("place:Ephesus".to_string()),
         )),
+        piece: map_types::Piece::Markers,
     });
     scene.attribution.insert(SourceId::new("test"));
     let svg = SvgEncoder {
@@ -561,6 +576,7 @@ fn label_wears_its_declared_voice() {
             tracking_em: 0.25,
             advance_em: 0.9,
         },
+        piece: map_types::Piece::Labels,
     });
     let svg = SvgEncoder::default().encode(&scene).unwrap();
     assert!(svg.contains("PHILISTIA"), "uppercase comes from the voice");
@@ -594,6 +610,7 @@ fn fixed_camera_frames_identically_and_pieces_stay_addressable() {
         holes: Vec::new(),
         paint: map_types::style::Paint { fill: map_types::style::Rgba(10, 120, 30, 255) },
         sources: Default::default(),
+        piece: map_types::Piece::Fills,
     };
     let mut whole = Snapshot::empty();
     whole.regions.push(region("partition:judah", 31.6));
@@ -643,6 +660,7 @@ fn flat_window_keeps_holes_of_oversized_rings() {
         holes: vec![island],
         paint: map_types::style::Paint { fill: map_types::style::Rgba(10, 20, 200, 255) },
         sources: Default::default(),
+        piece: map_types::Piece::Water,
     });
     let svg = SvgEncoder {
         projection: Projection::Flat { center: Some((32.0, 35.0)), zoom: Some(2.0) },
@@ -673,6 +691,7 @@ fn flat_projection_holds_its_standard_parallel() {
         },
         sources: Default::default(),
         place: None,
+        piece: map_types::Piece::Markers,
     });
     let enc = SvgEncoder {
         projection: Projection::Flat { center: Some((32.0, 35.0)), zoom: Some(2.0) },
@@ -700,6 +719,7 @@ fn flat_projection_holds_its_standard_parallel() {
             },
             sources: Default::default(),
             place: None,
+            piece: map_types::Piece::Markers,
         });
     }
     let svg = enc.encode(&probe).unwrap();
@@ -741,6 +761,7 @@ fn flat_and_globe_correspond_under_one_camera()  {
                 },
                 sources: Default::default(),
                 place: None,
+                piece: map_types::Piece::Markers,
             });
         }
         let svg = SvgEncoder { projection, width: 800.0, smooth: false, ..SvgEncoder::default() }
@@ -803,6 +824,7 @@ fn the_sentinel_keeps_its_holes_on_both_charts() {
             holes: vec![island.clone()],
             paint: map_types::style::Paint { fill: map_types::style::Rgba(1, 2, 200, 255) },
             sources: Default::default(),
+            piece: map_types::Piece::Fills,
         });
         let svg = SvgEncoder { projection, width: 800.0, smooth: false, ..SvgEncoder::default() }
             .encode(&scene)
@@ -870,6 +892,7 @@ fn equal_content_shares_one_resource() {
                 pattern: StrokePattern::Solid,
             },
             sources: Default::default(),
+            piece: map_types::Piece::Borders,
         });
     }
     let enc = gpu_encode(&scene);
@@ -898,6 +921,7 @@ fn identity_is_independent_of_style() {
             pts: pts.clone(),
             stroke: Stroke { color, width: 2.0, pattern: StrokePattern::Solid },
             sources: Default::default(),
+            piece: map_types::Piece::Borders,
         });
         s
     };
@@ -971,6 +995,7 @@ fn region_rings_share_one_fill_feature() {
         holes: vec![Ring::new(vec![uv(2.0, 4.0), uv(2.0, 6.0), uv(4.0, 5.0)]).unwrap()],
         paint: Paint { fill: Rgba(210, 190, 150, 200) },
         sources: Default::default(),
+        piece: map_types::Piece::Fills,
     });
     let enc = gpu_encode(&scene);
     let fills: Vec<_> = enc
@@ -1006,6 +1031,7 @@ fn sentinel_ring_is_marked_whole() {
         holes: vec![],
         paint: Paint { fill: Rgba(1, 2, 200, 255) },
         sources: Default::default(),
+        piece: map_types::Piece::Fills,
     });
     let enc = gpu_encode(&scene);
     assert!(enc.resources[0].descriptor.whole);
@@ -1086,12 +1112,14 @@ fn antimeridian_split_is_seam_safe() {
         holes: vec![],
         paint: Paint { fill: Rgba(1, 2, 3, 255) },
         sources: Default::default(),
+        piece: map_types::Piece::Fills,
     });
     scene.boundaries.push(StyledBoundary {
         boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(32)),
         pts: vec![uv(60.0, 170.0), uv(60.0, -170.0), uv(55.0, -160.0)],
         stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
         sources: Default::default(),
+        piece: map_types::Piece::Borders,
     });
     let enc = gpu_encode(&scene);
     // Every emitted piece lives in ONE longitude half: no edge of any
@@ -1518,14 +1546,21 @@ fn limb_fixtures_match_rust() {
 #[test]
 fn markers_from_two_origins_share_one_points_buffer() {
     let paint = MarkerStyle { color: Rgba(10, 20, 30, 255), size: 3.0 };
-    let mk = |lat: f64, lon: f64| StyledMarker {
+    // The two ORIGINS the docstring names, now sayable: a journey
+    // station and a gazetteer landmark. They still land in one buffer
+    // today — that is the red this test pins.
+    let mk = |lat: f64, lon: f64, piece: map_types::Piece| StyledMarker {
         at: uv(lat, lon),
         style: paint,
         sources: Default::default(),
         place: None,
+        piece,
     };
     let mut scene = Snapshot::empty();
-    scene.markers = vec![mk(31.0, 35.0), mk(32.0, 35.5)];
+    scene.markers = vec![
+        mk(31.0, 35.0, map_types::Piece::Journeys),
+        mk(32.0, 35.5, map_types::Piece::Markers),
+    ];
 
     let encoded = GpuSceneEncoder::default().encode(&scene).expect("encode");
 

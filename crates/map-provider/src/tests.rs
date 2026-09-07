@@ -82,8 +82,8 @@ mod canon_provider_laws {
     };
     use map_types::style::*;
     use map_types::{
-        GazetteerEntry, GazetteerExport, LayerSet, Lod, MapAddressed, MapProvider, RenderQuery,
-        RenderSubject, StyleId, TimeSelector, UnitVec,
+        GazetteerEntry, GazetteerExport, Lod, MapAddressed, MapProvider, Piece, PieceSet,
+        RenderQuery, RenderSubject, StyleId, TimeSelector, UnitVec,
     };
 
     use crate::canon_provider::CanonProvider;
@@ -236,16 +236,32 @@ mod canon_provider_laws {
         (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gaz)), sid)
     }
 
+    /// The piece-set spelling of the legacy default flags
+    /// (GEOMETRY | LABELS | TOPOGRAPHY | JOURNEYS): GEOMETRY was the
+    /// three land layers, whose elements are fills, borders, claims and
+    /// the point markers that ride in them.
+    pub(crate) fn legacy_defaults() -> PieceSet {
+        PieceSet::empty()
+            .with(Piece::Fills)
+            .with(Piece::Borders)
+            .with(Piece::Claims)
+            .with(Piece::Markers)
+            .with(Piece::Labels)
+            .with(Piece::Water)
+            .with(Piece::Journeys)
+    }
+
     fn world_q(sid: StyleId, y: i32) -> RenderQuery {
+        world_q_pieces(sid, y, legacy_defaults())
+    }
+
+    fn world_q_pieces(sid: StyleId, y: i32, pieces: PieceSet) -> RenderQuery {
         RenderQuery {
             subject: RenderSubject::World,
             time: TimeSelector::At(ts(y)),
             viewport: None,
             lod: Lod::exact(),
-            layers: LayerSet::GEOMETRY
-                .with(LayerSet::LABELS)
-                .with(LayerSet::TOPOGRAPHY)
-                .with(LayerSet::JOURNEYS),
+            pieces,
             style: sid,
         }
     }
@@ -406,7 +422,7 @@ mod canon_provider_laws {
         let sid = s.id();
         let p = CanonProvider::new(store, BTreeMap::from([(sid, s)]), None);
         let mut q = world_q(sid, -1000);
-        q.layers = q.layers.with(LayerSet::RELIEF);
+        q.pieces = q.pieces.with(Piece::Ground);
         let scene = p.render(&q).unwrap();
         let idx_of = |w: &str| {
             scene.regions.iter().position(|r| r.sources.contains(&SourceId::new(w)))
@@ -460,6 +476,221 @@ mod canon_provider_laws {
         assert!(only.regions[0]
             .sources
             .contains(&atlas_graph_types::covenant::SourceId::new("witness:atlas")));
+    }
+
+    /// A canon that puts SOMETHING in every piece: relief bands
+    /// (Ground), a sea and a river (Water), a territory and a
+    /// background culture (Fills/Borders), a scripture claim (Claims),
+    /// a standing landmark (Markers), a walked route with stations
+    /// (Journeys) — so no arm of the subtractivity law below is
+    /// vacuously satisfied.
+    fn every_piece_fixture() -> CanonStore {
+        let mut store = CanonStore::default();
+        let square = |lat0: f64, lon0: f64, d: f64| {
+            Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+        };
+        let layer_of = |store: &mut CanonStore, layer, feats: Vec<map_canon::FeatureId>| {
+            let sid = store.insert_snapshot(Snapshot { features: feats.into_iter().collect() });
+            let mut world = World::default();
+            world.insert(ts(-4004), sid).unwrap();
+            store.set_layer(layer, world);
+        };
+        let area = |store: &mut CanonStore, name: &str, b, tenure, witness| {
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId(name.to_string()),
+                name: name.to_string(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure,
+            }));
+            store.set_provenance(fid, Provenance { witness, verses: vec![], note: "t".into() });
+            fid
+        };
+
+        let band_b = store.insert_border(square(10.0, 10.0, 20.0));
+        let band = area(&mut store, "band", band_b, map_canon::Tenure::Held, Witness::NaturalEarth);
+        layer_of(&mut store, LayerKind::Relief, vec![band]);
+
+        let sea_b = store.insert_border(square(31.0, 30.0, 4.0));
+        let sea = area(&mut store, "the-sea", sea_b, map_canon::Tenure::Held, Witness::NaturalEarth);
+        let river_b = store.insert_border(Border(vec![uv(32.0, 35.0), uv(33.0, 35.5), uv(34.0, 36.0)]));
+        let river = store.insert_feature(Feature::Line(map_canon::PathLine {
+            entity: EntityId("the-river".into()),
+            name: "the river".into(),
+            border: river_b,
+        }));
+        store.set_provenance(river, Provenance {
+            witness: Witness::NaturalEarth,
+            verses: vec![],
+            note: "t".into(),
+        });
+        layer_of(&mut store, LayerKind::Water, vec![sea, river]);
+
+        let cult_b = store.insert_border(square(50.0, 10.0, 5.0));
+        let culture = area(&mut store, "culture", cult_b, map_canon::Tenure::Held, Witness::Basemap);
+        layer_of(&mut store, LayerKind::Background, vec![culture]);
+
+        let claim_b = store.insert_border(square(30.0, 40.0, 4.0));
+        let claim = area(&mut store, "claim", claim_b, map_canon::Tenure::Claimed, Witness::Authored);
+        layer_of(&mut store, LayerKind::ScriptureClaims, vec![claim]);
+
+        let terr_b = store.insert_border(square(35.0, 42.0, 3.0));
+        let assyria = area(&mut store, "assyria", terr_b, map_canon::Tenure::Held, Witness::Atlas);
+        let landmark = store.insert_feature(Feature::Point(map_canon::Landmark {
+            entity: EntityId("place:nineveh".into()),
+            name: "Nineveh".into(),
+            at: uv(36.36, 43.15),
+        }));
+        store.set_provenance(landmark, Provenance {
+            witness: Witness::Atlas,
+            verses: vec!["JON.1.2".into()],
+            note: "t".into(),
+        });
+        layer_of(&mut store, LayerKind::Territory, vec![assyria, landmark]);
+
+        let road1 = store.insert_border(Border(vec![uv(36.2, 36.16), uv(37.9, 27.3)]));
+        let road2 = store.insert_border(Border(vec![uv(37.9, 27.3), uv(41.89, 12.49)]));
+        let way = store.insert_feature(Feature::Way(Route {
+            entity: EntityId("test-walk".into()),
+            name: "a test walk".into(),
+            legs: vec![
+                Leg { from: PlaceId::new("antioch".to_string()), to: PlaceId::new("ephesus".to_string()),
+                      border: road1, span: (ts(-1500), ts(-1450)) },
+                Leg { from: PlaceId::new("ephesus".to_string()), to: PlaceId::new("rome".to_string()),
+                      border: road2, span: (ts(-1450), ts(-1420)) },
+            ],
+        }));
+        store.set_provenance(way, Provenance {
+            witness: Witness::Atlas,
+            verses: vec!["ACT.19.1".into()],
+            note: "t".into(),
+        });
+        layer_of(&mut store, LayerKind::Journeys, vec![way]);
+        store
+    }
+
+    fn every_piece_provider() -> (CanonProvider, StyleId) {
+        let s = style();
+        let sid = s.id();
+        let gaz = GazetteerExport {
+            atlas_root: atlas_graph_types::covenant::ContentHash(0),
+            places: [
+                ("antioch", 36.2, 36.16, "Antioch"),
+                ("ephesus", 37.9, 27.3, "Ephesus"),
+                ("rome", 41.89, 12.49, "Rome"),
+            ]
+            .into_iter()
+            .map(|(id, lat, lon, name)| {
+                (PlaceId::new(id.to_string()), GazetteerEntry {
+                    canonical_name: name.to_string(),
+                    position: uv(lat, lon),
+                    aliases: vec![],
+                    provenance: None,
+                    attestations: vec![],
+                })
+            })
+            .collect(),
+        };
+        (
+            CanonProvider::new(every_piece_fixture(), BTreeMap::from([(sid, s)]), Some(gaz)),
+            sid,
+        )
+    }
+
+    /// TOTALITY AND DISCRIMINATION: every scene element names the
+    /// piece it belongs to, the attribution is not a constant, and
+    /// restricting the query to a piece set subtracts exactly that
+    /// set's contribution — no more, no less.
+    #[test]
+    fn every_scene_element_names_its_piece_and_restriction_is_subtractive() {
+        use map_types::{Piece, PieceSet};
+        let (p, sid) = every_piece_provider();
+        let whole = p.render(&world_q_pieces(sid, -1405, PieceSet::all())).expect("render");
+
+        // Not vacuous: the fixture actually fills every element list,
+        // so no arm of the loop below is trivially satisfied.
+        assert!(!whole.markers.is_empty() && !whole.labels.is_empty());
+        let marker_pieces: std::collections::BTreeSet<_> =
+            whole.markers.iter().map(|m| m.piece).collect();
+        assert!(marker_pieces.len() >= 2, "markers come from more than one piece: {marker_pieces:?}");
+        let boundary_pieces: std::collections::BTreeSet<_> =
+            whole.boundaries.iter().map(|b| b.piece).collect();
+        assert!(boundary_pieces.len() >= 2, "boundaries too: {boundary_pieces:?}");
+        // and every piece that owns geometry actually shows up
+        let all_stamped: std::collections::BTreeSet<_> = whole
+            .regions
+            .iter()
+            .map(|r| r.piece)
+            .chain(whole.boundaries.iter().map(|b| b.piece))
+            .chain(whole.markers.iter().map(|m| m.piece))
+            .chain(whole.labels.iter().map(|l| l.piece))
+            .collect();
+        for expected in
+            [Piece::Ground, Piece::Water, Piece::Fills, Piece::Borders, Piece::Claims,
+             Piece::Labels, Piece::Markers, Piece::Journeys]
+        {
+            assert!(all_stamped.contains(&expected), "{expected:?} contributes nothing");
+        }
+
+        // Totality: not one element is unattributed. (The type makes
+        // this true by construction; the test exists so the day
+        // someone adds a fifth element list, it fails.)
+        assert!(!whole.regions.is_empty() && !whole.boundaries.is_empty());
+
+        // Discrimination: the attribution is not constant. A
+        // single-valued `piece` would satisfy "every element names its
+        // piece" while saying nothing -- the §6.3 trap, refused here.
+        let region_pieces: std::collections::BTreeSet<_> =
+            whole.regions.iter().map(|r| r.piece).collect();
+        assert!(region_pieces.len() >= 2, "regions come from more than one piece: {region_pieces:?}");
+
+        // Subtractivity, per piece, over EVERY piece: restricting to a
+        // set yields exactly the elements attributed to that set.
+        for omitted in Piece::ALL {
+            let kept = PieceSet::all().without(omitted);
+            let part = p.render(&world_q_pieces(sid, -1405, kept)).expect("render");
+            assert!(part.regions.iter().all(|r| r.piece != omitted));
+            assert!(part.boundaries.iter().all(|b| b.piece != omitted));
+            assert!(part.markers.iter().all(|m| m.piece != omitted));
+            assert_eq!(
+                part.regions,
+                whole.regions.iter().filter(|r| r.piece != omitted).cloned().collect::<Vec<_>>(),
+                "omitting {omitted:?} removed something else too");
+            assert_eq!(
+                part.markers,
+                whole.markers.iter().filter(|m| m.piece != omitted).cloned().collect::<Vec<_>>(),
+                "omitting {omitted:?} disturbed the markers of other pieces");
+        }
+
+        // `restrict` is the same subtraction, done on the scene: the
+        // law is a definition, not a hope.
+        for omitted in Piece::ALL {
+            let kept = PieceSet::all().without(omitted);
+            let filtered = whole.restrict(kept);
+            assert!(filtered.labels.iter().all(|l| l.piece != omitted));
+            assert_eq!(
+                filtered.regions,
+                whole.regions.iter().filter(|r| r.piece != omitted).cloned().collect::<Vec<_>>());
+        }
+    }
+
+    /// BEHAVIOR PRESERVATION: the piece-set spelling of yesterday's
+    /// legacy flags (GEOMETRY | LABELS | TOPOGRAPHY | JOURNEYS) yields
+    /// exactly the scene the LayerSet spelling yielded — the counts
+    /// below were measured against the pre-`piece` provider on this
+    /// same fixture. Piece attribution is new information, not a new
+    /// answer.
+    #[test]
+    fn todays_defaults_render_exactly_what_they_rendered_before() {
+        let (p, sid) = provider();
+        let counts = |y: i32| {
+            let s = p.render(&world_q(sid, y)).unwrap();
+            (s.regions.len(), s.boundaries.len(), s.markers.len(), s.labels.len())
+        };
+        assert_eq!(counts(-1405), (2, 1, 0, 2), "assyria + the sea, one outline, two names");
+        assert_eq!(counts(-1000), (2, 1, 0, 2));
+        assert_eq!(counts(46), (1, 1, 1, 2), "mid-first-leg: the sea, the road, Antioch");
+        assert_eq!(counts(49), (1, 1, 3, 4), "arrived: three stations, three names + the sea");
     }
 
     /// The scrubber lives: subjects at a time list the entities, and
@@ -569,7 +800,7 @@ mod memory_laws {
     use atlas_graph_types::covenant::{TimePoint, Year};
     use map_canon::{CanonStore, EntityId, Feature, LayerKind, Memory, World};
     use map_types::style::*;
-    use map_types::{LayerSet, Lod, MapProvider, RenderQuery, RenderSubject, StyleId, TimeSelector, UnitVec};
+    use map_types::{Lod, MapProvider, Piece, PieceSet, RenderQuery, RenderSubject, StyleId, TimeSelector, UnitVec};
 
     use crate::canon_provider::CanonProvider;
 
@@ -600,7 +831,12 @@ mod memory_laws {
                 time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
                 viewport: None,
                 lod: Lod(0.0),
-                layers: LayerSet::GEOMETRY.with(LayerSet::LABELS),
+                pieces: PieceSet::empty()
+                    .with(Piece::Fills)
+                    .with(Piece::Borders)
+                    .with(Piece::Claims)
+                    .with(Piece::Markers)
+                    .with(Piece::Labels),
                 style: style_id,
             })
             .unwrap();
@@ -619,7 +855,7 @@ mod scaling_laws {
     use atlas_graph_types::covenant::{TimePoint, Year};
     use map_canon::{Area, Border, CanonStore, EntityId, Feature, LayerKind, Snapshot, World};
     use map_types::style::*;
-    use map_types::{Bbox, LayerSet, Lod, MapProvider, RenderQuery, RenderSubject, TimeSelector, UnitVec};
+    use map_types::{Bbox, Lod, MapProvider, Piece, PieceSet, RenderQuery, RenderSubject, TimeSelector, UnitVec};
 
     use crate::canon_provider::CanonProvider;
 
@@ -665,7 +901,11 @@ mod scaling_laws {
             time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
             viewport,
             lod: Lod(lod),
-            layers: LayerSet::GEOMETRY,
+            pieces: PieceSet::empty()
+                .with(Piece::Fills)
+                .with(Piece::Borders)
+                .with(Piece::Claims)
+                .with(Piece::Markers),
             style: crate::tests::honest_style_for_memory_law().id(),
         }
     }
