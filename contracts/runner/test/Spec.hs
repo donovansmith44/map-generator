@@ -14,6 +14,7 @@ import Steps
 import Run
 import qualified Check
 import qualified Vocab
+import qualified Prop
 import Control.Exception (try, bracket, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
@@ -801,6 +802,132 @@ main = hspec $ do
         (out, result) <- captureStdout (Vocab.vocabDir allSteps dir False)
         result `shouldSatisfy` isRight
         out `shouldBe` "vocabulary: every table matches its types\n"
+
+  describe "@property scenarios" $ do
+    it "substitutes holes and runs N times, all green on a law that holds" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: determinism"
+            , "    When I render pieces <somePieces> at year <someYear> in style canaan as a"
+            , "    And I render pieces <somePieces> at year <someYear> in style canaan as b"
+            , "    Then a equals b" ]
+          fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
+            where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
+          w = World "http://x" fake "" mempty False
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- Prop.runScenarioProperty allSteps w 25 sc
+            v `shouldBe` Passed
+          [] -> expectationFailure "expected at least one scenario"
+    it "reports the failing binding when the law breaks" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: falsifiable"
+            , "    When I GET /api/echo?y=<someYear>"
+            , "    Then the response field neverThere equals nope" ]
+          fake _ = pure (Right ("{}", A.object []))
+          w = World "http://x" fake "" mempty False
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- Prop.runScenarioProperty allSteps w 25 sc
+            case v of
+              Failed e -> e `shouldSatisfy` T.isInfixOf "someYear ="
+              _ -> expectationFailure "law should have failed with its binding"
+          [] -> expectationFailure "expected at least one scenario"
+    -- Requirement 1: an unregistered `<hole>` must never silently pass --
+    -- it must fail loudly, naming the specific hole that has no generator.
+    it "an unregistered hole fails loudly, naming the hole" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: mystery"
+            , "    When I GET /api/echo?y=<someMysteryHole>" ]
+          w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- Prop.runScenarioProperty allSteps w 5 sc
+            case v of
+              Failed e -> e `shouldSatisfy` T.isInfixOf "someMysteryHole"
+              _ -> expectationFailure "an unregistered hole should fail loudly, naming it"
+          [] -> expectationFailure "expected at least one scenario"
+    -- Requirement 2: the diagnosis is reproducible run to run -- same
+    -- inputs must generate the same bindings and the same verdict,
+    -- including the exact text of a failing binding's counterexample.
+    it "the same scenario run twice produces byte-identical verdicts \
+       \(deterministic per-iteration seeding)" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: falsifiable"
+            , "    When I GET /api/echo?y=<someYear>"
+            , "    Then the response field neverThere equals nope" ]
+          fake _ = pure (Right ("{}", A.object []))
+          w = World "http://x" fake "" mempty False
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v1 <- Prop.runScenarioProperty allSteps w 25 sc
+            v2 <- Prop.runScenarioProperty allSteps w 25 sc
+            v1 `shouldBe` v2
+          [] -> expectationFailure "expected at least one scenario"
+    -- Requirement 4: the empty piece set (the scene monoid's identity) MUST
+    -- be in genPieces' codomain, and MUST round-trip through substitution
+    -- into a body the real step vocabulary still parses ("none", not "").
+    it "genPieces can generate the empty piece set (the monoid identity)" $ do
+      -- sublistOf independently keeps/drops each of the 10 pieces, so the
+      -- empty set has probability (1/2)^10 = 1/1024 per sample -- a large
+      -- sample count is needed for this to be reliable rather than flaky
+      -- (20000 samples puts the odds of missing it entirely below 1e-8).
+      samples <- generate (vectorOf 20000 Prop.genPieces)
+      samples `shouldSatisfy` any (== PieceSet Set.empty)
+    it "substituting the empty piece set renders 'none', which the real \
+       \pieces step still parses and runs to Passed" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  Scenario: s"
+            , "    When I render pieces <somePieces> at year 0 in style canaan as a" ]
+          fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
+            where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
+          w = World "http://x" fake "" mempty False
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            let sc' = Prop.substitute (Map.fromList [("somePieces", "none")]) sc
+            case scSteps sc' of
+              (Step _ b _ : _) ->
+                b `shouldBe` "I render pieces none at year 0 in style canaan as a"
+              [] -> expectationFailure "expected a step"
+            v <- runScenario allSteps w sc'
+            v `shouldBe` Passed
+          [] -> expectationFailure "expected at least one scenario"
+
+  describe "Check.dehole wired to Prop.substituteExamples" $
+    -- Task 7 shipped `dehole = id`, documented as a placeholder Task 9
+    -- would replace. This proves the wiring: a bare hole (which some
+    -- captures, like UrlPath, would otherwise accept unexamined) now
+    -- reaches `classify` already substituted with a real, registered
+    -- example value.
+    it "a scene line whose captures are holes classifies by its \
+       \substituted example, not the literal hole text" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
 
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,

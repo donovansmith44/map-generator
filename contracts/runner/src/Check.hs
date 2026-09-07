@@ -5,6 +5,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
+import qualified Prop
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>), takeExtension)
@@ -50,9 +51,12 @@ classify defs (Step k body _) = case (matched, errored) of
   where
     -- property holes (e.g. <someYear>) must be substituted with a
     -- registered example value before matching, or every @property step
-    -- looks wrong. Task 9 wires this to Prop.substituteExamples; until a
-    -- hole name is registered, the raw hole text (e.g. "<somePieces>")
-    -- reaches a definition's capture unparsed. Fix 4 (post-Task-7 review):
+    -- looks wrong. Task 9 wires this to Prop.substituteExamples: an
+    -- unregistered hole name is deliberately left as-is here (classify
+    -- has no scenario/tag context to build a good "which hole, which
+    -- scenario" message from a bare Step body -- that loud, hole-naming
+    -- failure lives in Prop.runScenarioProperty, which runs with that
+    -- context). Fix 4 (post-Task-7 review):
     -- this was documented as making the step "an orphan" — that's not
     -- what the real corpus shows. A hole like "<somePieces>" still matches
     -- the literal shape of "I render pieces ... at year ... in style ...",
@@ -72,14 +76,14 @@ classify defs (Step k body _) = case (matched, errored) of
     -- clean single match again — and the four lines fix 7 just made
     -- visible (see Steps.hs's UrlPath comment) go quiet a second time,
     -- silently fetching a URL containing the literal text "<someYear>".
-    -- `dehole = id` is not a safety net against that; the actual
+    -- A no-op `dehole` would not be a safety net against that; the actual
     -- protection is substituting the hole with a real registered example
-    -- value BEFORE matching, which is exactly what Task 9's wiring to
-    -- Prop.substituteExamples is for, and is still unwritten. Do not read
-    -- "bad-value" above as a universal guarantee that holes get caught —
-    -- it's an artifact of which captures happen to validate their input,
-    -- not a law this module enforces.
-    dehole = id
+    -- value BEFORE matching, which is exactly what `dehole` now does
+    -- (wired below to Prop.substituteExamples). Do not read "bad-value"
+    -- above as a universal guarantee that holes get caught on their own —
+    -- absent this wiring it would be an artifact of which captures happen
+    -- to validate their input, not a law this module enforces.
+    dehole = Prop.substituteExamples
     results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
     matched = [ sk | (sk, Matched _) <- results ]
     errored = [ (sk, e) | (sk, ClaimError e) <- results ]
