@@ -21,6 +21,13 @@
 > corrected headline is **two of four**, and the two reds are plausibly the
 > same underlying gap. What happened, and why it matters more than any
 > individual verdict, is recorded in [§7.0](#70-the-one-that-got-through-a-check-that-could-not-fail-reported-as-a-finding).
+>
+> **A second correction notice, dated 2026-09-07.** A later parameterization
+> sweep quantified these laws over pieces × year × style instead of one fixed
+> corner, changed the map-api tally again, and found a fifth red the owner has
+> ruled stays red. See the addendum at the end of this document,
+> [Addendum (2026-09-07): the parameterization sweep — every law over every
+> dimension it claims](#addendum-2026-09-07-the-parameterization-sweep--every-law-over-every-dimension-it-claims).
 
 ---
 
@@ -995,3 +1002,160 @@ off, 33 with journeys on.
 Toolchain: GHC 9.12.1, cabal 3.18.1.0. The runner forces UTF-8 on stdout, so
 the em dashes above survive any console code page. Requires both servers
 live: ours on `:8090`, the atlas on `:8080`.
+
+---
+
+## Addendum (2026-09-07): the parameterization sweep — every law over every dimension it claims
+
+**Written:** 2026-09-07. **Evidence:** `.superpowers/sdd/2026-09-06-contract-stage0/sweep-report.md`
+(the sweep report) and the SWEEP entries in that stage's `progress.md`.
+**Commits under discussion:** `8c09f8b` (the sweep itself) and `2baf81f`
+(review fix round — shared dehole gate, pinned group invariants,
+`--property-runs 0` refused). Everything above this addendum is the record
+of what was known at `7cd31bd`/`a382c68` and is left untouched; this section
+supersedes only the tallies and conclusions it explicitly names.
+
+### 1. What changed and why
+
+The owner's ruling: the `@property` laws above proved determinism only under
+"year = -1405, style = canaan" preconditions. Everything must be quantified
+over every dimension the law claims — pieces × year × style — not pinned to
+one fixed corner, and the composition law must vary all ten pieces of the
+monoid, not just the four the wire can toggle. Laws going red where the wire
+falls short is the point, not a defect to paper over.
+
+The owner reviewed and approved the resulting Gherkin directly:
+scene.feature was rewritten in full with user-story-first scenario names
+(e.g. "an empty map stacked onto any map changes nothing" rather than a
+mechanism-named title), resources.feature's two scenarios were quantified,
+and changes.feature's empty-span scenario became a property. Two fixed
+scenarios that the new `@property` versions dominate were deleted (the old
+fixed determinism scenario and the old fixed subtractive-omission scenario),
+along with their now-orphaned fixture `changes-empty.json`.
+
+Laws now range over **all ten pieces**, even though only four
+(ground, water, labels, journeys) have a wire toggle in v0.1. The other six
+are untestable-today by construction, and the report states this rather than
+hiding it — see §5 below.
+
+The work landed at `8c09f8b` and went through one review-and-fix round at
+`2baf81f`.
+
+### 2. The corrected tally, verbatim
+
+`run --base-url http://127.0.0.1:8090 map-api`, 21 rows:
+
+| feature | scenario | verdict | skipped |
+|---|---|---|---|
+| the scene — a picture composed from pieces | the twelve tribes scene, whole | ✅ green | 0 |
+| the scene — a picture composed from pieces | a scene with no labels is still a scene — pinned whole | ✅ green | 0 |
+| the scene — a picture composed from pieces | asking for the same map twice gives the same map | ✅ green | 0 |
+| the scene — a picture composed from pieces | an empty map stacked onto any map changes nothing | ❌ RED — Then combining some and empty equals some     ✗ combining some and empty is not some: 1 id(s) present only in the composed side: fb387872526ea52b     with someP | 0 |
+| the scene — a picture composed from pieces | turning pieces off only removes things — nothing new appears | 🔴 red (expected — @target) | 0 |
+| the scene — a picture composed from pieces | building a map in two parts gives the same map as building it in one | 🔴 red (expected — @target) | 0 |
+| the scene — a picture composed from pieces | drawing each piece alone and stacking them rebuilds the whole map | 🔴 red (expected — @target) | 0 |
+| the scene — a picture composed from pieces | switching styles repaints the map without moving anything on it | 🟢 green (target already met!) | 0 |
+| the scene — a picture composed from pieces | everything on the map says which piece put it there | 🔴 red (expected — @target) | 0 |
+| resources — geometry by content address | the same geometry fetched twice is exactly the same bytes | ✅ green | 0 |
+| resources — geometry by content address | fetching geometry in a batch is the same as fetching it one at a time | 🟢 green (target already met!) | 0 |
+| the contract endpoint — a server declares what it speaks | the contract declaration is exactly its blessed body | ✅ green | 0 |
+| subjects — what can be asked about at a moment | the twelve tribes era, whole | ✅ green | 0 |
+| subjects — what can be asked about at a moment | the tetrarchies era, whole | ✅ green | 0 |
+| subjects — what can be asked about at a moment | subjects are deterministic at any year | ✅ green | 0 |
+| changes — the narrative between two instants | the conquest is a change the timeline knows | ✅ green | 0 |
+| changes — the narrative between two instants | when no time passes, nothing changes | ✅ green | 0 |
+| the census — every disposition, queryable | the whole census at 1050 BC | ✅ green | 0 |
+| the census — every disposition, queryable | the whole census at AD 59 | ✅ green | 0 |
+| the census — every disposition, queryable | the whole census at the conquest | ✅ green | 0 |
+| the census — every disposition, queryable | the census is deterministic at any year | ✅ green | 0 |
+
+1 non-target failures
+
+Exit **1** (was 0 at `7cd31bd`).
+
+**Tally: 21 rows — 14 plain green, 2 target-already-met (dress-locality and
+batch, now established over 100 draws of pieces × year × distinct-style
+pairs rather than one fixed corner), 4 expected `@target` red, 1 unexpected
+red, exit 1.**
+
+`atlas-edge` is **unchanged, 6/6 green, exit 0** — the sweep did not touch
+that suite.
+
+Skip counts are **0 on every row of both suites**. That is the expected
+number, not a sign the skip machinery didn't run: `P(empty piece-set draw in
+100 iterations) ≈ 9.3%` per run, so zero-skips is the modal outcome, and the
+solo generators' seed streams are bit-identical to the pre-sweep run (no
+distribution regression).
+
+### 3. The new finding: year quantification caught the journeys bug at more instants
+
+Quantifying over year, not just pieces, is what surfaced this. The identity
+law — "an empty map stacked onto any map changes nothing," `@property`,
+**not** `@target` — fails at `someYear = 54`: `&journeys=0` makes resource
+`fb387872526ea52b` (a 26-vertex points buffer) appear that is absent when
+journeys is on.
+
+Every deleted fixed scenario was pinned at year -1405, where this orphan
+does not exist. Journeys geometry apparently does not exist at that year at
+all; the defect only fires at years where it does. No amount of care at one
+fixed year would have found it — quantifying over year is what did.
+
+Independently verified with raw HTTP calls at year 54, style parchment,
+holding other toggles fixed: **333 resources with journeys, 332 without**,
+and `fb387872526ea52b` present only when journeys is turned off. Net count
+goes down by one but a *different* resource appears — the buffer's content
+address changes because a shared buffer's contents change, not because
+geometry was cleanly removed.
+
+### 4. The owner's ruling
+
+**The identity red stays red, untagged.** map-api exits 1 by design until
+Stage 1's buffer split retires the underlying bug.
+
+The considered alternative — tagging it `@target`, on the grounds that under
+v0.1's ratified combining-as-resource-set-union the identity law is
+logically the `someSubset = ∅` instance of the already-`@target` subtractive
+law, so the untagged red is a tagging-consistency artifact rather than new
+server behaviour — was raised by the review and declined by the owner, in
+favour of keeping CI pressure on the defect.
+
+### 5. The failure taxonomy
+
+Five red scenarios, two categories, one root cause:
+
+- **Category 1 — pieces don't compose** (4 reds: identity, subtractive,
+  composition, singleton fold). One server defect with four faces: marker
+  geometry is buffered globally by paint style with piece-dependent
+  contents, so turning a piece off or on changes a buffer other pieces also
+  use — the orphan id `fb387872526ea52b` is the smoking gun, recurring
+  across every one of the four. The quieter half of this category: six of
+  ten pieces have no wire toggle at all in v0.1, so those dimensions of the
+  quantified laws are untestable today rather than failing — a gap the
+  sweep states rather than hides.
+- **Category 2 — geometry doesn't say who made it** (1 red: piece
+  attribution). Downstream of category 1: a manifest entry produced jointly
+  by more than one piece cannot be honestly stamped with a single `piece`
+  value, so attribution cannot be made correct until the buffers are split.
+- **Retirement.** All five are one statement — "pieces aren't first-class in
+  the renderer" — and Stage 1 Part B's buffer split retires the lot
+  together, not one at a time.
+
+### 6. Machinery notes
+
+- **Correlated holes.** `<someStyle>`/`<someOtherStyle>` are drawn distinct
+  by construction (a non-zero rotation in `Z_n`, not a retry), and
+  `<someSubset>`/`<someSuperset>` are drawn nested by construction (the
+  subset sampled from inside the superset), each pinned by a test that goes
+  red if the correlation breaks.
+- **The counted-skip discipline.** A law's skip count is now a first-class
+  part of its report rather than folded into the verdict; a law where every
+  iteration skips is `Failed`, naming the count, rather than a vacuous
+  green.
+- **`--property-runs 0` is now rejected** at option-parse time, before any
+  server contact — a run of zero iterations does not check a `@property` law
+  less thoroughly, it does not check it at all, and would otherwise report
+  every such law green having examined nothing.
+- **Mutation evidence is re-runnable**, not testimonial: `contracts/runner/mutation-evidence.py`
+  applies 7 mutations across two batches, reddening 11 distinct laws, and
+  restores the tree — `ALL MUTATIONS CAUGHT, TREE CLEAN` on the last run
+  recorded in the sweep report.
