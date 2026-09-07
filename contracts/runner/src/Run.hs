@@ -23,7 +23,8 @@ runScenario defs w0 sc = go w0 (scSteps sc)
         (f : _) -> do
           r <- try (f w) :: IO (Either SomeException (Either Text World))
           case r of
-            Left ex          -> pure (Failed (T.pack (show ex)))
+            Left ex          -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 "
+                                              <> T.pack (show ex)))
             Right (Left e)   -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 " <> e))
             Right (Right w') -> go w' rest
         [] -> pure (Failed ("undefined step: " <> kwText k <> " " <> body))
@@ -42,6 +43,15 @@ runFeatureFiles defs w paths = fmap concat . mapM one $ paths
 
 isTarget :: ScenarioResult -> Bool
 isTarget = elem (Tag "target") . srTags
+
+-- The classification this whole stage exists to produce: a non-@target
+-- scenario whose verdict is Failed is a hard red (fails the run); a
+-- @target scenario's Failed verdict is EXPECTED red (reported, not
+-- fatal), and a @target scenario's Passed verdict is information (a met
+-- target), not fatal either. Exported so `main` calls one law instead of
+-- duplicating this list comprehension into its own test.
+hardReds :: [ScenarioResult] -> [ScenarioResult]
+hardReds rs = [ r | r <- rs, not (isTarget r), Failed _ <- [srVerdict r] ]
 
 reportTable :: [ScenarioResult] -> Text
 reportTable rs = T.unlines $

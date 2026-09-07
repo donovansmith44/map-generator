@@ -278,6 +278,72 @@ main = hspec $ do
               Failed e -> e `shouldSatisfy` T.isInfixOf "nobody defined"
               _ -> expectationFailure "should have failed"
           [] -> expectationFailure "expected at least one scenario"
+    -- Review finding (Task 6 round 1): the classification this whole stage
+    -- exists to produce — a non-@target Failed is a hard red, a @target
+    -- Failed is expected-red (reported, not fatal), a @target Passed is
+    -- informational (not fatal either) — had ZERO coverage: the test above
+    -- only calls runScenario, which never sees tags at all. This test
+    -- drives the real pipeline: runFeatureFiles (so tag propagation from
+    -- Scenario through ScenarioResult is genuinely exercised, not
+    -- reimplemented), the exported Run.hardReds law, and reportTable's
+    -- cell rendering, against a real feature file on disk plus a second
+    -- file that fails to parse (so the PARSE-failure path — no tags, must
+    -- count as a hard red — is covered too).
+    it "classifies @target vs. hard-red through runFeatureFiles, hardReds, and reportTable" $ do
+      let fake url
+            | "/api/ok" `T.isSuffixOf` url =
+                pure (Right ("{\"ok\":\"yes\"}", fromJust (A.decodeStrict "{\"ok\":\"yes\"}")))
+            | otherwise =
+                pure (Right ("{\"x\":1}", fromJust (A.decodeStrict "{\"x\":1}")))
+          w = World "http://x" fake "test/fixtures" mempty False
+      results <- runFeatureFiles allSteps w
+        [ "test/features/classification.feature", "test/features/badparse.feature" ]
+      case results of
+        [hardRed, targetFail, targetPass, parseFail] -> do
+          -- tags and verdicts genuinely came out of the real pipeline
+          srScenario hardRed `shouldBe` "hard red"
+          srTags hardRed `shouldBe` []
+          srVerdict hardRed `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+          srScenario targetFail `shouldBe` "expected red"
+          srTags targetFail `shouldBe` [Tag "target"]
+          srVerdict targetFail `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+          srScenario targetPass `shouldBe` "target already met"
+          srTags targetPass `shouldBe` [Tag "target"]
+          srVerdict targetPass `shouldBe` Passed
+          srScenario parseFail `shouldBe` "PARSE"
+          srTags parseFail `shouldBe` []
+          srVerdict parseFail `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+          -- the classification: only the untagged failure and the parse
+          -- failure are hard reds; the @target failure is expected, and
+          -- the @target pass is informational — neither is fatal
+          map srScenario (hardReds results) `shouldBe` ["hard red", "PARSE"]
+          -- and the report table must actually SHOW the distinction, not
+          -- just compute it silently
+          let table = reportTable results
+          table `shouldSatisfy` T.isInfixOf "| hard red | \10060 RED"
+          table `shouldSatisfy`
+            T.isInfixOf "| expected red | \128308 red (expected \8212 @target) |"
+          table `shouldSatisfy`
+            T.isInfixOf "| target already met | \128994 green (target already met!) |"
+          table `shouldSatisfy` T.isInfixOf "| PARSE | \10060 RED"
+        rs -> expectationFailure ("expected exactly 4 results, got " <> show (length rs))
+    -- Review finding (Task 6 round 1), fix 3: the exception branch of
+    -- runScenario dropped the step's keyword and body that the logical-
+    -- failure branch includes, even though this stage's whole deliverable
+    -- is a legible diagnosis of which step failed.
+    it "an exception thrown while running a step is reported with the step's keyword and body" $ do
+      let w = World "http://x" (\_ -> error "boom") "" mempty False
+      case parseFeature "t.feature" "Feature: t\n  Scenario: s\n    When I GET /boom" of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- runScenario allSteps w sc
+            case v of
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "When"
+                e `shouldSatisfy` T.isInfixOf "I GET /boom"
+              _ -> expectationFailure "should have failed"
+          [] -> expectationFailure "expected at least one scenario"
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

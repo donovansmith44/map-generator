@@ -54,10 +54,9 @@ main = do
       files <- featureFiles dir
       results <- Prop.runWithProperties allSteps w runs files
       TIO.putStrLn (reportTable results)
-      let hardReds = [ r | r <- results, not (isTarget r)
-                         , Failed _ <- [srVerdict r] ]
-      if null hardReds then exitSuccess
-      else TIO.putStrLn (T.pack (show (length hardReds)) <> " non-target failures")
+      let reds = hardReds results
+      if null reds then exitSuccess
+      else TIO.putStrLn (T.pack (show (length reds)) <> " non-target failures")
            >> exitFailure
     CmdCheck dir -> Check.checkDir allSteps dir
     CmdVocab dir w -> Vocab.vocabDir allSteps dir w
