@@ -26,7 +26,8 @@ cmd = hsubparser
   (  command "run"   (info (CmdRun <$> strOption (long "base-url")
                                    <*> argument str (metavar "DIR")
                                    <*> switch (long "bless")
-                                   <*> option auto (long "property-runs" <> value 100))
+                                   <*> option propertyRuns
+                                         (long "property-runs" <> value 100))
                        (progDesc "execute a contract directory against a server"))
   <> command "check" (info (CmdCheck <$> argument str (metavar "DIR"))
                        (progDesc "totality: every step matches exactly one definition"))
@@ -34,6 +35,13 @@ cmd = hsubparser
                                      <*> switch (long "write"))
                        (progDesc "verify (or --write) Vocabulary blocks against the types"))
   )
+
+-- A two-line adapter over `Prop.checkPropertyRuns`, which holds the law
+-- (and the reason for it) and is pinned by the test suite. The parser's
+-- only job is to turn that `Left` into optparse-applicative's own
+-- reader failure, so `--property-runs 0` never reaches a run at all.
+propertyRuns :: ReadM Int
+propertyRuns = auto >>= either readerError pure . Prop.checkPropertyRuns
 
 featureFiles :: FilePath -> IO [FilePath]
 featureFiles dir = do

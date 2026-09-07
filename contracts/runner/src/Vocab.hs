@@ -50,10 +50,11 @@ import World (Claim (..), StepDef (..), readFeatureFile)
 -- prose sentence in every feature that uses it, never a real answer set.
 --
 -- The sweep: a hole is substituted with its example value before
--- matching, under EXACTLY the gate Check.classify uses -- only when the
--- enclosing scenario is @property-tagged, because that is the only
--- condition under which Prop.runWithProperties will ever substitute
--- anything at run time. Without this, a scenario body reading
+-- matching, through `Prop.deholeFor` -- the SAME function Check.classify
+-- calls, not a second copy of its rule (review finding, round 1: these
+-- were two independent re-expressions of one gate, which would have
+-- diverged silently into a wrong Vocabulary block rather than a red
+-- test). Without this substitution, a scenario body reading
 -- "I render pieces <somePieces> at year <someYear> in style <someStyle>"
 -- MATCHES no definition at all (its PieceSet capture cannot parse
 -- "<somePieces>"), contributes no universe, and a feature file whose
@@ -63,16 +64,16 @@ import World (Claim (..), StepDef (..), readFeatureFile)
 -- year or a style even is, precisely because those laws were
 -- generalized to range over all of them. Nothing about the vocabulary a
 -- reader needs changed when the values became generated; only the
--- literal text did. Same substitution, same gate, same reasoning as the
--- totality law's -- getting it wrong in either direction has the
--- mirror-image consequences Check.hs's own comment spells out.
+-- literal text did. Getting the gate wrong in either direction has the
+-- mirror-image consequences Check.hs's own comment spells out -- which
+-- is exactly why the decision is shared rather than restated here.
 expectedVocab :: [StepDef] -> Feature -> [(Text, Text)]
 expectedVocab defs f = nub
   [ (name, describeUniverse u)
   | sc <- ftScenarios f
-  , let dehole = if Tag "property" `elem` scTags sc then Prop.substituteExamples else id
   , st <- scSteps sc
-  , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m (dehole (stepBody st))]
+  , let body = Prop.deholeFor (scTags sc) (stepBody st)
+  , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m body]
   , (name, u) <- us, isVocab u ]
   where
     isVocab (Described _) = False

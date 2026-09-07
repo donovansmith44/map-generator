@@ -70,8 +70,18 @@ data Violation
 -- makes "never silently pass" actually true -- a hole is either bound to
 -- a real generator or the step is unconditionally undefined, the same
 -- as any other never-implemented step.
-classify :: Bool -> [StepDef] -> Step -> Maybe Violation
-classify isProperty defs (Step k body _)
+--
+-- Review finding (round 1, Important): the gate itself is no longer
+-- decided here. It was duplicated -- `Vocab.expectedVocab` re-expressed
+-- the identical rule in its own words -- so it now lives in ONE exported
+-- function, `Prop.deholeFor`, called by both. This comment keeps the
+-- REASONING (it is the fuller of the two, and it belongs with the
+-- totality law it was written for); `Prop.deholeFor` holds the decision.
+-- The parameter is the enclosing scenario's tags rather than a
+-- pre-computed Bool, so the shared function -- not each caller -- is what
+-- turns tags into a substitution.
+classify :: [Tag] -> [StepDef] -> Step -> Maybe Violation
+classify tags defs (Step k body _)
   | not (null unregistered) = Just VOrphan
   | otherwise = case (matched, errored) of
       ([], [])  -> Just VOrphan
@@ -80,8 +90,7 @@ classify isProperty defs (Step k body _)
       (ms, _)   -> Just (VAmbiguous ms)
   where
     unregistered = [ h | h <- Prop.holesIn body, h `Map.notMember` Prop.holeRegistry ]
-    dehole = if isProperty then Prop.substituteExamples else id
-    results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
+    results = [ (defSketch d, defRun d (Prop.deholeFor tags body)) | d <- defs, defKw d == k ]
     matched = [ sk | (sk, Matched _) <- results ]
     errored = [ (sk, e) | (sk, ClaimError e) <- results ]
 
@@ -90,9 +99,8 @@ violations :: [StepDef] -> Feature -> [(Text, Text, Violation)]
 violations defs f =
   [ (scName sc, stepBody st, v)
   | sc <- ftScenarios f
-  , let isProperty = Tag "property" `elem` scTags sc
   , st <- scSteps sc
-  , Just v <- [classify isProperty defs st] ]
+  , Just v <- [classify (scTags sc) defs st] ]
 
 -- | Steps matching zero definitions (and claimed by none either):
 -- (scenario, step body).

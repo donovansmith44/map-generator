@@ -18,6 +18,7 @@ import qualified Prop
 import Control.Exception (try, bracket, evaluate, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
+import Data.List (isInfixOf, sort)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Maybe (fromJust, listToMaybe)
 import qualified Data.Aeson as A
@@ -2137,6 +2138,30 @@ main = hspec $ do
         [ fmap Prop.groupName (Map.lookup h Prop.holeRegistry)
             `shouldBe` Just (Prop.groupName g)
         | g <- Prop.holeGroups, h <- Prop.groupMembers g ]
+    -- Review finding (round 1, Important): `groupName` uniqueness was
+    -- declared in prose and pinned by nothing. Two groups sharing a name
+    -- share ONE seed stream and one entry in `bindingsFor`'s
+    -- name-keyed map, so the loser's holes silently get no binding at
+    -- all -- literally the seed-collision family that produced the
+    -- composition bug (7cd31bd), just at the group level instead of the
+    -- hole level.
+    it "every group's NAME is unique: two groups sharing a name would \
+       \share one seed stream, and the loser's holes would silently go \
+       \unbound" $ do
+      let names = map Prop.groupName Prop.holeGroups
+      length names `shouldBe` Set.size (Set.fromList names)
+    -- Review finding (round 1, Important): nothing forced a group to
+    -- actually DRAW what it declares. A group whose generator omits a
+    -- declared member produces no binding for it, the hole survives
+    -- substitution as literal "<someHole>" text, and the failure
+    -- surfaces downstream as an obscure capture parse error that names
+    -- the capture rather than the real cause.
+    it "every group DRAWS exactly the members it DECLARES, at every \
+       \iteration -- a declared-but-undrawn member would leave its hole \
+       \as literal text and fail as an unrelated capture error" $
+      sequence_
+        [ Map.keys (Prop.drawGroup g i) `shouldBe` sort (Prop.groupMembers g)
+        | g <- Prop.holeGroups, i <- [0 .. 24] ]
     it "<someSubset> is nested inside <someSuperset> at EVERY iteration -- \
        \the correlation the subtractive law needs, asserted over the whole \
        \run rather than sampled" $
@@ -2350,6 +2375,45 @@ main = hspec $ do
               other -> expectationFailure
                 ("an all-skipped law must be Failed, got " <> show other)
           [] -> expectationFailure "expected at least one scenario"
+    -- Review finding (round 1): `--property-runs 0` is a green run that
+    -- checked nothing -- `lawTally`'s `iterations > 0` guard cannot fire,
+    -- so every @property law reports Passed having examined no draw at
+    -- all. Refused at parse time; the law itself lives in the library so
+    -- it can be pinned here rather than only in the option parser.
+    it "a property-runs count below 1 is REFUSED, naming why -- zero \
+       \iterations does not check a law less thoroughly, it does not \
+       \check it at all" $ do
+      case Prop.checkPropertyRuns 0 of
+        Left e -> do
+          e `shouldSatisfy` isInfixOf "at least 1"
+          e `shouldSatisfy` isInfixOf "does not check it at all"
+        Right n -> expectationFailure
+          ("--property-runs 0 must be refused, got " <> show n)
+      Prop.checkPropertyRuns (-5) `shouldSatisfy` isLeft
+      Prop.checkPropertyRuns 1 `shouldBe` Right 1
+      Prop.checkPropertyRuns 100 `shouldBe` Right 100
+    -- And the reason it must be refused, demonstrated rather than
+    -- asserted: at n = 0 the runner really does report a green verdict
+    -- for a law whose every real iteration fails.
+    it "the reason n = 0 is refused: the property runner would otherwise \
+       \report Passed on a law that fails at every genuine iteration" $ do
+      let fake _ = pure (Right ("{}", A.object []))
+          w = mkWorld "http://x" fake ""
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: falsifiable"
+            , "    When I GET /api/echo?y=<someYear>"
+            , "    Then the response field neverThere equals nope" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            atOne <- Prop.runScenarioProperty allSteps w 1 sc
+            lawVerdict atOne `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+            atZero <- Prop.runScenarioProperty allSteps w 0 sc
+            atZero `shouldBe` LawRun Passed 0   -- the vacuous green, unreachable via the CLI
+          [] -> expectationFailure "expected at least one scenario"
     it "the report table carries the skip count in its own column, so a \
        \green law with thin coverage is visible as such" $ do
       let rs = [ ScenarioResult "f" "thinly covered" [] Passed 12
@@ -2427,6 +2491,52 @@ main = hspec $ do
     -- Same shape, but registered AND unregistered holes both appear in
     -- one step: the unregistered one must still win (force VOrphan),
     -- not get silently ignored because its sibling hole resolves fine.
+    -- Review finding (round 1, Important): `check` and `vocab` each had
+    -- their OWN copy of the dehole gate. Same predicate, same
+    -- substitution, no shared function, nothing pinning them together --
+    -- so a future change to one (a feature-level tag, a scenario-aware
+    -- substitution) would diverge silently, and the symptom would be a
+    -- deleted or wrong Vocabulary block found by a human reading the
+    -- corpus, not a red test. Now one exported function,
+    -- `Prop.deholeFor`, called by both.
+    --
+    -- These three tests are the cross-pin: the gate's OWN behaviour in
+    -- both directions, and then -- the part that actually matters -- the
+    -- two consumers agreeing about the SAME body, so a change that
+    -- reached only one of them cannot stay quiet.
+    it "the dehole gate substitutes for @property tags and not otherwise" $ do
+      let body = "I render pieces <somePieces> at year <someYear> in style <someStyle>"
+      Prop.deholeFor [Tag "property"] body `shouldNotBe` body
+      Prop.deholeFor [Tag "property"] body `shouldBe` Prop.substituteExamples body
+      Prop.deholeFor [Tag "target", Tag "property"] body
+        `shouldBe` Prop.substituteExamples body
+      Prop.deholeFor [] body `shouldBe` body
+      Prop.deholeFor [Tag "target"] body `shouldBe` body
+    it "check and vocab agree about the same body because they call the \
+       \SAME gate -- a hole-bearing @property step is clean to `check` \
+       \AND contributes its universes to `vocab`" $
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style <someStyle>" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
+          map fst (Vocab.expectedVocab allSteps f) `shouldBe` ["pieces", "year", "style"]
+    it "check and vocab agree in the OTHER direction too: the same body \
+       \UNTAGGED is a value error to `check` and contributes nothing to \
+       \`vocab` -- neither tool may claim a scenario runs differently \
+       \than it does" $
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style <someStyle>" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.valueErrors allSteps f `shouldSatisfy` (not . null)
+          Vocab.expectedVocab allSteps f `shouldBe` []
     it "one unregistered hole among several makes the whole step an \
        \orphan, even when its sibling holes are registered" $ do
       case parseFeature "t.feature" $ T.unlines

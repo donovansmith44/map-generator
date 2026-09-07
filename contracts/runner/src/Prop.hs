@@ -333,6 +333,31 @@ runScenarioProperty defs w n sc =
 -- itself, BEFORE calling this function, using `holesIn` above; the
 -- run-time equivalent (naming the scenario too) is
 -- `runScenarioProperty`'s own check, just above.
+-- THE gate: whether a scenario with these tags gets its holes substituted
+-- before a step body is examined statically.
+--
+-- Review finding (round 1, Important): this rule used to exist TWICE --
+-- `Check.classify` and `Vocab.expectedVocab` each re-expressed "if the
+-- scenario is @property-tagged, substitute; otherwise don't" in their own
+-- words, with no shared function and nothing pinning the two copies
+-- together. Same predicate, same substitution, two independent
+-- definitions: the layer-name-twice defect class. The moment the gate
+-- becomes feature-tag-aware, or the substitution becomes scenario-aware,
+-- the two copies diverge SILENTLY -- and the symptom is not a red test
+-- but a deleted or wrong Vocabulary block in the owner's hand-written
+-- corpus, discovered by a human reading a file.
+--
+-- One function, called by both. The gate's REASONING lives in Check.hs's
+-- comment (which spells out the mirror-image consequences of getting it
+-- wrong in either direction); this is the single place it is DECIDED.
+-- The condition is exactly the one `Prop.runWithProperties`'s `run1`
+-- uses to decide whether to substitute at run time, which is the fact
+-- both static callers are trying to predict.
+deholeFor :: [Tag] -> Text -> Text
+deholeFor tags
+  | Tag "property" `elem` tags = substituteExamples
+  | otherwise                  = id
+
 substituteExamples :: Text -> Text
 substituteExamples b0 = foldr rep b0 (concatMap example holeGroups)
   where
@@ -343,6 +368,33 @@ substituteExamples b0 = foldr rep b0 (concatMap example holeGroups)
     example g = Map.toList (unGen (groupDraw g) (mkQCGen 1) 3)
     rep :: (Text, Text) -> Text -> Text
     rep (h, v) = T.replace ("<" <> h <> ">") v
+
+-- How many iterations a @property law must run, or why the requested
+-- count is not a count at all.
+--
+-- Review finding (round 1): `--property-runs 0` is not a CHEAP run, it
+-- is a SILENT one. With no iterations, `runScenarioProperty`'s loop
+-- terminates immediately having examined nothing; `lawTally`'s
+-- `iterations > 0` guard cannot fire (0 skipped of 0 is not "all
+-- skipped" by any honest reading); and every @property law in both
+-- corpora reports a green tick for zero evidence. That is the precise
+-- failure this whole stage exists to outlaw -- a check satisfiable by
+-- its own failure mode (MEMORY: verify-distinct-not-nonnull) -- and the
+-- knob that produces it is the one CI budget pressure reaches for
+-- first. So it is refused at PARSE time, loudly, rather than accepted
+-- into a run whose table looks like a pass.
+--
+-- Lives here, not in the option parser, so the law is testable: the
+-- executable's reader is a two-line adapter over this function (app/
+-- Main.hs), and Spec pins both directions against the function itself.
+checkPropertyRuns :: Int -> Either String Int
+checkPropertyRuns n
+  | n >= 1 = Right n
+  | otherwise = Left $
+      "--property-runs must be at least 1 (got " <> show n <> "). "
+        <> "A run of " <> show n <> " iterations does not check a @property law "
+        <> "less thoroughly -- it does not check it at all, and every such law "
+        <> "would report green having examined nothing."
 
 -- Plain scenarios run once; @property scenarios run `n` times over
 -- generated bindings (first failure's Verdict already carries its
