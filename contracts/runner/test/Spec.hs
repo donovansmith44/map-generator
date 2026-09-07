@@ -1047,6 +1047,15 @@ main = hspec $ do
       -- empty set has probability (1/2)^10 = 1/1024 per sample -- a large
       -- sample count is needed for this to be reliable rather than flaky
       -- (20000 samples puts the odds of missing it entirely below 1e-8).
+      --
+      -- Deliberately exempt from the determinism law pinned above (the
+      -- "same scenario run twice" test): this uses `generate`, QuickCheck's
+      -- real-entropy driver, not `renderHole`'s fixed per-iteration seed.
+      -- That's correct FOR THIS TEST -- it asks a codomain question
+      -- ("can genPieces ever produce []?"), not a diagnosis-reproducibility
+      -- one ("does the SAME run always report the SAME counterexample?").
+      -- The actual property runner never calls `generate`; only this one
+      -- test does, to sample the generator's range directly.
       samples <- generate (vectorOf 20000 Prop.genPieces)
       samples `shouldSatisfy` any (== PieceSet Set.empty)
     it "substituting the empty piece set renders 'none', which the real \
@@ -1071,14 +1080,36 @@ main = hspec $ do
             v `shouldBe` Passed
           [] -> expectationFailure "expected at least one scenario"
 
-  describe "Check.dehole wired to Prop.substituteExamples" $
+  describe "Check.dehole wired to Prop.substituteExamples" $ do
     -- Task 7 shipped `dehole = id`, documented as a placeholder Task 9
-    -- would replace. This proves the wiring: a bare hole (which some
-    -- captures, like UrlPath, would otherwise accept unexamined) now
-    -- reaches `classify` already substituted with a real, registered
-    -- example value.
-    it "a scene line whose captures are holes classifies by its \
-       \substituted example, not the literal hole text" $ do
+    -- would replace. This proves the wiring: a bare hole in an
+    -- @property-tagged scenario (which some captures, like UrlPath,
+    -- would otherwise accept unexamined) now reaches `classify` already
+    -- substituted with a real, registered example value.
+    it "a @property scene line whose captures are holes classifies by \
+       \its substituted example, not the literal hole text" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
+    -- Review finding (Important, round 2): substitution used to run
+    -- unconditionally, regardless of scenario tags -- but
+    -- Prop.runWithProperties only ever substitutes for an @property
+    -- scenario (see its `run1`); an UNTAGGED scenario runs through plain
+    -- `runScenario`, which never substitutes. Substituting for `check`
+    -- regardless of the tag would make a hole in an untagged scenario
+    -- classify clean while it would actually run, for real, on the
+    -- literal unresolved "<hole>" text -- a static verdict that lies
+    -- about the dynamic one. This is the same body as the test above,
+    -- MINUS the @property tag: it must NOT come back clean.
+    it "the same hole, in a scenario NOT tagged @property, is a bad \
+       \value -- check must not substitute a scenario run will not" $ do
       case parseFeature "t.feature" $ T.unlines
              [ "Feature: t"
              , "  Scenario: s"
@@ -1087,7 +1118,52 @@ main = hspec $ do
         Right f -> do
           Check.orphans allSteps f `shouldBe` []
           Check.ambiguous allSteps f `shouldBe` []
+          case Check.valueErrors allSteps f of
+            [(_, b, errs)] -> do
+              b `shouldBe` "I render pieces <somePieces> at year <someYear> in style canaan"
+              errs `shouldSatisfy` (not . null)
+              mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "'<somePieces>' is not a piece") errs
+            other -> expectationFailure
+                       ("expected exactly one value-error step, got " <> show other)
+    -- Requirement 1, closed: an UNREGISTERED hole must be an orphan in
+    -- `check`, unconditionally -- even landing in a capture (UrlPath)
+    -- that would otherwise accept its literal text unexamined, and even
+    -- in an untagged scenario (where no other law here would have
+    -- caught it at all, since dehole = id there and UrlPath rejects only
+    -- whitespace, not "<...>" text).
+    it "an unregistered hole is an orphan in check, naming the hole, \
+       \even where the literal <hole> text would otherwise silently \
+       \satisfy the capture it lands in (ruling R33)" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I GET /api/echo?y=<someMysteryHole>" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.ambiguous allSteps f `shouldBe` []
           Check.valueErrors allSteps f `shouldBe` []
+          case Check.orphans allSteps f of
+            [(_, b)] -> b `shouldSatisfy` T.isInfixOf "someMysteryHole"
+            other -> expectationFailure
+                       ("expected exactly one orphan step, got " <> show other)
+    -- Same shape, but registered AND unregistered holes both appear in
+    -- one step: the unregistered one must still win (force VOrphan),
+    -- not get silently ignored because its sibling hole resolves fine.
+    it "one unregistered hole among several makes the whole step an \
+       \orphan, even when its sibling holes are registered" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someMysteryHole> in style canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.ambiguous allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
+          case Check.orphans allSteps f of
+            [(_, b)] -> b `shouldSatisfy` T.isInfixOf "someMysteryHole"
+            other -> expectationFailure
+                       ("expected exactly one orphan step, got " <> show other)
 
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,

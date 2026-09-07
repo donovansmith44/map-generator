@@ -3,6 +3,7 @@ module Check where
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import qualified Data.Map.Strict as Map
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
 import qualified Prop
@@ -42,48 +43,44 @@ data Violation
     -- but whose capture didn't parse — and nothing else matched.
   deriving (Eq, Show)
 
-classify :: [StepDef] -> Step -> Maybe Violation
-classify defs (Step k body _) = case (matched, errored) of
-  ([], [])  -> Just VOrphan
-  ([], _)   -> Just (VValueError errored)
-  ([_], _)  -> Nothing                    -- one real match wins outright
-  (ms, _)   -> Just (VAmbiguous ms)
+-- `body`'s holes get substituted with a fixed example value before
+-- matching (see Prop.substituteExamples) -- but ONLY when `isProperty`
+-- says the enclosing scenario is @property-tagged, because that is
+-- exactly the condition under which `Prop.runWithProperties` will ever
+-- actually substitute anything at run time (see its `run1`: an untagged
+-- scenario runs through plain `runScenario`, which never substitutes).
+-- Getting this gate wrong in either direction breaks the law:
+--   * substitute unconditionally (the pre-fix behavior) and an untagged
+--     scenario that accidentally contains a hole is reported CLEAN by
+--     `check` while running, for real, on the literal unresolved
+--     "<hole>" text -- a static verdict that lies about the dynamic one.
+--   * never substitute and every @property scenario's holes reach their
+--     captures as raw "<hole>" text, which is only caught when the
+--     capture in question happens to validate its input -- exactly the
+--     "artifact of which captures happen to validate" trap this whole
+--     mechanism exists to close (concretely: "<someYear>" contains no
+--     whitespace, so UrlPath accepts it unexamined; once a "GET {url} as
+--     {name}" step exists, that would silently fetch a URL containing
+--     the literal text "<someYear>", never a real year).
+--
+-- An UNREGISTERED hole is a stronger, tag-independent law: scanning the
+-- RAW body (before any substitution) for a "<hole>" whose name is not in
+-- Prop.holeRegistry and forcing VOrphan on it, regardless of what any
+-- definition's capture would have done with the literal text, is what
+-- makes "never silently pass" actually true -- a hole is either bound to
+-- a real generator or the step is unconditionally undefined, the same
+-- as any other never-implemented step.
+classify :: Bool -> [StepDef] -> Step -> Maybe Violation
+classify isProperty defs (Step k body _)
+  | not (null unregistered) = Just VOrphan
+  | otherwise = case (matched, errored) of
+      ([], [])  -> Just VOrphan
+      ([], _)   -> Just (VValueError errored)
+      ([_], _)  -> Nothing                    -- one real match wins outright
+      (ms, _)   -> Just (VAmbiguous ms)
   where
-    -- property holes (e.g. <someYear>) must be substituted with a
-    -- registered example value before matching, or every @property step
-    -- looks wrong. Task 9 wires this to Prop.substituteExamples: an
-    -- unregistered hole name is deliberately left as-is here (classify
-    -- has no scenario/tag context to build a good "which hole, which
-    -- scenario" message from a bare Step body -- that loud, hole-naming
-    -- failure lives in Prop.runScenarioProperty, which runs with that
-    -- context). Fix 4 (post-Task-7 review):
-    -- this was documented as making the step "an orphan" — that's not
-    -- what the real corpus shows. A hole like "<somePieces>" still matches
-    -- the literal shape of "I render pieces ... at year ... in style ...",
-    -- so both render overloads CLAIM it; the hole text just fails to parse
-    -- as a Piece. With nothing left to actually MATCH, that's a bad-value
-    -- (VValueError), not an orphan (VOrphan is for a shape nobody claims
-    -- at all) — still fatal, still loud, but a different, correctly-named
-    -- class. See `classify` above for the three-way split.
-    --
-    -- CAVEAT (post-Task-7 review round 2): the above is true for a hole
-    -- landing in a VALIDATING capture (Piece, Year, ...), but it is NOT
-    -- the universal outcome — it depends entirely on whether the capture
-    -- the hole lands in happens to reject the hole's literal text.
-    -- Concretely: "<someYear>" contains no whitespace, so fix 7's UrlPath
-    -- accepts it happily. Once the real "I GET {url} as {name}" step
-    -- lands, "I GET /api/census?year=<someYear> as first" becomes a
-    -- clean single match again — and the four lines fix 7 just made
-    -- visible (see Steps.hs's UrlPath comment) go quiet a second time,
-    -- silently fetching a URL containing the literal text "<someYear>".
-    -- A no-op `dehole` would not be a safety net against that; the actual
-    -- protection is substituting the hole with a real registered example
-    -- value BEFORE matching, which is exactly what `dehole` now does
-    -- (wired below to Prop.substituteExamples). Do not read "bad-value"
-    -- above as a universal guarantee that holes get caught on their own —
-    -- absent this wiring it would be an artifact of which captures happen
-    -- to validate their input, not a law this module enforces.
-    dehole = Prop.substituteExamples
+    unregistered = [ h | h <- Prop.holesIn body, h `Map.notMember` Prop.holeRegistry ]
+    dehole = if isProperty then Prop.substituteExamples else id
     results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
     matched = [ sk | (sk, Matched _) <- results ]
     errored = [ (sk, e) | (sk, ClaimError e) <- results ]
@@ -92,8 +89,10 @@ classify defs (Step k body _) = case (matched, errored) of
 violations :: [StepDef] -> Feature -> [(Text, Text, Violation)]
 violations defs f =
   [ (scName sc, stepBody st, v)
-  | sc <- ftScenarios f, st <- scSteps sc
-  , Just v <- [classify defs st] ]
+  | sc <- ftScenarios f
+  , let isProperty = Tag "property" `elem` scTags sc
+  , st <- scSteps sc
+  , Just v <- [classify isProperty defs st] ]
 
 -- | Steps matching zero definitions (and claimed by none either):
 -- (scenario, step body).
