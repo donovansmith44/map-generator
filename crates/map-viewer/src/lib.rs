@@ -872,6 +872,23 @@ pub fn route(
     (status, ctype, body.into_bytes(), headers)
 }
 
+/// The house pattern, mirrored from `parse_style` (absent -> silent
+/// default; present-but-invalid -> a named error): `Params::year`
+/// alone conflates "key missing" with "key present but unparseable or
+/// year-zero" — both come back `None` — so `to=banana` and `to=0`
+/// would otherwise fall through to the single-instant path with a
+/// silent 200 instead of naming the bad input. The presence check
+/// happens here, against `p.get`, before the year parse ever runs.
+fn parse_to_param(p: &Params) -> Result<Option<TimePoint>, &'static str> {
+    match p.get("to") {
+        None => Ok(None),
+        Some(_) => match p.year("to") {
+            Some(t) => Ok(Some(t)),
+            None => Err("to must be a whole number year (no year zero)"),
+        },
+    }
+}
+
 /// One census row's wire shape, shared by the single-instant and the
 /// `to=` diff paths so the two can never disagree about what a row
 /// looks like on the wire.
@@ -960,8 +977,13 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             };
             // Additive: `to=` asks for the DIFF between two instants.
             // Without it the route answers exactly as it did before --
-            // no blessed census fixture moves.
-            if let Some(to) = p.year("to") {
+            // no blessed census fixture moves. A present-but-invalid
+            // `to=` is a named error, never a silent single-instant 200.
+            let to = match parse_to_param(&p) {
+                Ok(to) => to,
+                Err(msg) => return bad(msg),
+            };
+            if let Some(to) = to {
                 let changes: Vec<serde_json::Value> =
                     map_canon::census_diff(canon.store(), &year, &to)
                         .iter()
@@ -1351,6 +1373,29 @@ fn handle(app: &App, mut stream: TcpStream) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `to=` absent -> silent default (no diff); `to=` present and
+    /// valid -> that instant; `to=` present and invalid -> a named
+    /// error, never conflated with "absent" (both cases return `None`
+    /// from `Params::year` alone, which is exactly the bug this
+    /// function exists to close).
+    #[test]
+    fn to_param_distinguishes_absent_from_invalid() {
+        assert_eq!(parse_to_param(&Params::parse("year=-1405")), Ok(None), "absent is a silent default");
+        assert_eq!(
+            parse_to_param(&Params::parse("year=-1405&to=-1050")),
+            Ok(Some(tp(-1050).unwrap())),
+            "present and valid parses"
+        );
+        assert!(
+            parse_to_param(&Params::parse("year=-1405&to=banana")).is_err(),
+            "present and unparseable is an error, not a silent default"
+        );
+        assert!(
+            parse_to_param(&Params::parse("year=-1405&to=0")).is_err(),
+            "present and year-zero is an error, not a silent default"
+        );
+    }
 
     /// The `/api/census?to=` wire shape, pinned at the pure-function
     /// level: no route-level HTTP test idiom exists in this crate today
