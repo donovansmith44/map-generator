@@ -54,4 +54,4 @@ reportTable rs = T.unlines $
       (Passed, True)    -> "\128994 green (target already met!)"
       (Failed _, True)  -> "\128308 red (expected \8212 @target)"
       (Failed e, False) -> "\10060 RED \8212 " <> T.replace "\n" " " (T.take 160 e)
-      (Skipped why, _)  -> "\9199 " <> why
+      (Skipped why, _)  -> "\9197 " <> why
