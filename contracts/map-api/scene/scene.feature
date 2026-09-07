@@ -20,6 +20,10 @@ Feature: the scene — a picture composed from pieces
     When I render pieces ground, water, fills, borders, journeys at year -1405 in style canaan
     Then the response equals fixture "scene-1405-nolabels"
 
+  Scenario: default-totality — an omitted dress is the declared classical default
+    When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in no style
+    Then the response equals fixture "scene-1405-default-dress"
+
   # --- LAWS: quantified over every dimension they claim.
 
   @property
@@ -61,3 +65,9 @@ Feature: the scene — a picture composed from pieces
   Scenario: everything on the map says which piece put it there
     When I render pieces <somePieces> at year <someYear> in style <someStyle>
     Then every feature entry carries a piece field
+
+  @property
+  Scenario: a span of no width is the instant itself
+    When I GET /api/scene?year=<someYear>&zoom=90.0000&style=canaan as instant
+    And I GET /api/scene?year=<someYear>&to=<someYear>&zoom=90.0000&style=canaan as span
+    Then instant equals span

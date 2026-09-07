@@ -16,3 +16,9 @@ Feature: subjects — what can be asked about at a moment
     When I GET /api/subjects?year=<someYear> as first
     And I GET /api/subjects?year=<someYear> as second
     Then first equals second
+
+  @property
+  Scenario: a question about a span is not answered as a question about an instant
+    When I GET /api/subjects?year=<someYear> as instant
+    And I GET /api/subjects?year=<someYear>&to=<someOtherYear> as span
+    Then span is refused or differs from instant

@@ -16,3 +16,8 @@ Feature: resources — geometry by content address
   Scenario: fetching geometry in a batch is the same as fetching it one at a time
     When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene
     Then fetching scene's first two resources as a batch equals fetching them singly
+
+  @target
+  Scenario: asking for geometry that does not exist is an error, not silence
+    When I render pieces all at year -1405 in style canaan as scene
+    Then fetching scene's first resource alongside a bogus id is refused by name
