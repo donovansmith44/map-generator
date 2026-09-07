@@ -71,6 +71,15 @@ main = hspec $ do
         other -> expectationFailure ("expected an Enumerated universe, got " <> show other)
     it "piece sets parse comma-separated, any order, and render sorted" $ do
       (renderCap <$> parseCap @PieceSet "water, ground") `shouldBe` Right "ground, water"
+    it "piece sets render in alphabetical order, not declaration order" $ do
+      -- Water/Borders/Chrome are declared in that relative order (Water=1,
+      -- Borders=3, Chrome=8), so a set derived-Ord (declaration-order)
+      -- render would read "water, borders, chrome". Alphabetical is
+      -- "borders, chrome, water". These genuinely diverge, unlike the
+      -- water/ground pair above (whose two orders happen to coincide),
+      -- so this test can actually catch a declaration-order regression.
+      let ps = PieceSet (Set.fromList [Water, Borders, Chrome])
+      renderCap ps `shouldBe` "borders, chrome, water"
     it "a wrong piece gets a did-you-mean naming the universe" $
       case parseCap @PieceSet "water, topografy" of
         Left e -> do
@@ -89,6 +98,8 @@ main = hspec $ do
       parseCap @PieceSet "   " `shouldBe` Right (PieceSet Set.empty)
     prop "renderCap is a right inverse of parseCap for all piece sets, including empty" $
       \ps -> parseCap @PieceSet (renderCap ps) === Right ps
+    it "every style name round-trips" $
+      mapM_ (\n -> fmap renderCap (parseCap @StyleName n) `shouldBe` Right n) styleNames
 
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'

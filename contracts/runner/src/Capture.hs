@@ -73,9 +73,14 @@ instance FromCapture PieceSet where
   -- that parses back (T.splitOn "," "" == [""], which fails as a piece),
   -- so the empty set gets its own token, "none", which parseCap accepts
   -- on the way back in (along with a whitespace-only string).
+  -- `Set.toAscList` orders by Piece's derived Ord, which is constructor
+  -- declaration order, not alphabetical -- the same trap `universe`
+  -- (above, on Piece) had to be fixed for. Sort the *rendered text*
+  -- explicitly so there is one canonical "sorted" order in this module,
+  -- not two.
   renderCap (PieceSet s)
     | Set.null s = "none"
-    | otherwise  = T.intercalate ", " (map pieceText (Set.toAscList s))
+    | otherwise  = T.intercalate ", " (sort (map pieceText (Set.toList s)))
   parseCap t
     | T.strip t == "none" || T.null (T.strip t) = Right (PieceSet Set.empty)
     | otherwise = PieceSet . Set.fromList <$> traverse parseCap (T.splitOn "," t)
