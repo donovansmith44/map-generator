@@ -1504,3 +1504,40 @@ fn limb_fixtures_match_rust() {
          re-bless if the change is intended, and update the JS port"
     );
 }
+
+// ---------------------------------------- Stage 1 Task 1: shared buffer
+
+/// TASK 1 (Stage 1): the shared-buffer finding, pinned so it cannot
+/// change silently. Two markers of DIFFERENT semantic origin — one a
+/// journey station, one a gazetteer landmark — wearing the SAME
+/// MarkerStyle land in ONE `points` resource today. That is the whole
+/// of the composition red: omitting either origin changes the other's
+/// bytes, hence its content address, hence the resource set.
+///
+/// Task 10 inverts this test. Until then it is the record.
+#[test]
+fn markers_from_two_origins_share_one_points_buffer() {
+    let paint = MarkerStyle { color: Rgba(10, 20, 30, 255), size: 3.0 };
+    let mk = |lat: f64, lon: f64| StyledMarker {
+        at: uv(lat, lon),
+        style: paint,
+        sources: Default::default(),
+        place: None,
+    };
+    let mut scene = Snapshot::empty();
+    scene.markers = vec![mk(31.0, 35.0), mk(32.0, 35.5)];
+
+    let encoded = GpuSceneEncoder::default().encode(&scene).expect("encode");
+
+    let points: Vec<_> = encoded
+        .resources
+        .iter()
+        .filter(|r| r.descriptor.kind == ResourceKind::Points)
+        .collect();
+    assert_eq!(points.len(), 1, "today: one shared points buffer for every marker origin");
+    assert_eq!(points[0].descriptor.vertex_count, 2, "both markers packed into it");
+
+    let marker_entries: Vec<_> =
+        encoded.manifest.features.iter().filter(|f| f.feature == "markers").collect();
+    assert_eq!(marker_entries.len(), 1, "one undifferentiated 'markers' entry");
+}
