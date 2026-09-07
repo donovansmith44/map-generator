@@ -2864,6 +2864,193 @@ main = hspec $ do
       reportTable rs `shouldSatisfy` T.isInfixOf "| fully covered | \9989 green | 0 |"
       reportTable rs `shouldSatisfy` T.isInfixOf "| verdict | skipped |"
 
+  -- ---------- hole distinctness: the check that would have caught §7.0 ----------
+  describe "hole distinctness (Stage 1 Task 5)" $ do
+    it "the real composition scenario's holes vary and are independent" $ do
+      let src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces <someA> at year <someYear> in style canaan as a"
+            , "    And I render pieces <someB> at year <someYear> in style canaan as b"
+            , "    Then a equals b"
+            ]
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> Prop.holeDefects 30 sc `shouldBe` []
+          []       -> expectationFailure "expected at least one scenario"
+    -- Every registered @property scenario in the real corpus, run
+    -- through the exact function `check` calls -- a stronger claim than
+    -- the single scenario above, and the one the brief's "any real
+    -- scenario reporting a defect is a live finding" warning is about.
+    it "no registered @property scenario in the real map-api or \
+       \atlas-edge corpora reports a hole defect" $ do
+      let dirs = ["../map-api", "../atlas-edge"]
+      files <- concat <$> mapM Check.featureFilesLocal dirs
+      defects <- fmap concat . mapM (\p -> do
+        src <- readFeatureFile p
+        pure $ case parseFeature p src of
+          Left _  -> []
+          Right f -> [ (p, scName sc, d)
+                     | sc <- ftScenarios f
+                     , Prop.isProperty (scTags sc)
+                     , d <- Prop.holeDefects 30 sc ]) $ files
+      defects `shouldBe` []
+    -- Adaptation note (brief's Step 1): `SomeHole`/`renderHole` no longer
+    -- exist post-sweep; draws go through `HoleGroup`/`bindingsFor` now, so
+    -- the defective registries below are local `HoleGroup`s rather than
+    -- `SomeHole`s, and the detector is driven directly via
+    -- `holeDefectsWith` rather than through the real, always-clean
+    -- `holeRegistry`.
+    let mkConstantGroup members = Prop.HoleGroup
+          { Prop.groupName    = "defectiveConstant"
+          , Prop.groupMembers = members
+          , Prop.groupDraw    = pure (Map.fromList [ (m, "canaan") | m <- members ])
+          , Prop.groupShrink  = const []
+          , Prop.groupRank    = const 0
+          , Prop.groupLaw     = const True
+          }
+        constantRegistry = Map.fromList [ ("constHole", mkConstantGroup ["constHole"]) ]
+        alwaysEqualRegistry =
+          let g = mkConstantGroup ["eqHoleA", "eqHoleB"]
+          in Map.fromList [("eqHoleA", g), ("eqHoleB", g)]
+        withScenario src reg n = case parseFeature "t.feature" src of
+          Left e -> error (T.unpack e)
+          Right f -> case ftScenarios f of
+            (sc : _) -> Prop.holeDefectsWith reg n sc
+            []       -> error "expected at least one scenario"
+        constantHoleDefects = withScenario
+          (T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I GET /api/echo?y=<constHole>"
+             , "    Then the response field neverThere equals nope" ])
+          constantRegistry 30
+        alwaysEqualDefects = withScenario
+          (T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I GET /api/echo?y=<eqHoleA>"
+             , "    And I GET /api/echo?y=<eqHoleB>"
+             , "    Then the response field neverThere equals nope" ])
+          alwaysEqualRegistry 30
+    it "catches a hole that never varies" $
+      constantHoleDefects `shouldSatisfy` any (\d -> case d of Prop.Constant _ -> True; _ -> False)
+    it "catches two holes that are always equal -- diagnosis 7.0's defect itself" $
+      alwaysEqualDefects `shouldSatisfy`
+        any (\d -> case d of Prop.AlwaysEqual _ _ -> True; _ -> False)
+    -- A constant hole is also, trivially, "always equal" to itself if it
+    -- appeared twice under two names -- but it is NOT reported as
+    -- AlwaysEqual against some OTHER varying hole, and a genuinely
+    -- correlated-but-varying pair (the real corpus's someSubset/
+    -- someSuperset) must not misfire. Pinned above via the real corpus
+    -- scan; this test additionally pins that AlwaysEqual requires
+    -- equality on EVERY iteration, not merely the first.
+    it "AlwaysEqual requires equality on every iteration, not just one -- \
+       \a correlated pair that usually but not always agrees is NOT a \
+       \defect" $ do
+      let almostAlwaysEqualRegistry =
+            let g = Prop.HoleGroup
+                  { Prop.groupName    = "almostEqual"
+                  , Prop.groupMembers = ["holeA", "holeB"]
+                    -- Iteration 0 differs; every other iteration (1..29)
+                    -- coincides. If AlwaysEqual fired on "equal at least
+                    -- once", this would be a false positive -- and the
+                    -- real someSubset/someSuperset pair (equal roughly
+                    -- 6% of the time, per Prop.genNestedPieces's own
+                    -- comment) would misfire the same way.
+                  , Prop.groupDraw =
+                      sized (\sz -> pure (Map.fromList
+                               [ ("holeA", "v")
+                               , ("holeB", if sz == 3 then "different" else "v") ]))
+                  , Prop.groupShrink  = const []
+                  , Prop.groupRank    = const 0
+                  , Prop.groupLaw     = const True
+                  }
+            in Map.fromList [("holeA", g), ("holeB", g)]
+          src = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I GET /api/echo?y=<holeA>"
+            , "    And I GET /api/echo?y=<holeB>"
+            , "    Then the response field neverThere equals nope" ]
+      withScenario src almostAlwaysEqualRegistry 30
+        `shouldSatisfy` all (\d -> case d of Prop.AlwaysEqual _ _ -> False; _ -> True)
+    -- The carried-over pin from Task 4's re-review: a genuine TWO-MEMBER
+    -- misbehaving group whose `groupShrink` emits a PARTIAL slice (one
+    -- member missing) must be REJECTED by `shrinkToMinimalWith`'s
+    -- law-after-union mechanism, not silently accepted by unioning the
+    -- slice over the OLD (stale) value of the member it left out. Every
+    -- group in the real registry is complete-by-construction (`pair`
+    -- always shrinks both members together), so nothing in the real
+    -- corpus can reach this guard -- which is exactly why Task 4's round
+    -- could only argue it held in a comment (the nestedPieces docstring)
+    -- rather than in a test. This drives the REAL loop with a group built
+    -- to violate exactly that.
+    it "a two-member group's PARTIAL shrink slice (one member missing) is \
+       \rejected by the law-after-union check, and the loop still \
+       \terminates at a genuine local minimum" $ do
+      let subKey = "twoA"
+          superKey = "twoB"
+          val k env = maybe 0 (read . T.unpack) (Map.lookup k env) :: Int
+          -- The group's own law: subKey <= superKey (a stand-in for
+          -- nestedPieces' real subset<=superset containment) -- owed by
+          -- every draw AND every accepted candidate alike.
+          twoMemberLaw env = val subKey env <= val superKey env
+          twoMemberRank env = val subKey env + val superKey env
+          -- The misbehaving shrinker, at the STARTING bindings only:
+          -- offers a PARTIAL slice first (shrinks superKey alone, to a
+          -- value smaller than subKey -- breaking the law once unioned
+          -- with subKey's stale old value) and a lawful FULL slice
+          -- second (shrinks both members together, keeping the law).
+          -- At any other bindings it offers nothing, so a run that
+          -- accepts the full slice terminates there.
+          twoMemberShrink env
+            | val subKey env == 3 && val superKey env == 5 =
+                [ Map.singleton superKey "2"                          -- BAD: partial
+                , Map.fromList [(subKey, "1"), (superKey, "2")] ]     -- GOOD: full
+            | otherwise = []
+          twoMember = Prop.HoleGroup
+            { Prop.groupName    = "twoMember"
+            , Prop.groupMembers = [subKey, superKey]
+            , Prop.groupDraw    =
+                pure (Map.fromList [(subKey, "3"), (superKey, "5")])
+            , Prop.groupShrink  = twoMemberShrink
+            , Prop.groupRank    = twoMemberRank
+            , Prop.groupLaw     = twoMemberLaw
+            }
+          reg = Map.fromList [(subKey, twoMember), (superKey, twoMember)]
+          alwaysRed = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I GET /api/echo?y=<twoA>&z=<twoB>"
+            , "    Then the response field neverThere equals nope" ]
+      calls <- newIORef ([] :: [T.Text])
+      let fake url = modifyIORef calls (url :) >> pure (Right ("{}", A.object []))
+      case parseFeature "t.feature" alwaysRed of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            (minEnv, _) <- Prop.shrinkToMinimalWith
+                             reg allSteps (mkWorld "http://x" fake "") sc
+                             (Map.fromList [(subKey, "3"), (superKey, "5")])
+            -- The loop reaches the GOOD local minimum, not the bad
+            -- partial one (which would have been {twoA = 3, twoB = 2},
+            -- violating subKey <= superKey).
+            minEnv `shouldBe` Map.fromList [(subKey, "1"), (superKey, "2")]
+            -- And it never even ASKED the transport about the rejected
+            -- candidate: the law-after-union filter drops it before
+            -- `failureOf` is called, so no request ever carries
+            -- "y=3&z=2".
+            requested <- readIORef calls
+            requested `shouldSatisfy` all (not . T.isInfixOf "y=3&z=2")
+          [] -> expectationFailure "expected at least one scenario"
+
   describe "Check.dehole wired to Prop.substituteExamples" $ do
     -- Task 7 shipped `dehole = id`, documented as a placeholder Task 9
     -- would replace. This proves the wiring: a bare hole in an

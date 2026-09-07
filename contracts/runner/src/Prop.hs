@@ -2,6 +2,7 @@ module Prop where
 
 import Data.Bits (xor)
 import qualified Data.ByteString as BS
+import Data.List (nub, tails)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -485,10 +486,20 @@ drawGroup g i =
 -- real thing the runner calls, rather than against a reconstruction of
 -- it in the test file.
 bindingsFor :: [Text] -> Int -> Map Text Text
-bindingsFor hs i =
+bindingsFor = bindingsForWith holeRegistry
+
+-- The draw over an INJECTED registry -- the same split as
+-- `shrinkToMinimal`/`shrinkToMinimalWith` above and for the same reason:
+-- `holeDefectsWith` (below) needs to draw a scenario's bindings against a
+-- registry a TEST builds, not just against the real `holeRegistry`, so
+-- its own "does this hole vary / are these two holes independent" check
+-- runs the REAL drawing path (`drawGroup`/`groupsIn`) rather than a
+-- reconstruction of it.
+bindingsForWith :: Map Text HoleGroup -> [Text] -> Int -> Map Text Text
+bindingsForWith reg hs i =
   Map.restrictKeys drawn (Set.fromList hs)
   where
-    drawn = Map.unions [ drawGroup g i | g <- groupsIn holeRegistry hs ]
+    drawn = Map.unions [ drawGroup g i | g <- groupsIn reg hs ]
 
 -- The groups these hole names belong to, each ONCE, in a fixed order
 -- (by group name). Both the drawer and the shrinker ask this, so a
@@ -503,6 +514,67 @@ bindingsFor hs i =
 groupsIn :: Map Text HoleGroup -> [Text] -> [HoleGroup]
 groupsIn reg hs = Map.elems
   (Map.fromList [ (groupName g, g) | h <- hs, Just g <- [Map.lookup h reg] ])
+
+-- Diagnosis §7.0's cheapest lesson, made machine-checkable: "a green from
+-- a property scenario is worth nothing until you have seen its inputs
+-- vary." Two laws over the SAME run of draws (fix 7cd31bd's exact
+-- defect, generalized so a future correlated group can't reintroduce it
+-- another way):
+--
+--   Constant h        -- <h> took fewer than two distinct rendered
+--                         values across the whole run. A hole pinned to
+--                         one value is a constant wearing a generator's
+--                         clothes; a law that quantifies over it has no
+--                         discriminating power on that axis at all.
+--
+--   AlwaysEqual h1 h2 -- two DISTINCT holes rendered to the identical
+--                         value on EVERY iteration, not merely some. That
+--                         "every" is load-bearing: `someSubset` and
+--                         `someSuperset` legitimately draw equal values
+--                         SOMETIMES (subset is reflexive, and the
+--                         generator's own distribution test pins that
+--                         proper subsets are merely common, not
+--                         universal) -- collapsing that into "any two
+--                         iterations equal" would misfire on the corpus's
+--                         own real correlated pair. Equal on every
+--                         iteration is what fix 7cd31bd actually found:
+--                         someA and someB drawing the identical PieceSet
+--                         every single time, degenerating the composition
+--                         law to `x == x \`union\` x`.
+data HoleDefect = Constant Text | AlwaysEqual Text Text deriving (Eq, Show)
+
+-- Draws each of a scenario's REGISTERED holes `n` times through the REAL
+-- drawing path (`bindingsForWith`/`drawGroup`, the same functions
+-- `runScenarioProperty` itself calls), then checks both laws above.
+--
+-- Takes the registry as a parameter for the same reason
+-- `shrinkToMinimalWith` does: every group actually registered in the
+-- real corpus is well-formed (its whole point), so nothing in the real
+-- registry can ever reach the Constant/AlwaysEqual code paths --
+-- exercising them at all requires a test to build a deliberately
+-- defective registry and drive this function with it directly.
+--
+-- An UNREGISTERED hole (the coverage corpus's forced-orphan holes) is
+-- filtered out here, not reported: `classify`'s per-step scan already
+-- forces those to VOrphan unconditionally, and reporting them again here
+-- as a "constant" or "always-equal" hole (with no generator, they trivially
+-- are: an unbound name renders to nothing, always the same nothing) would
+-- be the SAME defect reported twice under two different labels.
+holeDefectsWith :: Map Text HoleGroup -> Int -> Scenario -> [HoleDefect]
+holeDefectsWith reg n sc =
+  [ Constant h | (h, vs) <- draws, length (nub vs) < 2 ]
+  ++ [ AlwaysEqual h1 h2
+     | ((h1, vs1) : rest) <- tails draws, (h2, vs2) <- rest
+       -- Equal on EVERY iteration (list equality over the whole run),
+       -- not "equal on some" -- see the AlwaysEqual comment above.
+     , vs1 == vs2 ]
+  where
+    hs = [ h | h <- dedupe (holesOf sc), Map.member h reg ]
+    envs = [ bindingsForWith reg hs i | i <- [0 .. n - 1] ]
+    draws = [ (h, [ Map.findWithDefault "" h e | e <- envs ]) | h <- hs ]
+
+holeDefects :: Int -> Scenario -> [HoleDefect]
+holeDefects = holeDefectsWith holeRegistry
 
 -- Run one @property-tagged scenario N times over generated bindings. A
 -- scenario with no holes at all is a harmless (if wasteful) degenerate
@@ -719,10 +791,24 @@ shrinkToMinimalWith reg defs w sc env0 = do
 -- The condition is exactly the one `Prop.runWithProperties`'s `run1`
 -- uses to decide whether to substitute at run time, which is the fact
 -- both static callers are trying to predict.
+-- THE property-tag predicate. Ruling R60/R77: this test used to be
+-- written out independently in three places -- `deholeFor` below,
+-- `runWithProperties`'s `run1` (the runtime's own copy of the exact
+-- condition `deholeFor`'s comment says it predicts), and, before the
+-- comment sweep, `Vocab.expectedVocab` (retired when `deholeFor` was
+-- pulled out as the one shared gate). A previous review caught the
+-- first two duplicates and deferred retiring `run1`'s as a documented
+-- minor; this retires it. `Check.checkDir`'s DEGENERATE-HOLE wiring is a
+-- FOURTH call site with the exact same question ("is this scenario
+-- @property-tagged?") and uses this too, so the count of independent
+-- copies goes to one, not up.
+isProperty :: [Tag] -> Bool
+isProperty tags = Tag "property" `elem` tags
+
 deholeFor :: [Tag] -> Text -> Text
 deholeFor tags
-  | Tag "property" `elem` tags = substituteExamples
-  | otherwise                  = id
+  | isProperty tags = substituteExamples
+  | otherwise        = id
 
 substituteExamples :: Text -> Text
 substituteExamples b0 = foldr rep b0 (concatMap example holeGroups)
@@ -776,7 +862,7 @@ runWithProperties defs w n files = fmap concat . mapM one $ files
         Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0]
         Right f -> mapM (run1 (ftTitle f)) (ftScenarios f)
     run1 ft sc
-      | Tag "property" `elem` scTags sc =
+      | isProperty (scTags sc) =
           mk ft sc <$> runScenarioProperty defs w n sc
       | otherwise =
           mk ft sc . lawOnce <$> runScenario defs w sc

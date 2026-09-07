@@ -131,6 +131,12 @@ featureFilesLocal dir = do
       if isDir then featureFilesLocal p
       else pure [ p | takeExtension p == ".feature" ]
 
+-- Stage 1 Task 5: the hole-distinctness law, added as a SECOND source of
+-- `bad` rows alongside the totality violations above. A @property
+-- scenario whose holes cannot vary, or two of whose holes are always
+-- equal, has no discriminating power on the axis it claims to fuzz --
+-- diagnosis §7.0's exact defect (someA/someB drawing the identical value
+-- every iteration), made a `check`-time failure instead of a comment.
 checkDir :: [StepDef] -> FilePath -> IO ()
 checkDir defs dir = do
   files <- featureFilesLocal dir
@@ -140,9 +146,14 @@ checkDir defs dir = do
     src <- readFeatureFile p
     pure $ case parseFeature p src of
       Left e  -> [(T.pack p, "PARSE", e)]
-      Right f -> [ (T.pack p <> " / " <> s, label v, describe b v)
-                 | (s, b, v) <- violations defs f ]) $ files
-  if null bad then TIO.putStrLn "totality: every step has exactly one definition"
+      Right f ->
+        [ (T.pack p <> " / " <> s, label v, describe b v) | (s, b, v) <- violations defs f ]
+        ++ [ (T.pack p <> " / " <> scName sc, "DEGENERATE-HOLE", describeDefect d)
+           | sc <- ftScenarios f
+           , Prop.isProperty (scTags sc)
+           , d <- Prop.holeDefects 30 sc ]) $ files
+  if null bad then TIO.putStrLn
+    "totality: every step has exactly one definition; every property hole varies"
   else do
     mapM_ (\(loc, tag, msg) -> TIO.putStrLn (tag <> " " <> loc <> ": " <> msg)) bad
     exitFailure
@@ -160,3 +171,9 @@ checkDir defs dir = do
       -- console at whatever code page it's running under, and a literal
       -- U+2014 crashed `commitAndReleaseBuffer` before either fix landed.
       b <> " -- " <> T.intercalate "; " [ sk <> ": " <> e | (sk, e) <- errs ]
+    describeDefect (Prop.Constant h) =
+      "<" <> h <> "> takes one value across the whole run -- a constant "
+      <> "wearing a generator's clothes; this scenario fuzzes nothing on that axis"
+    describeDefect (Prop.AlwaysEqual a b) =
+      "<" <> a <> "> and <" <> b <> "> are bound to the same value on every "
+      <> "iteration -- any law comparing them is degenerate (diagnosis 7.0)"
