@@ -13,6 +13,7 @@ import World
 import Steps
 import Run
 import qualified Check
+import qualified Vocab
 import Control.Exception (try, bracket, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
@@ -707,6 +708,99 @@ main = hspec $ do
               mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "whitespace") errs
             other -> expectationFailure
                        ("expected exactly one value-error step, got " <> show other)
+
+  describe "vocabulary drift" $ do
+    it "derives the expected table from the steps' capture types" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces fills at year -1405 in style canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          lookup "pieces" (Vocab.expectedVocab allSteps f)
+            `shouldBe` Just "any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water"
+          lookup "year" (Vocab.expectedVocab allSteps f)
+            `shouldBe` Just "whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC)"
+    it "flags drift when the file's table disagrees" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Vocabulary:"
+             , "    | pieces | some old lie |"
+             , "  Scenario: s"
+             , "    When I render pieces fills at year -1405 in style canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> Vocab.drift allSteps f `shouldSatisfy` (not . null)
+    -- Task 8's `url` decision: UrlPath (Steps.hs's GET-path capture) is a
+    -- Described universe, same shape as FixtureRefFreeText's "text" and
+    -- BindName's "name" -- free-form prose describing a value, not a
+    -- finite/bounded vocabulary a dummy needs to learn. expectedVocab
+    -- excludes ALL THREE the same structural way (by Universe constructor,
+    -- not by a hardcoded capName list), so a step using only Described
+    -- captures contributes nothing to the table.
+    it "excludes Described captures (url, name, text) from the table -- structurally, by Universe, not by a hardcoded name list" $ do
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I GET /api/subjects?year=-1405 as first" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> Vocab.expectedVocab allSteps f `shouldBe` []
+    -- R34 (controller ruling): --write must be SURGICAL -- it must never
+    -- go through parseFeature/renderFeature's whole-file round trip (which
+    -- reformats every preamble line and even drops blank lines within a
+    -- preamble), because the corpus is hand-written prose the owner cares
+    -- about. This proves the property empirically against a file with
+    -- prose, a leading tag, a blank line, and a DELIBERATELY WRONG
+    -- existing Vocabulary block (fewer rows than the truth, so the block
+    -- must both change content AND grow) -- every line that is not a
+    -- table row must survive byte-for-byte, in the same order, and the
+    -- rewritten table must equal the types.
+    it "--write rewrites only the Vocabulary block; every other line survives untouched" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-write-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "surgical.feature"
+          original = T.unlines
+            [ "@smoke"
+            , "Feature: t \8212 a hand-written law"
+            , "  Prose the owner wrote by hand, deliberately kept."
+            , "  A second prose line, also deliberate."
+            , ""
+            , "  Vocabulary:"
+            , "    | pieces | some old lie |"
+            , ""
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces fills at year -1405 in style canaan"
+            ]
+          isRow l = "    | " `T.isPrefixOf` l
+          nonRow ls = [ l | l <- ls, not (isRow l) ]
+      createDirectoryIfMissing True dir
+      -- BS.writeFile, not TIO.writeFile: this test's own fixture setup hit
+      -- the same console/handle-encoding trap the em dash below is meant
+      -- to exercise (Main.hs's UTF-8 fix, fix 6, is only wired into the
+      -- executable's entry point, not this test process) -- writing raw
+      -- UTF-8 bytes sidesteps it entirely, the same way Vocab.vocabDir's
+      -- own --write path does for the real corpus.
+      BS.writeFile path (TE.encodeUtf8 original)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        -- decodeUtf8, not TIO.readFile: same encoding trap as the write
+        -- side above -- this toolchain's default text-handle decoder is
+        -- not UTF-8, so reading the em dash back through it would show a
+        -- false failure (the file is fine; the read would not be).
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        rewritten `shouldSatisfy` T.isSuffixOf "\n"
+        nonRow (T.lines rewritten) `shouldBe` nonRow (T.lines original)
+        case parseFeature path rewritten of
+          Left e -> expectationFailure (T.unpack e)
+          Right f -> ftVocab f `shouldBe` Vocab.expectedVocab allSteps f
+        -- and re-running in verify mode against the now-correct file
+        -- reports clean, with no exception (exitFailure) along the way
+        (out, result) <- captureStdout (Vocab.vocabDir allSteps dir False)
+        result `shouldSatisfy` isRight
+        out `shouldBe` "vocabulary: every table matches its types\n"
 
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,

@@ -5,6 +5,11 @@ Feature: the scene — a picture composed from pieces
   rest are always present — a wart this contract records rather than
   hides, retired when the pieces parameter lands.
 
+  Vocabulary:
+    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
+    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC) |
+    | style | any of: canaan, parchment, slate |
+
   Scenario: the twelve tribes scene, whole
     When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in style canaan
     Then the response equals fixture "scene-1405-full"
