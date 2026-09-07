@@ -743,6 +743,157 @@ main = hspec $ do
         Left e  -> e `shouldSatisfy` T.isInfixOf "dress is not local"
         Right _ -> expectationFailure "expected differing geometry ids to fail"
 
+    -- ---------- the sweep: the identity law ----------
+    it "the identity law: combining a scene with an EMPTY scene is the \
+       \scene itself (v0.1 combining = resource-set union)" $ do
+      let ids ns = idsValue (ns :: [T.Text])
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList
+                    [ ("some",  (BS.empty, ids ["r1", "r2"]))
+                    , ("empty", (BS.empty, ids [])) ] }
+          run = fromJust $ firstMatch Then "combining some and empty equals some"
+      r <- run w
+      r `shouldSatisfy` isRight
+    it "the identity law fails, naming the ids that differ, when the union \
+       \genuinely is not the scene it claims to be" $ do
+      let ids ns = idsValue (ns :: [T.Text])
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList
+                    [ ("some",  (BS.empty, ids ["r1", "r2"]))
+                      -- not empty at all: stacking it ADDS r9, so the
+                      -- identity law is genuinely violated here
+                    , ("empty", (BS.empty, ids ["r9"])) ] }
+          run = fromJust $ firstMatch Then "combining some and empty equals some"
+      r <- run w
+      case r of
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "r9"
+          e `shouldSatisfy` T.isInfixOf "only in the composed side"
+        Right _ -> expectationFailure
+          "expected a scene that adds a resource to break the identity law"
+    it "the identity law fails naming an unbound scene name rather than \
+       \treating it as an empty resource set" $ do
+      let w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
+          run = fromJust $ firstMatch Then "combining some and empty equals some"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "unbound some"
+        Right _ -> expectationFailure "expected an unbound scene name to fail"
+
+    -- ---------- the sweep: the singleton fold ----------
+    it "the singleton fold: rendering each piece alone and stacking them \
+       \rebuilds the whole map" $ do
+      let fake url = pure (Right (TE.encodeUtf8 url, wireResources url))
+          w0' = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When
+        "I render pieces ground, water at year -77 in style canaan as whole")
+      Right w1 <- r1 w0'
+      Just chk <- pure (firstMatch Then
+        "rendering each piece of ground, water alone and combining them equals whole")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "the singleton fold reports Left, naming the ids that went missing, \
+       \when the whole carries something no single piece produced" $ do
+      -- The fake smuggles an extra id into any render of two or more
+      -- pieces -- something that appears only when pieces are combined,
+      -- which is exactly what this law exists to catch.
+      let fake url = pure (Right (TE.encodeUtf8 url, idsValue (bonus (activeInUrl url))))
+          bonus as = if length as >= 2 then as ++ ["bonus"] else as
+          w0' = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When
+        "I render pieces ground, water at year -77 in style canaan as whole")
+      Right w1 <- r1 w0'
+      Just chk <- pure (firstMatch Then
+        "rendering each piece of ground, water alone and combining them equals whole")
+      r <- chk w1
+      case r of
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "does not rebuild whole"
+          e `shouldSatisfy` T.isInfixOf "bonus"
+        Right _ -> expectationFailure
+          "expected an id that appears only in the combined render to fail the fold"
+    it "the singleton fold threads the SAME year AND style into every \
+       \single-piece render -- neither is hardcoded" $ do
+      -- The fake REJECTS any request not carrying both, so a fold that
+      -- rendered its singles at a different year or in a different style
+      -- fails here instead of coincidentally passing.
+      let fake url
+            | "year=-77" `T.isInfixOf` url && "style=slate" `T.isInfixOf` url =
+                pure (Right (TE.encodeUtf8 url, wireResources url))
+            | otherwise = pure (Left ("wrong year/style in single-piece render url: " <> url))
+          w0' = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When
+        "I render pieces ground, water at year -77 in style slate as whole")
+      Right w1 <- r1 w0'
+      Just chk <- pure (firstMatch Then
+        "rendering each piece of ground, water alone and combining them equals whole")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "the singleton fold SKIPS an empty piece set -- a fold over no \
+       \pieces demonstrates nothing, and must not pass vacuously" $ do
+      let fake url = pure (Right (TE.encodeUtf8 url, wireResources url))
+          w0' = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When
+        "I render pieces none at year -77 in style canaan as whole")
+      Right w1 <- r1 w0'
+      Just chk <- pure (firstOutcome Then
+        "rendering each piece of none alone and combining them equals whole")
+      r <- chk w1
+      case r of
+        StepSkipped why -> why `shouldSatisfy` T.isInfixOf "empty"
+        StepOk _ -> expectationFailure
+          "an empty fold must SKIP, not pass vacuously (its union is trivially empty)"
+        StepFailed e -> expectationFailure
+          ("an empty fold must SKIP, not fail: " <> T.unpack e)
+    it "the singleton fold without a prior render fails, naming that no \
+       \year/style was recorded" $ do
+      let w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
+          run = fromJust $ firstMatch Then
+            "rendering each piece of ground, water alone and combining them equals whole"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "no year/style recorded"
+        Right _ -> expectationFailure "expected a fold with no prior render to fail"
+
+    -- ---------- the sweep: the empty-list law ----------
+    it "the empty-list law passes when the WHOLE body is []" $ do
+      let fake _ = pure (Right ("[]", fromJust (A.decodeStrict "[]")))
+          w = mkWorld "http://x" fake ""
+      Just get <- pure (firstMatch When "I GET /api/changes?from=-3000&to=-3000")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then "the response is the empty list")
+      r <- chk w1
+      r `shouldSatisfy` isRight
+    it "the empty-list law fails on a NON-empty list, quoting the body it \
+       \actually found" $ do
+      let o = "[{\"id\":\"c1\"}]"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake ""
+      Just get <- pure (firstMatch When "I GET /api/changes?from=-1407&to=-1405")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then "the response is the empty list")
+      r <- chk w1
+      case r of
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "is not []"
+          e `shouldSatisfy` T.isInfixOf "c1"
+        Right _ -> expectationFailure "expected a non-empty list to fail"
+    it "the empty-list law fails on a body that is not a list at all -- \
+       \whole-body equality with [], not a poke at emptiness" $ do
+      -- An "is it empty?" check would happily accept {} (an empty
+      -- object) or "" ; whole-body equality with [] accepts exactly one
+      -- body and says so.
+      let o = "{}"
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake ""
+      Just get <- pure (firstMatch When "I GET /api/changes?from=-1&to=-1")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then "the response is the empty list")
+      r <- chk w1
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "is not []"
+        Right _ -> expectationFailure "expected an empty OBJECT to fail an empty-LIST law"
+
     it "fetching a scene's first resource twice: identical bytes pass" $ do
       let sceneVal = A.object ["resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])]
           rawGet _ = pure (Right "same-bytes")
@@ -1056,12 +1207,14 @@ main = hspec $ do
           map srScenario (hardReds results) `shouldBe` ["hard red", "PARSE"]
           -- and the report table must actually SHOW the distinction, not
           -- just compute it silently
+          -- (the sweep: the table now carries a skip-count column too --
+          -- every one of these laws ran in full, so each shows 0)
           let table = reportTable results
           table `shouldSatisfy` T.isInfixOf "| hard red | \10060 RED"
           table `shouldSatisfy`
-            T.isInfixOf "| expected red | \128308 red (expected \8212 @target) |"
+            T.isInfixOf "| expected red | \128308 red (expected \8212 @target) | 0 |"
           table `shouldSatisfy`
-            T.isInfixOf "| target already met | \128994 green (target already met!) |"
+            T.isInfixOf "| target already met | \128994 green (target already met!) | 0 |"
           table `shouldSatisfy` T.isInfixOf "| PARSE | \10060 RED"
         rs -> expectationFailure ("expected exactly 4 results, got " <> show (length rs))
     -- Review finding (Task 6 round 1), fix 3: the exception branch of
@@ -1360,6 +1513,10 @@ main = hspec $ do
             , (Then, "sceneA's labels are empty")
             , (Then, "every feature entry carries a piece field")
             , (Then, "combining sceneA and sceneB equals rendering fills plus ground")
+              -- the sweep's three new definitions
+            , (Then, "combining sceneA and sceneB equals sceneC")
+            , (Then, "rendering each piece of fills, ground alone and combining them equals sceneA")
+            , (Then, "the response is the empty list")
             , (Then, "sceneA and sceneB differ only in dress, never in geometry")
             , (Then, "fetching sceneA's first resource twice yields identical bytes")
             , (Then, "fetching sceneA's first two resources as a batch equals fetching them singly")
@@ -1507,6 +1664,35 @@ main = hspec $ do
             `shouldBe` Just "any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water"
           lookup "year" (Vocab.expectedVocab allSteps f)
             `shouldBe` Just "whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist)"
+    -- The sweep: a feature whose EVERY scenario is quantified still has a
+    -- vocabulary. Before this, `expectedVocab` matched the raw body, so
+    -- "<somePieces>" matched no definition, the derived table came out
+    -- EMPTY, and `vocab --write` deleted the block outright from
+    -- scene/resources.feature -- generalizing a law over all pieces
+    -- silently removed the sentence explaining what a piece is. Same
+    -- substitution and same @property gate as Check.classify's.
+    it "derives the table from a scenario whose captures are all HOLES, \
+       \under the same @property gate the totality law uses" $
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  @property"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene"
+             , "    Then fetching scene's first resource twice yields identical bytes" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> map fst (Vocab.expectedVocab allSteps f)
+                     `shouldBe` ["pieces", "year", "style"]
+    -- The other direction of the same gate: an UNTAGGED scenario is never
+    -- substituted at run time, so its literal "<somePieces>" text really
+    -- does match nothing, and the table must not claim otherwise.
+    it "does NOT substitute holes for an untagged scenario -- the table \
+       \must describe what will actually run" $
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces <somePieces> at year <someYear> in style <someStyle>" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> Vocab.expectedVocab allSteps f `shouldBe` []
     it "flags drift when the file's table disagrees" $ do
       case parseFeature "t.feature" $ T.unlines
              [ "Feature: t"
@@ -1788,7 +1974,10 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             v <- Prop.runScenarioProperty allSteps w 25 sc
-            v `shouldBe` Passed
+            -- (the sweep: a law's run is now its verdict AND how many
+            -- iterations never ran -- this one has no precondition, so
+            -- all 25 genuinely ran)
+            v `shouldBe` LawRun Passed 0
           [] -> expectationFailure "expected at least one scenario"
     it "reports the failing binding when the law breaks" $ do
       let feat = T.unlines
@@ -1804,7 +1993,7 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             v <- Prop.runScenarioProperty allSteps w 25 sc
-            case v of
+            case lawVerdict v of
               Failed e -> e `shouldSatisfy` T.isInfixOf "someYear ="
               _ -> expectationFailure "law should have failed with its binding"
           [] -> expectationFailure "expected at least one scenario"
@@ -1822,7 +2011,7 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             v <- Prop.runScenarioProperty allSteps w 5 sc
-            case v of
+            case lawVerdict v of
               Failed e -> e `shouldSatisfy` T.isInfixOf "someMysteryHole"
               _ -> expectationFailure "an unregistered hole should fail loudly, naming it"
           [] -> expectationFailure "expected at least one scenario"
@@ -1862,24 +2051,20 @@ main = hspec $ do
     -- finding at least one iteration where they genuinely differ -- the
     -- exact property whose absence made the composition law
     -- unfalsifiable.
-    it "renderHole draws independently per hole name: two holes sharing \
-       \the SAME generator (someA/someB's real situation in scene.feature) \
-       \genuinely differ at least once across a run of iterations" $ do
-      let someHole = Prop.SomeHole Prop.genPieces
-          draws = [ (Prop.renderHole "someA" someHole i, Prop.renderHole "someB" someHole i)
-                  | i <- [0 .. 49] ]
+    -- (The sweep: restated against the real registry rather than against
+    -- a hand-built SomeHole, now that `Prop.bindingsFor` is the one
+    -- function the runner uses to bind a scenario's holes -- so this
+    -- pins the actual wiring someA/someB have, not a reconstruction of
+    -- it that could drift from the registry.)
+    it "someA and someB draw independently: two holes registered against \
+       \the SAME generator, in SEPARATE groups, genuinely differ at least \
+       \once across a run of iterations" $ do
+      let draws = [ (Map.lookup "someA" b, Map.lookup "someB" b)
+                  | i <- [0 .. 49], let b = Prop.bindingsFor ["someA", "someB"] i ]
       draws `shouldSatisfy` any (uncurry (/=))
-    -- The seed is still a PURE function of (name, i) -- no wall-clock or
-    -- other live entropy crept in alongside the independence fix. Same
-    -- name, same iteration must always render identically (this is what
-    -- lets a single @property scenario substitute one <someA> value
-    -- consistently across every step body that mentions it within one
-    -- iteration).
-    it "renderHole is still deterministic: the same hole name at the same \
-       \iteration always renders identically" $ do
-      let someHole = Prop.SomeHole Prop.genPieces
-      Prop.renderHole "someA" someHole 7 `shouldBe` Prop.renderHole "someA" someHole 7
-      Prop.renderHole "someB" someHole 13 `shouldBe` Prop.renderHole "someB" someHole 13
+      -- and neither is silently missing, which `any (/=)` alone could
+      -- not tell apart from one of them being absent
+      draws `shouldSatisfy` all (\(a, b) -> a /= Nothing && b /= Nothing)
     -- Requirement 4: the empty piece set (the scene monoid's identity) MUST
     -- be in genPieces' codomain, and MUST round-trip through substitution
     -- into a body the real step vocabulary still parses ("none", not "").
@@ -1920,6 +2105,258 @@ main = hspec $ do
             v <- runScenario allSteps w sc'
             v `shouldBe` Passed
           [] -> expectationFailure "expected at least one scenario"
+
+  -- ---------- the sweep: holes drawn in correlated groups ----------
+  -- This project's worst Stage 0 defect was a law that COULD NOT FAIL:
+  -- someA and someB drew the identical value, so the composition law
+  -- degenerated to `x == x ∪ x`. The sweep now introduces correlation ON
+  -- PURPOSE, which is the same trap approached from the other side --
+  -- so every relationship a group establishes is pinned here by a test
+  -- that goes red if the relationship breaks, and every DISTINCTNESS
+  -- likewise. A correlation nobody checks is indistinguishable from the
+  -- accident that produced 7cd31bd.
+  describe "the sweep: correlated hole groups" $ do
+    let styleHoles  = ["someStyle", "someOtherStyle"]
+        nestedHoles = ["someSubset", "someSuperset"]
+        -- The two drawn sets of one iteration, as raw Sets.
+        nestedAt i = (,) <$> (unwrap <$> drawnAs nestedHoles "someSubset" i)
+                         <*> (unwrap <$> drawnAs nestedHoles "someSuperset" i)
+          where unwrap (PieceSet s) = s
+        stylesAt i = (,) <$> drawnAs @StyleName styleHoles "someStyle" i
+                         <*> drawnAs @StyleName styleHoles "someOtherStyle" i
+        iterations = [0 .. 199]
+    it "the registry is a PARTITION of the hole names: every hole belongs \
+       \to exactly one group, and that group is the one the registry \
+       \hands back for it" $ do
+      let members = concatMap Prop.groupMembers Prop.holeGroups
+      -- no hole is claimed by two groups (which would make its value
+      -- depend on which other holes a scenario happened to mention)
+      length members `shouldBe` Set.size (Set.fromList members)
+      Set.fromList members `shouldBe` Set.fromList (Map.keys Prop.holeRegistry)
+      sequence_
+        [ fmap Prop.groupName (Map.lookup h Prop.holeRegistry)
+            `shouldBe` Just (Prop.groupName g)
+        | g <- Prop.holeGroups, h <- Prop.groupMembers g ]
+    it "<someSubset> is nested inside <someSuperset> at EVERY iteration -- \
+       \the correlation the subtractive law needs, asserted over the whole \
+       \run rather than sampled" $
+      -- Whole-body: the full list of 200 answers, not "any" or "most".
+      -- Independent draws would fail this within a handful of
+      -- iterations, which is exactly the point of asserting it.
+      traverse (fmap (uncurry Set.isSubsetOf) . nestedAt) iterations
+        `shouldBe` Right (replicate (length iterations) True)
+    it "the nested pair is a PROPER subset in at least a quarter of \
+       \iterations -- a DISTRIBUTION FLOOR, not a tuned constant" $ do
+      -- The floor exists because a law tested only on EQUAL sets tests
+      -- nothing about subtraction: `fewer ⊆ more` is trivially true when
+      -- they are the same set, so a generator that drifted toward
+      -- equality would quietly hollow the law out while staying green.
+      -- Equality is still a legal draw (⊆ is reflexive and the law
+      -- claims the reflexive case too), so this is a floor on the
+      -- distribution, not a ban on a value.
+      --
+      -- A quarter is deliberately far below what the construction
+      -- delivers (`sublistOf` over a mean-size-5 superset coincides with
+      -- it about 5.6% of the time, so ~94% of draws are proper) -- it is
+      -- a floor chosen to be unmistakably clear of zero and unmistakably
+      -- clear of today's number, not a threshold fitted to the numbers
+      -- this generator happens to produce.
+      let proper = traverse (fmap (uncurry (/=)) . nestedAt) iterations
+      fmap (length . filter id) proper
+        `shouldSatisfy` either (const False) (>= length iterations `div` 4)
+    it "<someStyle> and <someOtherStyle> are DISTINCT at every iteration -- \
+       \a restyle to the same style would make dress-locality vacuous" $
+      traverse (fmap (uncurry (/=)) . stylesAt) iterations
+        `shouldBe` Right (replicate (length iterations) True)
+    it "both style slots reach EVERY style across a run -- distinctness \
+       \must not be bought by pinning one slot to a constant" $ do
+      -- The cheap way to pass the distinctness test above is to always
+      -- draw ("canaan", "slate"); that would leave the dress-locality
+      -- law quantified over one pair of dresses while claiming to range
+      -- over all of them. Coverage on BOTH slots is what rules it out.
+      let drawsE = traverse stylesAt iterations
+      fmap (Set.fromList . map (renderCap . fst)) drawsE
+        `shouldBe` Right (Set.fromList styleNames)
+      fmap (Set.fromList . map (renderCap . snd)) drawsE
+        `shouldBe` Right (Set.fromList styleNames)
+    it "asking for a DIFFERENT style is only meaningful because more than \
+       \one dress exists -- genStylePair's non-zero rotation depends on it" $
+      length styleNames `shouldSatisfy` (>= 2)
+    it "a group member drawn ALONE gets the same value it gets alongside \
+       \its partner: a group's draw depends on the GROUP, not on how many \
+       \of its members a scenario happens to mention" $
+      [ Map.lookup "someStyle" (Prop.bindingsFor ["someStyle"] i) | i <- [0 .. 49] ]
+        `shouldBe`
+      [ Map.lookup "someStyle" (Prop.bindingsFor ["someStyle", "someOtherStyle", "someYear"] i)
+      | i <- [0 .. 49] ]
+    it "bindings are restricted to the holes the scenario actually \
+       \mentions -- a counterexample must not report a partner hole the \
+       \scenario never used" $
+      Map.keys (Prop.bindingsFor ["someStyle"] 3) `shouldBe` ["someStyle"]
+    it "the subtractive law runs GREEN over 100 iterations against a \
+       \server that honours it -- end-to-end evidence that the drawn \
+       \pairs really are nested (independent draws redden this)" $ do
+      -- The fake answers with exactly the pieces the URL turned ON, so
+      -- its resource sets are nested exactly when the drawn piece sets
+      -- are. Nothing about the step is faked: this is the corpus's own
+      -- wording, run through the real property runner.
+      let fake url = pure (Right (TE.encodeUtf8 url, wireResources url))
+          w = mkWorld "http://x" fake ""
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: subtractive"
+            , "    When I render pieces <someSubset> at year <someYear> in style <someStyle> as fewer"
+            , "    And I render pieces <someSuperset> at year <someYear> in style <someStyle> as more"
+            , "    Then fewer's resources are a subset of more's resources" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps w 100 sc
+            r `shouldBe` LawRun Passed 0
+          [] -> expectationFailure "expected at least one scenario"
+    it "the dress-locality law runs GREEN over 100 iterations against a \
+       \server that repaints without moving anything -- end-to-end \
+       \evidence that the two drawn styles really differ (a collision \
+       \reddens this as \"dress did not actually change\")" $ do
+      let fake url = pure (Right (TE.encodeUtf8 url, A.object
+            [ "resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])
+            , "dress" A..= styleInUrl url ]))
+          w = mkWorld "http://x" fake ""
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: dress locality"
+            , "    When I render pieces <somePieces> at year <someYear> in style <someStyle> as dressed"
+            , "    And I render pieces <somePieces> at year <someYear> in style <someOtherStyle> as redressed"
+            , "    Then dressed and redressed differ only in dress, never in geometry" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps w 100 sc
+            r `shouldBe` LawRun Passed 0
+          [] -> expectationFailure "expected at least one scenario"
+    it "a scenario over CORRELATED holes still produces byte-identical \
+       \verdicts run to run, counterexample text included" $ do
+      let fake url = pure (Right (TE.encodeUtf8 url, wireResources url))
+          w = mkWorld "http://x" fake ""
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: falsifiable over correlated holes"
+            , "    When I render pieces <someSuperset> at year <someYear> in style <someStyle> as fewer"
+            , "    And I render pieces <someSubset> at year <someYear> in style <someOtherStyle> as more"
+            , "    Then fewer's resources are a subset of more's resources" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r1 <- Prop.runScenarioProperty allSteps w 100 sc
+            r2 <- Prop.runScenarioProperty allSteps w 100 sc
+            r1 `shouldBe` r2
+            -- and it really did fail (a law swapped end for end is not
+            -- true): two identical PASSES would satisfy the equality
+            -- above without proving anything about counterexample text.
+            lawVerdict r1 `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+            case lawVerdict r1 of
+              Failed e -> e `shouldSatisfy` T.isInfixOf "someSubset = "
+              _ -> pure ()
+          [] -> expectationFailure "expected at least one scenario"
+
+  -- ---------- the sweep: the skip discipline ----------
+  describe "the sweep: preconditioned laws skip, and a law that never ran \
+           \is never green" $ do
+    let noResources = A.object ["resources" A..= ([] :: [A.Value])]
+        oneResource = A.object
+          ["resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])]
+        constBytes _ = pure (Right "same-bytes")
+    it "a step whose precondition the draw cannot meet reports Skipped -- \
+       \neither Passed (a vacuous green) nor Failed (a red for an \
+       \unbroken law)" $ do
+      let w = (mkWorld "http://x" (\_ -> pure (Right ("{}", noResources))) "")
+                { transportRaw = constBytes }
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces fills at year -1405 in style canaan as scene"
+             , "    Then fetching scene's first resource twice yields identical bytes" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- runScenario allSteps w sc
+            case v of
+              Skipped why -> why `shouldSatisfy` T.isInfixOf "carries 0 resource(s)"
+              other -> expectationFailure
+                ("expected a precondition miss to Skip, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+    it "a plain scenario whose ONLY run skipped is Failed, not green: the \
+       \n = 1 instance of the same discipline the property runner applies" $
+      case lawOnce (Skipped "nothing to fetch") of
+        LawRun (Failed e) 1 -> do
+          e `shouldSatisfy` T.isInfixOf "law never ran"
+          e `shouldSatisfy` T.isInfixOf "nothing to fetch"
+        other -> expectationFailure
+          ("expected a single skipped run to be a named failure, got " <> show other)
+    it "a property that skips SOME iterations passes, with the skip count \
+       \visible in its LawRun" $ do
+      -- The fake serves a scene with no resources at every EVEN year and
+      -- one resource at every odd year, so the drawn <someYear> decides
+      -- whether the law can run at all -- some iterations skip, the rest
+      -- genuinely exercise byte-identity.
+      let fake url = pure (Right (TE.encodeUtf8 url,
+                                  if evenYearInUrl url then noResources else oneResource))
+          w = (mkWorld "http://x" fake "") { transportRaw = constBytes }
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: byte identity"
+            , "    When I render pieces fills at year <someYear> in style canaan as scene"
+            , "    Then fetching scene's first resource twice yields identical bytes" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            LawRun v skips <- Prop.runScenarioProperty allSteps w 25 sc
+            v `shouldBe` Passed
+            skips `shouldSatisfy` (> 0)
+            skips `shouldSatisfy` (< 25)
+          [] -> expectationFailure "expected at least one scenario"
+    it "a property whose iterations ALL skip is Failed, naming the count -- \
+       \a law that never ran must not report green" $ do
+      let w = (mkWorld "http://x" (\_ -> pure (Right ("{}", noResources))) "")
+                { transportRaw = constBytes }
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: byte identity"
+            , "    When I render pieces fills at year <someYear> in style canaan as scene"
+            , "    Then fetching scene's first resource twice yields identical bytes" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            LawRun v skips <- Prop.runScenarioProperty allSteps w 25 sc
+            skips `shouldBe` 25
+            case v of
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "law never ran"
+                e `shouldSatisfy` T.isInfixOf "all 25 iteration(s) skipped"
+                -- and it still says WHY, with the binding that failed
+                -- the precondition: a bare count is a number nobody can
+                -- act on.
+                e `shouldSatisfy` T.isInfixOf "someYear = "
+              other -> expectationFailure
+                ("an all-skipped law must be Failed, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
+    it "the report table carries the skip count in its own column, so a \
+       \green law with thin coverage is visible as such" $ do
+      let rs = [ ScenarioResult "f" "thinly covered" [] Passed 12
+               , ScenarioResult "f" "fully covered" [] Passed 0 ]
+      reportTable rs `shouldSatisfy` T.isInfixOf "| thinly covered | \9989 green | 12 |"
+      reportTable rs `shouldSatisfy` T.isInfixOf "| fully covered | \9989 green | 0 |"
+      reportTable rs `shouldSatisfy` T.isInfixOf "| verdict | skipped |"
 
   describe "Check.dehole wired to Prop.substituteExamples" $ do
     -- Task 7 shipped `dehole = id`, documented as a placeholder Task 9
@@ -2085,9 +2522,76 @@ mkWorld base tr dir = World base tr dir mempty False
   (\_ -> pure (Left "no raw transport configured for this test"))
   Nothing
 
-firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
-firstMatch k t = listToMaybe
+-- The step action a body resolves to, in its full three-outcome form
+-- (World.StepOutcome) -- used directly by the tests that are ABOUT
+-- skipping.
+firstOutcome :: Keyword -> T.Text -> Maybe (World -> IO StepOutcome)
+firstOutcome k t = listToMaybe
   [ f | StepDef k' _ _ m <- allSteps, k' == k, Matched f <- [m t] ]
+
+-- The two-outcome view, for the great majority of steps that cannot skip
+-- at all. An UNEXPECTED skip is surfaced as a loud, named failure rather
+-- than folded into either outcome: a step that quietly started skipping
+-- would otherwise look exactly like a step that still runs (a pass) or
+-- like a broken one (a failure), and the whole point of the third
+-- outcome is that it is neither.
+firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
+firstMatch k t = fmap (\f w -> asEither <$> f w) (firstOutcome k t)
+  where
+    asEither (StepOk w)        = Right w
+    asEither (StepFailed e)    = Left e
+    asEither (StepSkipped why) = Left ("UNEXPECTED SKIP: " <> why)
+
+-- ---------- fake-server helpers for the sweep's property tests ----------
+-- A fake scene body carrying exactly the pieces the URL turned ON. v0.1's
+-- wire expresses four of the ten pieces (Steps.sceneUrl), so this is what
+-- an HONEST server would answer: nested piece sets produce nested
+-- resource sets, and a piece with no wire toggle contributes nothing.
+-- Deliberately derived from the URL rather than from a canned response,
+-- so a step that built the wrong URL (wrong year, wrong style, wrong
+-- pieces) shows up as a wrong ANSWER instead of passing anyway.
+wireResources :: T.Text -> A.Value
+wireResources = idsValue . activeInUrl
+
+-- Which of v0.1's four wire-expressible pieces a scene URL turned on.
+activeInUrl :: T.Text -> [T.Text]
+activeInUrl url =
+     [ "ground"   | "relief=1" `T.isInfixOf` url ]
+  ++ [ "water"    | not ("topo=0" `T.isInfixOf` url) ]
+  ++ [ "labels"   | not ("labels=0" `T.isInfixOf` url) ]
+  ++ [ "journeys" | not ("journeys=0" `T.isInfixOf` url) ]
+
+-- A scene body carrying exactly these resource ids and nothing else.
+idsValue :: [T.Text] -> A.Value
+idsValue ns = A.object ["resources" A..= [ A.object ["id" A..= n] | n <- ns ]]
+
+-- The style a scene URL asked for. Stands in for every style-dependent
+-- field of a real payload: a fake that echoes it "repaints" exactly when
+-- the URL says to, which is what lets the dress-locality law be exercised
+-- for real against a fake.
+styleInUrl :: T.Text -> T.Text
+styleInUrl = T.takeWhile (/= '&') . snd . T.breakOnEnd "style="
+
+-- Whether a scene URL's year is even -- an arbitrary but deterministic
+-- way for a fake to make a law's precondition hold on some draws and not
+-- others, so "some iterations skip" is exercised without depending on a
+-- rare draw.
+evenYearInUrl :: T.Text -> Bool
+evenYearInUrl url =
+  case reads (T.unpack (T.takeWhile (/= '&') (snd (T.breakOnEnd "year=" url)))) of
+    [(y :: Int, "")] -> even y
+    _                -> False
+
+-- The binding a scenario mentioning exactly `hs` gets for hole `h` at
+-- iteration `i`, parsed back through the very capture the corpus parses
+-- it with. Asks `Prop.bindingsFor` -- the function the runner itself
+-- calls -- rather than reconstructing the drawing rule here, so these
+-- laws are pinned against the real registry and not against a copy of it
+-- that could drift.
+drawnAs :: FromCapture a => [T.Text] -> T.Text -> Int -> Either T.Text a
+drawnAs hs h i =
+  maybe (Left ("no binding for " <> h)) Right (Map.lookup h (Prop.bindingsFor hs i))
+    >>= parseCap
 
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'

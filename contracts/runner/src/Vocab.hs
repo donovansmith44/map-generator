@@ -10,6 +10,7 @@ import Capture (Universe (..), describeUniverse)
 import Check (featureFilesLocal)
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
+import qualified Prop
 import System.Exit (exitFailure)
 import World (Claim (..), StepDef (..), readFeatureFile)
 
@@ -47,11 +48,31 @@ import World (Claim (..), StepDef (..), readFeatureFile)
 -- there is no finite list of legal fixture names to enumerate in a
 -- feature's table, so a Vocabulary row for it would just repeat the same
 -- prose sentence in every feature that uses it, never a real answer set.
+--
+-- The sweep: a hole is substituted with its example value before
+-- matching, under EXACTLY the gate Check.classify uses -- only when the
+-- enclosing scenario is @property-tagged, because that is the only
+-- condition under which Prop.runWithProperties will ever substitute
+-- anything at run time. Without this, a scenario body reading
+-- "I render pieces <somePieces> at year <someYear> in style <someStyle>"
+-- MATCHES no definition at all (its PieceSet capture cannot parse
+-- "<somePieces>"), contributes no universe, and a feature file whose
+-- every scenario is quantified therefore derives an EMPTY table -- so
+-- `vocab --write` deletes the block, and a reader of
+-- scene/resources.feature is left with no statement of what a piece, a
+-- year or a style even is, precisely because those laws were
+-- generalized to range over all of them. Nothing about the vocabulary a
+-- reader needs changed when the values became generated; only the
+-- literal text did. Same substitution, same gate, same reasoning as the
+-- totality law's -- getting it wrong in either direction has the
+-- mirror-image consequences Check.hs's own comment spells out.
 expectedVocab :: [StepDef] -> Feature -> [(Text, Text)]
 expectedVocab defs f = nub
   [ (name, describeUniverse u)
-  | sc <- ftScenarios f, st <- scSteps sc
-  , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m (stepBody st)]
+  | sc <- ftScenarios f
+  , let dehole = if Tag "property" `elem` scTags sc then Prop.substituteExamples else id
+  , st <- scSteps sc
+  , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m (dehole (stepBody st))]
   , (name, u) <- us, isVocab u ]
   where
     isVocab (Described _) = False

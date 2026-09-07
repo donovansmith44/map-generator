@@ -140,9 +140,43 @@ data Claim
     -- ^ the shape matched (every literal was found) but a capture failed
     -- to PARSE — a bad piece name, a style that isn't a style. This step
     -- recognizes the line but the value in it is bad.
-  | Matched (World -> IO (Either Text World))
+  | Matched (World -> IO StepOutcome)
     -- ^ the pattern matched AND every capture parsed: the runnable
     -- action.
+
+-- The sweep (parameterization): RUNNING a step has THREE outcomes, not
+-- two — the same shape `Claim` already has for MATCHING one, and for the
+-- same reason. A law with a precondition (a scene with at least one
+-- resource to fetch; a non-empty piece set to fold over) meets a drawn
+-- binding that cannot exercise it perhaps one iteration in ten. The two-
+-- outcome `Either Text World` forces that into either a PASS (a vacuous
+-- green: the law didn't run, and a check satisfiable by its own failure
+-- mode is no check — MEMORY: verify-distinct-not-nonnull) or a FAILURE
+-- (a red for a law that isn't broken, just unexercised). Neither is
+-- true. `StepSkipped` is the third, honest answer, and `Run`/`Prop`
+-- count them: a law that ran 88 times and skipped 12 says so, and a law
+-- that skipped ALL of them is a Failed, because a law that never ran
+-- must never report green.
+data StepOutcome
+  = StepOk World
+    -- ^ the step ran and the law held on this iteration.
+  | StepFailed Text
+    -- ^ the step ran and the law BROKE, with the reason.
+  | StepSkipped Text
+    -- ^ the step could not run at all on this draw, with the precondition
+    -- that went unmet. NOT a pass, NOT a failure — counted separately.
+
+-- The typed shape of "this law needs something the draw may not have
+-- given it". Three cases, because there really are three: the world is
+-- BROKEN (an unbound scene name, a body with no resources array — a
+-- genuine failure that no amount of redrawing fixes), the precondition
+-- is merely UNMET on this draw (a legal scene that happens to carry
+-- fewer resources than this law needs — skip), or it is MET. Collapsing
+-- the first two into one `Left` is exactly how a broken world would come
+-- to look like a quiet skip, and how a law would stop being able to
+-- fail.
+data Precondition a = Broken Text | Unmet Text | Met a
+  deriving (Eq, Show)
 
 data StepDef = StepDef
   { defKw     :: Keyword
@@ -151,8 +185,17 @@ data StepDef = StepDef
   , defRun    :: Text -> Claim
   }
 
+-- The ordinary step: two outcomes, and it CANNOT skip — the lift is
+-- total and one-way, so a step written this way can never accidentally
+-- report a precondition miss it never reasoned about.
 mkStep :: Keyword -> StepP a -> (a -> World -> IO (Either Text World)) -> StepDef
-mkStep k p f = StepDef k (renderP p) (usesOf p) $ \body ->
+mkStep k p f = mkSkippableStep k p (\a w -> either StepFailed StepOk <$> f a w)
+
+-- The step whose law has a PRECONDITION: it says so in its own type, so
+-- "which steps can skip" is answerable by reading their definitions
+-- rather than by grepping for a magic string in an error message.
+mkSkippableStep :: Keyword -> StepP a -> (a -> World -> IO StepOutcome) -> StepDef
+mkSkippableStep k p f = StepDef k (renderP p) (usesOf p) $ \body ->
   case matchP p body of
     Right a -> Matched (f a)
     Left e

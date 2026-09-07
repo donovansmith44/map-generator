@@ -7,11 +7,12 @@ Feature: resources — geometry by content address
     | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
     | style | any of: canaan, parchment, slate |
 
-  Scenario: the same id fetched twice is byte-identical
-    When I render pieces fills, borders at year -1405 in style canaan as scene
+  @property
+  Scenario: the same geometry fetched twice is exactly the same bytes
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene
     Then fetching scene's first resource twice yields identical bytes
 
-  @target
-  Scenario: a batch equals its singles
-    When I render pieces fills, borders at year -1405 in style canaan as scene
+  @target @property
+  Scenario: fetching geometry in a batch is the same as fetching it one at a time
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene
     Then fetching scene's first two resources as a batch equals fetching them singly

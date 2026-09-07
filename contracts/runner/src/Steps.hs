@@ -29,7 +29,6 @@ sceneUrl base (PieceSet ps) (Year y) (StyleName st) =
        <> (if Ground `member` ps then "&relief=1" else "")
   where
     flag p name = if p `member` ps then "" else "&" <> name <> "=0"
-    tshow = T.pack . show
 
 getUrl :: Text -> World -> IO (Either Text World)
 getUrl url w = do
@@ -99,9 +98,39 @@ firstDiff = go "$"
     -- rest of the list (standard lazy foldr-based `any`/`asum` shape).
     firstJust :: [Maybe Text] -> Maybe Text
     firstJust = foldr (\x acc -> case x of Just _ -> x; Nothing -> acc) Nothing
-    tshow = T.pack . show
-    bounded v = let s = T.pack (show v)
-                in if T.length s > 120 then T.take 120 s <> "..." else s
+
+tshow :: Show a => a -> Text
+tshow = T.pack . show
+
+-- A JSON value in an error message, truncated so a 2.4 MB manifest
+-- cannot turn one failure line into the whole response body. Shared by
+-- `firstDiff` and by the empty-list step (which quotes the body it found
+-- instead of [] ) rather than defined twice.
+bounded :: Value -> Text
+bounded v = let s = tshow v
+            in if T.length s > 120 then T.take 120 s <> "..." else s
+
+-- What two resource-id sets disagree about, in both directions -- the
+-- diagnosis a bare "not equal" withholds. Both directions matter and
+-- mean different things: ids present in the composed side but not the
+-- whole are things that appeared from nowhere, ids present in the whole
+-- but not the composed side are things the parts failed to account for.
+describeSetDiff :: Set Text -> Set Text -> Text
+describeSetDiff got want
+  | Set.null extra && Set.null missing = "the two sets are equal"
+  | otherwise = T.intercalate "; " $
+      [ tshow (Set.size extra) <> " id(s) present only in the composed side: "
+        <> listIds extra | not (Set.null extra) ]
+      ++
+      [ tshow (Set.size missing) <> " id(s) present only in the whole: "
+        <> listIds missing | not (Set.null missing) ]
+  where
+    extra   = Set.difference got want
+    missing = Set.difference want got
+    -- bounded the same way `bounded` bounds a body: five ids is enough
+    -- to recognize the pattern, and a scene can carry thousands.
+    listIds s = T.intercalate ", " (take 5 (Set.toList s))
+                <> (if Set.size s > 5 then ", ..." else "")
 
 blessOrCompare :: Text -> World -> IO (Either Text World)
 blessOrCompare fname w = case Map.lookup "_last" (bound w) of
@@ -236,6 +265,20 @@ allSteps =
             Right other -> Left ("field " <> k <> " = " <> T.pack (show other)
                                  <> ", wanted " <> expct)
             Left e -> Left e
+    -- The sweep: "when no time passes, nothing changes" is quantified
+    -- over every year, so it can no longer be pinned against a blessed
+    -- fixture (a whole-body fixture cannot be blessed against a
+    -- generated year). WHOLE-BODY equality against the literal empty
+    -- list is the honest replacement -- not "the response has no
+    -- elements", not "some field is empty", but: the entire body is [].
+    -- That is the owner's whole-body law applied to the one body small
+    -- enough to write out in full.
+  , mkStep Then (lit "the response is the empty list") $ \() w ->
+      pure $ case Map.lookup "_last" (bound w) of
+        Nothing -> Left "no response"
+        Just (_, v)
+          | v == Array V.empty -> Right w
+          | otherwise -> Left ("the whole response body is not [] -- it is " <> bounded v)
     -- scene steps (piece vocabulary on the wire)
   , mkStep When (lit "I render pieces "
                  *> ((,,,) <$> capUntil @PieceSet " at year "
@@ -273,7 +316,7 @@ allSteps =
   , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s resources are a subset of "
                                 <*> capUntil @BindName "'s resources")) $
       \(BindName a, BindName b) w ->
-        pure $ case (resourceIds =<< scene a w, resourceIds =<< scene b w) of
+        pure $ case (resourceIdsIn =<< scene a w, resourceIdsIn =<< scene b w) of
           (Right ia, Right ib)
             | all (`elem` ib) ia -> Right w
             | otherwise -> Left (a <> " has resources absent from " <> b)
@@ -339,6 +382,67 @@ allSteps =
               rb <- resourceSet b w'
               if both == Set.union ra rb then Right w'
               else Left "union scene is not the union of its parts' resources"
+    -- The sweep: the monoid's IDENTITY law ("an empty map stacked onto
+    -- any map changes nothing"), stated in v0.1's terms. "Combining"
+    -- keeps exactly the meaning the composition step above gives it --
+    -- the union of two scenes' resource sets (owner-ratified design
+    -- decision) -- so `combining some and empty equals some` asks
+    -- whether resources(some) ∪ resources(empty) is resources(some).
+    -- Purely local: all three operands are already-bound scenes, so
+    -- unlike the composition step this one renders nothing of its own.
+    --
+    -- Listed AFTER the "equals rendering {pieces} plus {pieces}"
+    -- overload it overlaps with on the "combining " literal: specific
+    -- before generic, for error quality (not load-bearing under R23 --
+    -- this definition's capRest @BindName cannot parse "rendering fills
+    -- plus ground", so it only ever ClaimErrors on that line while the
+    -- overload above genuinely Matches).
+  , mkStep Then (lit "combining " *> ((,,) <$> capUntil @BindName " and "
+                                           <*> capUntil @BindName " equals "
+                                           <*> capRest @BindName)) $
+      \(BindName a, BindName b, BindName c) w ->
+        pure $ do
+          ra <- resourceSet a w
+          rb <- resourceSet b w
+          rc <- resourceSet c w
+          let combined = Set.union ra rb
+          if combined == rc then Right w
+          else Left ("combining " <> a <> " and " <> b <> " is not " <> c
+                     <> ": " <> describeSetDiff combined rc)
+    -- The sweep (@target): the singleton fold -- draw each piece of the
+    -- set ALONE, stack the results, and you must get the whole scene
+    -- back. Every single render happens at the SAME year and style the
+    -- whole was rendered at (World.lastRender, set by the binding render
+    -- step above) -- the same discipline the composition step already
+    -- keeps, and for the same reason: a hardcoded year or style would be
+    -- a tuned constant, and would silently compare two different maps.
+    --
+    -- The empty set SKIPS: a fold over no pieces demonstrates nothing
+    -- about whether pieces compose (its union is trivially empty, and
+    -- an empty scene's resources would have to be empty too for the
+    -- comparison to mean anything). Vacuously passing there would be a
+    -- law satisfied by its own failure mode.
+  , mkSkippableStep Then (lit "rendering each piece of "
+                          *> ((,) <$> capUntil @PieceSet " alone and combining them equals "
+                                  <*> capRest @BindName)) $
+      \(PieceSet ps, BindName whole) w ->
+        case lastRender w of
+          Nothing -> pure (StepFailed
+            "no year/style recorded for this scene (render a piece set first)")
+          Just (y, st)
+            | Set.null ps -> pure (StepSkipped
+                "the piece set drawn for this iteration is empty: a fold over no pieces \
+                \demonstrates nothing about how pieces compose")
+            | otherwise -> do
+                parts <- mapM (renderPieceAlone w y st) (Set.toList ps)
+                pure $ either StepFailed StepOk $ do
+                  sets <- sequence parts
+                  expected <- resourceSet whole w
+                  let stacked = Set.unions sets
+                  if stacked == expected then Right w
+                  else Left ("stacking the " <> tshow (Set.size ps)
+                             <> " single-piece renders does not rebuild " <> whole
+                             <> ": " <> describeSetDiff stacked expected)
     -- Task 11 (@target): geometry is content-addressed (an id IS its
     -- bytes -- see resources.feature's own title); dress rides styles,
     -- not payload ids, so restyling one piece must leave every id set
@@ -371,34 +475,45 @@ allSteps =
                 else Right w
     -- Task 11: /api/resource returns a BINARY body -- transportRaw, not
     -- the JSON-decoding transport, is used here (see World.hs).
-  , mkStep Then (lit "fetching " *> (capUntil @BindName "'s first resource twice yields identical bytes")) $
+    --
+    -- The sweep: quantified over every piece set, this law meets draws
+    -- whose scene carries no resources at all. That is not a failure of
+    -- byte-identity and it is certainly not a demonstration of it --
+    -- it is a precondition this iteration cannot meet, so the iteration
+    -- SKIPS and is counted (World.StepOutcome / Precondition).
+  , mkSkippableStep Then (lit "fetching " *> (capUntil @BindName "'s first resource twice yields identical bytes")) $
       \(BindName a) w ->
         case firstResourceId a w of
-          Left e -> pure (Left e)
-          Right rid -> do
+          Broken e -> pure (StepFailed e)
+          Unmet why -> pure (StepSkipped why)
+          Met rid -> do
             r1 <- transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)
             r2 <- transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)
             pure $ case (r1, r2) of
-              (Right b1, Right b2) | b1 == b2 -> Right w
-              (Right _, Right _) -> Left ("id " <> rid <> " served two different payloads")
-              (Left e, _) -> Left e
-              (_, Left e) -> Left e
+              (Right b1, Right b2) | b1 == b2 -> StepOk w
+              (Right _, Right _) -> StepFailed ("id " <> rid <> " served two different payloads")
+              (Left e, _) -> StepFailed e
+              (_, Left e) -> StepFailed e
     -- Task 11 (@target): a batch is exactly its singles, byte for byte.
-  , mkStep Then (lit "fetching " *> (capUntil @BindName "'s first two resources as a batch equals fetching them singly")) $
+    -- Same precondition story as above, one resource further along: a
+    -- scene with fewer than two resources cannot exercise a law about
+    -- batching two of them.
+  , mkSkippableStep Then (lit "fetching " *> (capUntil @BindName "'s first two resources as a batch equals fetching them singly")) $
       \(BindName a) w ->
         case twoResourceIds a w of
-          Left e -> pure (Left e)
-          Right (i1, i2) -> do
+          Broken e -> pure (StepFailed e)
+          Unmet why -> pure (StepSkipped why)
+          Met (i1, i2) -> do
             batch <- transportRaw w (baseUrl w <> "/api/resources?ids=" <> i1 <> "," <> i2)
             s1 <- transportRaw w (baseUrl w <> "/api/resource?id=" <> i1)
             s2 <- transportRaw w (baseUrl w <> "/api/resource?id=" <> i2)
             pure $ case (batch, s1, s2) of
               (Right bb, Right b1, Right b2)
-                | bb == b1 <> b2 -> Right w
-                | otherwise -> Left "batch bytes differ from concatenated singles"
-              (Left e, _, _) -> Left e
-              (_, Left e, _) -> Left e
-              (_, _, Left e) -> Left e
+                | bb == b1 <> b2 -> StepOk w
+                | otherwise -> StepFailed "batch bytes differ from concatenated singles"
+              (Left e, _, _) -> StepFailed e
+              (_, Left e, _) -> StepFailed e
+              (_, _, Left e) -> StepFailed e
     -- Task 12: the CDC step -- see `project`/`projections` above.
   , mkStep Then (lit "the consumed projection " *> ((,) <$> capUntil @ProjName " equals fixture "
                                                         <*> capRest @FixtureRef)) $
@@ -436,9 +551,6 @@ allSteps =
   ]
   where
     scene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))
-    resourceIds v = case field "resources" v of
-      Right (Array rs) -> traverse (field "id") (V.toList rs)
-      other -> Left ("no resources array: " <> T.pack (show (() <$ other)))
 
 -- ---------- Task 11: content-addressed resource ids ----------
 -- Every id in a bound scene's "resources" array, text order, extracted
@@ -447,32 +559,66 @@ allSteps =
 -- structural comparison) -- these three are used to build URLs
 -- (/api/resource?id=..., /api/resources?ids=...), which need the raw
 -- string.
-resourceIdsOf :: Text -> World -> Either Text [Text]
-resourceIdsOf n w = do
-  (_, v) <- maybe (Left ("unbound " <> n)) Right (Map.lookup n (bound w))
-  case field "resources" v of
-    Right (Array rs) -> traverse idOf (V.toList rs)
-    other -> Left ("no resources array: " <> T.pack (show (() <$ other)))
+-- The ids of a scene VALUE. Split out from `resourceIdsOf` (which looks
+-- one up by bound name) because the singleton-fold step renders scenes
+-- it never binds -- ten single-piece renders per iteration would
+-- otherwise need ten throwaway names in the world.
+resourceIdsIn :: Value -> Either Text [Text]
+resourceIdsIn v = case field "resources" v of
+  Right (Array rs) -> traverse idOf (V.toList rs)
+  other -> Left ("no resources array: " <> tshow (() <$ other))
   where
     idOf r = case field "id" r of
       Right (String s) -> Right s
-      Right other       -> Left ("resource id is not a string: " <> T.pack (show other))
+      Right other       -> Left ("resource id is not a string: " <> tshow other)
       Left e            -> Left e
+
+resourceIdsOf :: Text -> World -> Either Text [Text]
+resourceIdsOf n w = do
+  (_, v) <- maybe (Left ("unbound " <> n)) Right (Map.lookup n (bound w))
+  resourceIdsIn v
 
 resourceSet :: Text -> World -> Either Text (Set Text)
 resourceSet n w = Set.fromList <$> resourceIdsOf n w
 
-firstResourceId :: Text -> World -> Either Text Text
-firstResourceId n w = case resourceIdsOf n w of
-  Right (i : _) -> Right i
-  Right []      -> Left (n <> " has no resources")
-  Left e        -> Left e
+-- Render ONE piece on its own, at the year and style the whole scene was
+-- rendered at, and report just its resource-id set. Deliberately uses
+-- `transport` rather than `getUrl`: this render is an intermediate value
+-- in a fold, not an answer any later step should be able to see, so it
+-- must not overwrite the world's "_last" binding.
+renderPieceAlone :: World -> Year -> StyleName -> Piece -> IO (Either Text (Set Text))
+renderPieceAlone w y st p = do
+  r <- transport w (sceneUrl (baseUrl w) (PieceSet (Set.singleton p)) y st)
+  pure $ do
+    (_, v) <- r
+    Set.fromList <$> resourceIdsIn v
 
-twoResourceIds :: Text -> World -> Either Text (Text, Text)
+-- Task 11's two byte-identity laws need at least one / at least two
+-- resources to fetch. Under the sweep they are quantified over every
+-- piece set, and a perfectly legal draw can produce a scene carrying
+-- fewer resources than the law needs. That is a PRECONDITION MISS, not a
+-- failure -- and not a pass either. `Precondition` (World.hs) keeps it
+-- distinct from the two things that genuinely ARE failures: an unbound
+-- scene name, and a body with no resources array. Two specialized
+-- accessors rather than one `atLeast k`, so each caller matches a shape
+-- that is exactly what it needs and carries no unreachable "not enough
+-- after all" branch.
+firstResourceId :: Text -> World -> Precondition Text
+firstResourceId n w = case resourceIdsOf n w of
+  Left e        -> Broken e
+  Right (i : _) -> Met i
+  Right ids     -> Unmet (tooFew n (length ids) 1)
+
+twoResourceIds :: Text -> World -> Precondition (Text, Text)
 twoResourceIds n w = case resourceIdsOf n w of
-  Right (i1 : i2 : _) -> Right (i1, i2)
-  Right _             -> Left (n <> " has fewer than two resources")
-  Left e              -> Left e
+  Left e              -> Broken e
+  Right (i1 : i2 : _) -> Met (i1, i2)
+  Right ids           -> Unmet (tooFew n (length ids) 2)
+
+tooFew :: Text -> Int -> Int -> Text
+tooFew n have want =
+  n <> " carries " <> tshow have <> " resource(s) at this draw; this law needs at least "
+    <> tshow want
 
 -- free-text capture (field names, expected strings): Described universe.
 -- NOT used for URLs any more (see UrlPath below) — this capture can never

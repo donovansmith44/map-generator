@@ -5,6 +5,7 @@ Feature: changes — the narrative between two instants
     When I GET /api/changes?from=-1407&to=-1405
     Then the response equals fixture "changes-conquest"
 
-  Scenario: an empty span has no changes
-    When I GET /api/changes?from=-3000&to=-3000
-    Then the response equals fixture "changes-empty"
+  @property
+  Scenario: when no time passes, nothing changes
+    When I GET /api/changes?from=<someYear>&to=<someYear>
+    Then the response is the empty list
