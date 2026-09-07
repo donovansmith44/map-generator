@@ -47,7 +47,10 @@ contract-gates:
 	bash scripts/tests/semver-gate.test.sh
 
 # Everything, including the gates that need the live servers (8090 ours,
-# 8080 the atlas) and the browser. Never binds a port itself.
+# 8080 the atlas) and the browser. Never binds a port itself. The
+# map-api run is expected to exit 1 today: the composition identity law
+# (someSubset = empty at someYear = 54) is a known red, kept untagged
+# and unfixed by owner ruling until Task 12 -- see contracts/CHANGELOG.md.
 ci: contract-gates
 	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8090 ../map-api
 	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8080 ../atlas-edge

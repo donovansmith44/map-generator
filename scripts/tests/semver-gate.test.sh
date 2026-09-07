@@ -33,4 +33,8 @@ scenario "edit a feature WITH bump and changelog -> accept" 0 \
    printf '# Changelog\n\n## 0.2.0\n- changed a.feature\n' > contracts/CHANGELOG.md"
 scenario "ADD a new feature with no bump -> accept (additive)" 0 \
   "printf 'Feature: g\n  Scenario: s\n    When I GET /c\n' > contracts/map-api/b.feature"
+scenario "DELETE a fixture with no bump -> reject" 1 \
+  "git rm -q contracts/map-api/fixtures/a.json"
+scenario "RENAME a fixture out of its protected path with no bump -> reject" 1 \
+  "git mv contracts/map-api/fixtures/a.json contracts/map-api/a-moved-out.json"
 exit $fail

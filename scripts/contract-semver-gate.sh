@@ -5,12 +5,23 @@
 # both a VERSION move and a CHANGELOG entry. Deliberately dumb about
 # WHAT changed -- the version bump is the owner's declaration, and this
 # gate's whole job is to make sure the declaration happens.
+#
+# Renames get no pattern match at all: `git diff --name-only
+# --diff-filter=R` reports only the rename's DESTINATION path, so
+# matching the destination against the protected patterns would miss a
+# rename that moves a published file OUT of a protected namespace (a
+# fixture renamed out of fixtures/, a .feature renamed to any other
+# extension) -- a silent deletion of the old published path. A rename
+# under contracts/ is unconditionally breaking; inspecting the
+# destination is guessing at intent instead of checking it.
 set -u
 base="${1:-origin/master}"
 changed() { git diff --name-only --diff-filter="$1" "$base"..HEAD -- contracts/; }
 
-breaking="$( { changed M; changed D; changed R; } \
-  | grep -E '(\.feature$|/fixtures/)' || true )"
+md_breaking="$(changed M; changed D)"
+md_breaking="$(printf '%s\n' "$md_breaking" | grep -E '(\.feature$|/fixtures/)' || true)"
+renamed="$(changed R)"
+breaking="$(printf '%s\n%s\n' "$md_breaking" "$renamed" | grep -v '^$' || true)"
 [ -z "$breaking" ] && exit 0
 
 bumped=0

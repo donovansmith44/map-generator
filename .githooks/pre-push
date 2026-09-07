@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -e
+command -v make >/dev/null 2>&1 || { echo "pre-push: 'make' not found — install it (scoop install make) or run the gate commands from the Makefile directly"; exit 1; }
 echo "pre-push: contract gates"
 make contract-gates
-BASE_REF="${1:-origin/master}" bash scripts/contract-semver-gate.sh "${BASE_REF:-origin/master}"
+# No argument: git's pre-push protocol passes the REMOTE NAME as $1, never
+# a ref, so forwarding it here would be wrong even if it worked -- let the
+# script's own origin/master default be the single mechanism.
+bash scripts/contract-semver-gate.sh
