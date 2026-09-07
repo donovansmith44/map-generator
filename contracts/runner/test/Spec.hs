@@ -2333,7 +2333,10 @@ main = hspec $ do
         years   = Prop.holeRegistry Map.! "someYear"
         nested  = Prop.holeRegistry Map.! "someSubset"
         styles  = Prop.holeRegistry Map.! "someStyle"
-        iterations = [0 .. 49 :: Int]
+        -- 200, this file's convention for the correlation pins: the
+        -- shrink laws are the same KIND of claim as the draw laws and
+        -- are asserted over the same run length.
+        iterations = [0 .. 199 :: Int]
         -- One solo group's candidate renderings, in the shrinker's own
         -- order -- the order the greedy loop will try them in.
         soloCands g h rendered =
@@ -2349,6 +2352,17 @@ main = hspec $ do
       soloCands pieces "somePieces" "borders, ground, water"
         `shouldBe` ["borders, water", "borders, ground", "ground, water"]
       soloCands pieces "somePieces" "none" `shouldBe` []
+    it "the registry's hole names, WHOLE -- a literal list, so adding or \
+       \removing a hole is a visible edit to this test and never a silent \
+       \change to what the corpus is allowed to quantify over" $
+      -- This task added `somePiece` and not one existing test noticed:
+      -- the partition law checks that the registry AGREES with
+      -- holeGroups, which stays true however the two change together.
+      -- What the corpus may quantify over is a published surface; it
+      -- gets a whole-body pin like any other.
+      Map.keys Prop.holeRegistry `shouldBe`
+        [ "someA", "someB", "someOtherStyle", "somePiece", "somePieces"
+        , "someStyle", "someSubset", "someSuperset", "someYear" ]
     it "somePiece is registered as its own solo group and shrinks toward \
        \the earliest piece" $ do
       -- Registered here for Task 12's strengthened omission law; pinned
@@ -2357,19 +2371,25 @@ main = hspec $ do
       Prop.groupMembers piece `shouldBe` ["somePiece"]
       soloCands piece "somePiece" "fills" `shouldBe` ["ground", "water"]
       soloCands piece "somePiece" "ground" `shouldBe` []
-    it "every year candidate is a legal year of THIS calendar: never 0, \
-       \never outside the frame, never equal to its input, and either \
-       \-1405 or strictly nearer zero" $ do
+    it "every year candidate is a legal year of THIS calendar -- legality \
+       \asked of Capture.parseCap, the one place the frame is declared, \
+       \rather than restated here -- and is either -1405 or strictly \
+       \nearer zero" $ do
       -- Year's shrink is the one that moves toward a landmark (-1405)
       -- rather than only toward zero, so "strictly smaller" is stated as
       -- the disjunction the shrinker actually guarantees -- not a weaker
       -- "is different" that a looping shrinker would satisfy too.
-      let bad = [ (y, v)
+      --
+      -- Legality is NOT re-listed ("v /= 0, v >= -4004, v <= 100" was
+      -- the frame's fifth hand-written copy). The candidate is handed to
+      -- the very parser the corpus will hand it to, and an unreadable
+      -- candidate is a violation.
+      let bad = [ (y, c)
                 | y <- [-4004, -1405, -703, -100, -1, 1, 54, 100 :: Int]
-                , v <- map (read . T.unpack)
-                         (soloCands years "someYear" (T.pack (show y))) :: [Int]
-                , not (v /= 0 && v >= -4004 && v <= 100 && v /= y
-                       && (v == -1405 || abs v < abs y)) ]
+                , c <- soloCands years "someYear" (T.pack (show y))
+                , case parseCap c :: Either T.Text Year of
+                    Left _         -> True
+                    Right (Year v) -> not (v /= y && (v == -1405 || abs v < abs y)) ]
       bad `shouldBe` []
       -- and it is not the empty shrinker dressed up as a lawful one
       soloCands years "someYear" "54" `shouldSatisfy` (not . null)
@@ -2390,9 +2410,21 @@ main = hspec $ do
       -- until the FUEL ran out and reported wherever it stopped as
       -- "minimal". A shrinker that needs the fuel bound to terminate is
       -- the mis-written shrinker the fuel bound exists to survive.
+      --
+      -- The frame is not restated here either: the domain comes from
+      -- Year's OWN declared universe, and membership from its own
+      -- parseCap. If the calendar's bounds ever move, this sweep moves
+      -- with them.
       let ranked y = Prop.yearRank (Year y)
+          frame = case universe (Proxy @Year) of
+            Ranged lo hi _ ->
+              [ y | y <- [read (T.unpack lo) .. read (T.unpack hi)] :: [Int]
+                  , isRight (parseCap (T.pack (show y)) :: Either T.Text Year) ]
+            _ -> []
+      -- the sweep is a sweep, not an empty list dressed as one
+      length frame `shouldBe` 4104
       [ (y, y')
-        | y <- [-4004 .. 100 :: Int], y /= 0
+        | y <- frame
         , y' <- map (read . T.unpack) (soloCands years "someYear" (T.pack (show y)))
         , ranked y' >= ranked y ] `shouldBe` []
     it "every shrink candidate of every group RANKS strictly below the \
@@ -2404,15 +2436,25 @@ main = hspec $ do
       , let drawn = Prop.drawGroup g i
       , cand <- Prop.groupShrink g drawn
       , Prop.groupRank g cand >= Prop.groupRank g drawn ] `shouldBe` []
-    prop "the nested pair's order is well-founded over the WHOLE \
-         \generator, not only over the iterations the runner happens to \
-         \draw" $
+    prop "the nested pair's order is well-founded AND law-preserving over \
+         \the WHOLE generator, not only over the iterations the runner \
+         \happens to draw -- which closes law-preservation by induction: \
+         \every nested pair's candidates are nested pairs" $
       forAll Prop.genNestedPieces $ \(sub, super) ->
         let env = Map.fromList [ ("someSubset", renderCap sub)
                                , ("someSuperset", renderCap super) ]
-        in [ Prop.groupRank nested c
-           | c <- Prop.groupShrink nested env
-           , Prop.groupRank nested c >= Prop.groupRank nested env ] == []
+        in [ c | c <- Prop.groupShrink nested env
+               , Prop.groupRank nested c >= Prop.groupRank nested env
+                 || not (Prop.groupLaw nested c) ] == []
+    it "every candidate BINDS exactly the members its group DECLARES -- \
+       \the mirror of the draw-side pin. An undeclared key would slip a \
+       \hole into the environment the scenario never mentioned, and \
+       \groupRank could not notice: it reads only declared members" $
+      [ (Prop.groupName g, i, Map.keys cand)
+      | g <- Prop.holeGroups
+      , i <- iterations
+      , cand <- Prop.groupShrink g (Prop.drawGroup g i)
+      , Map.keys cand /= sort (Prop.groupMembers g) ] `shouldBe` []
     it "every shrink candidate of every group still satisfies that \
        \group's own correlation law -- a candidate the DRAW could never \
        \have produced is not a counterexample, it is a bug in the \
@@ -2462,6 +2504,96 @@ main = hspec $ do
        \is exactly the collision dress-locality exists to rule out" $
       [ Prop.groupShrink styles (Prop.drawGroup styles i) | i <- iterations ]
         `shouldBe` map (const []) iterations
+    -- ---- the loop's three refusals, given teeth ----
+    --
+    -- Every group in the real registry is well-founded, binds exactly
+    -- what it declares, and keeps its own law -- which is most of the
+    -- point of this task, and also the reason NOTHING in the real corpus
+    -- can reach the refusals in `shrinkToMinimal`'s `candidates`.
+    -- Deleting all three leaves every other example in this file green,
+    -- so "the loop is safe against a bad shrinker" would be a claim
+    -- satisfiable by its own absence (MEMORY:
+    -- verify-distinct-not-nonnull). The loop therefore takes its
+    -- registry as a parameter, and these three drive the REAL loop with
+    -- a group built to break one guard each.
+    let alwaysRed = T.unlines
+          [ "Feature: t"
+          , "  @property"
+          , "  Scenario: s"
+          , "    When I GET /api/echo?y=<someYear>"
+          , "    Then the response field neverThere equals nope" ]
+        yearIn env = Map.findWithDefault "" "someYear" env
+        misbehaving shr rk lw = Prop.HoleGroup
+          { Prop.groupName    = "misbehaving"
+          , Prop.groupMembers = ["someYear"]
+          , Prop.groupDraw    = pure (Map.singleton "someYear" "-1405")
+          , Prop.groupShrink  = shr
+          , Prop.groupRank    = rk
+          , Prop.groupLaw     = lw }
+        -- The real loop, over a one-group registry, against a transport
+        -- that always answers and a law that always fails -- so every
+        -- candidate the loop is willing to take, it takes. Returns the
+        -- minimal env and how many transport calls it cost, because the
+        -- COST is half the claim: a loop that reached the right answer
+        -- by exhausting its fuel has not been stopped by the guard.
+        runLoopWith g start = do
+          calls <- newIORef (0 :: Int)
+          let fake _ = modifyIORef calls (+ 1) >> pure (Right ("{}", A.object []))
+          case parseFeature "t.feature" alwaysRed of
+            Left e -> expectationFailure (T.unpack e) >> pure (Map.empty, 0)
+            Right f -> case ftScenarios f of
+              (sc : _) -> do
+                (minEnv, _) <- Prop.shrinkToMinimalWith
+                                 (Map.singleton "someYear" g)
+                                 allSteps (mkWorld "http://x" fake "") sc start
+                (,) minEnv <$> readIORef calls
+              [] -> expectationFailure "expected a scenario" >> pure (Map.empty, 0)
+    it "a ping-ponging shrinker -- the brief's own bug class, rebuilt -- \
+       \cannot make the greedy loop spin: the candidate that climbs back \
+       \is REFUSED, so the loop stops at a genuine local minimum after \
+       \one step instead of burning its fuel" $ do
+      (minEnv, calls) <- runLoopWith
+        (misbehaving
+           (\env -> case yearIn env of
+              "-1405" -> [Map.singleton "someYear" "-1400"]
+              "-1400" -> [Map.singleton "someYear" "-1405"]
+              _       -> [])
+           (\env -> case yearIn env of
+              "-1405" -> 1405
+              "-1400" -> 1400
+              _       -> 0)
+           (const True))
+        (Map.singleton "someYear" "-1405")
+      minEnv `shouldBe` Map.singleton "someYear" "-1400"
+      -- The exact cost: one run of the starting environment, one of the
+      -- single candidate that genuinely IS smaller, and nothing else.
+      -- Without the rank filter this is 1001 runs AND lands on -1405.
+      calls `shouldBe` 2
+    it "an UNDECLARED key in a candidate is dropped, not merged: a group \
+       \may only re-bind the members it declares, and the rank filter \
+       \cannot catch this on its own" $ do
+      (minEnv, _) <- runLoopWith
+        (misbehaving
+           (\env -> [ Map.fromList [ ("someYear", "-1")
+                                   , ("someSuperset", "journeys") ]
+                    | yearIn env /= "-1" ])
+           (\env -> if yearIn env == "-1" then 0 else 1)
+           (const True))
+        (Map.singleton "someYear" "-1405")
+      -- The year really did shrink -- so this is not passing because
+      -- the candidate was rejected wholesale -- and the smuggled hole
+      -- is simply not there.
+      minEnv `shouldBe` Map.singleton "someYear" "-1"
+    it "a candidate that breaks its group's OWN law is refused, even \
+       \though it is strictly smaller -- the same predicate the draw \
+       \side is held to, applied where a candidate becomes a binding" $ do
+      (minEnv, _) <- runLoopWith
+        (misbehaving
+           (const [Map.singleton "someYear" "-1"])
+           (\env -> if yearIn env == "-1" then 0 else 1)
+           (\env -> yearIn env /= "-1"))
+        (Map.singleton "someYear" "-1405")
+      minEnv `shouldBe` Map.singleton "someYear" "-1405"
     it "a property failing on ONE piece shrinks to that one piece" $ do
       -- A fake transport that fails only when `journeys` is actually ON
       -- in the rendered URL. NOTE (and the brief's own warning): today's
@@ -2569,6 +2701,11 @@ main = hspec $ do
             case lawVerdict r of
               Failed e -> do
                 e `shouldSatisfy` T.isInfixOf "\n    with someOtherStyle = "
+                -- holes are separated by "; ", not ", ": a piece set's
+                -- own rendering is comma-separated, so a comma-joined
+                -- report makes a reader count commas to find where one
+                -- binding ends.
+                e `shouldSatisfy` T.isInfixOf "; someStyle = "
                 e `shouldSatisfy` (not . T.isInfixOf "(shrunk from")
               other -> expectationFailure ("expected a failure, got " <> show other)
           [] -> expectationFailure "expected at least one scenario"
