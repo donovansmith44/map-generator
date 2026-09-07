@@ -2313,6 +2313,21 @@ git push
 
 ---
 
+## After This Plan: STOP AND PLAN AGAIN
+
+This plan implements **Stage 0 only**. Stages 1–4 of the spec (entity
+registry → ledger → one arrangement → route retirement) are deliberately
+NOT planned yet: the owner's intent is that the rest of the spec gets its
+own planning pass AFTER this implementation is done, informed by what the
+diagnosis actually finds. When Task 15 is complete and reported, do not
+continue into Stage 1 work — return to the writing-plans skill with the
+spec (`docs/superpowers/specs/2026-09-06-map-api-contract-design.md`),
+the diagnosis document, and the owner in the loop. The diagnosis may
+reorder or reshape the stages; the plan for them must be written against
+that evidence, not against tonight's guesses.
+
+---
+
 ## Self-Review (performed at write time)
 
 - **Spec coverage:** runner with three extensions (Tasks 1–9), map-api v0.1 features with laws-as-scenarios (10–11), CDC suite (12), `/api/contract` + `/api/census` (13), diagnosis (15), pre-release VERSION 0.1.0 (Task 1), golden-gate closure (15.3). Vocabulary drift (8) and property fuzzing (9) both land. ✓
