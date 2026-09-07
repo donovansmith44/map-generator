@@ -15,9 +15,11 @@ import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromJust, listToMaybe)
 import qualified Data.Aeson as A
+import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 
 main :: IO ()
 main = hspec $ do
@@ -139,15 +141,27 @@ main = hspec $ do
         Right _ -> expectationFailure "matched garbage"
 
   describe "world and steps" $ do
-    let fakeResp = "{\"scene\":\"abc\",\"labels\":[]}"
-        fake url = pure (Right (fakeResp, fromJust (A.decodeStrict fakeResp)))
-          where _ = url
+    let -- The body echoes the URL it was fetched from (rather than a fixed
+        -- string), so any two renders of DIFFERENT URLs produce genuinely
+        -- different bound values — needed so the equality step's negative
+        -- case (below) actually discriminates instead of trivially passing
+        -- against a stub that always returns success.
+        fake url = pure (Right (raw, v))
+          where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
+                v   = fromJust (A.decodeStrict raw)
         w0 = World "http://x" fake "test/fixtures" mempty False
-    it "sceneUrl maps pieces onto today's toggles" $ do
+        sceneVal :: [T.Text] -> A.Value
+        sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
+        labelsVal :: [T.Text] -> A.Value
+        labelsVal ls = A.object ["labels" A..= ls]
+    it "sceneUrl maps pieces onto today's toggles" $
+      -- Equality against the whole literal URL, not `isInfixOf` on pieces of
+      -- it: an isInfixOf-per-flag check would still pass if sceneUrl
+      -- duplicated a flag, injected an extra parameter, or reordered the
+      -- query string, since none of those change which substrings are
+      -- present.
       sceneUrl "http://x" (PieceSet (Set.fromList [Fills, Borders])) (Year (-1405)) (StyleName "canaan")
-        `shouldSatisfy` (\u -> all (`T.isInfixOf` u)
-             ["year=-1405", "labels=0", "topo=0", "journeys=0", "style=canaan"]
-             && not ("relief=1" `T.isInfixOf` u))
+        `shouldBe` "http://x/api/scene?year=-1405&zoom=90.0000&style=canaan&labels=0&topo=0&journeys=0"
     it "the render step binds a named response" $ do
       let run = fromJust $ firstMatch When
             "I render pieces fills at year -1405 in style canaan as sceneA"
@@ -163,6 +177,68 @@ main = hspec $ do
       Right w2 <- run2 w1
       r <- run3 w2
       r `shouldSatisfy` isRight
+    it "the equality step reports Left when the bound scenes come from different URLs" $ do
+      -- The negative case the positive test alone can't prove: without it,
+      -- a stub "always Right" equality step would also pass the test above.
+      let run1 = fromJust $ firstMatch When
+            "I render pieces fills at year -1405 in style canaan as sceneA"
+          run2 = fromJust $ firstMatch When
+            "I render pieces water at year -1300 in style slate as sceneB"
+          run3 = fromJust $ firstMatch Then "sceneA equals sceneB"
+      Right w1 <- run1 w0
+      Right w2 <- run2 w1
+      r <- run3 w2
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "differ"
+        Right _ -> expectationFailure "expected scenes rendered from different URLs to differ"
+    it "the GET step fetches and binds the response under _last" $ do
+      let run = fromJust $ firstMatch When "I GET /foo"
+      Right w1 <- run w0
+      Map.member "_last" (bound w1) `shouldBe` True
+    it "the response field step passes when the field matches" $ do
+      let getRun = fromJust $ firstMatch When "I GET /foo"
+          fieldRun = fromJust $ firstMatch Then "the response field scene equals http://x/foo"
+      Right w1 <- getRun w0
+      r <- fieldRun w1
+      r `shouldSatisfy` isRight
+    it "the response field step reports Left naming both the actual and wanted values on a mismatch" $ do
+      let getRun = fromJust $ firstMatch When "I GET /foo"
+          fieldRun = fromJust $ firstMatch Then "the response field scene equals http://wrong"
+      Right w1 <- getRun w0
+      r <- fieldRun w1
+      case r of
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "wanted"
+          e `shouldSatisfy` T.isInfixOf "http://wrong"
+        Right _ -> expectationFailure "expected a field mismatch to fail"
+    it "the subset step passes when one scene's resources are a genuine subset of the other's" $ do
+      let wSub = w0 { bound = Map.fromList
+            [ ("sceneA", (BS.empty, sceneVal ["r1", "r2"]))
+            , ("sceneB", (BS.empty, sceneVal ["r1", "r2", "r3"])) ] }
+          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB"
+      r <- run wSub
+      r `shouldSatisfy` isRight
+    it "the subset step reports Left when a resource is genuinely absent from the other scene" $ do
+      let wSub = w0 { bound = Map.fromList
+            [ ("sceneA", (BS.empty, sceneVal ["r1", "r9"]))
+            , ("sceneB", (BS.empty, sceneVal ["r1", "r2", "r3"])) ] }
+          run = fromJust $ firstMatch Then "sceneA's resources are a subset of sceneB"
+      r <- run wSub
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "absent from"
+        Right _ -> expectationFailure "expected r9 (absent from sceneB) to fail the subset check"
+    it "the labels-are-empty step passes when the bound scene's labels array is empty" $ do
+      let wLab = w0 { bound = Map.fromList [ ("sceneA", (BS.empty, labelsVal [])) ] }
+          run = fromJust $ firstMatch Then "sceneA's labels are empty"
+      r <- run wLab
+      r `shouldSatisfy` isRight
+    it "the labels-are-empty step reports Left when labels are present" $ do
+      let wLab = w0 { bound = Map.fromList [ ("sceneA", (BS.empty, labelsVal ["x"])) ] }
+          run = fromJust $ firstMatch Then "sceneA's labels are empty"
+      r <- run wLab
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "has labels"
+        Right _ -> expectationFailure "expected non-empty labels to fail"
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

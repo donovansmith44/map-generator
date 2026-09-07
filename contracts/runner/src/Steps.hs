@@ -64,6 +64,28 @@ blessOrCompare fname w = case Map.lookup "_last" (bound w) of
             | expected == v -> Right w
             | otherwise -> Left ("response differs from fixture " <> fname)
 
+-- Ordering rule (R5, controller ruling): SPECIFIC step definitions must be
+-- listed before GENERIC ones that could otherwise shadow them, wherever two
+-- definitions can both classify the same body as "this is my step, run me"
+-- (not merely "not this step") for the same input text. R4 makes a
+-- terminator-not-found a fall-through, but it does NOT protect against a
+-- capture failing to PARSE at all — that's a reportable error under R4/R5,
+-- not a fall-through, and it makes two *different* StepDefs able to each
+-- claim the same body when they share a literal substring. Concrete case a
+-- reviewer found live in this list: "the response field style equals
+-- canaan" is a legal body for BOTH the "the response field {text} equals
+-- {text}" step above AND the `lit ""`-prefixed "{name} equals {name}" step
+-- below (its `capUntil @BindName " equals "` would try to parse "the
+-- response field style" as a BindName, fail on the spaces, and — because
+-- that's a capture-parse failure rather than a missing literal — report an
+-- error rather than falling through). Listing the "the response field ..."
+-- step first means firstMatch (or its non-test callers) sees it before the
+-- ambiguous generic step. This list-order workaround is NOT a structural
+-- fix — it is not verified anywhere that a later append (Tasks 10-12) can't
+-- reintroduce the same shadowing by inserting a step in the wrong spot.
+-- Task 7's totality check is where the actual guarantee lives: it detects a
+-- step body matching two or more definitions and fails, naming both. Do not
+-- try to solve the ambiguity here.
 allSteps :: [StepDef]
 allSteps =
   [ -- generic wire steps
@@ -81,11 +103,6 @@ allSteps =
             Right other -> Left ("field " <> k <> " = " <> T.pack (show other)
                                  <> ", wanted " <> expct)
             Left e -> Left e
-  , mkStep Then (lit "the response is a JSON array") $ \() w ->
-      pure $ case Map.lookup "_last" (bound w) of
-        Just (_, Array _) -> Right w
-        Just _  -> Left "response is not an array"
-        Nothing -> Left "no response"
     -- scene steps (piece vocabulary on the wire)
   , mkStep When (lit "I render pieces "
                  *> ((,,,) <$> capUntil @PieceSet " at year "
@@ -116,16 +133,20 @@ allSteps =
             | otherwise -> Left (a <> " has resources absent from " <> b)
           (Left e, _) -> Left e
           (_, Left e) -> Left e
-  , mkStep Then (lit "" *> (capUntil @BindName "'s labels are empty" <* pure ())) $
+    -- The plan explicitly sanctions this definition being unused by any
+    -- current feature file (like the subset step above) — do not treat its
+    -- absence from allSteps' test coverage or from any .feature as a sign
+    -- it should be deleted; that's a deliberate, blessed exception, unlike
+    -- the now-removed "the response is a JSON array" step.
+  , mkStep Then (lit "" *> capUntil @BindName "'s labels are empty") $
       \(BindName a) w ->
-        pure $ case field "labels" =<< scene' a w of
+        pure $ case field "labels" =<< scene a w of
           Right (Array v) | V.null v -> Right w
           Right _ -> Left (a <> " has labels")
           Left e -> Left e
   ]
   where
     scene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))
-    scene' = scene
     resourceIds v = case field "resources" v of
       Right (Array rs) -> traverse (field "id") (V.toList rs)
       other -> Left ("no resources array: " <> T.pack (show (() <$ other)))
