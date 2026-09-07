@@ -32,7 +32,8 @@ library
                       http-types,
                       QuickCheck >=2.14,
                       directory,
-                      filepath
+                      filepath,
+                      vector
     default-language: GHC2021
 
 executable contract-runner

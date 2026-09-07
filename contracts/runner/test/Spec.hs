@@ -9,8 +9,13 @@ import Gherkin.Parse
 import Gherkin.Render
 import Capture
 import Pattern
+import World
+import Steps
 import Data.Proxy (Proxy (..))
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
+import Data.Maybe (fromJust, listToMaybe)
+import qualified Data.Aeson as A
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 
@@ -132,6 +137,36 @@ main = hspec $ do
       case matchP p "I render pieces water, topografy at year -1405" of
         Left e  -> e `shouldSatisfy` (not . T.isPrefixOf "expected literal")
         Right _ -> expectationFailure "matched garbage"
+
+  describe "world and steps" $ do
+    let fakeResp = "{\"scene\":\"abc\",\"labels\":[]}"
+        fake url = pure (Right (fakeResp, fromJust (A.decodeStrict fakeResp)))
+          where _ = url
+        w0 = World "http://x" fake "test/fixtures" mempty False
+    it "sceneUrl maps pieces onto today's toggles" $ do
+      sceneUrl "http://x" (PieceSet (Set.fromList [Fills, Borders])) (Year (-1405)) (StyleName "canaan")
+        `shouldSatisfy` (\u -> all (`T.isInfixOf` u)
+             ["year=-1405", "labels=0", "topo=0", "journeys=0", "style=canaan"]
+             && not ("relief=1" `T.isInfixOf` u))
+    it "the render step binds a named response" $ do
+      let run = fromJust $ firstMatch When
+            "I render pieces fills at year -1405 in style canaan as sceneA"
+      Right w1 <- run w0
+      Map.member "sceneA" (bound w1) `shouldBe` True
+    it "the equality step compares two bound scenes as JSON values" $ do
+      let run1 = fromJust $ firstMatch When
+            "I render pieces fills at year -1405 in style canaan as sceneA"
+          run2 = fromJust $ firstMatch When
+            "I render pieces fills at year -1405 in style canaan as sceneB"
+          run3 = fromJust $ firstMatch Then "sceneA equals sceneB"
+      Right w1 <- run1 w0
+      Right w2 <- run2 w1
+      r <- run3 w2
+      r `shouldSatisfy` isRight
+
+firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
+firstMatch k t = listToMaybe
+  [ f | StepDef k' _ _ m <- allSteps, k' == k, Just f <- [m t] ]
 
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'
