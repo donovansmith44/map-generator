@@ -756,6 +756,22 @@ fn tp(year: i32) -> TimePoint {
     TimePoint::year_only(Year::new(year).expect("no year zero in survey data"))
 }
 
+/// Whether the surveyed shape is POSSESSED ground or a claim upon
+/// ground. Holding is a statement about administration, not about
+/// how well the shape is known — a governed district may be drawn as
+/// a disclosed hull (the tetrarchies) and still fill as territory,
+/// while a perfectly text-traced border may bound only a promise
+/// (NUM 34). Ground carries its justification IN WRITING, the way
+/// endurance does; there is no silent default.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Holds {
+    /// possessed, administered ground: fills as territory, because —
+    Ground(&'static str),
+    /// a promise, vision, homeland hull, or reference tracing:
+    /// boundary and name, never territory fill
+    Claim,
+}
+
 /// WHEN a survey's world stands. Endurance is a claim like any other:
 /// it must be written down, and the canon's frame-edge law refuses
 /// any feature that reaches the end of time without its reason.
@@ -794,6 +810,8 @@ struct SurveySpec {
     /// carries its reason in writing, which the frame-edge validator
     /// demands of every survivor.
     stands: Stands,
+    /// possessed ground (with written justification) or a claim
+    holds: Holds,
     grade: Grade,
     circuit: &'static [Waypoint],
 }
@@ -827,7 +845,7 @@ const SURVEYS: &[SurveySpec] = &[
         year: -2200,
         // The tracing is the PRE-CONQUEST reference world; from the
         // conquest the allotment carries the plate's story.
-        stands: Stands::Until(-1406),
+        stands: Stands::Until(-1406), holds: Holds::Claim,
         grade: Grade::CityDerived,
         circuit: PLATE_CANAAN_CONTOUR,
     },
@@ -841,7 +859,7 @@ const SURVEYS: &[SurveySpec] = &[
         year: -1452,
         // The promise-as-map yields at the exile: the loss of the
         // land ends the survey's world, not the covenant.
-        stands: Stands::Until(-586),
+        stands: Stands::Until(-586), holds: Holds::Claim,
         grade: Grade::BorderText,
         circuit: NUM_34_CIRCUIT,
     },
@@ -859,17 +877,17 @@ const NATIONS_UNTIL: i32 = -1406;
 /// machinery, same stand-in review flag.
 const SURVEYS_MORE: &[SurveySpec] = &[
     // ---- Japheth (GEN 10:2-5) ----
-    SurveySpec { tag: "N-GOMER", label: "Gomer (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 3, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_GOMER },
-    SurveySpec { tag: "N-MAGOG", label: "Magog (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_MAGOG },
-    SurveySpec { tag: "N-MADAI", label: "Madai (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_MADAI },
-    SurveySpec { tag: "N-JAVAN", label: "Javan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 5, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_JAVAN },
-    SurveySpec { tag: "N-TUBAL", label: "Tubal (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_TUBAL },
-    SurveySpec { tag: "N-MESHECH", label: "Meshech (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_MESHECH },
-    SurveySpec { tag: "N-TIRAS", label: "Tiras (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_TIRAS },
+    SurveySpec { tag: "N-GOMER", label: "Gomer (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 3, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_GOMER },
+    SurveySpec { tag: "N-MAGOG", label: "Magog (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_MAGOG },
+    SurveySpec { tag: "N-MADAI", label: "Madai (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_MADAI },
+    SurveySpec { tag: "N-JAVAN", label: "Javan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 5, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_JAVAN },
+    SurveySpec { tag: "N-TUBAL", label: "Tubal (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_TUBAL },
+    SurveySpec { tag: "N-MESHECH", label: "Meshech (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_MESHECH },
+    SurveySpec { tag: "N-TIRAS", label: "Tiras (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 2, verse_to: 2, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_TIRAS },
     // ---- Ham (GEN 10:6-20) ----
-    SurveySpec { tag: "N-CUSH", label: "Cush (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 7, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_CUSH },
-    SurveySpec { tag: "N-MIZRAIM", label: "Mizraim (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_MIZRAIM },
-    SurveySpec { tag: "N-PHUT", label: "Phut (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_PHUT },
+    SurveySpec { tag: "N-CUSH", label: "Cush (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 7, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_CUSH },
+    SurveySpec { tag: "N-MIZRAIM", label: "Mizraim (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_MIZRAIM },
+    SurveySpec { tag: "N-PHUT", label: "Phut (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 6, verse_to: 6, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_PHUT },
     SurveySpec {
         tag: "N-CANAAN",
         label: "Canaan (GEN 10)",
@@ -878,17 +896,17 @@ const SURVEYS_MORE: &[SurveySpec] = &[
                Stand-in coordinates; Ussher dates.",
         book: 1, chapter: 10, verse_from: 15, verse_to: 19,
         year: NATIONS_YEAR,
-        stands: Stands::Until(NATIONS_UNTIL),
+        stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim,
         grade: Grade::BorderText,
         circuit: N_CANAAN,
     },
-    SurveySpec { tag: "N-SHINAR", label: "the land of Shinar, Nimrod's (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 8, verse_to: 10, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_SHINAR },
+    SurveySpec { tag: "N-SHINAR", label: "the land of Shinar, Nimrod's (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 8, verse_to: 10, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_SHINAR },
     // ---- Shem (GEN 10:21-31) ----
-    SurveySpec { tag: "N-ELAM", label: "Elam (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_ELAM },
-    SurveySpec { tag: "N-ASSHUR", label: "Asshur (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 11, verse_to: 12, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_ASSHUR },
-    SurveySpec { tag: "N-ARAM", label: "Aram (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 23, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_ARAM },
-    SurveySpec { tag: "N-LUD", label: "Lud (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_LUD },
-    SurveySpec { tag: "N-JOKTAN", label: "the sons of Joktan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 25, verse_to: 30, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), grade: Grade::CityDerived, circuit: N_JOKTAN },
+    SurveySpec { tag: "N-ELAM", label: "Elam (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_ELAM },
+    SurveySpec { tag: "N-ASSHUR", label: "Asshur (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 11, verse_to: 12, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_ASSHUR },
+    SurveySpec { tag: "N-ARAM", label: "Aram (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 23, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_ARAM },
+    SurveySpec { tag: "N-LUD", label: "Lud (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 22, verse_to: 22, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_LUD },
+    SurveySpec { tag: "N-JOKTAN", label: "the sons of Joktan (GEN 10)", note: NATIONS_NOTE, book: 1, chapter: 10, verse_from: 25, verse_to: 30, year: NATIONS_YEAR, stands: Stands::Until(NATIONS_UNTIL), holds: Holds::Claim, grade: Grade::CityDerived, circuit: N_JOKTAN },
     // ---- the land in vision (EZK 47-48, Ussher 574 BC) ----
     SurveySpec {
         tag: "EZK47",
@@ -898,7 +916,7 @@ const SURVEYS_MORE: &[SurveySpec] = &[
                dated to the vision's own year (Ussher 574 BC).",
         book: 26, chapter: 47, verse_from: 13, verse_to: 20,
         year: -574,
-        stands: Stands::Until(-538),
+        stands: Stands::Until(-538), holds: Holds::Claim,
         grade: Grade::BorderText,
         circuit: EZK_47_OUTER,
     },
@@ -909,15 +927,15 @@ const SURVEYS_MORE: &[SurveySpec] = &[
                (EZK 48:8-20) — schematic, a VISION; stand-in placement.",
         book: 26, chapter: 48, verse_from: 8, verse_to: 20,
         year: -574,
-        stands: Stands::Until(-538),
+        stands: Stands::Until(-538), holds: Holds::Claim,
         grade: Grade::BorderText,
         circuit: EZK_48_OBLATION,
     },
     // ---- the tetrarchies of LUK 3:1 (the 15th year of Tiberius) ----
-    SurveySpec { tag: "NT-JUDAEA", label: "Judea", note: city_note!("Judea under Pontius Pilate (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_JUDAEA },
-    SurveySpec { tag: "NT-GALILEE", label: "Galilee", note: city_note!("Galilee of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_GALILEE },
-    SurveySpec { tag: "NT-PEREA", label: "Perea", note: city_note!("Perea of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_PEREA },
-    SurveySpec { tag: "NT-ITUREA", label: "Iturea and Trachonitis", note: city_note!("Iturea and Trachonitis of Philip the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), grade: Grade::CityDerived, circuit: NT_ITUREA },
+    SurveySpec { tag: "NT-JUDAEA", label: "Judea", note: city_note!("Judea under Pontius Pilate (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), holds: Holds::Ground("the tetrarchies were governed districts of the Roman order (LUK 3:1); the hull approximates a real administration, and the dashed boundary discloses the approximation"), grade: Grade::CityDerived, circuit: NT_JUDAEA },
+    SurveySpec { tag: "NT-GALILEE", label: "Galilee", note: city_note!("Galilee of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), holds: Holds::Ground("the tetrarchies were governed districts of the Roman order (LUK 3:1); the hull approximates a real administration, and the dashed boundary discloses the approximation"), grade: Grade::CityDerived, circuit: NT_GALILEE },
+    SurveySpec { tag: "NT-PEREA", label: "Perea", note: city_note!("Perea of Herod the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), holds: Holds::Ground("the tetrarchies were governed districts of the Roman order (LUK 3:1); the hull approximates a real administration, and the dashed boundary discloses the approximation"), grade: Grade::CityDerived, circuit: NT_PEREA },
+    SurveySpec { tag: "NT-ITUREA", label: "Iturea and Trachonitis", note: city_note!("Iturea and Trachonitis of Philip the tetrarch (LUK 3:1)."), book: 42, chapter: 3, verse_from: 1, verse_to: 1, year: 26, stands: Stands::Enduring("the tetrarchies are the frame\'s final political order; nothing within the frame supersedes them"), holds: Holds::Ground("the tetrarchies were governed districts of the Roman order (LUK 3:1); the hull approximates a real administration, and the dashed boundary discloses the approximation"), grade: Grade::CityDerived, circuit: NT_ITUREA },
 ];
 
 // ------------------------------------------ journeys (open routes)
@@ -1342,16 +1360,18 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
     tl.regions.insert(
         region_id,
         RegionHistory {
-            // THE TENURE LAW at its source: NO SURVEY HOLDS GROUND.
-            // Grade says how the SHAPE is known (a text-traced border
-            // vs a city-derived hull); tenure says whether the ground
-            // is possessed — and they are orthogonal: NUM 34 recites
-            // its border verse by verse, yet it is a PROMISE, and
-            // painting it as territory once put a phantom state
-            // northeast of Phoenicia. Every survey is a Claim; ground
-            // is held only by the partition's cohorts and the
-            // scholarship layers. No per-survey choice exists.
-            class: map_types::RegionClass::Claim,
+            // THE TENURE LAW at its source, DECLARED per survey:
+            // grade says how the shape is known; Holds says whether
+            // the ground is possessed — orthogonal axes. NUM 34
+            // recites its border verse by verse yet bounds a promise
+            // (a phantom state once stood northeast of Phoenicia);
+            // the tetrarchies are city-derived hulls yet governed
+            // real ground. A survey that holds ground says why, in
+            // writing; everything else is a Claim.
+            class: match s.holds {
+                Holds::Ground(_) => map_types::RegionClass::Land,
+                Holds::Claim => map_types::RegionClass::Claim,
+            },
             label_history: vec![(valid, s.label.to_string())],
             geom_history: vec![(
                 valid,
