@@ -13,7 +13,7 @@ import World
 import Steps
 import Run
 import qualified Check
-import Control.Exception (try)
+import Control.Exception (try, bracket, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromJust, listToMaybe)
@@ -118,6 +118,21 @@ main = hspec $ do
       \ps -> parseCap @PieceSet (renderCap ps) === Right ps
     it "every style name round-trips" $
       mapM_ (\n -> fmap renderCap (parseCap @StyleName n) `shouldBe` Right n) styleNames
+    -- Review finding (post-Task-7 review round 2), fix 5: UrlPath (fix 7's
+    -- new capture type) had no direct law test where the other capture
+    -- laws are pinned -- only an indirect check via the GET step's
+    -- totality classification. A type introduced specifically as "the fix
+    -- is by type, with a law" belongs alongside Piece/PieceSet/Year's own
+    -- round-trip laws: a valid path is accepted and round-trips, and any
+    -- embedded whitespace is rejected outright (the whole point of the
+    -- type, per fix 7's comment in Steps.hs).
+    it "UrlPath accepts a whitespace-free path and round-trips" $
+      fmap renderCap (parseCap @UrlPath "/api/subjects?year=-1405")
+        `shouldBe` Right "/api/subjects?year=-1405"
+    it "UrlPath rejects any embedded whitespace" $
+      case parseCap @UrlPath "/api/subjects?year=-1405 as first" of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "whitespace"
+        Right _ -> expectationFailure "accepted a path containing a space"
 
   describe "step patterns" $ do
     let p = lit "I render pieces " *> ((,) <$> capUntil @PieceSet " at year " <*> capRest @Year)
@@ -541,13 +556,23 @@ main = hspec $ do
     -- exemplar body per definition in the real allSteps (built directly
     -- as AST, not parsed text, so keyword sequencing is irrelevant) and
     -- asserts no orphan, ambiguity, or value-error anywhere across the
-    -- whole set. The length equality is the actual re-trigger: append a
-    -- ninth step definition without adding its exemplar here and this
-    -- test fails on the count alone, regardless of which shape the new
-    -- step happens to collide with.
+    -- whole set.
+    --
+    -- Review finding (post-Task-7 review round 2), fix 3: the original
+    -- version of this test asserted only `length exemplars == length
+    -- allSteps` -- a CARDINALITY check, not a bijection. Append a ninth
+    -- definition that duplicates an existing shape, plus a ninth exemplar
+    -- for it, and that count-only check stays green while the genuinely
+    -- new definition is never actually exercised by anything. Fixed by
+    -- collecting, for every exemplar, the sketch of the ONE definition
+    -- that actually MATCHED it (there's exactly one, since ambiguous and
+    -- valueErrors are already asserted empty), and asserting that the SET
+    -- of matched sketches equals the set of every definition's sketch --
+    -- a real bijection: every definition gets its own distinct exemplar,
+    -- not just the right count of exemplars.
     it "every definition in the real allSteps has a genuine, unambiguous \
-       \exemplar -- covering the whole step set, not just four shapes \
-       \(fix 3)" $ do
+       \exemplar -- covering the whole step set as a bijection, not just \
+       \a count (fix 3)" $ do
       let exemplars =
             [ (When, "I GET /foo")
             , (Then, "the response equals fixture \"foo\"")
@@ -560,24 +585,57 @@ main = hspec $ do
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [Scenario "s" [] steps]
-      length exemplars `shouldBe` length allSteps
+          matchedSketchFor (k, b) =
+            [ defSketch d | d <- allSteps, defKw d == k, Matched _ <- [defRun d b] ]
       Check.orphans allSteps f `shouldBe` []
       Check.ambiguous allSteps f `shouldBe` []
       Check.valueErrors allSteps f `shouldBe` []
+      Set.fromList (concatMap matchedSketchFor exemplars) `shouldBe`
+        Set.fromList (map defSketch allSteps)
     -- Fix 5 (post-Task-7 review): checkDir's AMBIGUOUS and BAD-VALUE print
     -- paths (the `label`/`describe` branches other than ORPHAN) had never
     -- actually executed under test -- every existing totality test calls
     -- Check.orphans/ambiguous/valueErrors directly, never checkDir itself.
     -- This drives the real checkDir over a real temp directory (a
     -- synthetic ambiguous pair, reusing the fix-1/2 shape, alongside a
-    -- real bad-piece-name line from allSteps) and asserts BOTH tagged
-    -- lines actually appear in stdout. checkDir calls exitFailure, so the
-    -- resulting ExitCode exception is caught via `try` rather than killing
-    -- the test process.
+    -- real bad-piece-name line from allSteps) and asserts the output.
+    -- checkDir calls exitFailure, so the resulting ExitCode exception is
+    -- caught via `try` (inside captureStdout) rather than killing the
+    -- test process.
+    --
+    -- Review finding (post-Task-7 review round 2), fix 4: asserting five
+    -- substrings is satisfiable by output where the labels are attached
+    -- to the wrong steps, or the "loc: msg" line format is broken (e.g.
+    -- both tags and both bodies present, but swapped, or concatenated
+    -- into one garbled line) -- and this printed format is exactly what
+    -- the Stage 0 diagnosis document is generated from. checkDir's output
+    -- is short and fully deterministic once the piece name can't trigger
+    -- Capture.hs's did-you-mean hint, so this now asserts the ENTIRE
+    -- captured text against two fully-spelled-out expected lines. Picked
+    -- "qqqqqqqqqq" (not "bogus") as the bad piece name specifically
+    -- because it is Levenshtein-far from every real piece name (no
+    -- shared letters, ten characters against the longest piece name's
+    -- eight), so didYouMean's <=3 gate never fires and the error text is
+    -- exactly the two-part "'x' is not a piece." / "Pieces are: ..."
+    -- message with no extra suggestion clause to predict.
+    --
+    -- Review finding (post-Task-7 review round 2), fix 6: the temp
+    -- directory used to have a fixed name
+    -- (tmpBase </> "contract-runner-checkdir-test"), so two concurrent
+    -- runs (two checkouts, or CI shards sharing a machine's temp
+    -- directory) could collide and clobber each other's fixture. Made
+    -- unique by reserving a uniquely-named temp FILE first (openTempFile
+    -- guarantees no collision with anything else live at that moment),
+    -- then using that reserved, guaranteed-unique name as the basis for
+    -- the directory this test actually creates.
     it "checkDir's AMBIGUOUS and BAD-VALUE print paths actually execute \
-       \and are visible in its output (fix 5)" $ do
+       \and produce the exact expected output (fix 5)" $ do
       tmpBase <- getTemporaryDirectory
-      let dir = tmpBase </> "contract-runner-checkdir-test"
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-checkdir-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          featPath = dir </> "probe.feature"
           dupDefs =
             [ mkStep When (lit "I do " *> capRest @FixtureRefFreeText) (\_ w -> pure (Right w))
             , mkStep When (lit "I do the thing") (\() w -> pure (Right w))
@@ -587,17 +645,34 @@ main = hspec $ do
             , "  Scenario: ambiguous case"
             , "    When I do the thing"
             , "  Scenario: bad value case"
-            , "    When I render pieces bogus at year -1405 in style canaan" ]
+            , "    When I render pieces qqqqqqqqqq at year -1405 in style canaan" ]
+          -- Both the binding ("... as {name}") and non-binding render
+          -- overloads share `capUntil @PieceSet " at year "` as their
+          -- FIRST capture, so a bad piece name fails identically for both
+          -- before either overload's own "as"/no-"as" tail is ever
+          -- reached -- same precedent as the pre-existing "a step whose
+          -- shape matches but whose value doesn't parse" test above
+          -- (the "topografy" line), which asserts exactly two claimants
+          -- for the same reason. Both entries carry the identical error
+          -- text, differing only by sketch.
+          piecesErr = "'qqqqqqqqqq' is not a piece.\n"
+                   <> "  Pieces are: borders, chrome, claims, fills, ground, journeys, "
+                   <> "labels, markers, veil, water"
+          expected = T.concat
+            [ "AMBIGUOUS ", T.pack featPath, " / ambiguous case: I do the thing matches 2 "
+            , "definitions: I do {text} | I do the thing\n"
+            , "BAD-VALUE ", T.pack featPath, " / bad value case: I render pieces qqqqqqqqqq "
+            , "at year -1405 in style canaan -- "
+            , "I render pieces {pieces} at year {year} in style {style} as {name}: ", piecesErr
+            , "; I render pieces {pieces} at year {year} in style {style}: ", piecesErr
+            , "\n"
+            ]
       createDirectoryIfMissing True dir
-      TIO.writeFile (dir </> "probe.feature") feat
+      TIO.writeFile featPath feat
       (out, result) <- captureStdout (Check.checkDir (dupDefs ++ allSteps) dir)
       removeDirectoryRecursive dir
       result `shouldSatisfy` isLeft
-      out `shouldSatisfy` T.isInfixOf "AMBIGUOUS"
-      out `shouldSatisfy` T.isInfixOf "I do {text}"
-      out `shouldSatisfy` T.isInfixOf "I do the thing"
-      out `shouldSatisfy` T.isInfixOf "BAD-VALUE"
-      out `shouldSatisfy` T.isInfixOf "not a piece"
+      out `shouldBe` expected
     -- Fix 7 (post-Task-7 review, structural -- closes a FALSE GREEN in the
     -- law): the real corpus's "When I GET /api/subjects?year=<someYear>
     -- as first" used to come back CLEAN, even though no "I GET {url} as
@@ -639,21 +714,44 @@ main = hspec $ do
 -- returns what was written plus `act`'s own `try` result. Needed because
 -- checkDir writes straight to stdout and calls exitFailure -- there is no
 -- other way to observe its output from inside a test.
+--
+-- Review finding (post-Task-7 review round 2), fix 1 (Important): this
+-- used to be a happy-path sequence (redirect; try act; restore; close;
+-- read; remove), with the restore/close/remove lines only reached if
+-- `act` threw nothing but an ExitCode (the one thing `try`'s signature
+-- catches). ANY other exception -- an IOException from a malformed
+-- feature file, an ErrorCall from a partial pattern, an async exception
+-- from a user interrupt -- would skip straight past every one of those
+-- lines, leaving the process's real stdout permanently pointed at a now-
+-- orphaned temp file for the rest of the hspec run: every later test's
+-- output, and hspec's own failure report, would silently vanish into that
+-- file instead of the terminal, and the handle plus the temp file would
+-- leak. That is the worst failure mode available to a project whose gate
+-- is evidence-before-assertions, and it fires exactly when something has
+-- already gone wrong. Restructured so the restore and both handle closes
+-- run UNCONDITIONALLY: `bracket` around the stdout duplicate/restore
+-- (its release always runs, exception or not), nested inside a `finally`
+-- that always closes the temp handle, nested inside a `finally` that
+-- always removes the temp file. `try` still only catches `ExitCode` (that
+-- part of the design is intentional and unchanged -- checkDir's only
+-- non-local exit is exitFailure); a genuinely different exception now
+-- still propagates out of captureStdout (so the test correctly reports it
+-- as a failure, rather than being silently swallowed), but every layer of
+-- cleanup below it has already run by the time it does.
 captureStdout :: IO a -> IO (T.Text, Either ExitCode a)
 captureStdout act = do
   tmpDir <- getTemporaryDirectory
   (path, h) <- openTempFile tmpDir "capture.txt"
-  hSetEncoding h utf8
-  old <- hDuplicate stdout
-  hDuplicateTo h stdout
-  result <- try act
-  hFlush stdout
-  hDuplicateTo old stdout
-  hClose old
-  hClose h
-  txt <- TIO.readFile path
-  removeFile path
-  pure (txt, result)
+  (`finally` removeFile path) $ do
+    result <- (`finally` hClose h) $ do
+      hSetEncoding h utf8
+      bracket (hDuplicate stdout)
+              (\old -> hDuplicateTo old stdout >> hClose old)
+              (\_ -> do
+                  hDuplicateTo h stdout
+                  try act `finally` hFlush stdout)
+    txt <- TIO.readFile path
+    pure (txt, result)
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

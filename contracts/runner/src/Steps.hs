@@ -165,10 +165,17 @@ allSteps =
           (Left e, _) -> Left e
           (_, Left e) -> Left e
     -- The plan explicitly sanctions this definition being unused by any
-    -- current feature file (like the subset step above) — do not treat its
-    -- absence from allSteps' test coverage or from any .feature as a sign
-    -- it should be deleted; that's a deliberate, blessed exception, unlike
-    -- the now-removed "the response is a JSON array" step.
+    -- current feature file — do not treat its absence from allSteps' test
+    -- coverage or from any .feature as a sign it should be deleted; that's
+    -- a deliberate, blessed exception, unlike the now-removed "the response
+    -- is a JSON array" step.
+    -- (Post-Task-7 review, fix 2 of the second round: this comment used to
+    -- say "like the subset step above" as a second example of a blessed-
+    -- unused step. That's gone stale from this round's own fix 8 — the
+    -- subset step's wording now matches the corpus exactly
+    -- ("noWater's resources are a subset of full's resources"), so it is
+    -- no longer unused. This labels-are-empty step remains the one
+    -- deliberate exception.)
   , mkStep Then (lit "" *> capUntil @BindName "'s labels are empty") $
       \(BindName a) w ->
         pure $ case field "labels" =<< scene a w of

@@ -61,6 +61,24 @@ classify defs (Step k body _) = case (matched, errored) of
     -- (VValueError), not an orphan (VOrphan is for a shape nobody claims
     -- at all) — still fatal, still loud, but a different, correctly-named
     -- class. See `classify` above for the three-way split.
+    --
+    -- CAVEAT (post-Task-7 review round 2): the above is true for a hole
+    -- landing in a VALIDATING capture (Piece, Year, ...), but it is NOT
+    -- the universal outcome — it depends entirely on whether the capture
+    -- the hole lands in happens to reject the hole's literal text.
+    -- Concretely: "<someYear>" contains no whitespace, so fix 7's UrlPath
+    -- accepts it happily. Once the real "I GET {url} as {name}" step
+    -- lands, "I GET /api/census?year=<someYear> as first" becomes a
+    -- clean single match again — and the four lines fix 7 just made
+    -- visible (see Steps.hs's UrlPath comment) go quiet a second time,
+    -- silently fetching a URL containing the literal text "<someYear>".
+    -- `dehole = id` is not a safety net against that; the actual
+    -- protection is substituting the hole with a real registered example
+    -- value BEFORE matching, which is exactly what Task 9's wiring to
+    -- Prop.substituteExamples is for, and is still unwritten. Do not read
+    -- "bad-value" above as a universal guarantee that holes get caught —
+    -- it's an artifact of which captures happen to validate their input,
+    -- not a law this module enforces.
     dehole = id
     results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
     matched = [ sk | (sk, Matched _) <- results ]
