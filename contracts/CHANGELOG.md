@@ -4,7 +4,20 @@ The suite is **pre-release (0.x)**. Breaking change to an existing feature or
 blessed fixture = MINOR bump; additive = PATCH. v1.0.0 is the owner's act,
 never automatic. Enforced by `scripts/contract-semver-gate.sh`.
 
-## Unreleased
+## 0.2.0 — in progress (Stage 1; final entry lands when the stage closes)
+
+Breaking: the coverage corpus (`982817b`) rewrote scenarios in the four
+published features the gate names below, quantifying pinned examples over
+pieces × year × style and adding camera, detail, transition, and
+derivability laws. Steps and hole groups making the corpus runnable landed
+in `c86fd0a` + fix round `69224d5`. Census diff instrument and the
+absent-vs-malformed `to=` rule: `2cd12dc`, `4d24d1b`. The version is bumped
+mid-stage so pushes clear the semver gate; Task 17 finalizes this entry.
+
+- Edited features: `scene.feature`, `census.feature`, `subjects.feature`,
+  `resources.feature` (strengthened, breaking under the gate's rule); new
+  `camera.feature`, `detail.feature`, `transition.feature`,
+  `derivability.feature`.
 
 - The sweep (`8c09f8b`, `2baf81f`) quantified the totality, dehole, and
   composition laws over every piece, year, and style they claim, rather than
