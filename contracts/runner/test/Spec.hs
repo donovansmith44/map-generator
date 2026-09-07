@@ -934,12 +934,27 @@ main = hspec $ do
     -- stub -- see task-8-report.md) had no test proving --write actually
     -- exits non-zero on a bad file, rather than silently rewriting every
     -- OTHER file in the directory and reporting success anyway. Mixes one
-    -- genuinely valid feature (which COULD be rewritten) with one that
-    -- fails to parse at all (no "Feature:" line), and asserts the run
-    -- fails loudly, naming the bad file, instead of printing any
-    -- "rewritten" success message.
+    -- genuinely valid feature (which COULD be rewritten -- its
+    -- expectedVocab is non-empty, so a single-phase implementation WOULD
+    -- have touched it) with one that fails to parse at all (no
+    -- "Feature:" line), and asserts the run fails loudly, naming the bad
+    -- file, instead of printing any "rewritten" success message.
+    --
+    -- Review finding (round 3, controller ruling): this test originally
+    -- only checked the exit code and message, never re-reading
+    -- good.feature -- so it never actually caught that `vocabDir` used to
+    -- be a SINGLE pass (`mapM one files`, writing as it went) that wrote
+    -- good.feature's real bytes to disk BEFORE the aggregate parse-error
+    -- check ran and reported failure: a partial write on a failed run,
+    -- exactly the half-applied state the surgical requirement forbids.
+    -- Fixed structurally in Vocab.hs (`vocabDir` is now two phases: parse
+    -- EVERY file first, and only write -- ANY file -- once all of them
+    -- have parsed cleanly). This test now closes the loop by asserting
+    -- good.feature's bytes on disk are BYTE-IDENTICAL to what was written
+    -- before the run, not merely that the command as a whole failed.
     it "--write exits non-zero and names the bad file when one feature in \
-       \the directory fails to parse, rather than reporting success" $ do
+       \the directory fails to parse, rather than reporting success -- \
+       \and leaves the OTHER, valid file's bytes on disk untouched" $ do
       tmpBase <- getTemporaryDirectory
       (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-parseerr-test"
       hClose uh
@@ -953,8 +968,9 @@ main = hspec $ do
             , "    When I render pieces fills at year -1405 in style canaan"
             ]
           bad = T.unlines [ "this is not a feature file at all" ]
+          goodBytes = TE.encodeUtf8 good
       createDirectoryIfMissing True dir
-      BS.writeFile goodPath (TE.encodeUtf8 good)
+      BS.writeFile goodPath goodBytes
       BS.writeFile badPath (TE.encodeUtf8 bad)
       (`finally` removeDirectoryRecursive dir) $ do
         (out, result) <- captureStdout (Vocab.vocabDir allSteps dir True)
@@ -962,6 +978,13 @@ main = hspec $ do
         out `shouldSatisfy` T.isInfixOf "bad.feature"
         out `shouldSatisfy` (not . T.isInfixOf "rewrote")
         out `shouldSatisfy` (not . T.isInfixOf "nothing rewritten")
+        -- the assertion the fixture was implicitly promising all along:
+        -- good.feature -- which DOES have a non-empty expectedVocab, so
+        -- there was real content a buggy single-phase write could have
+        -- stamped onto it -- must be exactly the bytes it was before this
+        -- failed run, not merely "the command reported failure".
+        afterBytes <- BS.readFile goodPath
+        afterBytes `shouldBe` goodBytes
 
   describe "@property scenarios" $ do
     it "substitutes holes and runs N times, all green on a law that holds" $ do

@@ -200,38 +200,72 @@ joinLines :: Bool -> [Text] -> Text
 joinLines hadTrailingNewline ls =
   T.intercalate "\n" ls <> (if hadTrailingNewline then "\n" else "")
 
+-- Review finding (round 3, controller ruling): this used to be a SINGLE
+-- pass -- `mapM one files`, where `one` read, parsed, and (in write mode)
+-- WROTE each file in the same breath, with the aggregate parse-error
+-- check only happening after every file's `one` action had already run.
+-- That meant a directory with one malformed feature among several good
+-- ones would genuinely rewrite the good files' bytes on disk BEFORE
+-- reporting the parse failure and exiting non-zero -- a partial write on
+-- a failed run, which is exactly the half-applied state the surgical
+-- requirement exists to prevent (a tool that sometimes stamps some of the
+-- owner's hand-written corpus and sometimes doesn't, depending on which
+-- OTHER file happens to be broken, is not trustworthy to run at all).
+--
+-- Fixed structurally, not just with a test: `vocabDir` is now genuinely
+-- two phases, sequenced by Haskell's own data dependency (phase 2 cannot
+-- run without phase 1's result) rather than by convention. Phase 1
+-- (`readAndParse`) reads and parses EVERY file and produces nothing but
+-- data -- no write, ever, happens here. Only after ALL of phase 1 has
+-- completed does `vocabDir` decide whether ANY file failed to parse; if
+-- so, it reports every failure and exits, having touched no file's bytes
+-- at all. Phase 2 (`writeOne` / the drift computation) runs only on the
+-- `goods` list, and only after that all-clear -- so a single malformed
+-- feature now makes --write a strict no-op across the WHOLE directory,
+-- not a partial one.
 vocabDir :: [StepDef] -> FilePath -> Bool -> IO ()
 vocabDir defs dir writeMode = do
   files <- featureFilesLocal dir
-  results <- mapM one files
-  let parseErrs = [ e | ParseErr e <- results ]
+  parsed <- mapM readAndParse files
+  let parseErrs = [ e | Left e <- parsed ]
   if not (null parseErrs)
     -- Fatal in BOTH modes, not just verify: a malformed feature file must
     -- never let --write silently rewrite every OTHER file in the
     -- directory and then report success anyway (the brief's original
-    -- stub did exactly that -- see task-8-report.md's "Deviations").
+    -- stub did exactly that -- see task-8-report.md's "Deviations"), NOR
+    -- rewrite them and then report FAILURE (the bug this phase split just
+    -- closed) -- either way, no byte of any file moves when any file in
+    -- the directory fails to parse.
     then mapM_ TIO.putStrLn parseErrs >> exitFailure
-    else if writeMode
-      -- Say what actually happened, not what the command merely attempted:
-      -- an unconditional "rewritten" is itself a small false claim on the
-      -- (common, e.g. a second consecutive run) case where every table was
-      -- already correct and nothing on disk changed.
-      then
-        let changed = length [ () | Written True <- results ]
-            total = length results
-        in TIO.putStrLn $ if changed == 0
-             then "vocabulary: already matches its types across "
-                  <> T.pack (show total) <> " file(s); nothing rewritten"
-             else "vocabulary: rewrote " <> T.pack (show changed) <> " of "
-                  <> T.pack (show total) <> " file(s)"
-      else
-        let driftMsgs = concat [ ds | DriftReport ds <- results ]
-        in if null driftMsgs
-             then TIO.putStrLn "vocabulary: every table matches its types"
-             else mapM_ TIO.putStrLn driftMsgs >> exitFailure
+    else do
+      let goods = [ (p, src, f) | Right (p, src, f) <- parsed ]
+      if writeMode
+        then do
+          changes <- mapM (\(p, src, f) -> writeOne p src f) goods
+          -- Say what actually happened, not what the command merely
+          -- attempted: an unconditional "rewritten" is itself a small
+          -- false claim on the (common, e.g. a second consecutive run)
+          -- case where every table was already correct and nothing on
+          -- disk changed.
+          let changed = length (filter id changes)
+              total = length goods
+          TIO.putStrLn $ if changed == 0
+            then "vocabulary: already matches its types across "
+                 <> T.pack (show total) <> " file(s); nothing rewritten"
+            else "vocabulary: rewrote " <> T.pack (show changed) <> " of "
+                 <> T.pack (show total) <> " file(s)"
+        else do
+          let driftMsgs = concat
+                [ map ((T.pack p <> ": ") <>) (drift defs f) | (p, _, f) <- goods ]
+          if null driftMsgs
+            then TIO.putStrLn "vocabulary: every table matches its types"
+            else mapM_ TIO.putStrLn driftMsgs >> exitFailure
   where
-    one :: FilePath -> IO Outcome
-    one p = do
+    -- Phase 1: read and parse ONE file. Pure data in, data out -- no
+    -- write, no side effect beyond the read itself, so running this over
+    -- every file before deciding anything is always safe to do.
+    readAndParse :: FilePath -> IO (Either Text (FilePath, Text, Feature))
+    readAndParse p = do
       -- NOT TIO.readFile: verified empirically that this toolchain's
       -- default text-handle decoder is NOT UTF-8 (it silently mangles a
       -- 3-byte UTF-8 em dash into three separate Latin/Cyrillic-ish
@@ -242,36 +276,33 @@ vocabDir defs dir writeMode = do
       -- side half of the same fix as the encodeUtf8 write below.
       raw <- BS.readFile p
       let src = TE.decodeUtf8 raw
-      case parseFeature p src of
-        Left e -> pure (ParseErr (T.pack p <> ": " <> e))
-        Right f
-          | writeMode -> do
-              let vocab = expectedVocab defs f
-                  hadTrailingNewline = "\n" `T.isSuffixOf` src
-                  newSrc = joinLines hadTrailingNewline (spliceVocab vocab (T.lines src))
-                  changed = newSrc /= src
-              -- Only touch the file when something actually changed: an
-              -- already-correct table is left with its original mtime,
-              -- and no risk of an accidental no-op rewrite hitting the
-              -- newline-translation hazard below for nothing.
-              if changed
-                -- NOT TIO.writeFile: GHC's text handles default to native
-                -- newline translation, which on Windows turns every "\n"
-                -- into "\r\n" on output -- rewriting every line ending in
-                -- the file even though only the vocabulary block's
-                -- CONTENT changed (verified empirically: a plain
-                -- TIO.writeFile of "a\nb\n" on this toolchain produced
-                -- "a\r\nb\r\n" on disk). Binary-mode ByteString.writeFile
-                -- performs no translation, so every untouched line stays
-                -- byte-for-byte identical.
-                then BS.writeFile p (TE.encodeUtf8 newSrc)
-                else pure ()
-              pure (Written changed)
-          | otherwise -> pure (DriftReport (map ((T.pack p <> ": ") <>) (drift defs f)))
+      pure $ case parseFeature p src of
+        Left e  -> Left (T.pack p <> ": " <> e)
+        Right f -> Right (p, src, f)
 
--- One file's outcome, so `vocabDir` can report honestly instead of a
--- fixed string: a parse failure is always fatal; a write either did or
--- didn't actually change the file (so the summary can say how many files
--- were genuinely touched, not just that the command ran); a verify pass
--- reports its drift messages (empty means clean).
-data Outcome = ParseErr Text | Written Bool | DriftReport [Text]
+    -- Phase 2 (write mode only), and only ever called after EVERY file in
+    -- the directory has already parsed cleanly: splice this one file's
+    -- vocabulary and write it back if -- and only if -- something
+    -- actually changed. Returns whether it did, for the summary above.
+    writeOne :: FilePath -> Text -> Feature -> IO Bool
+    writeOne p src f = do
+      let vocab = expectedVocab defs f
+          hadTrailingNewline = "\n" `T.isSuffixOf` src
+          newSrc = joinLines hadTrailingNewline (spliceVocab vocab (T.lines src))
+          changed = newSrc /= src
+      -- Only touch the file when something actually changed: an
+      -- already-correct table is left with its original mtime, and no
+      -- risk of an accidental no-op rewrite hitting the newline-
+      -- translation hazard below for nothing.
+      if changed
+        -- NOT TIO.writeFile: GHC's text handles default to native
+        -- newline translation, which on Windows turns every "\n" into
+        -- "\r\n" on output -- rewriting every line ending in the file
+        -- even though only the vocabulary block's CONTENT changed
+        -- (verified empirically: a plain TIO.writeFile of "a\nb\n" on
+        -- this toolchain produced "a\r\nb\r\n" on disk). Binary-mode
+        -- ByteString.writeFile performs no translation, so every
+        -- untouched line stays byte-for-byte identical.
+        then BS.writeFile p (TE.encodeUtf8 newSrc)
+        else pure ()
+      pure changed
