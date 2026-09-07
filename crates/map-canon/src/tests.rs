@@ -588,3 +588,64 @@ fn the_census_is_total_and_sorted() {
     );
     assert!(census(&store, &ts(-2000)).is_empty(), "before the first moment: empty, not error");
 }
+
+// -------------------- Registry: one identity per real thing (Task 13)
+// Spec §2 equation 1: no witness mints an entity; every witness
+// references the registry. Unification is a WRITTEN act with a typed
+// reason — never slug matching (the bg_shadows disease).
+
+#[test]
+fn the_registry_resolves_totally_in_one_hop_and_refuses_chains() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+
+    r.observe(e("phoenicia"), "Phoenicia", EntityKind::Polity, w("phoenicia", Witness::Atlas));
+    r.observe(e("partition:phoenicia"), "Phoenicia", EntityKind::Polity, w("partition:phoenicia", Witness::Authored));
+    r.declare(e("phoenicia"), e("partition:phoenicia"),
+              Unification::Declared { reason: "the atlas polity and the partitioned claim are one coast".into(),
+                                      source: "data/authored/registry.json".into() }).unwrap();
+
+    // TOTALITY: resolve never panics and never returns None.
+    assert_eq!(r.resolve(&e("partition:phoenicia")), &e("phoenicia"));
+    assert_eq!(r.resolve(&e("phoenicia")), &e("phoenicia"));
+    assert_eq!(r.resolve(&e("never-heard-of-it")), &e("never-heard-of-it"));
+
+    // IDEMPOTENCE: resolving a resolved id is a fixed point.
+    let once = r.resolve(&e("partition:phoenicia")).clone();
+    assert_eq!(r.resolve(&once), &once);
+
+    // The entity has BOTH witnesses and one name.
+    let ent = r.get(&e("phoenicia")).expect("canonical entity");
+    assert_eq!(ent.names, vec!["Phoenicia".to_string()]);
+    assert_eq!(ent.witnesses.len(), 2);
+    assert!(r.why(&e("partition:phoenicia")).is_some(), "the reason is recorded, not implied");
+
+    // DISCRIMINATION: a chain is refused, by name.
+    r.observe(e("third:phoenicia"), "Phoenicia", EntityKind::Polity, w("third:phoenicia", Witness::Basemap));
+    r.declare(e("partition:phoenicia"), e("third:phoenicia"),
+              Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
+    assert!(r.validate().iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })));
+
+    // DISCRIMINATION: a canonical id nobody minted is a typo, and is caught.
+    let mut r2 = Registry::default();
+    r2.observe(e("a"), "A", EntityKind::Polity, w("a", Witness::Atlas));
+    r2.declare(e("typo"), e("a"), Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
+    assert!(r2.validate().iter().any(|v| matches!(v, RegistryViolation::DanglingCanonical(_))));
+}
+
+#[test]
+fn slug_equality_alone_never_unifies_anything() {
+    // The disease this replaces: `bg_shadows` unified on slugified name
+    // equality. Two entities with the SAME slug and no declaration stay
+    // two entities. Unification is a written act.
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let w = |s: &str| WitnessRef { minted_as: e(s), witness: Witness::Atlas, layer: LayerKind::Territory, kind: "area" };
+    r.observe(e("basemap:judea"), "Judea", EntityKind::Polity, w("basemap:judea"));
+    r.observe(e("authored:judea"), "Judea", EntityKind::Polity, w("authored:judea"));
+    assert_ne!(r.resolve(&e("basemap:judea")), r.resolve(&e("authored:judea")));
+    assert_eq!(r.entities().count(), 2);
+}

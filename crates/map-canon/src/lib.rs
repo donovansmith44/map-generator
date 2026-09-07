@@ -835,6 +835,8 @@ pub fn census(store: &CanonStore, at: &Timestamp) -> Vec<CensusRow> {
 }
 
 pub mod persist;
+pub mod registry;
+pub use registry::{Entity, EntityKind, Registry, RegistryViolation, Unification, WitnessRef};
 
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,11 @@
+{
+  "_comment": "THE ENTITY REGISTRY (2026-09-07, spec §2 equation 1). One identity per real thing. Every row here is a written act: two minted ids are ONE entity because a person said so and said why. Slug equality has no authority — this file replaces the bg_shadows slug matcher in map-compile. OWNER-REVIEWABLE DATA.",
+  "unifications": [
+    {
+      "canonical": "phoenicia",
+      "minted": "partition:phoenicia",
+      "kind": "Polity",
+      "reason": "The atlas polity 'phoenicia' and the partitioned scripture-claims face 'partition:phoenicia' are the same coast, witnessed twice."
+    }
+  ]
+}
