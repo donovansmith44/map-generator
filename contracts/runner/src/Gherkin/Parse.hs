@@ -29,18 +29,24 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
     goBody [] f = Right (doneFeature f)
     goBody ls@((_, l) : rest) f
       | isComment l = goBody rest f
-      | strip l == "Vocabulary:" = let (vs, rest') = vocabRows rest in
-          goBody rest' f { ftVocab = ftVocab f ++ vs }
+      | strip l == "Vocabulary:" =
+          case vocabRows rest of
+            Left e -> Left e
+            Right (vs, rest') -> goBody rest' f { ftVocab = ftVocab f ++ vs }
       | "@" `T.isPrefixOf` strip l || "Scenario: " `T.isPrefixOf` strip l =
           goScenarios ls f []
       | otherwise = goBody rest f { ftPreamble = ftPreamble f ++ [strip l] }
 
-    vocabRows ((_, l) : rest)
+    vocabRows :: [(Int, Text)] -> Either Text ([(Text, Text)], [(Int, Text)])
+    vocabRows ((n, l) : rest)
       | Just row <- tableRow l =
           case row of
-            [k, v] -> let (vs, rest') = vocabRows rest in ((k, v) : vs, rest')
-            _      -> ([], rest)
-    vocabRows ls = ([], ls)
+            [k, v] -> do
+              (vs, rest') <- vocabRows rest
+              pure ((k, v) : vs, rest')
+            _ -> err n ("malformed vocabulary row (expected 2 columns, got "
+                        <> T.pack (show (length row)) <> "): " <> strip l)
+    vocabRows ls = Right ([], ls)
 
     tableRow l =
       let s = strip l

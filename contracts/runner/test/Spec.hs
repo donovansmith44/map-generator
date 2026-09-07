@@ -41,6 +41,16 @@ main = hspec $ do
               -- And resolves to the PREVIOUS keyword at parse time:
               map stepKw (scSteps sc) `shouldBe` [When, When, Then]
             scs -> expectationFailure ("expected exactly one scenario, got " <> show (length scs))
+    it "rejects a malformed vocabulary row instead of silently dropping it" $ do
+      let src = T.unlines
+            [ "Feature: bad vocab"
+            , "  Vocabulary:"
+            , "    | pieces | any of | extra |"
+            ]
+      case parseFeature "badvocab.feature" src of
+        Left e -> e `shouldSatisfy` ("badvocab.feature:3" `T.isPrefixOf`)
+        Right f -> expectationFailure
+          ("expected Left for a 3-column vocabulary row, got Right " <> show f)
     prop "round-trips: parse . render == Right" $ \f ->
       parseFeature "gen.feature" (renderFeature f) === Right f
 
@@ -50,14 +60,27 @@ safeText = (T.pack <$> listOf1 (elements (['a'..'z'] ++ ['0'..'9'] ++ " -")))
 
 instance Arbitrary Feature where
   arbitrary = do
-    t  <- safeText
-    vs <- listOf ((,) <$> safeText <*> safeText)
-    ss <- listOf1 genScenario
-    pure (Feature t [] [] vs ss)
+    t   <- safeText
+    tgs <- sublistOf [Tag "smoke", Tag "wip"]
+    pre <- listOf safeText
+    vs  <- listOf ((,) <$> safeText <*> safeText)
+    ss  <- listOf1 genScenario
+    pure (Feature t tgs pre vs ss)
     where
       genScenario = do
         n  <- safeText
         tg <- sublistOf [Tag "property", Tag "target"]
         st <- listOf1 genStep
         pure (Scenario n tg st)
-      genStep = Step <$> elements [Given, When, Then] <*> safeText <*> pure Nothing
+      genStep = Step <$> elements [Given, When, Then] <*> safeText <*> genStepArg
+      -- No DocString: the parser deliberately defers DocString support
+      -- (see Gherkin.Parse), so it's not part of the round-trip law yet.
+      -- Tables are capped to a handful of small rows/cells: this doubly-
+      -- nested listOf1 shares QuickCheck's ambient size with the
+      -- scenario/step lists above it, and uncapped it compounds into
+      -- minutes-long runs without adding coverage the law needs (every
+      -- shape — one row, one cell, many of each — is still reachable).
+      genStepArg = frequency
+        [ (2, pure Nothing)
+        , (1, Just . Table <$> resize 4 (listOf1 (resize 4 (listOf1 safeText))))
+        ]
