@@ -192,19 +192,22 @@ allSteps =
                            <*> capUntil @Year " in style "
                            <*> capUntil @StyleName " as "
                            <*> capRest @BindName)) $
-      \(ps, y@(Year yInt), st, BindName n) w -> do
+      \(ps, y, st, BindName n) w -> do
         r <- getUrl (sceneUrl (baseUrl w) ps y st) w
         pure $ do
           w' <- r >>= bindLast n
-          -- Task 11: the combine step ("combining A and B equals
-          -- rendering <someA> plus <someB>") must render its own union
-          -- scene at the SAME year the two parts were rendered at, not
-          -- a hardcoded one (the plan's own self-review flagged exactly
-          -- this bug). Every binding render records the year it used
-          -- here; a @property scenario substitutes ONE <someYear> value
-          -- across the whole scenario body, so sceneA and sceneB's
-          -- renders (and therefore this binding) always agree.
-          Right w' { bound = Map.insert "_year" (BS.empty, Number (fromIntegral yInt)) (bound w') }
+          -- Task 11 / Phase S review fixes 2-3: the combine step
+          -- ("combining A and B equals rendering <someA> plus <someB>")
+          -- must render its own union scene at the SAME year AND STYLE
+          -- the two parts were rendered at, not a hardcoded pair (the
+          -- plan's own self-review flagged the year half of this bug;
+          -- review flagged that a hardcoded style is the same mistake).
+          -- Every binding render records the year+style it used, typed,
+          -- in `World.lastRender` (see World.hs); a @property scenario
+          -- substitutes ONE <someYear> value across the whole scenario
+          -- body, so sceneA and sceneB's renders (and therefore this
+          -- binding) always agree.
+          Right w' { lastRender = Just (y, st) }
   , mkStep When (lit "I render pieces "
                  *> ((,,) <$> capUntil @PieceSet " at year "
                           <*> capUntil @Year " in style "
@@ -248,30 +251,37 @@ allSteps =
     -- attribution at all -- this is the diagnosis, not a bug in the
     -- step. It MATCHES (so `check` never calls it an orphan) and fails
     -- honestly, naming the v0.1 wart, whenever any entry lacks the field.
+    -- Phase S review, cheap fix 4: `V.all` over an EMPTY array is
+    -- vacuously True, so an empty manifest would report this @target as
+    -- already met -- guarded explicitly rather than trusted to the
+    -- vacuous case.
   , mkStep Then (lit "every feature entry carries a piece field") $ \() w ->
       pure $ case Map.lookup "_last" (bound w) of
         Nothing -> Left "no response"
         Just (_, v) -> case field "features" v of
           Right (Array fs)
+            | V.null fs -> Left "no features to check piece attribution against (empty manifest)"
             | V.all (\f -> either (const False) (const True) (field "piece" f)) fs -> Right w
             | otherwise -> Left "manifest entries carry no piece attribution (v0.1 wart)"
-          other -> Left (T.pack (show (() <$ other)))
+          -- Phase S review, cheap fix 2: prefixed the way `resourceIds`
+          -- (this module's `where` clause) prefixes its own shape
+          -- mismatch, naming the field this step actually looked for.
+          other -> Left ("no features array: " <> T.pack (show (() <$ other)))
     -- Task 11 (@target @property): v0.1 has no server-side combine
     -- endpoint, so the law is checked indirectly -- render the union of
     -- the two piece sets and assert its resource-id set equals the
-    -- UNION of the two parts' resource-id sets, at the SAME year the
-    -- parts were rendered at (see the binding render step's "_year"
-    -- comment above).
+    -- UNION of the two parts' resource-id sets, at the SAME year AND
+    -- STYLE the parts were rendered at (World.lastRender, set by the
+    -- binding render step above).
   , mkStep Then (lit "combining " *> ((,,,) <$> capUntil @BindName " and "
                                             <*> capUntil @BindName " equals rendering "
                                             <*> capUntil @PieceSet " plus "
                                             <*> capRest @PieceSet)) $
       \(BindName a, BindName b, PieceSet sa, PieceSet sb) w ->
-        case Map.lookup "_year" (bound w) of
-          Nothing -> pure (Left "no year recorded for this scene (render a piece set first)")
-          Just (_, Number sci) -> do
-            let y = Year (round sci)
-            r <- getUrl (sceneUrl (baseUrl w) (PieceSet (Set.union sa sb)) y (StyleName "canaan")) w
+        case lastRender w of
+          Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
+          Just (y, st) -> do
+            r <- getUrl (sceneUrl (baseUrl w) (PieceSet (Set.union sa sb)) y st) w
             pure $ do
               w' <- r
               both <- resourceSet "_last" w'
@@ -279,7 +289,6 @@ allSteps =
               rb <- resourceSet b w'
               if both == Set.union ra rb then Right w'
               else Left "union scene is not the union of its parts' resources"
-          Just _ -> pure (Left "bound _year is not a number")
     -- Task 11 (@target): geometry is content-addressed (an id IS its
     -- bytes -- see resources.feature's own title); dress rides styles,
     -- not payload ids, so restyling one piece must leave every id set
@@ -330,24 +339,32 @@ allSteps =
           Nothing -> pure (Left "no response")
           Just (_, actual) -> case Map.lookup pn projections of
             Nothing -> pure (Left ("unknown projection " <> pn))
-            Just p -> do
-              let got = project p actual
-                  path = fixtureDir w </> T.unpack f <> ".json"
-              if blessMode w
-                then do
-                  -- Bless writes the PROJECTED value, not the raw
-                  -- response -- the fixture pins what our parsers
-                  -- consume, not everything the provider happens to
-                  -- send.
-                  BS.writeFile path (BL.toStrict (encodePretty got))
-                  pure (Right w)
-                else do
-                  fx <- loadFixture w f
-                  pure $ case fx of
-                    Left e -> Left e
-                    Right expected
-                      | got == expected -> Right w
-                      | otherwise -> Left ("consumed projection " <> pn <> " differs from fixture " <> f)
+            -- Phase S review, cheap fix 3: `project` now reports a
+            -- SHAPE mismatch (e.g. the tree expects an object and the
+            -- provider sent an array) as its own named error, distinct
+            -- from an ordinary value mismatch against the fixture --
+            -- exactly the provider-drift case this CDC suite exists to
+            -- catch, and a strictly worse message when collapsed into
+            -- "differs from fixture".
+            Just p -> case project p actual of
+              Left e -> pure (Left ("consumed projection " <> pn <> ": " <> e))
+              Right got -> do
+                let path = fixtureDir w </> T.unpack f <> ".json"
+                if blessMode w
+                  then do
+                    -- Bless writes the PROJECTED value, not the raw
+                    -- response -- the fixture pins what our parsers
+                    -- consume, not everything the provider happens to
+                    -- send.
+                    BS.writeFile path (BL.toStrict (encodePretty got))
+                    pure (Right w)
+                  else do
+                    fx <- loadFixture w f
+                    pure $ case fx of
+                      Left e -> Left e
+                      Right expected
+                        | got == expected -> Right w
+                        | otherwise -> Left ("consumed projection " <> pn <> " differs from fixture " <> f)
   ]
   where
     scene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))
@@ -486,23 +503,43 @@ setField _ _ other = other
 -- projection, including the two that aren't plain lookups.
 --
 -- An `Extractor` is a function from the ENCLOSING object to the value
--- (if any) its declared output key should hold; `Nothing` omits the key
--- entirely (used for a field that is genuinely absent, or present as
--- JSON `null` -- vendor.rs's own `Option`-typed fields, color_key and
--- when, are read with `.and_then`, which treats a JSON `null` exactly
--- the same as a missing key, so the projection does too).
-type Extractor = Value -> Maybe Value
+-- (if any) its declared output key should hold: `Right Nothing` omits
+-- the key entirely (used for a field that is genuinely absent, or
+-- present as JSON `null` -- vendor.rs's own `Option`-typed fields,
+-- color_key and when, are read with `.and_then`, which treats a JSON
+-- `null` exactly the same as a missing key, so the projection does
+-- too), and `Left` reports a SHAPE mismatch found while projecting that
+-- field's own value (see `project`'s `Fields`/`Each` fallthroughs
+-- below) -- distinct from the field being merely absent.
+type Extractor = Value -> Either Text (Maybe Value)
 
-data Proj = Keep | Fields [(Text, Extractor)] | Each Proj | Flatten [Text]
+data Proj = Keep | Fields [(Text, Extractor)] | Each Proj
 
-project :: Proj -> Value -> Value
-project Keep v = v
-project (Each p) (Array a) = Array (fmap (project p) a)
-project (Each _) v = v
-project (Flatten path) v = Array (V.fromList (flattenGather path v))
-project (Fields fs) v@(Object _) = Object (KM.fromList
-  [ (K.fromText k, pv) | (k, ext) <- fs, Just pv <- [ext v] ])
-project (Fields _) v = v
+-- Phase S review, cheap fix 3: a shape mismatch (the tree expects an
+-- object and the provider sent an array, or vice versa) used to fall
+-- through to `v` UNCHANGED, so it surfaced downstream only as an
+-- opaque "consumed projection X differs from fixture Y" -- a strictly
+-- worse message than naming the actual problem, on exactly the
+-- provider-drift case this CDC suite exists to catch. `project` now
+-- reports its own shape mismatches as `Left`, distinct from an ordinary
+-- value mismatch against the fixture (see the consumed-projection step
+-- in `allSteps`, which prefixes this error with the projection's name).
+project :: Proj -> Value -> Either Text Value
+project Keep v = Right v
+project (Each p) (Array a) = Array <$> traverse (project p) a
+project (Each _) v = Left ("expected an array, got " <> shapeName v)
+project (Fields fs) v@(Object _) = do
+  pairs <- traverse (\(k, ext) -> fmap (fmap (\pv -> (K.fromText k, pv))) (ext v)) fs
+  Right (Object (KM.fromList [ p | Just p <- pairs ]))
+project (Fields _) v = Left ("expected an object, got " <> shapeName v)
+
+shapeName :: Value -> Text
+shapeName (Object _) = "an object"
+shapeName (Array _)  = "an array"
+shapeName (String _) = "a string"
+shapeName (Number _) = "a number"
+shapeName (Bool _)   = "a boolean"
+shapeName Null       = "null"
 
 -- The ordinary case: keep the field named `k`, projecting its value
 -- through `p`. `Just Null` is treated the same as absent (see the
@@ -514,10 +551,21 @@ field1 k = fieldAlt k [k]
 -- sourced from the FIRST of `srcKeys` that is present (and non-null) on
 -- the enclosing object -- vendor.rs's `label` (from `title`, falling
 -- back to `label`) is `fieldAlt "label" ["title", "label"] Keep`.
+--
+-- Narrower than the Rust it mirrors, noted rather than silently
+-- diverged from: vendor.rs's own fallback
+-- (`str_field(&v, &ctx, "title").or_else(|_| str_field(&v, &ctx,
+-- "label"))`) also falls back to `label` when `title` is PRESENT but is
+-- not a string (str_field's own type check fails, tripping `or_else`);
+-- this only falls back on `title` being absent-or-null. A `title` field
+-- present with the wrong JSON type is not exercised by any known
+-- payload and is not covered by any fixture today.
 fieldAlt :: Text -> [Text] -> Proj -> (Text, Extractor)
 fieldAlt outKey srcKeys p = (outKey, \v -> case v of
-  Object o -> project p <$> asum [ nonNull (KM.lookup (K.fromText k) o) | k <- srcKeys ]
-  _        -> Nothing)
+  Object o -> case asum [ nonNull (KM.lookup (K.fromText k) o) | k <- srcKeys ] of
+    Nothing -> Right Nothing
+    Just fv -> fmap Just (project p fv)
+  _        -> Right Nothing)
   where
     nonNull (Just Null) = Nothing
     nonNull other        = other
@@ -528,7 +576,7 @@ fieldAlt outKey srcKeys p = (outKey, \v -> case v of
 -- witnesses[].verse_groups[].verses) is
 -- `flattenField "verses" ["witnesses", "verse_groups", "verses"]`.
 flattenField :: Text -> [Text] -> (Text, Extractor)
-flattenField outKey path = (outKey, \v -> Just (Array (V.fromList (flattenGather path v))))
+flattenField outKey path = (outKey, \v -> Right (Just (Array (V.fromList (flattenGather path v)))))
 
 flattenGather :: [Text] -> Value -> [Value]
 flattenGather [] v = [v]

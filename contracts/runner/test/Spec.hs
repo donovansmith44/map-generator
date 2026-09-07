@@ -273,6 +273,36 @@ main = hspec $ do
         Left e  -> e `shouldSatisfy` T.isInfixOf "has labels"
         Right _ -> expectationFailure "expected non-empty labels to fail"
 
+  describe "HTTP status law (Phase S review, fix 1): a non-2xx status is a Left, \
+           \naming the code and the url" $ do
+    -- `checkStatus` is extracted specifically so this law is testable
+    -- without a live server (this task must not start or restart one --
+    -- blessing fixtures against a live server is the NEXT task's job).
+    -- Both `httpTransport` and `httpTransportRaw` now call it before
+    -- doing anything else with a response; without it, "fetching
+    -- {name}'s first resource twice yields identical bytes" (NOT
+    -- @target -- expected GREEN) would report green against a server
+    -- whose /api/resource always 404s, since two fetches of the same
+    -- error page are byte-identical.
+    it "every 2xx code counts as success" $ do
+      checkStatus "http://x/foo" 200 `shouldSatisfy` isRight
+      checkStatus "http://x/foo" 204 `shouldSatisfy` isRight
+      checkStatus "http://x/foo" 299 `shouldSatisfy` isRight
+    it "a 404 fails, naming the status code and the exact url" $
+      case checkStatus "http://x/api/resource?id=r1" 404 of
+        Left e  -> do
+          e `shouldSatisfy` T.isInfixOf "404"
+          e `shouldSatisfy` T.isInfixOf "http://x/api/resource?id=r1"
+        Right _ -> expectationFailure "expected a 404 to fail"
+    it "a 500 fails, naming the status code" $
+      case checkStatus "http://x/foo" 500 of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "500"
+        Right _ -> expectationFailure "expected a 500 to fail"
+    it "a 3xx redirect also fails -- not silently treated as success" $
+      case checkStatus "http://x/foo" 301 of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "301"
+        Right _ -> expectationFailure "expected a 3xx to fail"
+
   describe "fact-tier steps (Task 10): GET-as binding, masked whole-body fixture equality" $ do
     it "GET-as binds under a name" $ do
       let fake _ = pure (Right ("[]", fromJust (A.decodeStrict "[]")))
@@ -366,6 +396,36 @@ main = hspec $ do
       case r of
         Left e  -> e `shouldSatisfy` T.isInfixOf "piece attribution"
         Right _ -> expectationFailure "expected the v0.1 wart to fail honestly, not silently pass"
+    -- Phase S review, cheap fix 4: `V.all` over an empty Vector is
+    -- vacuously True -- without an explicit guard, an empty manifest
+    -- would report this @target step as already met, which is false:
+    -- there is nothing here to demonstrate piece attribution AT ALL.
+    it "every feature entry carries a piece field: an EMPTY features array \
+       \fails, not vacuously passes" $ do
+      let v = A.object ["features" A..= ([] :: [A.Value])]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("_last", (BS.empty, v))] }
+          run = fromJust $ firstMatch Then "every feature entry carries a piece field"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "empty manifest"
+        Right _ -> expectationFailure "expected an empty manifest to fail, not vacuously pass"
+    -- Phase S review, cheap fix 2: this used to render as the BARE
+    -- string "Right ()" (`() <$ other` erases the payload before
+    -- `show`), naming neither the field nor the problem. Now prefixed
+    -- the way `resourceIds` (this module's own `where` clause) prefixes
+    -- its own shape mismatch -- at minimum naming the field this step
+    -- actually looked for, matching the established house style.
+    it "every feature entry carries a piece field: a non-array 'features' \
+       \field fails, naming the field it looked for" $ do
+      let v = A.object ["features" A..= ("not an array" :: T.Text)]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("_last", (BS.empty, v))] }
+          run = fromJust $ firstMatch Then "every feature entry carries a piece field"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "no features array"
+        Right _ -> expectationFailure "expected a non-array features field to fail"
 
     it "combining threads the SAME bound year into the union render -- not a \
        \hardcoded one (the plan's own self-review flag)" $ do
@@ -386,6 +446,32 @@ main = hspec $ do
       Just r1 <- pure (firstMatch When "I render pieces ground at year -77 in style canaan as sceneA")
       Right w1 <- r1 w0
       Just r2 <- pure (firstMatch When "I render pieces water at year -77 in style canaan as sceneB")
+      Right w2 <- r2 w1
+      Just chk <- pure (firstMatch Then "combining sceneA and sceneB equals rendering ground plus water")
+      r <- chk w2
+      r `shouldSatisfy` isRight
+    it "combining threads the SAME bound STYLE into the union render, too -- \
+       \not the hardcoded \"canaan\" of the original sketch (Phase S review \
+       \fixes 2/3)" $ do
+      -- The fake REJECTS any request not carrying "style=slate": both
+      -- parts are rendered in slate here, and a combine step that still
+      -- hardcoded "canaan" for the union render would request the wrong
+      -- style and fail this test, rather than merely coincidentally
+      -- passing (the real corpus scenario never exercises this because
+      -- it always uses canaan for both parts).
+      let fake url
+            | "style=slate" `T.isInfixOf` url = pure (Right (raw, val))
+            | otherwise = pure (Left ("wrong style threaded into union render url: " <> url))
+            where
+              raw = TE.encodeUtf8 url
+              active :: [T.Text]
+              active = [ "ground" | "relief=1" `T.isInfixOf` url ]
+                    ++ [ "water"  | not ("topo=0" `T.isInfixOf` url) ]
+              val = A.object ["resources" A..= [ A.object ["id" A..= p] | p <- active ]]
+          w0 = mkWorld "http://x" fake ""
+      Just r1 <- pure (firstMatch When "I render pieces ground at year -77 in style slate as sceneA")
+      Right w1 <- r1 w0
+      Just r2 <- pure (firstMatch When "I render pieces water at year -77 in style slate as sceneB")
       Right w2 <- r2 w1
       Just chk <- pure (firstMatch Then "combining sceneA and sceneB equals rendering ground plus water")
       r <- chk w2
@@ -415,6 +501,16 @@ main = hspec $ do
       case r of
         Left e  -> e `shouldSatisfy` T.isInfixOf "not the union of its parts"
         Right _ -> expectationFailure "expected a genuinely non-union result to fail"
+    it "combining without a prior render fails, naming that no year/style \
+       \was recorded (no ill-typed \"bound _year is not a number\" branch \
+       \is reachable any more -- lastRender is typed)" $ do
+      let w = mkWorld "http://x" (\_ -> pure (Left "no")) ""
+          run = fromJust $ firstMatch Then
+            "combining sceneA and sceneB equals rendering ground plus water"
+      r <- run w
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "no year/style recorded"
+        Right _ -> expectationFailure "expected combining with no prior render to fail"
 
     it "dress-locality: two restyled scenes with identical resource ids pass" $ do
       let sceneVal :: [T.Text] -> A.Value
@@ -515,7 +611,7 @@ main = hspec $ do
               [ "id" A..= ("e1" :: T.Text), "name" A..= ("Alpha" :: T.Text)
               , "from_year" A..= (1 :: Int), "to_year" A..= (9 :: Int) ] ] :: [A.Value])
       case Map.lookup "eras" projections of
-        Just p  -> project p raw `shouldBe` expected
+        Just p  -> project p raw `shouldBe` Right expected
         Nothing -> expectationFailure "no 'eras' projection registered"
     it "a CHANGED consumed value changes the projection -- it is not blind \
        \to the fields it keeps" $ do
@@ -567,7 +663,7 @@ main = hspec $ do
             , "verses" A..= (["GEN.11.31", "GEN.12.1", "GEN.12.4"] :: [T.Text])
             ]
       case Map.lookup "event" projections of
-        Just p  -> project p raw `shouldBe` expected
+        Just p  -> project p raw `shouldBe` Right expected
         Nothing -> expectationFailure "no 'event' projection registered"
     it "the event projection falls back to 'label' when 'title' is absent, \
        \and an event with no witnesses projects empty verses (not an \
@@ -584,7 +680,7 @@ main = hspec $ do
             , "verses" A..= ([] :: [T.Text])
             ]
       case Map.lookup "event" projections of
-        Just p  -> project p raw `shouldBe` expected
+        Just p  -> project p raw `shouldBe` Right expected
         Nothing -> expectationFailure "no 'event' projection registered"
     it "a projection name outside the registry fails to parse, naming the \
        \real endpoints" $
@@ -593,6 +689,38 @@ main = hspec $ do
           e `shouldSatisfy` T.isInfixOf "not a projection"
           e `shouldSatisfy` T.isInfixOf "eras"
         Right _ -> expectationFailure "accepted a non-projection name"
+    -- Phase S review, cheap fix 3: a shape mismatch used to fall through
+    -- to the value UNCHANGED, so it surfaced only as an opaque "differs
+    -- from fixture" once compared -- a worse message than naming the
+    -- actual problem, on exactly the provider-drift case this suite
+    -- exists to catch.
+    it "project reports a named shape mismatch (object tree, array \
+       \payload) instead of silently passing the array through" $
+      case Map.lookup "eras" projections of
+        Just p  -> project p (A.object ["oops" A..= True]) `shouldBe`
+          Left "expected an array, got an object"
+        Nothing -> expectationFailure "no 'eras' projection registered"
+    it "project reports a named shape mismatch (array tree, object \
+       \payload) instead of silently passing the object through" $
+      case Map.lookup "land-mask" projections of
+        Just p  -> project p (A.toJSON ([1 :: Int] :: [Int])) `shouldBe`
+          Left "expected an object, got an array"
+        Nothing -> expectationFailure "no 'land-mask' projection registered"
+    it "the consumed-projection step names the shape mismatch, prefixed \
+       \with the projection, when the provider's top-level shape drifts" $ do
+      let o = "{\"id\":\"e9\"}"  -- an object where 'eras' expects a bare array
+          fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+          w = mkWorld "http://x" fake "test/fixtures"
+      Just get <- pure (firstMatch When "I GET /api/eras")
+      Right w1 <- get w
+      Just chk <- pure (firstMatch Then
+        "the consumed projection eras equals fixture \"eras-single-test-consumed\"")
+      r <- chk w1
+      case r of
+        Left e  -> do
+          e `shouldSatisfy` T.isInfixOf "eras"
+          e `shouldSatisfy` T.isInfixOf "expected an array, got an object"
+        Right _ -> expectationFailure "expected the top-level shape drift to fail, named"
 
     it "the consumed-projection step passes when the response's consumed \
        \fields equal the fixture, with every unconsumed extra filtered" $ do
@@ -1628,6 +1756,7 @@ captureStdout act = do
 mkWorld :: T.Text -> (T.Text -> IO (Either T.Text (BS.ByteString, A.Value))) -> FilePath -> World
 mkWorld base tr dir = World base tr dir mempty False
   (\_ -> pure (Left "no raw transport configured for this test"))
+  Nothing
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe
