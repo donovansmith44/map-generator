@@ -1641,6 +1641,11 @@ fn every_manifest_entry_names_its_piece_correctly() {
 fn splitting_the_points_buffer_conserves_every_marker_vertex() {
     use map_types::Piece;
 
+    // BOTH pieces wear BOTH paints. That is what makes the ordering law
+    // below independent of how the two style HASHES happen to compare:
+    // with only one piece spanning both paints, piece-major grouping
+    // would come out non-decreasing whenever the hashes fell one way,
+    // and the law would pass the design it exists to reject.
     let a = MarkerStyle { color: Rgba(10, 20, 30, 255), size: 3.0 };
     let b = MarkerStyle { color: Rgba(200, 40, 40, 255), size: 5.0 };
     let mut scene = Snapshot::empty();
@@ -1650,6 +1655,7 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
         marker_of(33.0, 35.0, b, Piece::Markers),
         marker_of(34.0, 35.0, a, Piece::Journeys),
         marker_of(35.0, 35.0, a, Piece::Journeys),
+        marker_of(36.0, 35.0, b, Piece::Journeys),
     ];
     let enc = gpu_encode(&scene);
 
@@ -1667,16 +1673,23 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
         scene.markers.len() as u32,
         "the split moved markers between buffers; it did not add or lose any"
     );
-    // Three buckets: (a, Markers), (b, Markers), (a, Journeys).
+    // Four buckets — two paints × two pieces — and four points buffers,
+    // since no two buckets hold the same points.
     assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Markers).count(), 2);
-    assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Journeys).count(), 1);
+    assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Journeys).count(), 2);
+    assert_eq!(
+        enc.resources.iter().filter(|r| r.descriptor.kind == ResourceKind::Points).count(),
+        4
+    );
 
     // Paint order is key order, and the key is STYLE-major: the marker
     // entries' style keys are non-decreasing, which is exactly the
     // sequence the pre-split encoder emitted (it keyed on style alone).
-    // Piece-major grouping would interleave them — (a, b, a) here — and
-    // reorder markers of unrelated paints against each other, changing
-    // pixels the split has no business changing.
+    // Piece-major grouping would emit (x, y, x, y) for whichever style
+    // hash is smaller — a descent, for EITHER hash ordering, which is
+    // why both pieces above wear both paints — reordering markers of
+    // unrelated paints against each other and changing pixels the split
+    // has no business changing.
     let style_seq: Vec<_> = enc
         .manifest
         .features
@@ -1684,6 +1697,7 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
         .filter(|f| f.feature.starts_with("markers"))
         .map(|f| f.style)
         .collect();
+    assert_eq!(style_seq.len(), 4, "four entries, so a descent has room to appear");
     assert!(
         style_seq.windows(2).all(|w| w[0] <= w[1]),
         "marker entries must stay style-major, preserving the pre-split paint order"
