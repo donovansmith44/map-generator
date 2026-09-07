@@ -1,6 +1,7 @@
 Feature: eras — the named periods that resolve standings
-  Our parse_eras reads id and from_year per era; era ids are how
-  vendored data declares WHO STANDS WHEN without hardcoded years.
+  Our parse_eras reads four fields per era: id, name, from_year, and
+  to_year. Era ids are how vendored data declares WHO STANDS WHEN
+  without hardcoded years.
 
   Vocabulary:
     | projection | any of: eras, event, land-mask, landmarks, narratives, polities |
