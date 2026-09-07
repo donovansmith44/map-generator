@@ -7,6 +7,10 @@ import Test.QuickCheck
 import Gherkin.Ast
 import Gherkin.Parse
 import Gherkin.Render
+import Capture
+import Data.Proxy (Proxy (..))
+import Data.Either (isLeft)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 
 main :: IO ()
@@ -54,6 +58,38 @@ main = hspec $ do
     prop "round-trips: parse . render == Right" $ \f ->
       parseFeature "gen.feature" (renderFeature f) === Right f
 
+  describe "capture universes" $ do
+    it "every enumerated piece value round-trips" $ do
+      case universe (Proxy @Piece) of
+        Enumerated vs -> mapM_ (\v -> fmap renderCap (parseCap @Piece v) `shouldBe` Right v) vs
+        other -> expectationFailure ("expected an Enumerated universe, got " <> show other)
+    it "the piece universe is enumerated in sorted order" $ do
+      case universe (Proxy @Piece) of
+        Enumerated vs -> vs `shouldBe`
+          [ "borders", "chrome", "claims", "fills", "ground"
+          , "journeys", "labels", "markers", "veil", "water" ]
+        other -> expectationFailure ("expected an Enumerated universe, got " <> show other)
+    it "piece sets parse comma-separated, any order, and render sorted" $ do
+      (renderCap <$> parseCap @PieceSet "water, ground") `shouldBe` Right "ground, water"
+    it "a wrong piece gets a did-you-mean naming the universe" $
+      case parseCap @PieceSet "water, topografy" of
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "topografy"
+          e `shouldSatisfy` T.isInfixOf "ground"   -- the full universe is listed
+        Right _ -> expectationFailure "accepted a non-piece"
+    it "years parse within the frame and refuse outside it" $ do
+      parseCap @Year "-1405" `shouldBe` Right (Year (-1405))
+      parseCap @Year "9999" `shouldSatisfy` isLeft
+    prop "renderCap is a right inverse of parseCap for years" $
+      \(y :: Int) -> let y' = (-4004) + (abs y `mod` 4105) in
+        parseCap @Year (renderCap (Year y')) === Right (Year y')
+    it "the empty piece set renders as none and round-trips" $ do
+      renderCap (PieceSet Set.empty) `shouldBe` "none"
+      parseCap @PieceSet "none" `shouldBe` Right (PieceSet Set.empty)
+      parseCap @PieceSet "   " `shouldBe` Right (PieceSet Set.empty)
+    prop "renderCap is a right inverse of parseCap for all piece sets, including empty" $
+      \ps -> parseCap @PieceSet (renderCap ps) === Right ps
+
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'
 -- could never round-trip through this format — a genuine representability
@@ -98,3 +134,8 @@ instance Arbitrary Feature where
       -- ranges over.
       genTable = scale intSqrt (listOf1 (scale intSqrt (listOf1 safeText)))
       intSqrt = floor . sqrt . (fromIntegral :: Int -> Double)
+
+-- Every subset of the piece universe, including the empty set (the
+-- monoid identity that Task 9's subset generation relies on).
+instance Arbitrary PieceSet where
+  arbitrary = PieceSet . Set.fromList <$> sublistOf [minBound .. maxBound]
