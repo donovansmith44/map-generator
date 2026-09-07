@@ -169,8 +169,21 @@ impl Registry {
 
         if let Some(mut moving) = self.entities.remove(&minted) {
             let votes = self.kind_votes.remove(&minted).unwrap_or_default();
-            let target = self.entities.entry(canonical.clone()).or_insert_with(|| Entity {
-                id: canonical.clone(),
+            // Merge into wherever `canonical` ITSELF currently resolves
+            // (one hop through the table just updated above), never into
+            // the raw `canonical` key directly. Using the raw key would
+            // resurrect a home a PRIOR declare already emptied and
+            // relocated — e.g. after declare(phoenicia, partition:phoenicia)
+            // has moved partition:phoenicia's entity into `phoenicia`, a
+            // later declare(partition:phoenicia, third:phoenicia) must
+            // land third:phoenicia's testimony in `phoenicia` too, not
+            // resurrect an orphaned entity at the now-empty
+            // `partition:phoenicia` key. `aliases` itself still stores the
+            // RAW canonical (below `resolve` sees it and `validate` names
+            // the resulting chain) — only the merge TARGET is resolved.
+            let home = self.resolve(&canonical).clone();
+            let target = self.entities.entry(home.clone()).or_insert_with(|| Entity {
+                id: home.clone(),
                 names: Vec::new(),
                 kind: moving.kind,
                 witnesses: Vec::new(),
@@ -180,7 +193,7 @@ impl Registry {
             }
             target.witnesses.append(&mut moving.witnesses);
             resort_witnesses(&mut target.witnesses);
-            self.kind_votes.entry(canonical).or_default().extend(votes);
+            self.kind_votes.entry(home).or_default().extend(votes);
         }
         Ok(())
     }

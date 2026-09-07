@@ -628,6 +628,21 @@ fn the_registry_resolves_totally_in_one_hop_and_refuses_chains() {
               Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
     assert!(r.validate().iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })));
 
+    // ONE HOP, not chased: third:phoenicia's alias is the RAW declared
+    // target (partition:phoenicia) — resolve never follows a second hop
+    // to phoenicia, even though that is where the data ultimately means
+    // to point. A chase-fully implementation would fail this.
+    assert_eq!(r.resolve(&e("third:phoenicia")), &e("partition:phoenicia"), "one hop only, not chased to phoenicia");
+
+    // The chain's declare still merges third:phoenicia's testimony into
+    // wherever partition:phoenicia ITSELF currently resolves (phoenicia)
+    // — never into a resurrected, orphaned entity at the now-vacated
+    // partition:phoenicia key.
+    let phoenicia_entity = r.get(&e("phoenicia")).expect("still the one merged entity");
+    assert_eq!(phoenicia_entity.witnesses.len(), 3, "third:phoenicia's witness landed here too");
+    assert!(phoenicia_entity.witnesses.iter().any(|wr| wr.minted_as == e("third:phoenicia")));
+    assert!(r.get(&e("partition:phoenicia")).is_none(), "no orphaned entity left at the vacated intermediate key");
+
     // DISCRIMINATION: a canonical id nobody minted is a typo, and is caught.
     let mut r2 = Registry::default();
     r2.observe(e("a"), "A", EntityKind::Polity, w("a", Witness::Atlas));
@@ -648,4 +663,139 @@ fn slug_equality_alone_never_unifies_anything() {
     r.observe(e("authored:judea"), "Judea", EntityKind::Polity, w("authored:judea"));
     assert_ne!(r.resolve(&e("basemap:judea")), r.resolve(&e("authored:judea")));
     assert_eq!(r.entities().count(), 2);
+}
+
+/// Two witnesses of one declared-unified entity disagreeing about its
+/// EntityKind (a District mistaken for a People, say) is exactly the
+/// case `RegistryViolation::KindConflict` exists to name — this was
+/// previously wired up but entirely unexercised.
+#[test]
+fn kind_conflict_between_two_witnesses_is_reported() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+
+    r.observe(e("partition:dan"), "Dan", EntityKind::District, w("partition:dan", Witness::Authored));
+    r.observe(e("place:dan"), "Dan", EntityKind::People, w("place:dan", Witness::Atlas));
+    r.declare(e("partition:dan"), e("place:dan"),
+              Unification::Declared { reason: "one tribe, one town".into(), source: "t".into() }).unwrap();
+
+    assert!(
+        r.validate().iter().any(|v| matches!(
+            v,
+            RegistryViolation::KindConflict { entity, a, b }
+                if *entity == e("partition:dan") && *a == EntityKind::District && *b == EntityKind::People
+        )),
+        "two witnesses of one entity disagreeing about its kind must be named"
+    );
+}
+
+/// validate() must report EVERY violation in one pass, not just the
+/// first — an accidental early return would pass every other test in
+/// this file, since each of them exercises exactly one violation kind
+/// at a time. Here a chain and a dangling canonical coexist, and both
+/// must surface from a single call.
+#[test]
+fn validate_reports_every_violation_not_just_the_first() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+
+    r.observe(e("phoenicia"), "Phoenicia", EntityKind::Polity, w("phoenicia", Witness::Atlas));
+    r.observe(e("partition:phoenicia"), "Phoenicia", EntityKind::Polity, w("partition:phoenicia", Witness::Authored));
+    r.observe(e("third:phoenicia"), "Phoenicia", EntityKind::Polity, w("third:phoenicia", Witness::Basemap));
+    r.declare(e("phoenicia"), e("partition:phoenicia"),
+              Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
+    r.declare(e("partition:phoenicia"), e("third:phoenicia"),
+              Unification::Declared { reason: "y".into(), source: "t".into() }).unwrap();
+
+    r.observe(e("a"), "A", EntityKind::Polity, w("a", Witness::Atlas));
+    r.declare(e("typo"), e("a"), Unification::Declared { reason: "z".into(), source: "t".into() }).unwrap();
+
+    let violations = r.validate();
+    assert!(
+        violations.iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })),
+        "the chain must still be named alongside the other violation, got {violations:?}"
+    );
+    assert!(
+        violations.iter().any(|v| matches!(v, RegistryViolation::DanglingCanonical(id) if *id == e("typo"))),
+        "the dangling canonical must still be named alongside the chain, got {violations:?}"
+    );
+}
+
+/// `Unification::SameId` is the ONE reason `observe` itself is allowed
+/// to write, and only on a repeat sighting of the identical minted id
+/// — never on the first sighting, when there is nothing yet to explain.
+#[test]
+fn observing_the_same_minted_id_twice_records_same_id() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let w = |wit| WitnessRef { minted_as: e("dan"), witness: wit, layer: LayerKind::Territory, kind: "area" };
+
+    assert!(r.why(&e("dan")).is_none(), "nothing to explain before any sighting");
+    r.observe(e("dan"), "Dan", EntityKind::District, w(Witness::Atlas));
+    assert!(r.why(&e("dan")).is_none(), "the first sighting alone unifies nothing");
+    r.observe(e("dan"), "Dan", EntityKind::District, w(Witness::Authored));
+    assert_eq!(r.why(&e("dan")), Some(&Unification::SameId), "the second sighting of the identical id is the trivial case");
+}
+
+/// `declare`'s two refusals, each asserted by its actual message, not
+/// merely `is_err()`: unifying an id with itself, and silently
+/// redeclaring an already-declared id to a DIFFERENT canonical (which
+/// would hide a data contradiction rather than surface it).
+#[test]
+fn declare_refuses_self_unification_and_silent_redeclaration() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+
+    let err = r.declare(e("dan"), e("dan"), Unification::SameId).unwrap_err();
+    assert!(err.contains("cannot unify"), "self-unification is refused with a named reason, got: {err}");
+    assert!(err.contains("dan"), "the offending id is named, got: {err}");
+
+    r.declare(e("phoenicia"), e("partition:phoenicia"),
+              Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
+    let err2 = r.declare(e("something-else"), e("partition:phoenicia"),
+              Unification::Declared { reason: "y".into(), source: "t".into() }).unwrap_err();
+    assert!(err2.contains("already declared"), "redeclaring to a different canonical is refused, got: {err2}");
+    assert!(
+        err2.contains("phoenicia") && err2.contains("something-else"),
+        "both the standing and the proposed canonical are named, got: {err2}"
+    );
+}
+
+/// The byte-determinism invariant, pinned by CONTENT, not count: names
+/// merge into a sorted, deduped list, and witnesses merge into a list
+/// sorted by (witness, layer, minted_as) — regardless of call order.
+#[test]
+fn witnesses_sort_by_witness_then_layer_then_minted_id_and_names_sort_deduped() {
+    use crate::registry::*;
+    let mut r = Registry::default();
+    let e = |s: &str| EntityId(s.to_string());
+    let mk = |s: &str, wit, layer| WitnessRef { minted_as: e(s), witness: wit, layer, kind: "area" };
+
+    // Inserted deliberately out of (witness, layer, minted_as) order,
+    // and "Alpha" observed twice — it must collapse to one name.
+    r.observe(e("z"), "Zed", EntityKind::Place, mk("z", Witness::NaturalEarth, LayerKind::Relief));
+    r.observe(e("z"), "Alpha", EntityKind::Place, mk("z", Witness::Atlas, LayerKind::Water));
+    r.observe(e("z"), "Alpha", EntityKind::Place, mk("z", Witness::Atlas, LayerKind::Journeys));
+
+    let ent = r.get(&e("z")).unwrap();
+    assert_eq!(ent.names, vec!["Alpha".to_string(), "Zed".to_string()], "sorted AND deduped");
+
+    // The FULL sorted sequence, not merely a count: Atlas < Authored <
+    // Basemap < NaturalEarth, and within Atlas, Journeys < Water (both
+    // orders are LayerKind's and Witness's own declared enum order).
+    assert_eq!(
+        ent.witnesses,
+        vec![
+            mk("z", Witness::Atlas, LayerKind::Journeys),
+            mk("z", Witness::Atlas, LayerKind::Water),
+            mk("z", Witness::NaturalEarth, LayerKind::Relief),
+        ],
+        "witnesses sorted by (witness, layer, minted_as), content pinned exactly"
+    );
 }
