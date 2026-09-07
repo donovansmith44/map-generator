@@ -12,6 +12,7 @@ import Pattern
 import World
 import Steps
 import Run
+import qualified Check
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromJust, listToMaybe)
@@ -344,6 +345,66 @@ main = hspec $ do
                 e `shouldSatisfy` T.isInfixOf "I GET /boom"
               _ -> expectationFailure "should have failed"
           [] -> expectationFailure "expected at least one scenario"
+
+  describe "totality" $ do
+    it "names the orphan steps" $ do
+      -- (Deviation from the brief's literal `let Right f = ...`: an
+      -- incomplete pattern binding triggers -Wincomplete-uni-patterns
+      -- under this project's -Wall, same issue task-6-report.md already
+      -- worked around. Restructured as a case to keep pristine output.)
+      case parseFeature "t.feature" $ T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I render pieces fills at year -1405 in style canaan"
+             , "    Then nobody wrote this step" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> map snd (Check.orphans allSteps f) `shouldBe` ["nobody wrote this step"]
+    it "names ambiguous steps: a body claimed by two or more definitions (R18)" $ do
+      -- Task 5 review finding, recorded in Steps.hs's ordering comment:
+      -- "the response field style equals canaan" is a legal body for BOTH
+      -- the "the response field {text} equals {text}" step AND the
+      -- generic "{name} equals {name}" step below it — the generic step's
+      -- BindName capture tries to parse "the response field style" as a
+      -- bind name, fails on the spaces (a capture PARSE failure, not a
+      -- missing literal), and under R4/mkStep that's "this step, bad
+      -- value" (Just), not a fall-through (Nothing). So it counts as a
+      -- CLAIM, and TWO definitions claim this one body. Only allSteps'
+      -- list order (specific-before-generic) hides this from firstMatch
+      -- today; the totality check must catch it regardless of order,
+      -- which is exactly why this test uses the REAL allSteps and this
+      -- REAL colliding line rather than a synthetic fixture.
+      case parseFeature "amb.feature" $ T.unlines
+             [ "Feature: amb"
+             , "  Scenario: s"
+             , "    When I GET /foo"
+             , "    Then the response field style equals canaan" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          let ambs = Check.ambiguous allSteps f
+          map (\(_, b, _) -> b) ambs `shouldBe` ["the response field style equals canaan"]
+          case ambs of
+            [(_, _, sketches)] -> length sketches `shouldBe` 2
+            _ -> expectationFailure
+                   ("expected exactly one ambiguous step, got " <> show (length ambs))
+    it "an unambiguous, fully-defined step is neither an orphan nor ambiguous" $ do
+      -- NOTE: this deliberately does NOT use an "I render pieces ... as
+      -- sceneX" line. That family turns out to be ambiguous too (found
+      -- while writing this test, not asked for by the brief or R18):
+      -- StepDef 5 ("I render pieces {p} at year {y} in style {s}", no
+      -- "as") has a capRest @StyleName that greedily swallows the
+      -- trailing "canaan as sceneA" and fails to PARSE it as a style —
+      -- a capture-parse failure, which under R4/mkStep is a claim (Just),
+      -- not a fall-through. So StepDef 4 and StepDef 5 both claim every
+      -- "as sceneX" render line, including lines Task 6's own tests use.
+      -- Reported to the diagnosis; not this task's job to fix Steps.hs.
+      case parseFeature "ok.feature" $ T.unlines
+             [ "Feature: ok"
+             , "  Scenario: s"
+             , "    When I GET /foo" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe
