@@ -184,6 +184,33 @@ main = hspec $ do
         Left e  -> e `shouldSatisfy` T.isInfixOf "whitespace"
         Right _ -> expectationFailure "accepted a path containing a space"
 
+  describe "capture hardening (Stage 1 Task 2)" $ do
+    it "editDistance agrees with the textbook answer on known pairs" $ do
+      editDistance "kitten" "sitting" `shouldBe` 3
+      editDistance "" "abc"           `shouldBe` 3
+      editDistance "abc" ""           `shouldBe` 3
+      editDistance "abc" "abc"        `shouldBe` 0
+      editDistance "topografy" "topography" `shouldBe` 2
+    prop "editDistance is symmetric" $ \a b ->
+      editDistance (T.pack a) (T.pack b) === editDistance (T.pack b) (T.pack a)
+    prop "editDistance is bounded by the longer string" $ \a b ->
+      editDistance (T.pack a) (T.pack b) <= max (length a) (length b)
+    it "didYouMean answers on a long garbage value instead of hanging" $ do
+      -- 400 chars of junk against the piece universe. The old triple
+      -- recursion is exponential in the shorter string and never
+      -- returns; one second is three orders of magnitude of headroom.
+      let junk = T.replicate 400 "q"
+      r <- timeout 1000000 (evaluate (T.length (didYouMean (map pieceText [minBound .. maxBound]) junk)))
+      r `shouldSatisfy` \x -> case x of Just _ -> True; Nothing -> False
+    prop "every Piece round-trips through renderCap/parseCap" $ \(p :: Piece) ->
+      parseCap (renderCap p) === Right p
+    prop "every PieceSet round-trips, INCLUDING the empty set" $ \(ps :: PieceSet) ->
+      parseCap (renderCap ps) === Right ps
+    prop "every StyleName round-trips" $ \(s :: StyleName) ->
+      parseCap (renderCap s) === Right s
+    prop "every Year in the frame round-trips" $ \(y :: Year) ->
+      parseCap (renderCap y) === Right y
+
   describe "step patterns" $ do
     let p = lit "I render pieces " *> ((,) <$> capUntil @PieceSet " at year " <*> capRest @Year)
     it "matches and yields typed captures" $
@@ -2748,7 +2775,27 @@ instance Arbitrary Feature where
       genTable = scale intSqrt (listOf1 (scale intSqrt (listOf1 safeText)))
       intSqrt = floor . sqrt . (fromIntegral :: Int -> Double)
 
+-- Stage 1 Task 2: quantify the round-trip laws over the WHOLE type (via
+-- these Arbitrary instances), not merely over parseCap's image -- see
+-- Capture.hs's export-list comment. Piece, StyleName, and Year are new;
+-- PieceSet already existed (Task 9's subset generation, above) and keeps
+-- its `arbitrary` exactly as it was -- only `shrink` is added here, so
+-- the distribution every existing PieceSet-quantified property draws
+-- from (the round-trip law just above, and any future use) is unchanged.
+instance Arbitrary Piece where
+  arbitrary = elements [minBound .. maxBound]
+  shrink p = takeWhile (< p) [minBound .. maxBound]
+
+instance Arbitrary StyleName where
+  arbitrary = StyleName <$> elements styleNames
+  shrink _ = []
+
+instance Arbitrary Year where
+  arbitrary = Year <$> chooseInt (-4004, 100) `suchThat` (/= 0)
+  shrink (Year y) = [ Year y' | y' <- shrink y, y' /= 0, y' >= -4004, y' <= 100 ]
+
 -- Every subset of the piece universe, including the empty set (the
 -- monoid identity that Task 9's subset generation relies on).
 instance Arbitrary PieceSet where
   arbitrary = PieceSet . Set.fromList <$> sublistOf [minBound .. maxBound]
+  shrink (PieceSet s) = [ PieceSet (Set.delete p s) | p <- Set.toList s ]

@@ -1,4 +1,23 @@
-module Capture where
+-- An explicit export list, so the round-trip laws in test/Spec.hs can
+-- quantify over the WHOLE type (via Arbitrary) rather than only over
+-- values that `parseCap` happened to produce -- which is the set
+-- `parseCap` accepts, making the law circular. Constructors are
+-- exported deliberately for that reason.
+module Capture
+  ( Universe (..)
+  , FromCapture (..)
+  , describeUniverse
+  , didYouMean
+  , editDistance
+  , Piece (..)
+  , pieceText
+  , PieceSet (..)
+  , allPieces
+  , Year (..)
+  , StyleName (..)
+  , styleNames
+  , FixtureRef (..)
+  ) where
 
 import Data.List (sort, sortOn)
 import Data.Proxy (Proxy (..))
@@ -24,11 +43,9 @@ describeUniverse (Described d)     = d
 
 didYouMean :: [Text] -> Text -> Text
 didYouMean vocab w =
-  case sortOn (dist w) vocab of
-    (best : _) | dist w best <= 3 -> "  Did you mean: " <> best <> "?"
+  case sortOn (editDistance w) vocab of
+    (best : _) | editDistance w best <= 3 -> "  Did you mean: " <> best <> "?"
     _ -> ""
-  where
-    dist a b = lev (T.unpack a) (T.unpack b)
 
 -- Bounded-time edit distance (Final review cleanup, Fix 1): the previous
 -- definition was the naive recursive Levenshtein, exponential in input
@@ -43,9 +60,11 @@ didYouMean vocab w =
 -- same edit-distance definition (unit insert/delete/substitute cost) as
 -- the naive version it replaces, so genuine near-misses score exactly as
 -- before.
-lev :: String -> String -> Int
-lev a b = last (foldl transform [0 .. length a] b)
+editDistance :: Text -> Text -> Int
+editDistance ta tb = last (foldl transform [0 .. length a] b)
   where
+    a = T.unpack ta
+    b = T.unpack tb
     -- Every row this produces has length `length a + 1` (never []), but
     -- that's a length invariant GHC can't see -- `head`/`tail` would
     -- compile clean structurally but trip -Wx-partial (this project
