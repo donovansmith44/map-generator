@@ -71,7 +71,7 @@ main = do
     CmdRun base dir bless runs -> do
       mgr <- newManager defaultManagerSettings
       let w = World (T.pack base) (httpTransport mgr) (dir </> "fixtures") Map.empty bless
-                    (httpTransportRaw mgr) Nothing
+                    (httpTransportRaw mgr) Nothing Map.empty
       files <- featureFiles dir
       results <- Prop.runWithProperties allSteps w runs files
       TIO.putStrLn (reportTable results)

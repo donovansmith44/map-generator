@@ -17,6 +17,26 @@ module Capture
   , StyleName (..)
   , styleNames
   , FixtureRef (..)
+  , Center (..)
+  , centerLat
+  , centerLon
+  , latClamp
+  , Zoom (..)
+  , zoomMin
+  , zoomMax
+  , zoomClamp
+  , zoomDoubled
+  , zoomHalved
+  , DetailTier (..)
+  , detailTierNames
+  , lodFloor
+  , lodCeiling
+  , autoLod
+  , canonicalWidth
+  , canonicalFineZoom
+  , tierLod
+  , ScaleQual (..)
+  , applyScale
   ) where
 
 import Data.List (sort, sortOn)
@@ -130,8 +150,29 @@ instance FromCapture PieceSet where
   renderCap (PieceSet s)
     | Set.null s = "none"
     | otherwise  = T.intercalate ", " (sort (map pieceText (Set.toList s)))
+  -- R78 (controller ruling): `all` is the DUAL of `none`, and it is an
+  -- input alias on exactly the same terms. The Rust side already has
+  -- both (crates/map-types/src/piece.rs:103-110: `if s == "none" {
+  -- PieceSet::empty() }`, `if s == "all" { PieceSet::all() }`); this
+  -- side had only `none`, so every corpus line reading `pieces all`
+  -- came back BAD-VALUE ("'all' is not a piece. Did you mean: fills?")
+  -- against a server that would have accepted it. That was a genuine
+  -- gap between the two implementations of ONE vocabulary, not a
+  -- missing step.
+  --
+  -- Input alias only: `renderCap` is unchanged and still renders the
+  -- whole set as its ten sorted names, so the round-trip law
+  -- (parseCap . renderCap == Right) is untouched -- `all` is a value
+  -- parseCap accepts, never one renderCap produces, exactly as `none`
+  -- is for the empty set's OTHER spelling ("" / whitespace). The
+  -- universe is likewise unchanged, for the same reason it never
+  -- mentioned `none`: `universe (Proxy @PieceSet)` answers "what is a
+  -- piece", and neither `all` nor `none` is a piece -- they are
+  -- shorthands for a SET of them. (Mirrors Rust exactly: `Piece::ALL`
+  -- is what its error message lists too, with neither alias in it.)
   parseCap t
     | T.strip t == "none" || T.null (T.strip t) = Right (PieceSet Set.empty)
+    | T.strip t == "all" = Right allPieces
     | otherwise = PieceSet . Set.fromList <$> traverse parseCap (T.splitOn "," t)
 
 -- ---------- Year ----------
@@ -189,3 +230,197 @@ instance FromCapture FixtureRef where
     in if "\"" `T.isPrefixOf` s && "\"" `T.isSuffixOf` s && T.length s >= 2
          then Right (FixtureRef (T.dropEnd 1 (T.drop 1 s)))
          else Left "a fixture reference is quoted, e.g. \"tribes-at-1405\""
+
+-- ---------- Center: where the camera looks ----------
+-- A geographic point in degrees, written the way the wire writes it and
+-- the way camera.feature writes it: "lat,lon" (e.g. "31.5,35.0").
+--
+-- The frame is the SERVER'S OWN, not a number chosen here: `build_query`
+-- (crates/map-viewer/src/lib.rs:645) clamps latitude to +/-89.9 before
+-- building the viewport cap, so +/-89.9 is the whole of what a latitude
+-- can mean to this API -- a request at 89.95 and one at 89.9 are the
+-- same camera. Longitude has no clamp and wraps, so the half-open
+-- (-180, 180] is the full circle written exactly once.
+--
+-- Described, not Enumerated or Ranged: a lat/lon pair is neither a
+-- finite answer set nor a whole-number window, so `describeUniverse`'s
+-- Ranged sentence ("whole number from ... to ...") would be a false
+-- statement about the type. It therefore contributes no Vocabulary row,
+-- on the same structural grounds as UrlPath and BindName.
+data Center = Center Double Double deriving (Eq, Ord, Show)
+
+centerLat, centerLon :: Center -> Double
+centerLat (Center la _) = la
+centerLon (Center _ lo) = lo
+
+-- The server's own latitude clamp, transcribed once (lib.rs:645) and
+-- used by both the type's legality check and the visibility predicates
+-- that must agree with the server about where the camera actually is.
+latClamp :: Double -> Double
+latClamp = max (-89.9) . min 89.9
+
+instance FromCapture Center where
+  capName _ = "center"
+  universe _ = Described
+    "a lat,lon point in degrees, e.g. 31.5,35.0 (latitude -89.9 to 89.9 \
+    \-- the server's own clamp; longitude -180 to 180)"
+  renderCap (Center la lo) = T.pack (show la) <> "," <> T.pack (show lo)
+  parseCap t = case T.splitOn "," (T.strip t) of
+    [a, b] -> do
+      la <- readDouble "latitude" a
+      lo <- readDouble "longitude" b
+      if la < (-89.9) || la > 89.9
+        then Left ("latitude " <> a <> " is outside the frame: "
+                   <> describeUniverse (universe (Proxy @Center)))
+        else if lo < (-180) || lo > 180
+          then Left ("longitude " <> b <> " is outside the frame: "
+                     <> describeUniverse (universe (Proxy @Center)))
+          else Right (Center la lo)
+    _ -> Left ("'" <> T.strip t <> "' is not a center: "
+               <> describeUniverse (universe (Proxy @Center)))
+
+-- One place a decimal is read, so every numeric capture below reports the
+-- same shape of error and none of them re-derives "is this a number".
+readDouble :: Text -> Text -> Either Text Double
+readDouble what raw = case reads (T.unpack (T.strip raw)) of
+  [(d, "")] -> Right d
+  _         -> Left ("'" <> T.strip raw <> "' is not a " <> what)
+
+-- ---------- Zoom: how wide the camera looks ----------
+-- The angular RADIUS of the view in degrees. The frame is again the
+-- server's own: `build_query` clamps zoom to [0.05, 90] before turning
+-- it into the viewport cap (lib.rs:646), and the characterization
+-- confirmed the clamp empirically from both ends (zoom 0.001/0.01/0.05
+-- byte-identical; 89.9/90/180/1000 byte-identical). Outside that window
+-- a zoom is not a different camera, it is the same camera spelled
+-- misleadingly -- so the type refuses it rather than letting a law
+-- silently compare a scene with itself.
+newtype Zoom = Zoom Double deriving (Eq, Ord, Show)
+
+zoomMin, zoomMax :: Double
+zoomMin = 0.05
+zoomMax = 90
+
+zoomClamp :: Double -> Double
+zoomClamp = max zoomMin . min zoomMax
+
+-- The two derived forms camera.feature asks for by name ("zoom <someZoom>
+-- doubled", "... halved"). Derived through the SERVER'S clamp, not around
+-- it: doubling 60 gives 90, not 120, because 120 and 90 are the same
+-- camera. That is exactly why the someZoom hole draws from the
+-- doubling-safe sub-window (Prop.genZoom) -- outside it, "doubled" and
+-- "halved" would silently be the same camera as the base and the two
+-- nesting laws would be vacuous.
+zoomDoubled, zoomHalved :: Zoom -> Zoom
+zoomDoubled (Zoom z) = Zoom (zoomClamp (z * 2))
+zoomHalved  (Zoom z) = Zoom (zoomClamp (z / 2))
+
+instance FromCapture Zoom where
+  capName _ = "zoom"
+  universe _ = Described
+    "an angular view radius in degrees from 0.05 to 90 (the server's own \
+    \clamp), e.g. 4"
+  renderCap (Zoom z) = T.pack (show z)
+  parseCap t = do
+    z <- readDouble "zoom" t
+    if z < zoomMin || z > zoomMax
+      then Left ("zoom " <> T.strip t <> " is outside the frame: "
+                 <> describeUniverse (universe (Proxy @Zoom)))
+      else Right (Zoom z)
+
+-- ---------- ScaleQual: the two derived cameras, spoken ----------
+-- Enumerated, unlike Center and Zoom: "which scale words exist" IS a
+-- small closed vocabulary a reader must learn before writing a camera
+-- scenario, exactly like the piece and style lists. So it earns its
+-- Vocabulary row.
+data ScaleQual = Doubled | Halved deriving (Eq, Ord, Show, Bounded, Enum)
+
+applyScale :: ScaleQual -> Zoom -> Zoom
+applyScale Doubled = zoomDoubled
+applyScale Halved  = zoomHalved
+
+scaleText :: ScaleQual -> Text
+scaleText Doubled = "doubled"
+scaleText Halved  = "halved"
+
+instance FromCapture ScaleQual where
+  capName _ = "scale"
+  universe _ = Enumerated (sort (map scaleText [minBound .. maxBound]))
+  renderCap = scaleText
+  parseCap t =
+    let vs = [ (scaleText s, s) | s <- [minBound .. maxBound] ]
+    in case lookup (T.strip t) vs of
+         Just s  -> Right s
+         Nothing -> Left ("'" <> T.strip t <> "' is not a scale word."
+                          <> didYouMean (map fst vs) (T.strip t)
+                          <> "\n  Scale words are: "
+                          <> T.intercalate ", " (sort (map fst vs)))
+
+-- ---------- DetailTier: how much geometry ----------
+-- Three tiers a person actually uses, and their lod numbers are DERIVED
+-- from the server's own auto rule -- never chosen to make a scenario
+-- pass.
+--
+-- The rule (crates/map-viewer/src/lib.rs:605-616, `auto_lod`, verified
+-- byte-identical against explicit `lod=` at three zooms in the
+-- characterization's section 0):
+--
+--     lod(zoom, width) = clamp(radians(zoom / width), 1e-6, 0.01)
+--
+-- `autoLod` below IS that rule. The three tiers are the only three
+-- distinguished points the rule has:
+--
+--   ultra  = the rule's FLOOR (1e-6). The finest tolerance the auto law
+--            can ever ask for; leaning all the way in. (Characterization
+--            section 2.0 labels 1e-6 "auto floor".)
+--   fine   = the rule's value at the canonical working camera,
+--            autoLod 8 1200 = radians(8/1200) = 1.1636e-4. (Section 2.0
+--            labels this rung "fine"; it is the working map.)
+--   coarse = the rule's CEILING (0.01). The coarsest tolerance the auto
+--            law can ever ask for, and -- per section 2.0's table -- the
+--            exact minimum of the vertex curve; the world at a glance.
+--
+-- Note what is deliberately NOT a tier: `lod = 6.0`, /api/transition's
+-- default, which is 3.3x HEAVIER than the ceiling and collapses every
+-- morph to two points. Calling it "coarse" would be a lie about the
+-- curve's shape (characterization D7's trap, stated in its own words).
+data DetailTier = Coarse | Fine | Ultra deriving (Eq, Ord, Show, Bounded, Enum)
+
+detailTierNames :: [Text]
+detailTierNames = sort (map tierText [minBound .. maxBound])
+
+tierText :: DetailTier -> Text
+tierText = T.toLower . T.pack . show
+
+lodFloor, lodCeiling :: Double
+lodFloor = 1e-6
+lodCeiling = 1e-2
+
+-- The page width the auto rule defaults to when none is given
+-- (lib.rs:611: `.unwrap_or(1200.0)`), and the zoom at which the
+-- characterization's own table names the middle tier. Both are the
+-- server's/characterization's numbers, cited, not tuned here.
+canonicalWidth, canonicalFineZoom :: Double
+canonicalWidth = 1200
+canonicalFineZoom = 8
+
+autoLod :: Double -> Double -> Double
+autoLod zoom width = max lodFloor (min lodCeiling ((zoom / width) * pi / 180))
+
+tierLod :: DetailTier -> Double
+tierLod Ultra  = lodFloor
+tierLod Fine   = autoLod canonicalFineZoom canonicalWidth
+tierLod Coarse = lodCeiling
+
+instance FromCapture DetailTier where
+  capName _ = "detail"
+  universe _ = Enumerated detailTierNames
+  renderCap = tierText
+  parseCap t =
+    let vs = [ (tierText d, d) | d <- [minBound .. maxBound] ]
+    in case lookup (T.strip t) vs of
+         Just d  -> Right d
+         Nothing -> Left ("'" <> T.strip t <> "' is not a detail tier."
+                          <> didYouMean (map fst vs) (T.strip t)
+                          <> "\n  Detail tiers are: "
+                          <> T.intercalate ", " detailTierNames)

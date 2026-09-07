@@ -4,6 +4,7 @@ import Data.Bits (xor)
 import qualified Data.ByteString as BS
 import Data.List (nub, tails)
 import Data.Map.Strict (Map)
+import Data.Proxy (Proxy (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -114,7 +115,18 @@ data Order a = Order
 -- and shrunk on its own -- a solo group correlates nothing, so its law
 -- is trivially true and its candidates are just its member's.
 solo :: FromCapture a => Text -> Gen a -> Order a -> HoleGroup
-solo n g o = HoleGroup n [n] (Map.singleton n . renderCap <$> g) sh rk (const True)
+solo n g o = soloLawful n g o (const True)
+
+-- A solo group WITH a law. A group of one correlates nothing with a
+-- partner, but it can still owe a property of its own -- <someZoom>
+-- does: the two cameras camera.feature derives from it ("doubled",
+-- "halved") must be other cameras, or the laws quantified over it
+-- compare a scene with itself. `solo` is this at `const True`, so
+-- there is still ONE drawing rule and one shrinking rule, not two, and
+-- the generic pins (every draw and every candidate satisfies its
+-- group's law) reach a lawful solo group for free.
+soloLawful :: FromCapture a => Text -> Gen a -> Order a -> (Map Text Text -> Bool) -> HoleGroup
+soloLawful n g o lawful = HoleGroup n [n] (Map.singleton n . renderCap <$> g) sh rk lawful
   where
     sh env = [ Map.singleton n r
              | Right a <- [bound1 n env], a' <- shrinkWith o a, r <- renderLawful a' ]
@@ -141,6 +153,78 @@ pair gname n1 n2 g o lawful = HoleGroup gname [n1, n2] draw sh rk lawful
              | Right ab <- [both env], (x, y) <- shrinkWith o ab
              , r1 <- renderLawful x, r2 <- renderLawful y ]
     rk env = either (const 0) (rankOf o) (both env)
+
+-- A correlated pair whose members ALSO mean something on their own.
+--
+-- `pair` above is the right shape when the two holes only ever appear
+-- together: with a partner missing, `both` fails, so the group offers no
+-- candidates and ranks 0 -- it simply does not shrink. That costs
+-- nothing for <someStyle>/<someOtherStyle> (dresses have no candidates
+-- to offer in the first place) and nothing for
+-- <someSubset>/<someSuperset> (which the corpus only ever writes
+-- together).
+--
+-- It costs a great deal for <someYear>. The step phase had to move
+-- `someYear` into a correlated pair with `someOtherYear`, because the
+-- span laws (transition's four, and subjects' span-vs-instant) are
+-- degenerate or falsely red when the two years collide -- and a
+-- collision is not hypothetical at 1 draw in 4104. But <someYear> is
+-- also the corpus's most-used hole, appearing ALONE in eight scenarios
+-- across scene, census, subjects and resources, and its shrinker (the
+-- one that walks a failing year down to the -1405 landmark, and whose
+-- well-foundedness cost this project a real cycle to get right) is the
+-- diagnosis those scenarios lean on. Registering the pair with `pair`
+-- would have silently deleted it from all eight.
+--
+-- So: when both members are in evidence, this behaves exactly like
+-- `pair` -- one correlated draw, one correlated candidate, the pair's
+-- own order. When only ONE is (because the scenario mentions only one),
+-- it behaves exactly like `solo` on that member, using the member's own
+-- order. Nothing is re-bound that the scenario did not mention, and a
+-- candidate is still confined, still strictly smaller, and still owes
+-- `groupLaw` -- see `shrinkToMinimalWith`'s gates, which now admit a
+-- half-present group precisely because a relation with an absent
+-- partner is not a relation that can be broken (`distinctPairLaw`
+-- states that side of it).
+--
+-- `pair` is NOT re-expressed in terms of this: its partial-env
+-- behaviour (rank 0, no candidates) is a deliberate statement about
+-- holes that mean nothing alone, and collapsing the two would turn that
+-- statement into an accident of which order was passed.
+pairOrSolo :: forall a. (FromCapture a, Eq a)
+           => Text -> Text -> Text
+           -> Gen (a, a) -> Order (a, a) -> Order a -> (Map Text Text -> Bool)
+           -> HoleGroup
+pairOrSolo gname n1 n2 g o o1 lawful = HoleGroup gname [n1, n2] draw sh rk lawful
+  where
+    draw = rend <$> g
+    rend (a, b) = Map.fromList [(n1, renderCap a), (n2, renderCap b)]
+    sh env = case slice env of
+      Just (Left (a, b)) -> [ Map.fromList [(n1, r1), (n2, r2)]
+                            | (x, y) <- shrinkWith o (a, b)
+                            , r1 <- renderLawful x, r2 <- renderLawful y ]
+      Just (Right (n, a)) -> [ Map.singleton n r
+                             | a' <- shrinkWith o1 a, r <- renderLawful a' ]
+      Nothing -> []
+    rk env = case slice env of
+      Just (Left ab)      -> rankOf o ab
+      Just (Right (_, a)) -> rankOf o1 a
+      Nothing             -> 0
+    -- Which members this environment carries, read back through the very
+    -- captures the corpus parses them with. `Left` is the correlated
+    -- case (both present), `Right` the solo one (exactly one present,
+    -- named so the candidate re-binds the right hole); `Nothing` is
+    -- either nothing present at all or a present binding that does not
+    -- read back -- both bottoms of the order, which is the honest answer
+    -- for a value we cannot examine.
+    slice :: Map Text Text -> Maybe (Either (a, a) (Text, a))
+    slice env = case (Map.lookup n1 env, Map.lookup n2 env) of
+      (Just _, Just _) -> either (const Nothing) (Just . Left)
+                            ((,) <$> bound1 @a n1 env <*> bound1 @a n2 env)
+      (Just _, Nothing) -> fmap (Right . (,) n1) (eitherToMaybe (bound1 @a n1 env))
+      (Nothing, Just _) -> fmap (Right . (,) n2) (eitherToMaybe (bound1 @a n2 env))
+      (Nothing, Nothing) -> Nothing
+    eitherToMaybe = either (const Nothing) Just
 
 -- One hole's current binding, parsed back through the very capture the
 -- corpus parses it with. Parsing back is what keeps a shrinker honest in
@@ -235,6 +319,138 @@ genNestedPieces = do
   PieceSet super <- genPieces
   sub <- sublistOf (Set.toList super)
   pure (PieceSet (Set.fromList sub), PieceSet super)
+
+-- <someYear> / <someOtherYear>: two years that are DISTINCT BY
+-- CONSTRUCTION, by exactly the mechanism `genStylePair` uses on dresses
+-- -- draw an index, then rotate by a NON-ZERO offset in Z_n, so no draw
+-- in this generator's codomain has the two equal.
+--
+-- The alternative (`genYear` twice, or `suchThat (/=)`) would make
+-- transition.feature's four span laws collide one iteration in 4104 --
+-- rare enough to look green for a long time and then fail once, for a
+-- reason that is not a fact about the server. `transition(a, a)` is a
+-- law with its OWN scenario ("no time passing means nothing moves"),
+-- written over a single <someYear>; a span law that silently degenerated
+-- into it would be that scenario a second time, not the span law.
+--
+-- The index -> year map is arithmetic, not a list lookup: the calendar
+-- has no year 0 (see Capture.Year), so index 0..4003 is -4004..-1 and
+-- index 4004..4103 is 1..100 -- 4104 legal years, each reached exactly
+-- once, which is what makes the rotation a genuine bijection and the
+-- distinctness structural.
+yearCount :: Int
+yearCount = 4104
+
+yearAt :: Int -> Year
+yearAt k = Year (if k < 4004 then k - 4004 else k - 4003)
+
+genYearPair :: Gen (Year, Year)
+genYearPair = do
+  i <- chooseInt (0, yearCount - 1)
+  d <- chooseInt (1, yearCount - 1)
+  pure (yearAt i, yearAt ((i + d) `mod` yearCount))
+
+-- <someDetail> / <someOtherDetail>: two tiers, distinct by construction,
+-- by the same rotation. detail.feature's invariance law ("detail changes
+-- how much is drawn, never what exists") compares the feature sets of two
+-- renders; drawing the same tier twice would compare a render with
+-- itself, which every server passes.
+genDetailPair :: Gen (DetailTier, DetailTier)
+genDetailPair = do
+  i <- chooseInt (0, n - 1)
+  d <- chooseInt (1, n - 1)
+  pure (tierAt i, tierAt (i + d))
+  where
+    n = length ([minBound .. maxBound] :: [DetailTier])
+    tierAt k = toEnum (k `mod` n) :: DetailTier
+
+-- ---------- the camera's own holes ----------
+--
+-- THE GRID. Centers and zooms are drawn on a grid of HUNDREDTHS OF A
+-- DEGREE, and the choice is not cosmetic: it is what makes "smaller"
+-- a natural number rather than a real, which is what `Order`'s rank
+-- contract requires. A hundredth of a degree is also the resolution the
+-- corpus's own camera literals are written at (`31.5,35.0`, `zoom 4`,
+-- and the frame's own endpoints 0.05 and 89.9), so the grid is the
+-- corpus's own precision, not a resolution invented here.
+centerGrid :: Int -> Double
+centerGrid k = fromIntegral k / 100
+
+-- Division, deliberately, not `fromIntegral k * 0.01`: 0.01 is not
+-- representable, so multiplying accumulates its error and 8990 * 0.01
+-- need not be the same Double as the literal 89.9 that `parseCap`
+-- compares against. `x / 100` is correctly rounded, so it IS that
+-- literal, and every drawn endpoint parses back rather than falling one
+-- ulp outside the frame.
+gridTicks :: Double -> Int
+gridTicks d = round (d * 100)
+
+-- <someCenter> / <someOtherCenter>: a distinct pair of points, drawn
+-- from a DECLARED box.
+--
+-- THE BOX IS THE WHOLE GLOBE: latitude -89.90..89.90, longitude
+-- -179.99..180.00. Two reasons, and both are about not quantifying over
+-- a corner of what the server actually ships:
+--
+--   * the latitude bounds are the SERVER'S OWN (`build_query` clamps to
+--     +/-89.9 before building the cap), so this box is not a choice at
+--     all -- it is the set of distinct cameras the API has. Longitude
+--     wraps, and the half-open (-180, 180] writes each meridian once.
+--   * this canon is GLOBAL, not Levantine. The characterization found
+--     833 labels in a 0.09-degree view over Jerusalem, the farthest
+--     being Lake Waikaremoana in New Zealand, 148.3 degrees away. A
+--     camera law drawn only from the biblical Near East would never
+--     put a feature beyond the horizon at all, and "the far side of the
+--     globe is never sent" would be a law about an empty set.
+--
+-- Distinct by construction, by the same Z_n rotation as the style pair:
+-- the grid index -> (lat, lon) map is a bijection on [0, n), so two
+-- distinct indices are two distinct points, and no draw in the
+-- codomain has them equal.
+latTickBound :: Int
+latTickBound = gridTicks 89.9
+
+lonTickLo, lonTickHi :: Int
+lonTickLo = gridTicks (-179.99)
+lonTickHi = gridTicks 180
+
+latTickCount, lonTickCount, centerCount :: Int
+latTickCount = 2 * latTickBound + 1
+lonTickCount = lonTickHi - lonTickLo + 1
+centerCount  = latTickCount * lonTickCount
+
+centerAt :: Int -> Center
+centerAt k = Center (centerGrid (q - latTickBound)) (centerGrid (r + lonTickLo))
+  where (q, r) = k `divMod` lonTickCount
+
+genCenterPair :: Gen (Center, Center)
+genCenterPair = do
+  i <- chooseInt (0, centerCount - 1)
+  d <- chooseInt (1, centerCount - 1)
+  pure (centerAt i, centerAt ((i + d) `mod` centerCount))
+
+-- <someZoom>: one draw, but the step vocabulary derives TWO more cameras
+-- from it -- camera.feature says "zoom <someZoom> doubled" and
+-- "zoom <someZoom> halved" in the two nesting laws.
+--
+-- Those derived forms go through the server's own clamp
+-- (`Capture.zoomDoubled`/`zoomHalved`), which is where the danger is:
+-- doubling 90 gives 90, and halving 0.05 gives 0.05. A draw at either
+-- endpoint would make "wide" and "narrow" the SAME camera, and both
+-- nesting laws would compare a scene with itself -- green for every
+-- possible server, which is the exact defect this project already paid
+-- for once (7cd31bd's someA/someB). So the generator draws from the
+-- sub-window where BOTH derived forms escape the clamp:
+-- [2*zoomMin, zoomMax/2] = [0.1, 45]. That window is stated in the
+-- clamp's own endpoints, not tuned, and `zoomLaw` below re-states the
+-- property itself so a future change to either function is caught rather
+-- than assumed.
+zoomSafeLoTicks, zoomSafeHiTicks :: Int
+zoomSafeLoTicks = gridTicks (zoomMin * 2)
+zoomSafeHiTicks = gridTicks (zoomMax / 2)
+
+genZoom :: Gen Zoom
+genZoom = Zoom . centerGrid <$> chooseInt (zoomSafeLoTicks, zoomSafeHiTicks)
 
 -- ---------- the shrinkers ----------
 --
@@ -334,6 +550,66 @@ distinctStyleLaw env = case (bound1 "someStyle" env, bound1 "someOtherStyle" env
   (Right a, Right b) -> a /= (b :: StyleName)
   _ -> False
 
+-- The three new distinctness laws, all the same shape as
+-- `distinctStyleLaw` and all for the same reason: the law that
+-- quantifies over the pair compares two responses, and two EQUAL
+-- bindings turn that comparison into "a response equals itself" -- true
+-- for every server, so a check satisfiable by its own failure mode
+-- (MEMORY: verify-distinct-not-nonnull). An unparseable or missing
+-- binding is a violation, never a pass: "I could not check it" and
+-- "it holds" must not be the same answer.
+--
+-- Written as one combinator rather than three near-identical copies:
+-- the predicate IS "these two holes parse and differ", and the only
+-- thing that varies is which two names and at which type.
+-- One further distinction this predicate draws that `distinctStyleLaw`
+-- does not need to: a member that is ABSENT from the environment (the
+-- scenario mentions <someYear> but not <someOtherYear>) is not a gap in
+-- the evidence. There is no pair to be distinct, so there is no relation
+-- to break -- "not applicable" is the honest answer, and it is what lets
+-- `pairOrSolo` shrink a lone <someYear> at all. A member that is PRESENT
+-- but does not read back is still a violation, because "I could not read
+-- it" and "it holds" must not be the same answer.
+-- Carries its type in a `proxy` argument, the same convention
+-- `Capture`'s own `capName`/`universe` use, rather than leaning on an
+-- ambiguous type variable resolved by TypeApplications at each call
+-- site: the type is part of what the law says (two YEARS differ, two
+-- TIERS differ), so it belongs in the signature.
+distinctPairLaw :: forall proxy a. (FromCapture a, Eq a)
+                => proxy a -> Text -> Text -> Map Text Text -> Bool
+distinctPairLaw _ n1 n2 env = case (Map.lookup n1 env, Map.lookup n2 env) of
+  (Nothing, Nothing) -> True
+  (Just _, Nothing)  -> readable n1
+  (Nothing, Just _)  -> readable n2
+  (Just _, Just _)   -> case (bound1 @a n1 env, bound1 @a n2 env) of
+    (Right a, Right b) -> a /= b
+    _                  -> False
+  where readable n = either (const False) (const True) (bound1 @a n env)
+
+distinctYearLaw :: Map Text Text -> Bool
+distinctYearLaw = distinctPairLaw (Proxy @Year) "someYear" "someOtherYear"
+
+distinctDetailLaw :: Map Text Text -> Bool
+distinctDetailLaw = distinctPairLaw (Proxy @DetailTier) "someDetail" "someOtherDetail"
+
+distinctCenterLaw :: Map Text Text -> Bool
+distinctCenterLaw = distinctPairLaw (Proxy @Center) "someCenter" "someOtherCenter"
+
+-- <someZoom>'s law is NOT distinctness (it is a solo hole) -- it is that
+-- the two cameras the STEP VOCABULARY derives from it ("zoom X doubled",
+-- "zoom X halved") are genuinely other cameras. A zoom of 90 doubles to
+-- 90 and a zoom of 0.05 halves to 0.05, and either would make
+-- camera.feature's two nesting laws compare a scene with itself.
+--
+-- Declared on the group so that the generic pins (every draw and every
+-- shrink candidate satisfies its group's law) enforce it automatically,
+-- exactly as they do for the correlated pairs -- a solo group with a
+-- real precondition is still a group with a law.
+zoomLaw :: Map Text Text -> Bool
+zoomLaw env = case bound1 "someZoom" env of
+  Right z -> zoomDerivesTwoCameras z
+  Left _  -> False
+
 -- Styles do not shrink. A dress is not made of smaller dresses, and the
 -- only "smaller" move available -- collapsing one style onto the other --
 -- is exactly the collision `genStylePair` exists to rule out. Returning
@@ -343,6 +619,110 @@ distinctStyleLaw env = case (bound1 "someStyle" env, bound1 "someOtherStyle" env
 -- the same size, so none is smaller than another).
 stylePairOrder :: Order (StyleName, StyleName)
 stylePairOrder = Order (const 0) (const [])
+
+-- The year pair shrinks the way a year shrinks -- toward -1405, the
+-- frame's landmark -- but ONE MEMBER AT A TIME, and never onto its
+-- partner. Both halves matter:
+--
+--   * shrinking both at once would routinely collapse the pair onto
+--     -1405 twice, which is not a distinct pair and therefore not a
+--     draw this generator could have produced (the same discipline
+--     `nestedOrder` keeps for the nesting).
+--   * the rank is the SUM of the two years' own ranks, so every
+--     candidate (which strictly lowers one rank and leaves the other
+--     alone) strictly lowers the sum -- the well-foundedness `yearOrder`
+--     already established, inherited rather than re-derived.
+yearPairOrder :: Order (Year, Year)
+yearPairOrder = Order rk shr
+  where
+    rk (a, b) = yearRank a + yearRank b
+    shr (a, b) =
+         [ (a', b) | a' <- shrinkWith yearOrder a, a' /= b ]
+      ++ [ (a, b') | b' <- shrinkWith yearOrder b, b' /= a ]
+
+-- Detail tiers do not shrink, for the reason dresses do not: a tier is
+-- not made of smaller tiers. There are exactly three, so a drawn
+-- distinct pair is one of six, and the only "smaller" move available --
+-- collapsing one tier onto the other -- is precisely the collision
+-- `genDetailPair` exists to rule out. The payload ORDER (coarse ships
+-- less than fine ships less than ultra) is a fact about the server's
+-- output, not about the size of the tier VALUE, so it would not make a
+-- counterexample easier to read. Flat rank, no candidates, stated here
+-- rather than discovered later as an empty list nobody meant.
+detailPairOrder :: Order (DetailTier, DetailTier)
+detailPairOrder = Order (const 0) (const [])
+
+-- The camera's landmark, and the bottom of both camera orders: the very
+-- point camera.feature's own pinned example looks at
+-- ("looking at 31.5,35.0 zoom 4", which detail.feature repeats). Same
+-- role -1405 plays for years -- rank 0, shrinks to nothing, and reachable
+-- in one jump from anywhere -- so a camera counterexample narrows toward
+-- the one camera every reader of this corpus already has in their head.
+canonicalCenter :: Center
+canonicalCenter = Center 31.5 35.0
+
+canonicalZoom :: Zoom
+canonicalZoom = Zoom 4
+
+centerRank :: Center -> Int
+centerRank c
+  | c == canonicalCenter = 0
+  | otherwise = 1 + abs (la - la0) + abs (lo - lo0)
+  where
+    (la, lo)   = (gridTicks (centerLat c), gridTicks (centerLon c))
+    (la0, lo0) = (gridTicks (centerLat canonicalCenter), gridTicks (centerLon canonicalCenter))
+
+-- One center's candidates: the landmark, plus ordinary integer shrinks
+-- of each coordinate's tick, filtered to those that genuinely rank
+-- lower. The filter is what makes this well-founded even though `shrink`
+-- moves toward ZERO while the rank measures distance from the LANDMARK:
+-- a move toward zero that overshoots the landmark ranks higher and is
+-- simply not offered. (`yearOrder` needs, and has, the identical filter,
+-- for the identical reason -- the -1405 <-> -1400 cycle it exists to
+-- rule out.)
+centerShrinks :: Center -> [Center]
+centerShrinks c =
+  [ c' | c' <- [ canonicalCenter | c /= canonicalCenter ] ++ moves, centerRank c' < centerRank c ]
+  where
+    (la, lo) = (centerLat c, centerLon c)
+    moves = [ Center (centerGrid la') lo | la' <- shrink (gridTicks la) ]
+         ++ [ Center la (centerGrid lo') | lo' <- shrink (gridTicks lo) ]
+
+centerPairOrder :: Order (Center, Center)
+centerPairOrder = Order rk shr
+  where
+    rk (a, b) = centerRank a + centerRank b
+    shr (a, b) =
+         [ (a', b) | a' <- centerShrinks a, a' /= b ]
+      ++ [ (a, b') | b' <- centerShrinks b, b' /= a ]
+
+zoomRank :: Zoom -> Int
+zoomRank z@(Zoom v)
+  | z == canonicalZoom = 0
+  | otherwise = 1 + abs (gridTicks v - gridTicks cz)
+  where Zoom cz = canonicalZoom
+
+-- A zoom's candidates: the landmark zoom, plus tick shrinks -- and every
+-- candidate must still be a zoom whose doubled and halved forms are
+-- distinct cameras (`zoomLaw`'s property, asked of the value rather
+-- than restated as a window), because a candidate the DRAW could never
+-- have produced is not a smaller counterexample.
+zoomOrder :: Order Zoom
+zoomOrder = Order zoomRank shr
+  where
+    shr z@(Zoom v) =
+      [ z' | z' <- [ canonicalZoom | z /= canonicalZoom ]
+                   ++ [ Zoom (centerGrid t) | t <- shrink (gridTicks v) ]
+           , zoomRank z' < zoomRank z
+           , zoomDerivesTwoCameras z' ]
+
+-- The property `genZoom`'s window delivers and `zoomOrder` must
+-- preserve, stated ONCE as a predicate over the value: both derived
+-- cameras really are other cameras. Read off `Capture.zoomDoubled`/
+-- `zoomHalved` (which carry the server's clamp) rather than restating
+-- the window's endpoints, so a change to the clamp moves this with it.
+zoomDerivesTwoCameras :: Zoom -> Bool
+zoomDerivesTwoCameras z = zoomDoubled z /= z && zoomHalved z /= z
 
 -- The one and only place a hole name is given meaning. EXPLICIT and
 -- TYPED, no name-sniffing/inference: a hole not listed here has no
@@ -359,8 +739,7 @@ stylePairOrder = Order (const 0) (const [])
 -- a hole that already narrows instead of one that has to be taught to.
 holeGroups :: [HoleGroup]
 holeGroups =
-  [ solo "someYear"   genYear   yearOrder
-  , solo "somePieces" genPieces pieceSetOrder
+  [ solo "somePieces" genPieces pieceSetOrder
   , solo "somePiece"  (elements [minBound .. maxBound] :: Gen Piece) pieceOrder
   , solo "someA"      genPieces pieceSetOrder
   , solo "someB"      genPieces pieceSetOrder
@@ -368,6 +747,22 @@ holeGroups =
       genStylePair    stylePairOrder distinctStyleLaw
   , pair "nestedPieces" "someSubset" "someSuperset"
       genNestedPieces nestedOrder    nestedLaw
+    -- The step phase's four: the camera's centers and zoom, the detail
+    -- axis's tiers, and the span laws' second year. Each carries the
+    -- relationship its laws depend on (see the four predicates above),
+    -- so no scenario quantified over them can degenerate into comparing
+    -- a response with itself.
+    -- The one pair whose members also mean something alone: <someYear>
+    -- is written on its own in eight scenarios across four files, and
+    -- its shrinker is what walks a failing year down to -1405 there.
+    -- See `pairOrSolo`.
+  , pairOrSolo "yearPair" "someYear" "someOtherYear"
+      genYearPair     yearPairOrder  yearOrder distinctYearLaw
+  , pair "detailPair"   "someDetail" "someOtherDetail"
+      genDetailPair   detailPairOrder distinctDetailLaw
+  , pair "centerPair"   "someCenter" "someOtherCenter"
+      genCenterPair   centerPairOrder distinctCenterLaw
+  , soloLawful "someZoom" genZoom zoomOrder zoomLaw
   ]
 
 -- Every hole name, mapped to the group that draws it. A partition of the
@@ -712,10 +1107,24 @@ shrinkToMinimalWith reg defs w sc env0 = do
     -- the other way a binding environment comes into existence, and it
     -- owes exactly what a draw owes.
     --
-    --   COMPLETE. Only a group whose members are ALL bound here can be
-    --   shrunk: half a correlated pair cannot be re-bound lawfully (its
-    --   partner's value is not in evidence). A solo group is always
-    --   complete, so this costs nothing in the ordinary case.
+    --   PRESENT. The group must have at least one member in this
+    --   environment. `groupsIn` already guarantees that (it enumerates
+    --   the groups these hole names belong to), so the gate is written
+    --   here as documentation of what a candidate rests on rather than
+    --   as a second filter.
+    --
+    --   This gate used to read COMPLETE -- all of a group's members
+    --   bound -- on the reasoning that half a correlated pair cannot be
+    --   re-bound lawfully, its partner's value not being in evidence.
+    --   That is true when the partner is missing from a SLICE, and it is
+    --   still enforced, but by the CONFINED and LAWFUL gates below, not
+    --   by this one. It is NOT true when the partner is absent because
+    --   the SCENARIO never mentioned it: <someYear> alone is a whole
+    --   binding, not half of one, and `pairOrSolo` re-binds it through
+    --   its own solo order. Keeping COMPLETE here would have deleted
+    --   year shrinking from every scenario that writes <someYear>
+    --   without <someOtherYear> -- eight of them -- the moment the two
+    --   became one group.
     --
     --   CONFINED to the members the group DECLARES. An undeclared key in
     --   a slice would slip a hole into the environment that the scenario
@@ -740,7 +1149,7 @@ shrinkToMinimalWith reg defs w sc env0 = do
     candidates env =
       [ next
       | g <- groupsIn reg (Map.keys env)
-      , all (`Map.member` env) (groupMembers g)
+      , any (`Map.member` env) (groupMembers g)
       , slice <- groupShrink g env
       , let next = Map.union (Map.restrictKeys slice (Set.fromList (groupMembers g))) env
       , groupRank g next < groupRank g env

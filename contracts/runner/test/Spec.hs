@@ -18,7 +18,7 @@ import qualified Prop
 import Control.Exception (try, bracket, evaluate, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
-import Data.List (isInfixOf, sort)
+import Data.List (isInfixOf, nub, sort)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Maybe (fromJust, listToMaybe)
 import qualified Data.Aeson as A
@@ -1549,6 +1549,37 @@ main = hspec $ do
             , (Then, "fetching sceneA's first resource twice yields identical bytes")
             , (Then, "fetching sceneA's first two resources as a batch equals fetching them singly")
             , (Then, "the consumed projection eras equals fixture \"foo\"")
+              -- the step phase's twenty-four. Every one of these is a
+              -- line the coverage corpus actually contains, not a
+              -- synthetic body invented to satisfy the bijection: if a
+              -- definition's literals ever drift away from the sentence
+              -- the corpus writes, this test goes red at the same moment
+              -- `check` does, rather than staying green against a body
+              -- only this file believes in.
+            , (When, "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine as viewed")
+            , (When, "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 doubled detail fine as wide")
+            , (When, "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 as first")
+            , (When, "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine")
+            , (When, "I render pieces fills at year -1405 in style canaan detail fine as one")
+            , (When, "I render pieces fills at year -1405 in no style")
+            , (Then, "viewed keeps every feature of world in view and omits every feature of world out of view")
+            , (Then, "every resource here and there share is byte-identical in both")
+            , (Then, "narrow's markers and labels are a subset of wide's")
+            , (Then, "every marker and label of wide still in narrow's view is kept by narrow")
+            , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
+            , (Then, "every label of viewed anchors in view")
+            , (Then, "one and other draw the same features")
+            , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
+            , (Then, "no shared resource of glance carries more vertices than it does in corner")
+            , (Then, "still's steps are the empty list")
+            , (Then, "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan")
+            , (Then, "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after")
+            , (Then, "back is there with every morph reversed and every fade inverted")
+            , (Then, "every morph of plan carries at least as many points as its border carries vertices in after")
+            , (Then, "span is refused or differs from instant")
+            , (Then, "fetching scene's first resource alongside a bogus id is refused by name")
+            , (Then, "every entry in sampled traces to a disposition and a border")
+            , (Then, "selfDiff equals fixture \"census-diff-empty\"")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [Scenario "s" [] steps]
@@ -1625,13 +1656,43 @@ main = hspec $ do
           piecesErr = "'qqqqqqqqqq' is not a piece.\n"
                    <> "  Pieces are: borders, chrome, claims, fills, ground, journeys, "
                    <> "labels, markers, veil, water"
+          -- The step phase took this from two claimants to EIGHT. Every
+          -- render overload -- the six camera/detail/no-style shapes and
+          -- the two plain ones -- opens with the same
+          -- `capUntil @PieceSet " at year "`, so a bad piece name fails
+          -- identically for all eight before any of their differing
+          -- tails is reached. Same mechanism the two-claimant version
+          -- documented, at four times the width.
+          --
+          -- Recorded rather than welcomed: eight verbatim repetitions of
+          -- one error is a materially worse message than two, and this
+          -- printed format is what the diagnosis document is generated
+          -- from. The fix is a dedupe in `Check.describe` (group the
+          -- sketches that share an error text, print the text once) --
+          -- it belongs to whoever owns Check.hs's reporting, not to the
+          -- step phase, and it is written up in the step-phase report
+          -- rather than smuggled in here. This test asserts what the
+          -- runner ACTUALLY prints today; it does not claim that is what
+          -- it should print.
+          claimant sk = "; " <> sk <> ": " <> piecesErr
+          firstSketch =
+            "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail} as {name}"
+          laterSketches =
+            [ "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} {scale} detail {detail} as {name}"
+            , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} as {name}"
+            , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail}"
+            , "I render pieces {pieces} at year {year} in style {style} detail {detail} as {name}"
+            , "I render pieces {pieces} at year {year} in no style"
+            , "I render pieces {pieces} at year {year} in style {style} as {name}"
+            , "I render pieces {pieces} at year {year} in style {style}"
+            ]
           expected = T.concat
             [ "AMBIGUOUS ", T.pack featPath, " / ambiguous case: I do the thing matches 2 "
             , "definitions: I do {text} | I do the thing\n"
             , "BAD-VALUE ", T.pack featPath, " / bad value case: I render pieces qqqqqqqqqq "
             , "at year -1405 in style canaan -- "
-            , "I render pieces {pieces} at year {year} in style {style} as {name}: ", piecesErr
-            , "; I render pieces {pieces} at year {year} in style {style}: ", piecesErr
+            , firstSketch, ": ", piecesErr
+            , T.concat (map claimant laterSketches)
             , "\n"
             ]
       createDirectoryIfMissing True dir
@@ -1928,6 +1989,68 @@ main = hspec $ do
         case parseFeature path rewritten of
           Left e -> expectationFailure (T.unpack e)
           Right f -> ftVocab f `shouldBe` Vocab.expectedVocab allSteps f
+    -- Step-phase finding: a fresh block must go ABOVE a comment that is
+    -- glued to the scenario it annotates, not between the two.
+    --
+    -- Found the moment the step phase gave scene/detail.feature a
+    -- vocabulary it had never had. Its first scenario carries two
+    -- "# Characterization: ..." lines directly above its "@property"
+    -- tag; a comment is neither a blank nor a boundary, so the insertion
+    -- scan walked past both and put the table between the note and the
+    -- scenario the note is about. Byte-surgical and still wrong: those
+    -- notes are the owner's, and a tool that quietly cuts one away from
+    -- what it annotates has no business running on a hand-written
+    -- corpus.
+    it "a fresh Vocabulary block is inserted ABOVE a comment glued to \
+       \the scenario it annotates -- never between the note and its \
+       \scenario -- while a comment separated by a blank line stays \
+       \where the author put it" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-comment"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "commented.feature"
+          original = T.unlines
+            [ "Feature: t"
+            , "  a preamble line"
+            , ""
+            , "  # a free-standing preamble note, separated by a blank"
+            , ""
+            , "  # glued to the scenario: its own characterization note"
+            , "  @property"
+            , "  Scenario: s"
+            , "    When I render pieces fills at year -1405 in style canaan"
+            ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 original)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        -- whole-body: the exact file, so placement is pinned rather
+        -- than probed with a substring that several wrong layouts
+        -- would also satisfy
+        rewritten `shouldBe` T.unlines
+          [ "Feature: t"
+          , "  a preamble line"
+          , ""
+          , "  # a free-standing preamble note, separated by a blank"
+          , ""
+          , "  Vocabulary:"
+          , "    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |"
+          , "    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |"
+          , "    | style | any of: canaan, parchment, slate |"
+          , ""
+          , "  # glued to the scenario: its own characterization note"
+          , "  @property"
+          , "  Scenario: s"
+          , "    When I render pieces fills at year -1405 in style canaan"
+          ]
+        -- and running it again changes nothing: the block it just wrote
+        -- is found where it left it, not re-inserted somewhere else
+        Vocab.vocabDir allSteps dir True
+        twice <- TE.decodeUtf8 <$> BS.readFile path
+        twice `shouldBe` rewritten
     -- Review finding (round 2), gap 4: the deviation making a parse error
     -- fatal in BOTH modes (not just verify, unlike the brief's literal
     -- stub -- see task-8-report.md) had no test proving --write actually
@@ -2361,8 +2484,10 @@ main = hspec $ do
       -- What the corpus may quantify over is a published surface; it
       -- gets a whole-body pin like any other.
       Map.keys Prop.holeRegistry `shouldBe`
-        [ "someA", "someB", "someOtherStyle", "somePiece", "somePieces"
-        , "someStyle", "someSubset", "someSuperset", "someYear" ]
+        [ "someA", "someB", "someCenter", "someDetail", "someOtherCenter"
+        , "someOtherDetail", "someOtherStyle", "someOtherYear", "somePiece"
+        , "somePieces", "someStyle", "someSubset", "someSuperset", "someYear"
+        , "someZoom" ]
     it "somePiece is registered as its own solo group and shrinks toward \
        \the earliest piece" $ do
       -- Registered here for Task 12's strengthened omission law; pinned
@@ -3205,6 +3330,783 @@ main = hspec $ do
       msg `shouldSatisfy` T.isInfixOf "consumed projection"
       msg `shouldSatisfy` T.isInfixOf "$."
 
+  -- ================= THE STEP PHASE =================
+
+  describe "the step phase: R78's `all` alias" $ do
+    it "`all` parses as every piece -- the input alias Rust's \
+       \PieceSet::parse already had and this side did not" $ do
+      parseCap @PieceSet "all" `shouldBe` Right allPieces
+      parseCap @PieceSet "  all  " `shouldBe` Right allPieces
+    it "`all` is an INPUT alias only: renderCap still writes the ten \
+       \names, so the round-trip law is untouched" $ do
+      -- The alias would be a real change to the type's laws if renderCap
+      -- ever produced it: `parseCap . renderCap == Right` would still
+      -- hold, but `renderCap . parseCap == Right` would stop, and the
+      -- corpus would start reading "all" where it had written a list.
+      renderCap allPieces `shouldBe`
+        "borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water"
+      parseCap @PieceSet (renderCap allPieces) `shouldBe` Right allPieces
+    it "`all` is not a piece, and the piece universe still says so -- \
+       \exactly as `none` has never been in it either" $ do
+      parseCap @Piece "all" `shouldSatisfy` isLeft
+      case universe (Proxy @PieceSet) of
+        Enumerated vs -> vs `shouldSatisfy` \v -> "all" `notElem` v && "none" `notElem` v
+        other -> expectationFailure ("expected an Enumerated universe, got " <> show other)
+    it "a mis-spelling of `all` is still a piece error, not a silent \
+       \empty set -- the alias is exact, not a prefix or a fuzzy match" $ do
+      parseCap @PieceSet "al" `shouldSatisfy` isLeft
+      parseCap @PieceSet "alll" `shouldSatisfy` isLeft
+      parseCap @PieceSet "ALL" `shouldSatisfy` isLeft
+
+  -- THE BLIND SPOT, RESOLVED. The corpus-phase report's finding 4 said
+  -- two new `I GET {url} as {name}` lines "look clean in `check` but are
+  -- not actually bound -- they are swallowed whole by the existing
+  -- capRest-based `I GET {url}` step, which never fails to parse."
+  --
+  -- That is no longer true, and these tests are what say so. R23's fix 7
+  -- gave UrlPath a type that REFUSES embedded whitespace, and Task 10
+  -- added the real binding step, so the two lines are that step's unique
+  -- clean match and the binding genuinely happens. What remains
+  -- invisible to `check` is something else entirely, and narrower --
+  -- pinned below so the limit is a known one rather than a rediscovered
+  -- one.
+  describe "the step phase: what `check` can and cannot see at an \
+           \`I GET {url} as {name}` line" $ do
+    let getLines =
+          [ "I GET /api/subjects?year=-1405 as instant"
+          , "I GET /api/subjects?year=-1405&to=-1050 as span"
+          , "I GET /api/scene?year=-1405&zoom=90.0000&style=canaan as instant"
+          , "I GET /api/scene?year=-1405&to=-1405&zoom=90.0000&style=canaan as span"
+          ]
+    it "each of the corpus's own GET-as lines is the binding step's \
+       \UNIQUE match -- not a silent swallow by the plain GET step, \
+       \whose UrlPath capture rejects the embedded space" $ do
+      let steps = [ Step When b Nothing | b <- getLines ]
+          f = Feature "getas" [] [] [] [Scenario "s" [] steps]
+      Check.orphans allSteps f `shouldBe` []
+      Check.ambiguous allSteps f `shouldBe` []
+      Check.valueErrors allSteps f `shouldBe` []
+      -- and it is the BINDING definition that matched, not the plain one
+      sequence_
+        [ [ defSketch d | d <- allSteps, defKw d == When, Matched _ <- [defRun d b] ]
+            `shouldBe` ["I GET {url} as {name}"]
+        | b <- getLines ]
+    it "... and the binding really happens: the name is bound to the \
+       \response, which is the whole thing the report doubted" $ do
+      let fake url = pure (Right (TE.encodeUtf8 url, A.toJSON url))
+          w = mkWorld "http://x" fake ""
+      case firstMatch When "I GET /api/subjects?year=-1405&to=-1050 as span" of
+        Nothing -> expectationFailure "no definition matched the GET-as line"
+        Just f -> do
+          r <- f w
+          case r of
+            Left e -> expectationFailure (T.unpack e)
+            Right w' -> Map.keys (bound w') `shouldBe` ["_last", "span"]
+    it "WHAT CHECK CANNOT SEE: the query string is opaque to it. A URL \
+       \path is a whitespace-free token with a Described universe, so no \
+       \parameter name, no parameter value and no year inside one is \
+       \ever type-checked -- a typo, an out-of-frame year, and an \
+       \unsupported parameter are all clean to `check`" $ do
+      -- This is the honest boundary of the static verdict, and it is
+      -- exactly why the two scenarios these lines belong to (subjects'
+      -- span-vs-instant, scene's interval identity) are decided by the
+      -- LIVE run and not by `check`: `to=` being ignored rather than
+      -- honoured is a fact about the server that no amount of static
+      -- checking can reach.
+      let bogus =
+            [ "I GET /api/subjects?yaer=-1405 as first"        -- typo'd parameter
+            , "I GET /api/subjects?year=-9999 as first"        -- outside the frame
+            , "I GET /api/subjects?year=-1405&nonsense=x as first"
+            , "I GET /api/nosuchroute?year=-1405 as first"     -- no such route
+            ]
+          f = Feature "opaque" [] [] [] [Scenario "s" [] [ Step When b Nothing | b <- bogus ]]
+      Check.orphans allSteps f `shouldBe` []
+      Check.ambiguous allSteps f `shouldBe` []
+      Check.valueErrors allSteps f `shouldBe` []
+      -- and it contributes no Vocabulary row either, so a reader of the
+      -- feature learns nothing about what a year is from a GET line
+      Vocab.expectedVocab allSteps f `shouldBe` []
+    it "... whereas the SAME facts, written through a typed render line, \
+       \are caught statically -- the difference is the capture's type, \
+       \not the checker" $ do
+      -- The contrast is what makes the limit above a property of
+      -- UrlPath rather than a weakness of `check`: an out-of-frame year
+      -- in a `{year}` capture is a value error, immediately.
+      let f = Feature "typed" [] [] []
+                [Scenario "s" []
+                  [Step When "I render pieces fills at year -9999 in style canaan" Nothing]]
+      Check.valueErrors allSteps f `shouldSatisfy` (not . null)
+
+  describe "the step phase: the camera's new capture types" $ do
+    it "a center round-trips, and the frame it refuses is the SERVER's \
+       \own clamp, not a number chosen here" $ do
+      parseCap @Center "31.5,35.0" `shouldBe` Right (Center 31.5 35.0)
+      fmap renderCap (parseCap @Center "31.5,35.0") `shouldBe` Right "31.5,35.0"
+      parseCap @Center "-33.87,151.21" `shouldBe` Right (Center (-33.87) 151.21)
+      -- build_query clamps latitude to +/-89.9 before building the cap,
+      -- so 89.95 is not a different camera -- it is 89.9 spelled
+      -- misleadingly, and the type refuses it rather than letting a law
+      -- believe it drew a camera it did not.
+      parseCap @Center "89.95,0" `shouldSatisfy` isLeft
+      parseCap @Center "0,180.5" `shouldSatisfy` isLeft
+      parseCap @Center "31.5" `shouldSatisfy` isLeft
+      parseCap @Center "north,east" `shouldSatisfy` isLeft
+    prop "every center in the frame round-trips" $ \(c :: Center) ->
+      parseCap (renderCap c) === Right c
+    it "a zoom round-trips and refuses outside the server's [0.05, 90]" $ do
+      parseCap @Zoom "4" `shouldBe` Right (Zoom 4)
+      fmap renderCap (parseCap @Zoom "4") `shouldBe` Right "4.0"
+      parseCap @Zoom "0.05" `shouldBe` Right (Zoom 0.05)
+      parseCap @Zoom "90" `shouldBe` Right (Zoom 90)
+      -- Outside the clamp a zoom is not a different camera; the
+      -- characterization confirmed 0.001/0.01/0.05 byte-identical and
+      -- 89.9/90/180/1000 byte-identical. Refusing it is what stops a
+      -- law from thinking it compared two cameras when it compared one.
+      parseCap @Zoom "0.04" `shouldSatisfy` isLeft
+      parseCap @Zoom "180" `shouldSatisfy` isLeft
+      parseCap @Zoom "wide" `shouldSatisfy` isLeft
+    prop "every zoom in the frame round-trips" $ \(z :: Zoom) ->
+      parseCap (renderCap z) === Right z
+    it "the three detail tiers round-trip and are Enumerated -- a closed \
+       \vocabulary a reader must learn, so it earns a Vocabulary row" $ do
+      mapM_ (\n -> fmap renderCap (parseCap @DetailTier n) `shouldBe` Right n)
+            detailTierNames
+      detailTierNames `shouldBe` ["coarse", "fine", "ultra"]
+      universe (Proxy @DetailTier) `shouldBe` Enumerated ["coarse", "fine", "ultra"]
+      case parseCap @DetailTier "corse" of
+        Left e -> e `shouldSatisfy` T.isInfixOf "Did you mean: coarse?"
+        Right _ -> expectationFailure "accepted a typo as a detail tier"
+    it "the two scale words round-trip and are Enumerated" $ do
+      parseCap @ScaleQual "doubled" `shouldBe` Right Doubled
+      parseCap @ScaleQual "halved" `shouldBe` Right Halved
+      universe (Proxy @ScaleQual) `shouldBe` Enumerated ["doubled", "halved"]
+      parseCap @ScaleQual "tripled" `shouldSatisfy` isLeft
+    it "center and zoom are DESCRIBED, so they contribute no Vocabulary \
+       \row -- a lat/lon pair is neither a finite answer set nor a \
+       \whole-number window, and Ranged's sentence would be false of them" $ do
+      case universe (Proxy @Center) of
+        Described _ -> pure ()
+        other -> expectationFailure ("center should be Described, got " <> show other)
+      case universe (Proxy @Zoom) of
+        Described _ -> pure ()
+        other -> expectationFailure ("zoom should be Described, got " <> show other)
+
+  -- The visibility predicates, alone, with no server. Each `it` below
+  -- carries its DISCRIMINATING CASE: a pair of inputs that a plausible
+  -- mutation of the predicate would answer differently. A boundary test
+  -- that only ever asks one side of the boundary is satisfiable by a
+  -- constant.
+  describe "the step phase: the camera, as arithmetic" $ do
+    -- A point d degrees east of (0,0) along the equator: the angle from
+    -- the center is exactly d, so every distance below is exact and
+    -- nothing depends on a projection.
+    let east d = unitOf (Center 0 d)
+        origin = Center 0 0
+        capAt d r = Cap (east d) r
+        degrees x = x * pi / 180
+    it "unitOf agrees with the server's from_lat_lon_deg, INCLUDING its \
+       \latitude clamp -- a predicate using the unclamped latitude would \
+       \disagree with the server about where the camera is" $ do
+      unitOf (Center 0 0) `shouldBe` Vec3 1 0 0
+      -- discriminating case for the clamp: 89.95 is not a legal Center
+      -- through parseCap, but the constructor is exported and a future
+      -- caller could build one. Clamped, it IS 89.9.
+      unitOf (Center 89.95 0) `shouldBe` unitOf (Center 89.9 0)
+      -- and the clamp does not flatten everything: two legal latitudes
+      -- inside the frame stay distinct
+      unitOf (Center 89.9 0) `shouldNotBe` unitOf (Center 89.8 0)
+    it "the view cap's radius is 1.8x the nominal zoom -- the margin \
+       \pinned at the characterization's own 1.78-in / 1.82-out boundary" $ do
+      -- Characterization 1.3, measured live: with zoom 2, a point at
+      -- 1.78x the nominal zoom is IN the view and one at 1.82x is OUT.
+      -- Both sides, because a law asserting only "far things are out" is
+      -- satisfied by culling everything (characterization C5's trap).
+      let vw = viewCap origin (Zoom 2)
+      pointInView vw (east (1.78 * 2)) `shouldBe` True
+      pointInView vw (east (1.82 * 2)) `shouldBe` False
+    it "the 1.8 margin is load-bearing: a point at 1.5x the nominal zoom \
+       \is in view ONLY because of it, and one at 2.0x is out" $ do
+      -- The discriminating pair for the CONSTANT. Drop the margin to 1.0
+      -- and the first line flips; raise it to 2.0 and the second does.
+      -- Conflating the cap radius with the query's nominal zoom is
+      -- characterization K3's named trap, and this is what catches it.
+      let vw = viewCap origin (Zoom 2)
+      pointInView vw (east 3.0) `shouldBe` True
+      pointInView vw (east 4.0) `shouldBe` False
+    it "at the widest legal zoom the cap is 162 degrees -- not the whole \
+       \sphere, and the difference is exactly what makes the antipodal \
+       \case a statement about the FEATURE's extent" $ do
+      let widest = viewCap origin (Zoom 90)
+      capRadius widest `shouldSatisfy` \r -> abs (r - degrees 162) < 1e-9
+      -- Characterization 1.3's degenerate end says that at zoom 90 the
+      -- camera is a no-op FOR THIS CANON -- and this is the precise
+      -- reason, which is easy to state wrongly. A bare POINT at 179
+      -- degrees is genuinely outside a 162-degree cap:
+      pointInView widest (east 179) `shouldBe` False
+      pointInView widest (east 161) `shouldBe` True
+      -- What reaches everything is a FEATURE, because its own bounding
+      -- cap is added to the view's. An almost-antipodal feature with any
+      -- appreciable extent still intersects:
+      inView widest (Cap (east 179) (degrees 20)) `shouldBe` True
+      inView widest (Cap (east 179) (degrees 5)) `shouldBe` False
+    it "inView counts the FEATURE's own extent, not only the view's -- \
+       \the discriminating case a view-radius-only mutation fails" $ do
+      let vw = Cap (east 0) 0.4
+      -- centers 1.0 rad apart. 0.4 + 0.7 > 1.0, so the caps meet even
+      -- though the feature's CENTER is far outside the view.
+      inView vw (Cap (unitOf (Center 0 (180 / pi))) 0.7) `shouldBe` True
+      -- and with a small enough feature they genuinely do not meet
+      inView vw (Cap (unitOf (Center 0 (180 / pi))) 0.5) `shouldBe` False
+    it "inView and outOfView are a PARTITION -- exactly one holds, at \
+       \every distance, so \"keeps ... and omits ...\" has no gap and no \
+       \overlap" $ do
+      let vw = viewCap origin (Zoom 10)
+          answers = [ (inView vw (capAt d 0.01), outOfView vw (capAt d 0.01))
+                    | d <- [0, 1 .. 180 :: Double] ]
+      -- whole-body: every one of the 181 answers, not "any" or "most"
+      map (uncurry (/=)) answers `shouldBe` replicate (length answers) True
+      -- and the sweep really does cross the boundary, rather than being
+      -- 181 copies of one answer
+      length (filter fst answers) `shouldSatisfy` \n -> n > 0 && n < length answers
+    it "beyondHorizon is a quarter turn from the CENTER, with no zoom \
+       \term -- the horizon does not move when you change how much of it \
+       \you frame" $ do
+      let eye = east 0
+      beyondHorizon eye (capAt 91 0) `shouldBe` True
+      beyondHorizon eye (capAt 89 0) `shouldBe` False
+    it "beyondHorizon needs the WHOLE bounds over the edge: a wide \
+       \feature whose near edge is still visible is not beyond it" $ do
+      -- The discriminating case a mutation that compared only the cap's
+      -- CENTRE would get wrong: centre at 100 degrees, radius 28.6
+      -- degrees, so the nearest point is at 71.4 -- visible.
+      let eye = east 0
+      beyondHorizon eye (Cap (east 100) (degrees 28.6)) `shouldBe` False
+      beyondHorizon eye (Cap (east 100) (degrees 5)) `shouldBe` True
+    it "the whole-sphere sentinel is in view of every camera, beyond no \
+       \horizon, and out of no view -- so it can never be the HIT that \
+       \makes one of these laws look satisfied" $ do
+      -- MEMORY: verify-distinct-not-nonnull -- exclude the whole-sphere
+      -- sentinel from hit logic. Named as a predicate so the counting
+      -- guards in the steps can refuse a vacuous pass.
+      let sentinel = Cap (east 0) pi
+          far = viewCap (Center (-45) 179) (Zoom 0.05)
+      coversSphere sentinel `shouldBe` True
+      coversSphere (Cap (east 0) 1.5) `shouldBe` False
+      inView far sentinel `shouldBe` True
+      outOfView far sentinel `shouldBe` False
+      beyondHorizon (unitOf (Center (-45) 179)) sentinel `shouldBe` False
+    it "angleBetween survives a dot product rounding has pushed outside \
+       \[-1,1]: the degenerate case is a real angle, never a NaN that \
+       \silently makes every comparison False" $ do
+      let v = east 0
+      angleBetween v v `shouldBe` 0
+      abs (angleBetween v (east 180) - pi) `shouldSatisfy` (< 1e-9)
+      -- a NaN here would make `outOfView` answer False for everything,
+      -- i.e. quietly disable the law rather than break it
+      isNaN (angleBetween v v) `shouldBe` False
+
+  describe "the step phase: the detail tiers are DERIVED from the server's \
+           \own auto rule" $ do
+    it "autoLod reproduces the characterization's measured table, which \
+       \was taken from the live server -- not from this function" $ do
+      -- Characterization section 0: an explicit lod equal to the derived
+      -- value gave a byte-identical manifest at each of these zooms.
+      -- to the precision the report published each number at
+      autoLod 0.25 1200 `shouldSatisfy` \v -> abs (v - 3.636103e-06) < 1e-12
+      autoLod 8 1200    `shouldSatisfy` \v -> abs (v - 1.163553e-04) < 1e-10
+      autoLod 90 1200   `shouldSatisfy` \v -> abs (v - 1.308997e-03) < 1e-9
+    it "autoLod clamps at BOTH ends, which is where two of the three \
+       \tiers come from" $ do
+      autoLod 0.001 1200 `shouldBe` lodFloor
+      autoLod 100000 1200 `shouldBe` lodCeiling
+    it "the three tiers ARE those distinguished points, and nothing was \
+       \tuned: ultra is the floor, coarse is the ceiling, fine is the \
+       \rule at the canonical working camera" $ do
+      tierLod Ultra `shouldBe` lodFloor
+      tierLod Coarse `shouldBe` lodCeiling
+      tierLod Fine `shouldBe` autoLod canonicalFineZoom canonicalWidth
+      -- ordered as their names claim, and genuinely distinct: three
+      -- tiers that collapsed onto one number would make detail.feature's
+      -- ladder compare a scene with itself
+      tierLod Ultra `shouldSatisfy` (< tierLod Fine)
+      tierLod Fine `shouldSatisfy` (< tierLod Coarse)
+    it "lod 6.0 -- /api/transition's default -- is NOT a tier, and is \
+       \heavier than every one of them" $
+      -- characterization D7's trap: calling 6.0 "coarse" would be a lie
+      -- about the curve, whose minimum is at the ceiling (0.01) and
+      -- which rises again above it.
+      map tierLod [minBound .. maxBound] `shouldSatisfy` all (< 6.0)
+    it "the zoom clamp's derived cameras: doubling and halving go \
+       \THROUGH the server's clamp, so 60 doubles to 90, not 120" $ do
+      zoomDoubled (Zoom 20) `shouldBe` Zoom 40
+      zoomHalved (Zoom 20) `shouldBe` Zoom 10
+      zoomDoubled (Zoom 60) `shouldBe` Zoom 90
+      zoomHalved (Zoom 0.05) `shouldBe` Zoom 0.05
+      zoomClamp 1000 `shouldBe` zoomMax
+      zoomClamp 0 `shouldBe` zoomMin
+
+  -- The four new groups. The GENERIC pins (every draw and every shrink
+  -- candidate satisfies its group's own law; every candidate ranks
+  -- strictly lower; every candidate binds exactly the declared members;
+  -- the registry is a partition; group names are unique; every group
+  -- draws what it declares) already sweep `Prop.holeGroups` and so
+  -- reached these four the moment they were registered -- that is what
+  -- makes them generic. What follows is what is SPECIFIC to each.
+  describe "the step phase: the four new hole groups" $ do
+    let iterations = [0 .. 199 :: Int]
+        yearsAt i = (,) <$> drawnAs @Year yearHoles "someYear" i
+                        <*> drawnAs @Year yearHoles "someOtherYear" i
+        yearHoles = ["someYear", "someOtherYear"]
+        detailHoles = ["someDetail", "someOtherDetail"]
+        detailsAt i = (,) <$> drawnAs @DetailTier detailHoles "someDetail" i
+                          <*> drawnAs @DetailTier detailHoles "someOtherDetail" i
+        centerHoles = ["someCenter", "someOtherCenter"]
+        centersAt i = (,) <$> drawnAs @Center centerHoles "someCenter" i
+                          <*> drawnAs @Center centerHoles "someOtherCenter" i
+        zoomAt i = drawnAs @Zoom ["someZoom"] "someZoom" i
+    it "<someYear> and <someOtherYear> are DISTINCT at every iteration -- \
+       \a collision would turn every span law into the identity law it \
+       \already has its own scenario for, and would make subjects' \
+       \span-vs-instant law RED for a reason that is not the server's" $
+      traverse (fmap (uncurry (/=)) . yearsAt) iterations
+        `shouldBe` Right (replicate (length iterations) True)
+    it "both year slots range over the whole calendar -- distinctness \
+       \must not be bought by pinning one slot near a constant" $ do
+      let drawsE = traverse yearsAt iterations
+          spread f = fmap (\ys -> let vs = [ v | Year v <- map f ys ] in
+                                  (minimum vs, maximum vs, length (nub vs))) drawsE
+      -- both slots reach deep BC and the AD end, and take many values
+      spread fst `shouldSatisfy` either (const False) (\(lo, hi, n) -> lo < -3000 && hi > 0 && n > 150)
+      spread snd `shouldSatisfy` either (const False) (\(lo, hi, n) -> lo < -3000 && hi > 0 && n > 150)
+    it "<someDetail> and <someOtherDetail> are DISTINCT at every \
+       \iteration, and both slots reach every tier" $ do
+      traverse (fmap (uncurry (/=)) . detailsAt) iterations
+        `shouldBe` Right (replicate (length iterations) True)
+      let drawsE = traverse detailsAt iterations
+      fmap (Set.fromList . map (renderCap . fst)) drawsE
+        `shouldBe` Right (Set.fromList detailTierNames)
+      fmap (Set.fromList . map (renderCap . snd)) drawsE
+        `shouldBe` Right (Set.fromList detailTierNames)
+    it "<someCenter> and <someOtherCenter> are DISTINCT at every \
+       \iteration, and the box they are drawn from is the WHOLE globe -- \
+       \a camera law drawn only from the Levant would never put a \
+       \feature beyond the horizon at all" $ do
+      traverse (fmap (uncurry (/=)) . centersAt) iterations
+        `shouldBe` Right (replicate (length iterations) True)
+      let drawsE = traverse centersAt iterations
+          lats = fmap (concatMap (\(a, b) -> [centerLat a, centerLat b])) drawsE
+          lons = fmap (concatMap (\(a, b) -> [centerLon a, centerLon b])) drawsE
+      -- both hemispheres, north and south, east and west: the draw
+      -- genuinely covers the globe rather than a band of it
+      lats `shouldSatisfy` either (const False) (\ls -> minimum ls < -60 && maximum ls > 60)
+      lons `shouldSatisfy` either (const False) (\ls -> minimum ls < -120 && maximum ls > 120)
+      -- and every drawn center is inside the server's own frame, asked
+      -- of parseCap rather than restated here
+      lats `shouldSatisfy` either (const False) (all (\l -> l >= -89.9 && l <= 89.9))
+    it "every drawn center parses back through the very capture the \
+       \corpus parses it with -- a rendering that does not read back is \
+       \not a binding, it is a broken one" $
+      [ (i, v) | i <- iterations
+               , let m = Prop.drawGroup (Prop.holeRegistry Map.! "someCenter") i
+               , (_, v) <- Map.toList m
+               , isLeft (parseCap v :: Either T.Text Center) ] `shouldBe` []
+    it "<someZoom>'s own law: BOTH derived cameras are other cameras at \
+       \every iteration -- a draw at 90 doubles to 90, and both nesting \
+       \laws would then compare a scene with itself" $ do
+      let bad = [ (i, z) | i <- iterations, Right z <- [zoomAt i]
+                         , zoomDoubled z == z || zoomHalved z == z ]
+      bad `shouldBe` []
+      -- and the draw is not pinned to one zoom while satisfying that
+      fmap (length . nub) (traverse zoomAt iterations)
+        `shouldSatisfy` either (const False) (> 100)
+    it "the someZoom group DECLARES that law, so the generic pins \
+       \enforce it on every shrink candidate too -- a solo group with a \
+       \real precondition is still a group with a law" $ do
+      let g = Prop.holeRegistry Map.! "someZoom"
+      Prop.groupName g `shouldBe` "someZoom"
+      Prop.groupMembers g `shouldBe` ["someZoom"]
+      -- not `const True`: a group whose law is trivially true would pass
+      -- the generic law pins while establishing nothing
+      Prop.groupLaw g (Map.singleton "someZoom" "90.0") `shouldBe` False
+      Prop.groupLaw g (Map.singleton "someZoom" "4.0") `shouldBe` True
+    it "the camera holes shrink toward the corpus's own landmark camera \
+       \-- 31.5,35.0 at zoom 4, the very view camera.feature's pinned \
+       \example looks at -- and the landmark shrinks to nothing" $ do
+      let zg = Prop.holeRegistry Map.! "someZoom"
+          zc r = [ m Map.! "someZoom" | m <- Prop.groupShrink zg (Map.singleton "someZoom" r) ]
+      zc "4.0" `shouldBe` []
+      zc "40.0" `shouldSatisfy` elem "4.0"
+      -- every candidate is a legal zoom AND still derives two cameras,
+      -- asked of the capture and the law rather than restated
+      [ (r, c) | r <- ["0.1", "12.34", "45.0", "2.0"]
+               , c <- zc r
+               , case parseCap c :: Either T.Text Zoom of
+                   Left _ -> True
+                   Right z -> not (zoomDoubled z /= z && zoomHalved z /= z) ] `shouldBe` []
+    -- THE REGRESSION THIS COMBINATOR EXISTS FOR. Registering
+    -- someYear/someOtherYear with plain `pair` would have silently
+    -- deleted year shrinking from the eight scenarios that write
+    -- <someYear> alone -- green tests, worse diagnoses.
+    it "<someYear> mentioned ALONE still shrinks, through its own solo \
+       \order, exactly as it did before it joined a correlated pair" $ do
+      let g = Prop.holeRegistry Map.! "someYear"
+          cands r = [ m | m <- Prop.groupShrink g (Map.singleton "someYear" r) ]
+      -- the landmark is still the bottom
+      cands "-1405" `shouldBe` []
+      -- and any other year still reaches it in one step, re-binding
+      -- ONLY the hole the scenario actually mentioned
+      map Map.keys (cands "-703") `shouldSatisfy` all (== ["someYear"])
+      [ m Map.! "someYear" | m <- cands "-703" ] `shouldSatisfy` elem "-1405"
+      -- ranked by the solo order, so the greedy loop's SMALLER gate
+      -- still has something to compare
+      Prop.groupRank g (Map.singleton "someYear" "-1405") `shouldBe` 0
+      Prop.groupRank g (Map.singleton "someYear" "-703")
+        `shouldSatisfy` (> Prop.groupRank g (Map.singleton "someYear" "-1405"))
+    it "with BOTH years bound the same group behaves as a correlated \
+       \pair: candidates re-bind both members and never collapse one \
+       \onto the other" $ do
+      let g = Prop.holeRegistry Map.! "someYear"
+          env = Map.fromList [("someYear", "-703"), ("someOtherYear", "-600")]
+          cands = Prop.groupShrink g env
+      map Map.keys cands `shouldSatisfy` all (== ["someOtherYear", "someYear"])
+      -- every candidate still satisfies the group's own distinctness law
+      filter (not . Prop.groupLaw g) cands `shouldBe` []
+      cands `shouldSatisfy` (not . null)
+    it "an ABSENT partner is not applicable, but a PRESENT partner that \
+       \cannot be read is a violation -- \"I could not check it\" and \
+       \\"it holds\" must not be the same answer" $ do
+      let g = Prop.holeRegistry Map.! "someYear"
+      Prop.groupLaw g (Map.singleton "someYear" "-1405") `shouldBe` True
+      Prop.groupLaw g (Map.fromList [("someYear", "-1405"), ("someOtherYear", "-1405")])
+        `shouldBe` False
+      Prop.groupLaw g (Map.singleton "someYear" "not-a-year") `shouldBe` False
+      Prop.groupLaw g (Map.fromList [("someYear", "-1405"), ("someOtherYear", "banana")])
+        `shouldBe` False
+
+  -- Each new step, driven through the REAL `allSteps` on the corpus's
+  -- own sentence, with a happy case and a negative whose REASON is
+  -- pinned -- not merely that it failed. A step that fails for the wrong
+  -- reason is a step that will pass for the wrong reason later.
+  describe "the step phase: the new steps run, and fail for the stated \
+           \reason" $ do
+    let vec :: (Double, Double, Double) -> A.Value
+        vec (x, y, z) = A.toJSON [x, y, z]
+        res :: T.Text -> Int -> (Double, Double, Double) -> Double -> A.Value
+        res i v c r = A.object
+          [ "id" A..= (i :: T.Text), "kind" A..= ("ring" :: T.Text)
+          , "bytes" A..= (0 :: Int), "vertices" A..= (v :: Int)
+          , "bounds" A..= A.object ["center" A..= vec c, "radius" A..= (r :: Double)] ]
+        feat :: T.Text -> T.Text -> A.Value
+        feat f r = A.object ["feature" A..= f, "resource" A..= r]
+        lbl :: T.Text -> (Double, Double, Double) -> A.Value
+        lbl s c = A.object ["subject" A..= s, "anchor" A..= vec c]
+        mrk :: T.Text -> (Double, Double, Double) -> A.Value
+        mrk p c = A.object ["place" A..= p, "at" A..= vec c]
+        manifest :: [A.Value] -> [A.Value] -> [A.Value] -> [A.Value] -> A.Value
+        manifest fs rs ls ms = A.object
+          [ "features" A..= fs, "resources" A..= rs
+          , "labels" A..= ls, "markers" A..= ms ]
+        plan :: [A.Value] -> A.Value
+        plan sts = A.object ["steps" A..= sts]
+        fadeIn, fadeOut :: T.Text -> A.Value
+        fadeIn r = A.object ["kind" A..= ("fade_in" :: T.Text), "region" A..= r]
+        fadeOut r = A.object ["kind" A..= ("fade_out" :: T.Text), "region" A..= r]
+        morph :: T.Text -> [A.Value] -> [A.Value] -> A.Value
+        morph b f t = A.object
+          [ "kind" A..= ("morph" :: T.Text), "boundary" A..= b
+          , "from" A..= f, "to" A..= t ]
+        pt :: Double -> A.Value
+        pt n = A.toJSON [n, n]
+        change :: T.Text -> T.Text -> A.Value
+        change k s = A.object
+          [ "kind" A..= k, "subject" A..= s
+          , "id" A..= ("x" :: T.Text), "year" A..= (-1 :: Int) ]
+        -- east d: a unit vector d degrees east of (0,0) on the equator.
+        east :: Double -> (Double, Double, Double)
+        east d = let r = d * pi / 180 in (cos r, sin r, 0)
+        -- Run one Then step of the REAL allSteps against bound scenes
+        -- and recorded cameras. Nothing about the step is faked; only
+        -- the responses it reads are.
+        runThen :: T.Text -> [(T.Text, A.Value)] -> [(T.Text, (Center, Zoom))]
+                -> IO StepOutcome
+        runThen body binds cams = case firstOutcome Then body of
+          Nothing -> pure (StepFailed "NO DEFINITION MATCHED THIS BODY")
+          Just f -> f (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                        { bound = Map.fromList [ (n, ("", v)) | (n, v) <- binds ]
+                        , cameras = Map.fromList cams }
+        shouldPass :: StepOutcome -> Expectation
+        shouldPass o = case o of
+          StepOk _ -> pure ()
+          StepFailed e -> expectationFailure ("expected a pass, got failure: " <> T.unpack e)
+          StepSkipped e -> expectationFailure ("expected a pass, got skip: " <> T.unpack e)
+        shouldFailWith needle o = case o of
+          StepFailed e -> e `shouldSatisfy` T.isInfixOf needle
+          StepOk _ -> expectationFailure "expected a failure, got a pass"
+          StepSkipped e -> expectationFailure ("expected a failure, got skip: " <> T.unpack e)
+        shouldSkipWith needle o = case o of
+          StepSkipped e -> e `shouldSatisfy` T.isInfixOf needle
+          StepOk _ -> expectationFailure "expected a skip, got a pass"
+          StepFailed e -> expectationFailure ("expected a skip, got failure: " <> T.unpack e)
+        -- one near feature, one far feature, against a camera at (0,0)
+        nearFar = manifest [feat "region:near" "rn", feat "region:far" "rf"]
+                           [res "rn" 10 (east 0) 0.001, res "rf" 10 (east 100) 0.001]
+                           [] []
+        camAt0 = (Center 0 0, Zoom 2)
+
+    it "the two-sided culling law computes BOTH halves and reports the \
+       \real violation -- an honest @target, never a stub" $ do
+      -- `viewed` sent both features; the far one is out of view, so the
+      -- law must report a leak, naming it.
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", nearFar), ("world", nearFar)] [("viewed", camAt0)]
+      shouldFailWith "out of view but sent" o
+      -- and it NAMES the offending feature rather than reporting a bare
+      -- count that could be about anything
+      shouldFailWith "region:far" o
+    it "... and it PASSES against a scene that really did cull the far \
+       \feature -- so the red above is about the server, not the step" $ do
+      let culled = manifest [feat "region:near" "rn"] [res "rn" 10 (east 0) 0.001] [] []
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", culled), ("world", nearFar)] [("viewed", camAt0)]
+      shouldPass o
+    it "... and it SKIPS rather than passes when the camera leaves \
+       \nothing out of view: a green earned by the draw is not a green" $ do
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", nearFar), ("world", nearFar)] [("viewed", (Center 0 0, Zoom 90))]
+      shouldSkipWith "cannot exercise the \"omits\" half" o
+    it "... and a scene rendered with NO camera is an error, not a pass: \
+       \a law about a view cannot be checked against a scene with none" $ do
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", nearFar), ("world", nearFar)] []
+      shouldFailWith "was not rendered with a camera" o
+    it "the label-anchor law really checks anchors, and names how many \
+       \of how many anchor outside the view" $ do
+      let scn = manifest [] [] [lbl "region:here" (east 0), lbl "region:away" (east 100)] []
+      o <- runThen "every label of viewed anchors in view" [("viewed", scn)] [("viewed", camAt0)]
+      shouldFailWith "1 of 2 labels" o
+      o2 <- runThen "every label of viewed anchors in view"
+              [("viewed", manifest [] [] [lbl "region:here" (east 0)] [])] [("viewed", camAt0)]
+      shouldPass o2
+    it "the horizon law really computes the horizon from the center the \
+       \scenario names" $ do
+      o <- runThen "no feature of viewed is beyond the horizon of 0,0" [("viewed", nearFar)] []
+      shouldFailWith "beyond the horizon" o
+      -- from the far side, it is the NEAR feature that is over the edge
+      o2 <- runThen "no feature of viewed is beyond the horizon of 0,100" [("viewed", nearFar)] []
+      shouldFailWith "region:near" o2
+    it "the marker/label subset law compares the two kinds by their \
+       \published ids, and names what is missing" $ do
+      let narrow = manifest [] [] [lbl "region:a" (east 0)] [mrk "place:x" (east 0)]
+          wide   = manifest [] [] [lbl "region:a" (east 0)]
+                                  [mrk "place:x" (east 0), mrk "place:y" (east 1)]
+      shouldPass =<< runThen "narrow's markers and labels are a subset of wide's"
+                       [("narrow", narrow), ("wide", wide)] []
+      shouldFailWith "marker:place:y" =<<
+        runThen "wide's markers and labels are a subset of narrow's"
+          [("narrow", narrow), ("wide", wide)] []
+    it "the zoom-in law owes only what is still inside the narrower \
+       \view, and skips when nothing is" $ do
+      let wide = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+          narrow = manifest [] [] [] []
+      shouldFailWith "marker:place:near" =<<
+        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+          [("wide", wide), ("narrow", narrow)] [("narrow", camAt0)]
+      -- with the camera pointed away, nothing of `wide` is owed at all
+      shouldSkipWith "nothing to be owed" =<<
+        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+          [("wide", manifest [] [] [] [mrk "place:far" (east 100)]), ("narrow", narrow)]
+          [("narrow", camAt0)]
+    it "byte-identity across two cameras compares the WHOLE shared \
+       \record, and skips when the two share nothing" $ do
+      let a = manifest [] [res "r1" 10 (east 0) 0.1] [] []
+          b = manifest [] [res "r1" 10 (east 0) 0.1] [] []
+          c = manifest [] [res "r1" 99 (east 0) 0.1] [] []
+      shouldPass =<< runThen "every resource here and there share is byte-identical in both"
+                       [("here", a), ("there", b)] []
+      shouldFailWith "serve different records" =<<
+        runThen "every resource here and there share is byte-identical in both"
+          [("here", a), ("there", c)] []
+      shouldSkipWith "share no resource ids" =<<
+        runThen "every resource here and there share is byte-identical in both"
+          [("here", a), ("there", manifest [] [] [] [])] []
+    it "detail invariance compares the whole feature-id set, both \
+       \directions" $ do
+      let one = manifest [feat "region:a" "r1"] [res "r1" 5 (east 0) 0.1] [] []
+          other = manifest [feat "region:a" "r1"] [res "r1" 50 (east 0) 0.1] [] []
+          fewer = manifest [] [] [] []
+      shouldPass =<< runThen "one and other draw the same features"
+                       [("one", one), ("other", other)] []
+      shouldFailWith "do not draw the same features" =<<
+        runThen "one and other draw the same features" [("one", one), ("other", fewer)] []
+    it "the vertex ladder is stated PER FEATURE, not summed -- the sum \
+       \hides which features exploded (and a per-resource-ID reading \
+       \could not fail at all: a shared id IS identical bytes)" $ do
+      -- `coarse` totals MORE than `fine` overall, but the law is about
+      -- the individual feature that lost geometry. Note each scene gives
+      -- the SAME feature a DIFFERENT resource id, which is what happens
+      -- in reality (geometry is content-addressed, so re-simplified
+      -- geometry is a different id) -- and is exactly why the comparison
+      -- joins through the feature.
+      let scn a b = manifest [feat "region:a" ("r1" <> a), feat "region:b" ("r2" <> a)]
+                             [res ("r1" <> a) b1 (east 0) 0.1, res ("r2" <> a) b2 (east 0) 0.1]
+                             [] []
+            where (b1, b2) = b
+          coarse = scn "c" (5, 100)
+          fine   = scn "f" (50, 9)
+          ultra  = scn "u" (60, 20)
+      shouldFailWith "region:b 9<100" =<<
+        runThen "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine"
+          [("coarse", coarse), ("fine", fine), ("ultra", ultra)] []
+      let fineOk = scn "f" (50, 100)
+          ultraOk = scn "u" (60, 120)
+      shouldPass =<<
+        runThen "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine"
+          [("coarse", coarse), ("fine", fineOk), ("ultra", ultraOk)] []
+    it "the glance-vs-corner law weighs the same way, in the other \
+       \direction" $ do
+      let glance = manifest [feat "region:a" "rg"] [res "rg" 500 (east 0) 0.1] [] []
+          corner = manifest [feat "region:a" "rc"] [res "rc" 5 (east 0) 0.1] [] []
+      shouldFailWith "region:a 5<500" =<<
+        runThen "no shared resource of glance carries more vertices than it does in corner"
+          [("glance", glance), ("corner", corner)] []
+      shouldPass =<<
+        runThen "no shared resource of glance carries more vertices than it does in corner"
+          [("glance", corner), ("corner", glance)] []
+    it "the empty-plan law quotes the body it found instead of just \
+       \saying no" $ do
+      shouldPass =<< runThen "still's steps are the empty list" [("still", plan [])] []
+      shouldFailWith "carries 1 step(s), not none" =<<
+        runThen "still's steps are the empty list" [("still", plan [fadeIn "a"])] []
+    it "the plan-vs-timeline law is a BIJECTION ON IDS, both kinds, both \
+       \directions -- not a count (the timeline also carries journey \
+       \rows that deliberately produce no step)" $ do
+      let p = plan [fadeIn "aa", fadeOut "bb"]
+          story = A.toJSON [change "rise" "region:aa", change "fall" "region:bb",
+                            change "journey" "boundary:cc"]
+          storyShort = A.toJSON [change "rise" "region:aa"]
+      shouldPass =<<
+        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
+          [("plan", p), ("story", story)] []
+      shouldFailWith "fade_out vs fall" =<<
+        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
+          [("plan", p), ("story", storyShort)] []
+      shouldSkipWith "bijection between empty sets" =<<
+        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
+          [("plan", plan []), ("story", A.toJSON ([] :: [A.Value]))] []
+    it "the endpoint-fade law checks BOTH directions: a region that \
+       \exists in NEITHER scene is absent from the other endpoint too, \
+       \and would pass a one-sided check" $ do
+      -- characterization T8's exact trap, and its exact live finding:
+      -- 56 fade ids are never a region feature anywhere.
+      let p = plan [fadeIn "aa"]
+          sceneAfter = manifest [feat "region:aa" "r1"] [res "r1" 1 (east 0) 0.1] [] []
+          sceneBefore = manifest [] [] [] []
+          ghostPlan = plan [fadeIn "zz"]
+      shouldPass =<<
+        runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
+          [("plan", p), ("after", sceneAfter), ("before", sceneBefore)] []
+      shouldFailWith "not new in after" =<<
+        runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
+          [("plan", ghostPlan), ("after", sceneAfter), ("before", sceneBefore)] []
+    it "the inversion law compares the constructed mirror WHOLE -- a \
+       \shuffled order or a matching kind-multiset does not satisfy it" $ do
+      let there = plan [fadeIn "aa", morph "bb" [pt 1, pt 2] [pt 3, pt 4], fadeOut "cc"]
+          back = plan [fadeIn "cc", morph "bb" [pt 3, pt 4] [pt 1, pt 2], fadeOut "aa"]
+          -- same kinds, same count, wrong order: a multiset comparison
+          -- would call this the mirror
+          shuffled = plan [fadeOut "aa", morph "bb" [pt 3, pt 4] [pt 1, pt 2], fadeIn "cc"]
+      shouldPass =<< runThen "back is there with every morph reversed and every fade inverted"
+                       [("back", back), ("there", there)] []
+      shouldFailWith "is not the mirror of" =<<
+        runThen "back is there with every morph reversed and every fade inverted"
+          [("back", shuffled), ("there", there)] []
+    it "the morph-fidelity law really counts the morph's points against \
+       \the border's vertices in the endpoint scene" $ do
+      let p = plan [morph "bb" [pt 1, pt 2] [pt 3, pt 4]]
+          sceneAfter = manifest [feat "boundary:bb" "r1"] [res "r1" 42 (east 0) 0.1] [] []
+          thin = manifest [feat "boundary:bb" "r1"] [res "r1" 2 (east 0) 0.1] [] []
+      shouldFailWith "bb 2<42" =<<
+        runThen "every morph of plan carries at least as many points as its border carries vertices in after"
+          [("plan", p), ("after", sceneAfter)] []
+      shouldPass =<<
+        runThen "every morph of plan carries at least as many points as its border carries vertices in after"
+          [("plan", p), ("after", thin)] []
+    it "the span-vs-instant law says WHICH thing went wrong: the \
+       \parameter was ignored, not refused" $ do
+      let a = A.toJSON ([1, 2] :: [Int])
+          b = A.toJSON ([1, 3] :: [Int])
+      shouldPass =<< runThen "span is refused or differs from instant"
+                       [("span", a), ("instant", b)] []
+      shouldFailWith "was ignored, not refused" =<<
+        runThen "span is refused or differs from instant" [("span", a), ("instant", a)] []
+    it "the derivability @target really looks for the two fields, and \
+       \counts how many entries lack each" $ do
+      let bare = manifest [feat "region:a" "r1"] [res "r1" 1 (east 0) 0.1] [] []
+          traced = A.object
+            [ "features" A..= [A.object [ "feature" A..= ("region:a" :: T.Text)
+                                        , "resource" A..= ("r1" :: T.Text)
+                                        , "disposition" A..= ("held" :: T.Text)
+                                        , "border" A..= ("b1" :: T.Text) ]]
+            , "resources" A..= ([] :: [A.Value]) ]
+      shouldFailWith "1 of 1 entries carry no disposition" =<<
+        runThen "every entry in sampled traces to a disposition and a border" [("sampled", bare)] []
+      shouldPass =<< runThen "every entry in sampled traces to a disposition and a border"
+                       [("sampled", traced)] []
+    it "an empty manifest is a FAILURE for the derivability law, not a \
+       \vacuous pass -- `all` over an empty list is trivially true" $
+      shouldFailWith "carries no manifest entries" =<<
+        runThen "every entry in sampled traces to a disposition and a border"
+          [("sampled", manifest [] [] [] [])] []
+
+  describe "the step phase: the render vocabulary builds the right URL" $ do
+    let urlFor body = do
+          seen <- newIORef []
+          let fake u = modifyIORef seen (u :) >> pure (Right ("{}", A.object []))
+          case firstOutcome When body of
+            Nothing -> pure ["NO DEFINITION MATCHED THIS BODY"]
+            Just f -> f (mkWorld "http://x" fake "") >> reverse <$> readIORef seen
+    it "a camera line sends BOTH center and zoom -- a viewport exists \
+       \only when both are present, so sending one would be no camera" $ do
+      [u] <- urlFor "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine as viewed"
+      u `shouldSatisfy` T.isInfixOf "center=31.5,35.0"
+      u `shouldSatisfy` T.isInfixOf "zoom=4.0"
+      -- and the detail is pinned EXPLICITLY, because zoom otherwise
+      -- changes detail too (the camera laws would measure two things)
+      u `shouldSatisfy` T.isInfixOf "lod="
+    it "`doubled` and `halved` derive the camera through the server's \
+       \clamp, and reach the wire as the derived zoom" $ do
+      [ud] <- urlFor "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 20 doubled detail fine as wide"
+      [uh] <- urlFor "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 20 halved detail fine as narrow"
+      ud `shouldSatisfy` T.isInfixOf "zoom=40.0"
+      uh `shouldSatisfy` T.isInfixOf "zoom=10.0"
+    it "a line with no detail clause sends NO lod, handing the choice to \
+       \the server's auto rule -- which is what the implicit/explicit \
+       \scenario is about" $ do
+      [u] <- urlFor "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 as implicit"
+      u `shouldSatisfy` (not . T.isInfixOf "lod=")
+    it "\"in no style\" sends NO style parameter at all, so the server \
+       \answers with the dress IT declares -- not one this runner picked" $ do
+      [u] <- urlFor "I render pieces ground, water at year -1405 in no style"
+      u `shouldSatisfy` (not . T.isInfixOf "style=")
+      u `shouldSatisfy` T.isInfixOf "year=-1405"
+    it "the three tiers reach the wire as three DIFFERENT lod values -- \
+       \a tier table that collapsed would make the ladder compare a \
+       \scene with itself" $ do
+      us <- mapM (\t -> urlFor ("I render pieces fills at year -1405 in style canaan detail "
+                                <> t <> " as x")) ["coarse", "fine", "ultra"]
+      length (nub (concat us)) `shouldBe` 3
+    it "the camera render step RECORDS its camera under the bound name, \
+       \which is the only way a later Then can know what view it means" $ do
+      let fake _ = pure (Right ("{}", A.object []))
+      case firstMatch When "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine as viewed" of
+        Nothing -> expectationFailure "no definition matched the camera render line"
+        Just f -> do
+          r <- f (mkWorld "http://x" fake "")
+          case r of
+            Left e -> expectationFailure (T.unpack e)
+            Right w -> Map.lookup "viewed" (cameras w)
+                         `shouldBe` Just (Center 31.5 35.0, Zoom 4)
+
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,
 -- the same technique `System.IO.Silently` uses), then restores it and
@@ -3282,7 +4184,7 @@ captureStdout act = do
 mkWorld :: T.Text -> (T.Text -> IO (Either T.Text (BS.ByteString, A.Value))) -> FilePath -> World
 mkWorld base tr dir = World base tr dir mempty False
   (\_ -> pure (Left "no raw transport configured for this test"))
-  Nothing
+  Nothing Map.empty
 
 -- The step action a body resolves to, in its full three-outcome form
 -- (World.StepOutcome) -- used directly by the tests that are ABOUT
@@ -3479,8 +4381,33 @@ instance Arbitrary Year where
   arbitrary = Year <$> chooseInt (-4004, 100) `suchThat` (/= 0)
   shrink (Year y) = [ Year y' | y' <- shrink y, y' /= 0, y' >= -4004, y' <= 100 ]
 
+-- The step phase's four. Center and Zoom generate on the SAME
+-- hundredth-of-a-degree grid `Prop` draws them on, and for the same
+-- reason: that is the precision the corpus writes camera literals at,
+-- and `show`/`reads` round-trips a grid value exactly. An arbitrary
+-- Double would be testing Haskell's `show` for doubles, not this
+-- corpus's captures.
+instance Arbitrary Center where
+  arbitrary = Center <$> (grid <$> chooseInt (-8990, 8990))
+                     <*> (grid <$> chooseInt (-17999, 18000))
+    where grid k = fromIntegral k / 100
+  shrink _ = []
+
+instance Arbitrary Zoom where
+  arbitrary = Zoom . (\k -> fromIntegral k / 100) <$> chooseInt (5, 9000)
+  shrink _ = []
+
+instance Arbitrary DetailTier where
+  arbitrary = elements [minBound .. maxBound]
+  shrink d = takeWhile (< d) [minBound .. maxBound]
+
+instance Arbitrary ScaleQual where
+  arbitrary = elements [minBound .. maxBound]
+  shrink s = takeWhile (< s) [minBound .. maxBound]
+
 -- Every subset of the piece universe, including the empty set (the
 -- monoid identity that Task 9's subset generation relies on).
 instance Arbitrary PieceSet where
   arbitrary = PieceSet . Set.fromList <$> sublistOf [minBound .. maxBound]
   shrink (PieceSet s) = [ PieceSet (Set.delete p s) | p <- Set.toList s ]
+

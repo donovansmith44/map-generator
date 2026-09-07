@@ -5,6 +5,11 @@ Feature: the transition — how the map moves between two moments
   two the author liked. The plan must tell the same story as the
   changes timeline and the two scenes it joins.
 
+  Vocabulary:
+    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
+    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
+    | style | any of: canaan, parchment, slate |
+
   Scenario: the conquest's whole animation plan
     When I GET /api/transition?from=-1407&to=-1405&zoom=90.0000&style=canaan
     Then the response equals fixture "transition-conquest"

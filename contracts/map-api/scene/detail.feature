@@ -6,6 +6,12 @@ Feature: detail — how much geometry, never which geometry
   canonical zooms — read from the code and the characterization,
   never tuned.
 
+  Vocabulary:
+    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
+    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
+    | style | any of: canaan, parchment, slate |
+    | detail | any of: coarse, fine, ultra |
+
   # Characterization: feature-id invariance across lod in [0, 6] holds
   # EXACTLY today. Green, and load-bearing.
   @property

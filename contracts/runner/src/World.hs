@@ -10,7 +10,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Gherkin.Ast (Keyword)
-import Capture (StyleName, Universe, Year)
+import Capture (Center, StyleName, Universe, Year, Zoom)
 import Pattern
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
@@ -63,6 +63,21 @@ data World = World
   -- construction: there is no ill-typed value this can hold, and no
   -- style left to hardcode.
   , lastRender   :: Maybe (Year, StyleName)
+  -- The step phase: WHICH CAMERA a bound scene was drawn with, per bound
+  -- name. Three of camera.feature's laws ("keeps every feature ... in
+  -- view", "every marker and label ... still in narrow's view", "every
+  -- label ... anchors in view") are stated relative to a camera the
+  -- scenario named on an EARLIER line and never repeats, so the Then step
+  -- has to be able to ask what camera `viewed`/`narrow` was rendered at.
+  --
+  -- Typed and per-name, for the same reason `lastRender` is typed
+  -- (World.hs's own note on smuggling a year through the stringly-typed
+  -- `bound` map): there is no ill-typed value this can hold, and no
+  -- camera left to guess. Per-NAME rather than "last", unlike
+  -- `lastRender`, because these laws compare TWO scenes drawn at two
+  -- different cameras in the same scenario -- a single "last camera"
+  -- would answer for the wrong one exactly half the time.
+  , cameras      :: Map Text (Center, Zoom)
   }
 
 -- `transport` is a function and has no Show instance, so World cannot
@@ -79,6 +94,7 @@ instance Show World where
       <> ", bound = " <> show (Map.keys (bound w))
       <> ", blessMode = " <> show (blessMode w)
       <> ", lastRender = " <> show (lastRender w)
+      <> ", cameras = " <> show (Map.toList (cameras w))
       <> " }"
 
 -- Phase S review, fix 1: a non-2xx status used to come back as `Right`

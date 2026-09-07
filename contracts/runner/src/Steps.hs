@@ -22,13 +22,55 @@ import Gherkin.Ast (Keyword (..))
 import Pattern
 import World
 
-sceneUrl :: Text -> PieceSet -> Year -> StyleName -> Text
-sceneUrl base (PieceSet ps) (Year y) (StyleName st) =
-  base <> "/api/scene?year=" <> tshow y <> "&zoom=90.0000&style=" <> st
+-- WHAT A CAMERA IS, on the wire: a center AND a zoom, together. Not two
+-- optional parameters -- the server builds a viewport only when BOTH are
+-- present (`build_query`, crates/map-viewer/src/lib.rs:643-651, and the
+-- characterization confirmed it: `center` alone is byte-identical to no
+-- camera at all). A type with one constructor taking both is that fact,
+-- written so a step cannot express half a camera.
+data CamSpec = CamSpec Center Zoom deriving (Eq, Show)
+
+camSpecCenter :: CamSpec -> Center
+camSpecCenter (CamSpec c _) = c
+
+camSpecZoom :: CamSpec -> Zoom
+camSpecZoom (CamSpec _ z) = z
+
+-- The one scene URL builder. Four optional things, each of which the
+-- corpus writes in some scenarios and omits in others:
+--
+--   * the STYLE -- scene.feature's default-totality scenario says "in no
+--     style" and means it: no `style=` parameter at all, so the server
+--     answers with its own declared default rather than one this runner
+--     chose. `Just`/`Nothing` is that distinction; a `StyleName
+--     "classical"` sentinel would have been this runner inventing a
+--     dress name the server never published.
+--   * the CAMERA -- see `CamSpec`.
+--   * the DETAIL tier, as an explicit `lod=`. Omitting it is not
+--     "detail doesn't matter": it hands the choice to the server's auto
+--     rule, which detail.feature's implicit/explicit scenario is
+--     precisely about. So the absence is a value here too.
+--
+-- `zoom=` is written whether or not there is a camera, because it has
+-- TWO jobs on this API and only one of them is the camera: with no
+-- explicit `lod`, `zoom` also drives `auto_lod`. The no-camera default
+-- stays the 90.0000 every existing scenario was already pinned at, so
+-- no green scenario's URL moves.
+sceneUrlFull :: Text -> PieceSet -> Year -> Maybe StyleName
+             -> Maybe CamSpec -> Maybe DetailTier -> Text
+sceneUrlFull base (PieceSet ps) (Year y) mst mcam mdetail =
+  base <> "/api/scene?year=" <> tshow y
+       <> "&zoom=" <> maybe "90.0000" (renderCap . camSpecZoom) mcam
+       <> maybe "" (\c -> "&center=" <> renderCap (camSpecCenter c)) mcam
+       <> maybe "" (\d -> "&lod=" <> tshow (tierLod d)) mdetail
+       <> maybe "" (\(StyleName st) -> "&style=" <> st) mst
        <> flag Labels "labels" <> flag Water "topo" <> flag Journeys "journeys"
        <> (if Ground `member` ps then "&relief=1" else "")
   where
     flag p name = if p `member` ps then "" else "&" <> name <> "=0"
+
+sceneUrl :: Text -> PieceSet -> Year -> StyleName -> Text
+sceneUrl base ps y st = sceneUrlFull base ps y (Just st) Nothing Nothing
 
 getUrl :: Text -> World -> IO (Either Text World)
 getUrl url w = do
@@ -281,7 +323,467 @@ allSteps =
         Just (_, v)
           | v == Array V.empty -> Right w
           | otherwise -> Left ("the whole response body is not [] -- it is " <> bounded v)
+    -- ============ the step phase's Then vocabulary ============
+    -- Listed BEFORE the four `lit ""`-prefixed generic steps further
+    -- down ("{name} equals {name}", the subset step, labels-are-empty,
+    -- and dress-locality), specific before generic. Not load-bearing
+    -- under R23 -- a real match always wins over a mere claim -- but it
+    -- is what decides which message a human sees when one of these
+    -- lines is genuinely malformed: without it, "narrow's markers and
+    -- labels are a subset of wide's" reports "a bind name is a single
+    -- word" from the dress-locality step's capture, a true statement
+    -- about a capture and a useless one about the line.
+
+    -- camera.feature's two-sided culling law (@target). BOTH sides are
+    -- computed and both are required, which is the whole point:
+    -- characterization C5's named trap is a law that asserts only "far
+    -- things are absent", which culling everything satisfies. The
+    -- partition comes from ONE predicate and its negation (`inView` /
+    -- `outOfView`), so there is no gap between the halves and no overlap.
+    --
+    -- Two precondition guards, and neither is politeness. A draw whose
+    -- camera leaves NOTHING out of view cannot exercise the "omits"
+    -- half, and a draw that leaves nothing in view cannot exercise the
+    -- "keeps" half; passing either way would be a green earned by the
+    -- draw rather than by the server (MEMORY: verify-distinct-not-
+    -- nonnull). At zoom 45 the cap radius is 81 degrees, so the first
+    -- case is real, not hypothetical.
+  , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every feature of "
+                                          <*> capUntil @BindName " in view and omits every feature of "
+                                          <*> capUntil @BindName " out of view")) $
+      \(BindName viewed, BindName ref, BindName ref2) w -> pure $
+        either StepFailed id $ do
+          () <- if ref == ref2 then Right ()
+                else Left ("this law compares one reference scene against " <> viewed
+                           <> ", but names two: " <> ref <> " and " <> ref2)
+          vw <- cameraOf viewed w
+          caps <- featureCaps =<< boundScene ref w
+          seen <- featureIdSet =<< boundScene viewed w
+          let ins  = [ f | (f, c) <- caps, inView vw c ]
+              outs = [ f | (f, c) <- caps, outOfView vw c ]
+              missing = [ f | f <- ins, not (f `Set.member` seen) ]
+              leaked  = [ f | f <- outs, f `Set.member` seen ]
+          pure $ case (null ins, null outs) of
+            (True, _) -> StepSkipped
+              ("no feature of " <> ref <> " is in " <> viewed
+               <> "'s view at this camera: this draw cannot exercise the \"keeps\" half")
+            (_, True) -> StepSkipped
+              ("every feature of " <> ref <> " is in " <> viewed
+               <> "'s view at this camera: this draw cannot exercise the \"omits\" half")
+            _ | null missing && null leaked -> StepOk w
+              | otherwise -> StepFailed
+                  (viewed <> " does not partition " <> ref <> "'s "
+                   <> tshow (length caps) <> " features by the view: "
+                   <> tshow (length missing) <> " in view but absent ("
+                   <> listSome missing <> "); " <> tshow (length leaked)
+                   <> " out of view but sent (" <> listSome leaked <> ")")
+    -- "moving the camera never redraws what stays visible" -- content
+    -- addressing, stated the way it can actually fail: for every id the
+    -- two manifests SHARE, the whole published record must agree.
+    -- Characterization C3's trap is that this is true by construction of
+    -- the hash and therefore certifies nothing on its own; it is worth
+    -- pinning anyway because the thing it would catch (an id that is not
+    -- a function of its bytes) is catastrophic, and because C4 -- the
+    -- law with the real content -- is stated separately as the @target
+    -- above. Whole record, not a chosen triple of fields.
+  , mkSkippableStep Then (lit "every resource " *> ((,) <$> capUntil @BindName " and "
+                                                        <*> capUntil @BindName " share is byte-identical in both")) $
+      \(BindName a, BindName b) w -> pure $ either StepFailed id $ do
+        ra <- resourceRecords =<< boundScene a w
+        rb <- resourceRecords =<< boundScene b w
+        let shared = Map.keys (Map.intersection ra rb)
+            differ = [ i | i <- shared, Map.lookup i ra /= Map.lookup i rb ]
+        pure $ if null shared
+          then StepSkipped (a <> " and " <> b <> " share no resource ids at this draw; \
+                            \content addressing has nothing to be tested against here")
+          else if null differ then StepOk w
+          else StepFailed (tshow (length differ) <> " of " <> tshow (length shared)
+                           <> " shared resource ids serve different records in " <> a
+                           <> " and " <> b <> ": " <> listSome differ)
+    -- "zooming out only reveals markers and labels -- it never removes
+    -- them". Stated over the two kinds the camera ACTUALLY culls
+    -- (characterization 1.0: Points and Memories are the only elements
+    -- the viewport removes), by their published ids -- marker place and
+    -- label subject -- which is characterization C1/C2's non-vacuous
+    -- form. Written over feature ids instead it would pass while the
+    -- camera did nothing at all (917 ids at every zoom); that version is
+    -- the @target above.
+  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName "'s markers and labels are a subset of "
+                                         <*> capUntil @BindName "'s")) $
+      \(BindName a, BindName b) w -> pure $ either StepFailed id $ do
+        ia <- Set.fromList . map fst <$> (cameraCulled =<< boundScene a w)
+        ib <- Set.fromList . map fst <$> (cameraCulled =<< boundScene b w)
+        let extra = Set.difference ia ib
+        pure $ if Set.null ia
+          then StepSkipped (a <> " carries no markers and no labels at this draw; \
+                            \the empty set is a subset of anything")
+          else if Set.null extra then StepOk w
+          else StepFailed (tshow (Set.size extra) <> " marker/label id(s) of " <> a
+                           <> " are absent from " <> b <> ": " <> listSome (Set.toList extra))
+    -- "zooming in never loses a marker or label you are looking at" --
+    -- the converse, and the one that needs the camera: only the things
+    -- still inside the NARROWER view are owed.
+  , mkSkippableStep Then (lit "every marker and label of " *> ((,,) <$> capUntil @BindName " still in "
+                                                                    <*> capUntil @BindName "'s view is kept by "
+                                                                    <*> capRest @BindName)) $
+      \(BindName wide, BindName narrowView, BindName narrow) w -> pure $
+        either StepFailed id $ do
+          vw <- cameraOf narrowView w
+          ws <- cameraCulled =<< boundScene wide w
+          kept <- Set.fromList . map fst <$> (cameraCulled =<< boundScene narrow w)
+          let owed = [ i | (i, p) <- ws, pointInView vw p ]
+              lost = [ i | i <- owed, not (i `Set.member` kept) ]
+          pure $ if null owed
+            then StepSkipped ("nothing of " <> wide <> " lies inside " <> narrowView
+                              <> "'s view at this draw; this law has nothing to be owed")
+            else if null lost then StepOk w
+            else StepFailed (tshow (length lost) <> " of " <> tshow (length owed)
+                             <> " marker/label id(s) of " <> wide <> " inside " <> narrowView
+                             <> "'s view are missing from " <> narrow <> ": " <> listSome lost)
+    -- "the far side of the globe is never sent" (@target). The horizon
+    -- is a property of the CENTER alone -- no zoom term -- so this step
+    -- takes the center literally, from the scenario's own <someCenter>,
+    -- rather than looking one up.
+  , mkSkippableStep Then (lit "no feature of " *> ((,) <$> capUntil @BindName " is beyond the horizon of "
+                                                       <*> capRest @Center)) $
+      \(BindName n, c) w -> pure $ either StepFailed id $ do
+        caps <- featureCaps =<< boundScene n w
+        let eye = unitOf c
+            over = [ f | (f, cap) <- caps, beyondHorizon eye cap ]
+            reachable = [ f | (f, cap) <- caps, not (coversSphere cap) ]
+        pure $ if null reachable
+          then StepSkipped (n <> " carries no feature with bounds smaller than the whole \
+                            \sphere; nothing here can be beyond any horizon")
+          else if null over then StepOk w
+          else StepFailed (tshow (length over) <> " of " <> tshow (length caps)
+                           <> " features of " <> n <> " lie entirely beyond the horizon of "
+                           <> renderCap c <> ": " <> listSome over)
+    -- "a label is only sent when the thing it names is in view"
+    -- (@target) -- the screenshots' law. Characterization C10's trap is
+    -- an existential ("some labels are culled"), which 6 of 833 satisfy;
+    -- this is stated over every label, and reports how many of how many.
+  , mkSkippableStep Then (lit "every label of " *> capUntil @BindName " anchors in view") $
+      \(BindName n) w -> pure $ either StepFailed id $ do
+        vw <- cameraOf n w
+        ls <- labelAnchors =<< boundScene n w
+        let outside = [ i | (i, p) <- ls, not (pointInView vw p) ]
+        pure $ if null ls
+          then StepSkipped (n <> " carries no labels at this draw; a law about where \
+                            \labels anchor has nothing to examine")
+          else if null outside then StepOk w
+          else StepFailed (tshow (length outside) <> " of " <> tshow (length ls)
+                           <> " labels of " <> n <> " anchor outside its own view: "
+                           <> listSome outside)
+    -- ---------- detail.feature ----------
+    -- "detail changes how much is drawn, never what exists" --
+    -- characterization D1, which HOLDS exactly (917 ids at all 13 lod
+    -- rungs). The whole feature-id set on both sides, compared as sets,
+    -- with the difference reported in both directions.
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " and "
+                                <*> capUntil @BindName " draw the same features")) $
+      \(BindName a, BindName b) w -> pure $ do
+        ia <- featureIdSet =<< boundScene a w
+        ib <- featureIdSet =<< boundScene b w
+        if ia == ib then Right w
+        else Left (a <> " and " <> b <> " do not draw the same features: "
+                   <> describeSetDiff ia ib)
+    -- "leaning in never loses geometry" (@target): per shared resource
+    -- id, finer must carry at least as many vertices. Per RESOURCE, not
+    -- summed -- characterization D5's trap is that the sum hides which
+    -- features exploded, and 498 of 917 do at the auto ceiling.
+    --
+    -- Four names, one chain: `capUntil` breaks on the FIRST occurrence
+    -- of its terminator, so " as in " -> ", and in " -> " as in " ->
+    -- capRest walks the sentence left to right exactly as a reader does.
+    -- The last two names repeat the first two by design ("... in ultra
+    -- as in fine"), which is what makes this one ladder of two rungs
+    -- rather than two unrelated comparisons.
+  , mkSkippableStep Then (lit "every shared resource has at least as many vertices in "
+                          *> ((,,,) <$> capUntil @BindName " as in "
+                                    <*> capUntil @BindName ", and in "
+                                    <*> capUntil @BindName " as in "
+                                    <*> capRest @BindName)) $
+      \(BindName finer, BindName coarser, BindName finest, BindName mid) w ->
+        pure $ either StepFailed id $ do
+          l1 <- vertexRung finer coarser w
+          l2 <- vertexRung finest mid w
+          pure $ case (rungShared l1, rungShared l2) of
+            (0, 0) -> StepSkipped
+              (finer <> "/" <> coarser <> " and " <> finest <> "/" <> mid
+               <> " share no features at this draw; a per-feature comparison \
+                  \has nothing to compare")
+            _ | null (rungBad l1) && null (rungBad l2) -> StepOk w
+              | otherwise -> StepFailed
+                  (describeRung finer coarser l1 <> "; " <> describeRung finest mid l2)
+    -- "the world at a glance is never heavier than the street corner"
+    -- (@target) -- characterization C9/1.5: 490 of 917 features carry
+    -- MORE geometry at the deepest zoom than at the widest, because
+    -- below-limit rings ship unsimplified.
+  , mkSkippableStep Then (lit "no shared resource of " *> ((,) <$> capUntil @BindName " carries more vertices than it does in "
+                                                                <*> capRest @BindName)) $
+      \(BindName glance, BindName corner) w -> pure $ either StepFailed id $ do
+        r <- vertexRung corner glance w
+        pure $ if rungShared r == 0
+          then StepSkipped (glance <> " and " <> corner <> " share no features \
+                            \at this draw; nothing to weigh against anything")
+          else if null (rungBad r) then StepOk w
+          else StepFailed (describeRung corner glance r)
+    -- ---------- transition.feature ----------
+    -- "no time passing means nothing moves": the WHOLE steps array is
+    -- the empty list, quoted in full when it is not.
+  , mkStep Then (lit "" *> capUntil @BindName "'s steps are the empty list") $
+      \(BindName n) w -> pure $ do
+        sts <- planSteps =<< boundScene n w
+        if null sts then Right w
+        else Left (n <> "'s plan carries " <> tshow (length sts)
+                   <> " step(s), not none: " <> bounded (Array (V.fromList (take 3 sts))))
+    -- "the plan and the timeline tell one story, wherever you scrub" --
+    -- characterization T6, a BIJECTION ON IDS, both directions, both
+    -- kinds. T6's own trap is comparing counts: the timeline also
+    -- carries `journey` rows that deliberately produce no step, so
+    -- len(steps) /= len(changes) and a count law would be WRONG as well
+    -- as weak.
+  , mkSkippableStep Then (lit "every fade in " *> ((,,,) <$> capUntil @BindName " is a rise or fall in "
+                                                          <*> capUntil @BindName ", and every rise and fall in "
+                                                          <*> capUntil @BindName " has a fade in "
+                                                          <*> capRest @BindName)) $
+      \(BindName plan, BindName story, BindName story2, BindName plan2) w ->
+        pure $ either StepFailed id $ do
+          () <- sameTwice "plan" plan plan2
+          () <- sameTwice "timeline" story story2
+          sts <- planSteps =<< boundScene plan w
+          ch <- boundScene story w
+          ins <- fadeRegions "fade_in" sts
+          outs <- fadeRegions "fade_out" sts
+          rises <- changeSubjects "rise" "region:" ch
+          falls <- changeSubjects "fall" "region:" ch
+          pure $ if Set.null ins && Set.null outs && Set.null rises && Set.null falls
+            then StepSkipped ("this span carries no fades and no rises or falls; \
+                              \a bijection between empty sets demonstrates nothing")
+            else if ins == rises && outs == falls then StepOk w
+            else StepFailed ("fade_in vs rise: " <> describeSetDiff ins rises
+                             <> " -- fade_out vs fall: " <> describeSetDiff outs falls)
+    -- "what fades in arrives, what fades out departs" (@target) --
+    -- characterization T8, which is PARTIAL today: 56 region ids named
+    -- by fades are never a region feature at any stop. T8's trap is
+    -- checking only that the id is ABSENT from the other endpoint (a
+    -- nonexistent region is absent from both, so it passes); both
+    -- directions are required here.
+  , mkSkippableStep Then (lit "every fade-in region of " *> ((,,,,) <$> capUntil @BindName " is in "
+                                                                    <*> capUntil @BindName " and not "
+                                                                    <*> capUntil @BindName ", and every fade-out region is in "
+                                                                    <*> capUntil @BindName " and not "
+                                                                    <*> capRest @BindName)) $
+      \(BindName plan, BindName after, BindName before, BindName before2, BindName after2) w ->
+        pure $ either StepFailed id $ do
+          () <- sameTwice "later scene" after after2
+          () <- sameTwice "earlier scene" before before2
+          sts <- planSteps =<< boundScene plan w
+          ins <- fadeRegions "fade_in" sts
+          outs <- fadeRegions "fade_out" sts
+          fa <- featureIdSet =<< boundScene after w
+          fb <- featureIdSet =<< boundScene before w
+          let regionOf i = "region:" <> i
+              badIn  = [ i | i <- Set.toList ins
+                           , not (regionOf i `Set.member` fa) || regionOf i `Set.member` fb ]
+              badOut = [ i | i <- Set.toList outs
+                           , not (regionOf i `Set.member` fb) || regionOf i `Set.member` fa ]
+          pure $ if Set.null ins && Set.null outs
+            then StepSkipped "this span's plan carries no fades; a law about what fades \
+                             \in and out has nothing to examine"
+            else if null badIn && null badOut then StepOk w
+            else StepFailed (tshow (length badIn) <> " of " <> tshow (Set.size ins)
+                             <> " fade-in region(s) are not new in " <> after <> " ("
+                             <> listSome badIn <> "); " <> tshow (length badOut) <> " of "
+                             <> tshow (Set.size outs) <> " fade-out region(s) are not gone from "
+                             <> after <> " (" <> listSome badOut <> ")")
+    -- "the road back is the road there, reversed" -- characterization
+    -- T5, which HOLDS exactly. Whole-body: the constructed mirror is
+    -- compared against the served reverse plan step for step, with
+    -- `firstDiff` naming the first disagreement. T5's trap is comparing
+    -- step counts or kind multisets, both of which a shuffled order
+    -- satisfies.
+  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName " is "
+                                         <*> capUntil @BindName " with every morph reversed and every fade inverted")) $
+      \(BindName back, BindName there) w -> pure $ either StepFailed id $ do
+        bs <- planSteps =<< boundScene back w
+        ts <- planSteps =<< boundScene there w
+        let want = Array (V.fromList (mirrorPlan ts))
+            got  = Array (V.fromList bs)
+        pure $ if null ts && null bs
+          then StepSkipped ("this span's plan carries no steps in either direction; \
+                            \mirroring nothing demonstrates nothing")
+          else if want == got then StepOk w
+          else StepFailed (back <> " is not the mirror of " <> there <> ": "
+                           <> maybe "(no leaf difference found)" id (firstDiff want got))
+    -- "a border morphs with its real shape, not a stick figure"
+    -- (@target) -- characterization T13/4.9: /api/transition defaults to
+    -- Lod(6.0), which collapses every morph in this canon to a two-point
+    -- great-circle segment. T13's trap is passing an explicit lod in the
+    -- test and never exercising the default; the corpus's URL carries no
+    -- lod, on purpose, so this measures the default.
+  , mkSkippableStep Then (lit "every morph of " *> ((,) <$> capUntil @BindName " carries at least as many points as its border carries vertices in "
+                                                        <*> capRest @BindName)) $
+      \(BindName plan, BindName scn) w -> pure $ either StepFailed id $ do
+        sts <- planSteps =<< boundScene plan w
+        sv <- boundScene scn w
+        byId <- resourceRecords sv
+        fs <- arrayOf "features" sv
+        let morphs = stepsOfKind "morph" sts
+        pairs <- traverse (morphPoints byId fs) morphs
+        let bad = [ (b, n, v) | (b, n, v) <- pairs, n < v ]
+        pure $ if null morphs
+          then StepSkipped ("this span's plan carries no morphs; a law about a morph's \
+                            \geometry has nothing to examine")
+          else if null bad then StepOk w
+          else StepFailed (tshow (length bad) <> " of " <> tshow (length morphs)
+                           <> " morphs carry fewer points than their border's vertices in "
+                           <> scn <> ": "
+                           <> T.intercalate ", " [ b <> " " <> tshow n <> "<" <> tshow v
+                                                 | (b, n, v) <- take 5 bad ])
+    -- ---------- the small edits ----------
+    -- subjects.feature: "a question about a span is not answered as a
+    -- question about an instant".
+    --
+    -- On "refused or": a refusal cannot reach this step. The GET-as step
+    -- above turns a non-2xx into a Left (World.checkStatus), so a server
+    -- that refused the span would fail the scenario at its When line,
+    -- naming the status -- red, not green, though the law would be
+    -- satisfied. That is a real limitation of the binding step's
+    -- contract, recorded here rather than papered over; what this step
+    -- can and does decide is the other half, and it is the half today's
+    -- server actually exercises.
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " is refused or differs from "
+                                <*> capRest @BindName)) $
+      \(BindName span_, BindName instant) w -> pure $ do
+        a <- boundScene span_ w
+        b <- boundScene instant w
+        if a /= b then Right w
+        else Left (span_ <> " was answered with exactly the body " <> instant
+                   <> " was answered with: the span parameter was ignored, not refused")
+    -- resources.feature (@target): a batch containing an id the store
+    -- does not hold must say so. Today /api/resources
+    -- (crates/map-viewer/src/lib.rs:838-851) filters the unknown id out
+    -- and returns 200 with the rest, so the caller cannot tell a missing
+    -- payload from a short one.
+  , mkSkippableStep Then (lit "fetching " *> capUntil @BindName "'s first resource alongside a bogus id is refused by name") $
+      \(BindName a) w -> case firstResourceId a w of
+        Broken e -> pure (StepFailed e)
+        Unmet why -> pure (StepSkipped why)
+        Met rid -> case resourceRecords =<< boundScene a w of
+          Left e -> pure (StepFailed e)
+          Right byId
+            | Map.member bogusResourceId byId -> pure (StepSkipped
+                ("this scene publishes " <> bogusResourceId <> ", the id this law uses \
+                 \as its known-absent one; it cannot be used as a bogus id here"))
+            | otherwise -> do
+                batch <- transportRaw w (baseUrl w <> "/api/resources?ids=" <> rid
+                                         <> "," <> bogusResourceId)
+                single <- transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)
+                pure $ case (batch, single) of
+                  -- A refusal IS the law being met: the transport turns
+                  -- a non-2xx into a Left, and that is the green case.
+                  (Left _, _) -> StepOk w
+                  (Right bb, Right b1)
+                    | bb == b1 -> StepFailed
+                        ("the batch answered 200 with exactly the bytes of the one resident \
+                         \id, silently dropping " <> bogusResourceId
+                         <> ": a caller cannot tell a missing payload from a short one")
+                    | otherwise -> StepFailed
+                        ("the batch answered 200 rather than refusing the unknown id "
+                         <> bogusResourceId <> " by name")
+                  (_, Left e) -> StepFailed e
+    -- derivability.feature (@target): the manifest publishes no
+    -- disposition and no border attribution per entry, so the scene tier
+    -- cannot today be traced back to the fact tier at all. Computed, not
+    -- stubbed: it really looks for the two fields, and reports which of
+    -- them is missing from how many entries.
+  , mkStep Then (lit "every entry in " *> capUntil @BindName " traces to a disposition and a border") $
+      \(BindName n) w -> pure $ do
+        fs <- arrayOf "features" =<< boundScene n w
+        let missing k = length [ () | f <- fs, either (const True) (const False) (field k f) ]
+        if null fs then Left (n <> " carries no manifest entries to trace")
+        else if missing "disposition" == 0 && missing "border" == 0 then Right w
+        else Left (tshow (missing "disposition") <> " of " <> tshow (length fs)
+                   <> " entries carry no disposition, and " <> tshow (missing "border")
+                   <> " carry no border: the scene tier cannot be traced to the fact \
+                      \tier (disposition is Stage 2, borders Stage 3)")
+    -- census.feature: a BOUND response against a fixture. The existing
+    -- fixture step compares the LAST response; a @property scenario that
+    -- binds its response under a name (so the counterexample can report
+    -- it) needs to name it here too. Listed before the generic
+    -- "{name} equals {name}" step, whose capRest cannot parse
+    -- `fixture "census-diff-empty"` and so only ever claims this line.
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " equals fixture "
+                                <*> capRest @FixtureRef)) $
+      \(BindName n, FixtureRef f) w -> case Map.lookup n (bound w) of
+        Nothing -> pure (Left ("unbound " <> n))
+        Just pair_ -> blessOrCompare f w { bound = Map.insert "_last" pair_ (bound w) }
     -- scene steps (piece vocabulary on the wire)
+    -- ============ the camera's render vocabulary ============
+    -- Six shapes, all one request with different parts present or
+    -- absent (see `sceneUrlFull`). Listed before the two plain render
+    -- steps they overlap with on "I render pieces ", specific before
+    -- generic: on a camera line the plain steps' `capRest @StyleName`
+    -- swallows "canaan looking at 31.5,35.0 zoom 4 detail fine as
+    -- viewed" whole and reports "... is not a style" -- a true statement
+    -- about a capture and a useless one about the line, and exactly the
+    -- misclassification the corpus phase flagged as its finding 3.
+  , mkStep When (lit "I render pieces "
+                 *> ((,,,,,,) <$> capUntil @PieceSet " at year "
+                              <*> capUntil @Year " in style "
+                              <*> capUntil @StyleName " looking at "
+                              <*> capUntil @Center " zoom "
+                              <*> capUntil @Zoom " detail "
+                              <*> capUntil @DetailTier " as "
+                              <*> capRest @BindName)) $
+      \(ps, y, st, c, z, d, BindName n) ->
+        renderInto (Just n) ps y (Just st) (Just (CamSpec c z)) (Just d)
+  , mkStep When (lit "I render pieces "
+                 *> ((,,,,,,,) <$> capUntil @PieceSet " at year "
+                               <*> capUntil @Year " in style "
+                               <*> capUntil @StyleName " looking at "
+                               <*> capUntil @Center " zoom "
+                               <*> capUntil @Zoom " "
+                               <*> capUntil @ScaleQual " detail "
+                               <*> capUntil @DetailTier " as "
+                               <*> capRest @BindName)) $
+      \(ps, y, st, c, z, sc, d, BindName n) ->
+        renderInto (Just n) ps y (Just st) (Just (CamSpec c (applyScale sc z))) (Just d)
+  , mkStep When (lit "I render pieces "
+                 *> ((,,,,,) <$> capUntil @PieceSet " at year "
+                             <*> capUntil @Year " in style "
+                             <*> capUntil @StyleName " looking at "
+                             <*> capUntil @Center " zoom "
+                             <*> capUntil @Zoom " as "
+                             <*> capRest @BindName)) $
+      \(ps, y, st, c, z, BindName n) ->
+        renderInto (Just n) ps y (Just st) (Just (CamSpec c z)) Nothing
+  , mkStep When (lit "I render pieces "
+                 *> ((,,,,,) <$> capUntil @PieceSet " at year "
+                             <*> capUntil @Year " in style "
+                             <*> capUntil @StyleName " looking at "
+                             <*> capUntil @Center " zoom "
+                             <*> capUntil @Zoom " detail "
+                             <*> capRest @DetailTier)) $
+      \(ps, y, st, c, z, d) ->
+        renderInto Nothing ps y (Just st) (Just (CamSpec c z)) (Just d)
+  , mkStep When (lit "I render pieces "
+                 *> ((,,,,) <$> capUntil @PieceSet " at year "
+                            <*> capUntil @Year " in style "
+                            <*> capUntil @StyleName " detail "
+                            <*> capUntil @DetailTier " as "
+                            <*> capRest @BindName)) $
+      \(ps, y, st, d, BindName n) ->
+        renderInto (Just n) ps y (Just st) Nothing (Just d)
+    -- "in no style", meaning it: no `style=` parameter at all, so the
+    -- server answers with the dress IT declares as classical rather than
+    -- one this runner picked. That absence is the whole content of
+    -- scene.feature's default-totality scenario.
+  , mkStep When (lit "I render pieces "
+                 *> ((,) <$> capUntil @PieceSet " at year "
+                         <*> capUntil @Year " in no style")) $
+      \(ps, y) -> renderInto Nothing ps y Nothing Nothing Nothing
   , mkStep When (lit "I render pieces "
                  *> ((,,,) <$> capUntil @PieceSet " at year "
                            <*> capUntil @Year " in style "
@@ -555,7 +1057,412 @@ allSteps =
                                                   (firstDiff expected got))
   ]
   where
-    scene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))
+    -- The step phase promoted this to `boundScene` (top level): twenty
+    -- more definitions need it, and a `where`-bound copy is not
+    -- reachable from any of them.
+    scene = boundScene
+
+-- ============ THE CAMERA, AS ARITHMETIC ============
+--
+-- camera.feature's preamble DEFINES visibility rather than gesturing at
+-- it, and these are the definitions, one function each, pure, exported,
+-- and unit-tested at their boundaries without a server. The whole point
+-- of putting them here rather than inside the steps is that a predicate
+-- nobody can call alone is a predicate nobody can falsify alone: each of
+-- these has a discriminating case in the test suite (a pair of inputs
+-- that a mutation of the predicate would answer differently), which is
+-- what "mutation evidence" means in this project.
+--
+-- Every constant below is the SERVER'S, transcribed with its source, not
+-- a number chosen to make anything pass.
+
+-- A point on the unit sphere. The manifest publishes bounds centers,
+-- label anchors and marker positions as 3-element unit vectors, so this
+-- is the wire's own representation, not a re-encoding of it.
+data Vec3 = Vec3 !Double !Double !Double deriving (Eq, Show)
+
+-- A spherical cap: everything within `capRadius` radians of
+-- `capCenter`. Both the view and every resource's `bounds` are one of
+-- these, which is exactly why the visibility predicates are so short --
+-- the wire already speaks in caps.
+data Cap = Cap { capCenter :: Vec3, capRadius :: Double } deriving (Eq, Show)
+
+-- crates/map-types/src/geom.rs:52-55 (`UnitVec::from_lat_lon_deg`),
+-- with the latitude clamp `build_query` applies before calling it
+-- (lib.rs:645). Both halves matter: a request at 89.95 and one at 89.9
+-- are the same camera to this server, so a predicate that used the
+-- unclamped latitude would disagree with the server about where the
+-- camera IS.
+unitOf :: Center -> Vec3
+unitOf c = Vec3 (cos la * cos lo) (cos la * sin lo) (sin la)
+  where
+    la = radiansOf (latClamp (centerLat c))
+    lo = radiansOf (centerLon c)
+
+radiansOf :: Double -> Double
+radiansOf d = d * pi / 180
+
+-- The angle between two unit vectors, in radians. `acos` of a dot
+-- product that rounding has pushed a hair outside [-1, 1] is NaN, and a
+-- NaN silently makes every comparison below False -- i.e. it would make
+-- "is this feature out of view?" answer no for a feature exactly on the
+-- boundary. Clamped, so the degenerate case is a real angle (0 or pi)
+-- rather than a value that quietly disables the law.
+angleBetween :: Vec3 -> Vec3 -> Double
+angleBetween (Vec3 ax ay az) (Vec3 bx by bz) =
+  acos (max (-1) (min 1 (ax * bx + ay * by + az * bz)))
+
+-- THE MARGIN. `build_query` (lib.rs:646-650):
+--
+--     radius = min(pi, radians(clamp(zoom, 0.05, 90) * 1.8))
+--
+-- The 1.8 is the server's own declared margin, and the characterization
+-- pinned it empirically to better than 1%: a point at 1.78x the nominal
+-- zoom is inside, at 1.82x it is outside. Conflating this cap radius
+-- with the query's nominal `zoom` -- they differ by 80% -- is
+-- characterization K3's named trap.
+viewCap :: Center -> Zoom -> Cap
+viewCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (zoomClamp z * 1.8)))
+
+-- The whole-sphere sentinel: a cap that covers the globe. It intersects
+-- every view cap, is disjoint from none, and lies beyond no horizon --
+-- so it can never be a violation of any of the three laws below, and it
+-- can never be the HIT that makes one of them look satisfied either.
+-- Named rather than left implicit (MEMORY: verify-distinct-not-nonnull
+-- -- exclude the whole-sphere sentinel from hit logic): the counting
+-- guards below use it to refuse a vacuous pass.
+coversSphere :: Cap -> Bool
+coversSphere cap = capRadius cap >= pi
+
+-- IN VIEW: the feature's own bounding cap INTERSECTS the view cap. Two
+-- caps intersect exactly when the angle between their centers is no
+-- more than the sum of their radii -- the whole content of the
+-- predicate, and the reason the margin above has to be right.
+inView :: Cap -> Cap -> Bool
+inView view f = angleBetween (capCenter view) (capCenter f) <= capRadius view + capRadius f
+
+-- OUT OF VIEW: the two caps are disjoint. Stated as the negation, in one
+-- place, so the two can never drift into overlapping or leaving a gap --
+-- a feature is in view or out of view, never both and never neither,
+-- which is what makes camera.feature's "keeps ... and omits ..." a
+-- partition rather than two independent claims.
+outOfView :: Cap -> Cap -> Bool
+outOfView view f = not (inView view f)
+
+-- BEYOND THE HORIZON: the feature's bounds lie ENTIRELY more than a
+-- quarter turn from the center -- i.e. even its nearest point is over
+-- the edge of the visible hemisphere. Note this is a property of the
+-- CENTER alone: no zoom appears, because the horizon of a viewpoint on a
+-- sphere does not move when you change how much of it you frame.
+beyondHorizon :: Vec3 -> Cap -> Bool
+beyondHorizon eye f = angleBetween eye (capCenter f) - capRadius f > pi / 2
+
+-- A published point (a label's anchor, a marker's position) is in view
+-- when it lies inside the view cap. The degenerate cap of radius zero,
+-- so it is the same predicate as `inView`, not a second one.
+pointInView :: Cap -> Vec3 -> Bool
+pointInView view p = inView view (Cap p 0)
+
+-- ---------- reading the manifest ----------
+
+vec3Of :: Value -> Either Text Vec3
+vec3Of (Array v) = case V.toList v of
+  [a, b, c] -> Vec3 <$> num a <*> num b <*> num c
+  other     -> Left ("a unit vector needs 3 components, found "
+                     <> tshow (length other))
+  where
+    num (Number n) = Right (realToFrac n)
+    num other      = Left ("a unit vector component is not a number: " <> bounded other)
+vec3Of other = Left ("not a unit vector: " <> bounded other)
+
+capOf :: Value -> Either Text Cap
+capOf v = do
+  b <- field "bounds" v
+  c <- vec3Of =<< field "center" b
+  r <- field "radius" b
+  case r of
+    Number n -> Right (Cap c (realToFrac n))
+    other    -> Left ("bounds radius is not a number: " <> bounded other)
+
+arrayOf :: Text -> Value -> Either Text [Value]
+arrayOf k v = case field k v of
+  Right (Array a) -> Right (V.toList a)
+  Right other     -> Left ("field " <> k <> " is not an array: " <> bounded other)
+  Left e          -> Left e
+
+textField :: Text -> Value -> Either Text Text
+textField k v = case field k v of
+  Right (String s) -> Right s
+  Right other      -> Left ("field " <> k <> " is not a string: " <> bounded other)
+  Left e           -> Left e
+
+intField :: Text -> Value -> Either Text Int
+intField k v = case field k v of
+  Right (Number n) -> Right (round n)
+  Right other      -> Left ("field " <> k <> " is not a number: " <> bounded other)
+  Left e           -> Left e
+
+-- Every resource record of a manifest, by id -- the WHOLE record, not a
+-- projection of it: `every resource {a} and {b} share is byte-identical
+-- in both` is a whole-body claim about the record, and comparing a
+-- hand-picked triple of fields would be the existential poke this
+-- project's law forbids.
+resourceRecords :: Value -> Either Text (Map.Map Text Value)
+resourceRecords v = do
+  rs <- arrayOf "resources" v
+  Map.fromList <$> traverse (\r -> (,) <$> textField "id" r <*> pure r) rs
+
+-- The distinct feature ids of a manifest.
+featureIdSet :: Value -> Either Text (Set Text)
+featureIdSet v = Set.fromList <$> (traverse (textField "feature") =<< arrayOf "features" v)
+
+-- Each feature id paired with the bounding cap of the geometry it
+-- references. A feature names a `resource`; the resource carries the
+-- `bounds`. A feature whose resource is not in the manifest is a broken
+-- manifest, not a feature to skip quietly.
+featureCaps :: Value -> Either Text [(Text, Cap)]
+featureCaps v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  traverse (one byId) fs
+  where
+    one byId f = do
+      fid <- textField "feature" f
+      rid <- textField "resource" f
+      case Map.lookup rid byId of
+        Nothing -> Left ("feature " <> fid <> " references resource " <> rid
+                         <> ", which the manifest does not publish")
+        Just r  -> (,) fid <$> capOf r
+
+-- Labels by their SUBJECT (the feature they name) and markers by their
+-- PLACE, each with the point it is drawn at. Subject and place are the
+-- ids the characterization's nesting laws are stated over (C1/C2); the
+-- point is what the anchor law needs.
+labelAnchors :: Value -> Either Text [(Text, Vec3)]
+labelAnchors v = traverse one =<< arrayOf "labels" v
+  where one l = (,) <$> textField "subject" l <*> (vec3Of =<< field "anchor" l)
+
+markerPoints :: Value -> Either Text [(Text, Vec3)]
+markerPoints v = traverse one =<< arrayOf "markers" v
+  where one m = (,) <$> textField "place" m <*> (vec3Of =<< field "at" m)
+
+-- The two kinds together, which is how camera.feature states both
+-- nesting laws ("markers and labels"). Ids are namespaced by kind so a
+-- marker place and a label subject that happen to share a hex id are two
+-- different things, as they are on the wire.
+cameraCulled :: Value -> Either Text [(Text, Vec3)]
+cameraCulled v = do
+  ms <- markerPoints v
+  ls <- labelAnchors v
+  pure ([ ("marker:" <> i, p) | (i, p) <- ms ] ++ [ ("label:" <> i, p) | (i, p) <- ls ])
+
+-- ---------- reading a transition plan ----------
+
+planSteps :: Value -> Either Text [Value]
+planSteps = arrayOf "steps"
+
+stepsOfKind :: Text -> [Value] -> [Value]
+stepsOfKind k = filter (\s -> textField "kind" s == Right k)
+
+-- The region ids a plan's fades name, by kind. `fade_in`/`fade_out`
+-- publish a bare 16-hex `region`; scene manifests publish the same thing
+-- as the feature id `region:HEX`, and `/api/changes` as the subject
+-- `region:HEX` -- so one of the three has to be translated to compare
+-- them, and it is done here, once, rather than at each of the three call
+-- sites.
+fadeRegions :: Text -> [Value] -> Either Text (Set Text)
+fadeRegions kind sts = Set.fromList <$> traverse (textField "region") (stepsOfKind kind sts)
+
+-- `/api/changes` is a flat array of change rows, each with a `kind` and
+-- a namespaced `subject`. The subjects of one kind, with the namespace
+-- stripped, are directly comparable with `fadeRegions` above.
+changeSubjects :: Text -> Text -> Value -> Either Text (Set Text)
+changeSubjects kind ns v = case v of
+  Array rows -> Set.fromList . concat <$> traverse one (V.toList rows)
+  other      -> Left ("the changes timeline is not an array: " <> bounded other)
+  where
+    one r = do
+      k <- textField "kind" r
+      s <- textField "subject" r
+      pure [ T.drop (T.length ns) s | k == kind, ns `T.isPrefixOf` s ]
+
+-- THE STRUCTURAL MIRROR of a plan (characterization T5): reverse the
+-- step order, swap fade_in with fade_out, and swap each morph's `from`
+-- with its `to`. Any other field of any step is carried through
+-- untouched, so the comparison the inversion law makes is a WHOLE-BODY
+-- one -- a step kind this canon never fires today (split, merge) would
+-- be mirrored as itself and would have to match exactly, rather than
+-- being silently dropped from the comparison.
+mirrorPlan :: [Value] -> [Value]
+mirrorPlan = reverse . map flipStep
+  where
+    flipStep s = case textField "kind" s of
+      Right "fade_in"  -> setField "kind" (String "fade_out") s
+      Right "fade_out" -> setField "kind" (String "fade_in") s
+      Right "morph"    -> case (field "from" s, field "to" s) of
+        (Right f, Right t) -> setField "from" t (setField "to" f s)
+        _                  -> s
+      _ -> s
+
+-- ---------- what the new steps are built from ----------
+
+-- The bound response under a name. Promoted out of `allSteps`'s own
+-- `where` clause (where it was called `scene`) because the step phase's
+-- twenty-odd new definitions all need it and a second copy inside each
+-- would be the same function written twenty-odd times.
+boundScene :: Text -> World -> Either Text Value
+boundScene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))
+
+-- The view cap a bound scene was rendered at. A scene rendered with no
+-- camera has none, and that is an ERROR rather than "the whole globe":
+-- a law stated about `viewed`'s view cannot be checked against a scene
+-- that has no view, and answering "it holds" there would be the exact
+-- shape of check this project forbids.
+cameraOf :: Text -> World -> Either Text Cap
+cameraOf n w = case Map.lookup n (cameras w) of
+  Just (c, z) -> Right (viewCap c z)
+  Nothing -> Left (n <> " was not rendered with a camera (no center and zoom \
+                   \recorded for it), so it has no view for this law to be about")
+
+-- ONE render action, for all six of the step phase's render shapes. The
+-- differences between those shapes are entirely in WHICH parts are
+-- present (`sceneUrlFull`'s four Maybes), so they are parameters here
+-- rather than six near-identical bodies.
+--
+-- Records the same two things every render records: the (year, style)
+-- the combine and fold steps re-render at -- absent when the scenario
+-- said "in no style", because there is then no style to re-render at
+-- and inventing one would be the hardcoded dress `World.lastRender`
+-- exists to prevent -- and, new here, the CAMERA under the bound name.
+renderInto :: Maybe Text -> PieceSet -> Year -> Maybe StyleName
+           -> Maybe CamSpec -> Maybe DetailTier -> World -> IO (Either Text World)
+renderInto mname ps y mst mcam mdet w = do
+  r <- getUrl (sceneUrlFull (baseUrl w) ps y mst mcam mdet) w
+  pure $ do
+    w0 <- r
+    w1 <- maybe (Right w0) (`bindLast` w0) mname
+    Right w1 { lastRender = (,) y <$> mst
+             , cameras = case (mname, mcam) of
+                 (Just n, Just (CamSpec c z)) -> Map.insert n (c, z) (cameras w1)
+                 _ -> cameras w1 }
+
+-- A handful of ids in a failure message, the same way `describeSetDiff`
+-- bounds its own: five is enough to recognize a pattern, and a scene
+-- carries thousands.
+listSome :: [Text] -> Text
+listSome xs = T.intercalate ", " (take 5 xs) <> (if length xs > 5 then ", ..." else "")
+
+-- Several of the transition laws name the same scene twice ("... is in
+-- after and not before, and every fade-out region is in before and not
+-- after"). Two DIFFERENT names there would be a sentence that no longer
+-- states the law, so it is refused with the reason rather than quietly
+-- compared against whichever one came last.
+sameTwice :: Text -> Text -> Text -> Either Text ()
+sameTwice what a b
+  | a == b = Right ()
+  | otherwise = Left ("this law names one " <> what <> " twice, but was given two: "
+                      <> a <> " and " <> b)
+
+-- The geometry each FEATURE carries, in vertices, summed over every
+-- resource it references.
+--
+-- WHAT "SHARED" MEANS HERE, and why it is the feature and not the
+-- resource id. Geometry is content-addressed: a resource id IS its
+-- bytes. So two scenes rendered at different detail share a resource id
+-- exactly when that geometry did not change between them -- and then its
+-- vertex count is necessarily EQUAL on both sides. Read literally over
+-- resource ids, "every shared resource has at least as many vertices in
+-- fine as in coarse" is therefore true by construction of the hash: it
+-- cannot fail, for any server, ever. Measured on the live canon at
+-- -1405: 470 shared ids between the coarse and fine tiers, 852 between
+-- fine and ultra, and ZERO violations possible among them. A check
+-- satisfiable by its own failure mode is no check (MEMORY:
+-- verify-distinct-not-nonnull), and a vacuous GREEN on a @target is
+-- worse than a red -- it retires a law nobody has run.
+--
+-- The sentence also refutes that reading on its own terms: "no shared
+-- resource of glance carries more vertices than IT DOES IN corner"
+-- presupposes that the same thing can carry two different counts in the
+-- two scenes. Under content addressing nothing can. Under the feature
+-- reading everything does, which is what the sentence is about.
+--
+-- And it is the reading detail.feature's own comments declare. They cite
+-- "498/917 violations on the 1.5e-3 -> 1e-2 rung" and "490/917 features
+-- carry MORE vertices at zoom 0.05 than at zoom 90": 917 is the count of
+-- distinct FEATURE ids in this canon (characterization 1.1/2.1), not of
+-- resources, of which there are three to eleven thousand. The corpus
+-- author measured features; this measures features.
+--
+-- Flagged in the step-phase report as an interpretation for the owner to
+-- ratify, since it reads "resource" in the feature's sentence as the
+-- geometry a shared feature carries. No feature text was changed.
+featureVertices :: Value -> Either Text (Map.Map Text Int)
+featureVertices v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  rows <- traverse (one byId) fs
+  pure (Map.fromListWith (+) rows)
+  where
+    one byId f = do
+      fid <- textField "feature" f
+      rid <- textField "resource" f
+      case Map.lookup rid byId of
+        Nothing -> Left ("feature " <> fid <> " references resource " <> rid
+                         <> ", which the manifest does not publish")
+        Just r  -> (,) fid <$> intField "vertices" r
+
+-- One rung of a vertex-count comparison: how many features the two
+-- scenes share, and which of them the finer side draws with FEWER
+-- vertices than the coarser -- the violations, with both counts, so the
+-- message can say `region:x 42<108` rather than "something is smaller".
+data Rung = Rung { rungShared :: Int, rungBad :: [(Text, Int, Int)] } deriving (Eq, Show)
+
+vertexRung :: Text -> Text -> World -> Either Text Rung
+vertexRung finer coarser w = do
+  vf <- featureVertices =<< boundScene finer w
+  vc <- featureVertices =<< boundScene coarser w
+  let shared = Map.toList (Map.intersectionWith (,) vf vc)
+  pure (Rung (length shared) [ (i, a, b) | (i, (a, b)) <- shared, a < b ])
+
+describeRung :: Text -> Text -> Rung -> Text
+describeRung finer coarser (Rung shared bad)
+  | null bad = tshow shared <> " shared feature(s) between " <> finer <> " and " <> coarser
+               <> ": none loses vertices"
+  | otherwise = tshow (length bad) <> " of " <> tshow shared <> " shared feature(s) carry "
+                <> "fewer vertices in " <> finer <> " than in " <> coarser <> ": "
+                <> T.intercalate ", " [ i <> " " <> tshow a <> "<" <> tshow b
+                                      | (i, a, b) <- take 5 bad ]
+
+-- One morph step, against the border it claims to move: the boundary's
+-- id, how many points the morph carries, and how many vertices that
+-- boundary's geometry carries in the endpoint scene. `from` and `to`
+-- are always resampled to the same length (characterization T10), so
+-- the smaller of the two is the honest number to hold the law to.
+morphPoints :: Map.Map Text Value -> [Value] -> Value -> Either Text (Text, Int, Int)
+morphPoints byId fs s = do
+  b <- textField "boundary" s
+  from <- arrayOf "from" s
+  to <- arrayOf "to" s
+  rids <- sequence [ textField "resource" f
+                   | f <- fs, textField "feature" f == Right ("boundary:" <> b) ]
+  case rids of
+    [] -> Left ("the plan morphs boundary " <> b
+                <> ", which the endpoint scene does not publish as a feature")
+    _ -> do
+      vs <- traverse (\i -> maybe (Left ("no resource " <> i)) (intField "vertices")
+                              (Map.lookup i byId)) rids
+      pure (b, min (length from) (length to), sum vs)
+
+-- The known-absent resource id the batch-refusal law probes with.
+--
+-- A resource id is the 64-bit content hash of a non-empty geometry
+-- payload, rendered as 16 hex digits; an all-zero hash is not a value
+-- this canon's hasher produces for any geometry it holds. That is an
+-- argument, not a guarantee, so the step does not rest on it: it checks
+-- that the scene under test does not in fact publish this id, and skips
+-- (naming the reason) rather than passing if it ever does.
+bogusResourceId :: Text
+bogusResourceId = "0000000000000000"
 
 -- ---------- Task 11: content-addressed resource ids ----------
 -- Every id in a bound scene's "resources" array, text order, extracted

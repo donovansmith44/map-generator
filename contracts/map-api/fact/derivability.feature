@@ -8,7 +8,9 @@ Feature: derivability — the scene tier is a composition of the fact tier
   each other, and that gap belongs in the corpus, not only in a note.
 
   Vocabulary:
+    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
     | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
+    | style | any of: canaan, parchment, slate |
 
   @target
   Scenario: every manifest entry traces to a disposition and a border

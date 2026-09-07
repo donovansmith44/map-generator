@@ -12,6 +12,13 @@ Feature: the camera — what you look at is what you get, and nothing else chang
   wherever the camera is under test, because zoom otherwise changes
   detail too (detail.feature owns that coupling law).
 
+  Vocabulary:
+    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
+    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
+    | style | any of: canaan, parchment, slate |
+    | detail | any of: coarse, fine, ultra |
+    | scale | any of: doubled, halved |
+
   Scenario: looking at the Levant shows the Levant
     When I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine
     Then the response equals fixture "scene-1405-levant-cam"

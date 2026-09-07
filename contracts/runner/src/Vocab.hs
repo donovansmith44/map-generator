@@ -183,8 +183,40 @@ vocabRegion ls = classify (skipHeader ls)
     consumeRows j
       | j < n, isTableRow (ls !! j) = consumeRows (j + 1)
       | otherwise = j
-    backOverBlanks i
-      | i > 0, T.null (T.strip (ls !! (i - 1))) = backOverBlanks (i - 1)
+    -- Back up over any contiguous run of blank lines, AND over any
+    -- contiguous run of COMMENT lines glued directly to the anchor.
+    --
+    -- The comment half was a real defect, found the moment the step
+    -- phase gave two previously block-less files a vocabulary: in
+    -- scene/detail.feature the anchor is a "@property" tag line with two
+    -- "# Characterization: ..." lines immediately above it and a blank
+    -- above those. A comment is neither a blank nor a boundary, so the
+    -- scan passed straight over it and inserted the block AT the tag --
+    -- between a scenario's own note and the scenario, orphaning the
+    -- comment above a table it has nothing to do with. Byte-surgical,
+    -- and still wrong: the owner writes those notes, and a tool that
+    -- silently cuts one away from what it annotates is not one to run on
+    -- a hand-written corpus.
+    --
+    -- "Contiguous with the anchor" is what keeps this narrow. A comment
+    -- separated from the scenario by a blank line is preamble prose and
+    -- stays put; only a comment glued to the boundary travels with it,
+    -- which is the same convention a reader uses.
+    -- TWO phases, in this order, and not one mixed loop: comments
+    -- first, then blanks. A single loop that accepted either would keep
+    -- walking past the blank ABOVE a glued comment and swallow whatever
+    -- comment sits above THAT -- in a file with a free-standing preamble
+    -- note and a scenario note, it hoists the block above both and
+    -- reorders the author's prose. Comments travel with the anchor only
+    -- while they are glued to it; the blank run is then folded in
+    -- exactly as before, because `renderRows` supplies its own leading
+    -- blank.
+    backOverBlanks = backOverBlankRun . backOverCommentRun
+    backOverCommentRun i
+      | i > 0, "#" `T.isPrefixOf` T.strip (ls !! (i - 1)) = backOverCommentRun (i - 1)
+      | otherwise = i
+    backOverBlankRun i
+      | i > 0, T.null (T.strip (ls !! (i - 1))) = backOverBlankRun (i - 1)
       | otherwise = i
 
 -- The block's own text, in renderFeature's exact format (blank line, the
