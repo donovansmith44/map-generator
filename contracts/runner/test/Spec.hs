@@ -54,6 +54,10 @@ main = hspec $ do
     prop "round-trips: parse . render == Right" $ \f ->
       parseFeature "gen.feature" (renderFeature f) === Right f
 
+-- '|' is deliberately excluded from the alphabet: the renderer emits
+-- table rows as "| a | b |" with no escaping, so a cell containing '|'
+-- could never round-trip through this format — a genuine representability
+-- limit of the (unescaped) table syntax, not a generator convenience.
 safeText :: Gen T.Text
 safeText = (T.pack <$> listOf1 (elements (['a'..'z'] ++ ['0'..'9'] ++ " -")))
     `suchThat` (\t -> t == T.strip t && not (T.null (T.strip t)))
@@ -75,12 +79,22 @@ instance Arbitrary Feature where
       genStep = Step <$> elements [Given, When, Then] <*> safeText <*> genStepArg
       -- No DocString: the parser deliberately defers DocString support
       -- (see Gherkin.Parse), so it's not part of the round-trip law yet.
-      -- Tables are capped to a handful of small rows/cells: this doubly-
-      -- nested listOf1 shares QuickCheck's ambient size with the
-      -- scenario/step lists above it, and uncapped it compounds into
-      -- minutes-long runs without adding coverage the law needs (every
-      -- shape — one row, one cell, many of each — is still reachable).
       genStepArg = frequency
         [ (2, pure Nothing)
-        , (1, Just . Table <$> resize 4 (listOf1 (resize 4 (listOf1 safeText))))
+        , (1, Just . Table <$> genTable)
         ]
+      -- `listOf1 (listOf1 safeText)` nests three unbounded dimensions
+      -- (rows, cells, and cell length, via safeText's own listOf1) under
+      -- one shared QuickCheck size parameter, so generation cost grows
+      -- roughly cubically with ambient size — at size 100 that's on the
+      -- order of a 100-row table of 100 cells of 100 characters each,
+      -- which is the actual source of a 78-second run. `scale intSqrt`
+      -- at each nesting boundary shrinks the size seen by that level
+      -- (roughly: n rows -> sqrt(n) cells -> sqrt(sqrt(n))-length text),
+      -- bringing total cost back down to roughly linear in the ambient
+      -- size. This changes the *distribution*, not the *domain*: every
+      -- table shape, arbitrarily large, is still reachable at a large
+      -- enough ambient size — nothing is capped out of what the law
+      -- ranges over.
+      genTable = scale intSqrt (listOf1 (scale intSqrt (listOf1 safeText)))
+      intSqrt = floor . sqrt . (fromIntegral :: Int -> Double)
