@@ -824,7 +824,7 @@ fn the_sentinel_keeps_its_holes_on_both_charts() {
             holes: vec![island.clone()],
             paint: map_types::style::Paint { fill: map_types::style::Rgba(1, 2, 200, 255) },
             sources: Default::default(),
-            piece: map_types::Piece::Fills,
+            piece: map_types::Piece::Water,
         });
         let svg = SvgEncoder { projection, width: 800.0, smooth: false, ..SvgEncoder::default() }
             .encode(&scene)

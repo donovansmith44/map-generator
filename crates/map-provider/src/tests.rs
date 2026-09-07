@@ -532,10 +532,10 @@ mod canon_provider_laws {
 
         let claim_b = store.insert_border(square(30.0, 40.0, 4.0));
         let claim = area(&mut store, "claim", claim_b, map_canon::Tenure::Claimed, Witness::Authored);
-        layer_of(&mut store, LayerKind::ScriptureClaims, vec![claim]);
-
-        let terr_b = store.insert_border(square(35.0, 42.0, 3.0));
-        let assyria = area(&mut store, "assyria", terr_b, map_canon::Tenure::Held, Witness::Atlas);
+        // WHERE PRODUCTION PUTS IT: map-compile's partition_bridge
+        // overlays every standing city into ScriptureClaims, not
+        // Territory. A fixture that placed it in Territory would agree
+        // with the brief's assumption and disagree with the canon.
         let landmark = store.insert_feature(Feature::Point(map_canon::Landmark {
             entity: EntityId("place:nineveh".into()),
             name: "Nineveh".into(),
@@ -546,7 +546,11 @@ mod canon_provider_laws {
             verses: vec!["JON.1.2".into()],
             note: "t".into(),
         });
-        layer_of(&mut store, LayerKind::Territory, vec![assyria, landmark]);
+        layer_of(&mut store, LayerKind::ScriptureClaims, vec![claim, landmark]);
+
+        let terr_b = store.insert_border(square(35.0, 42.0, 3.0));
+        let assyria = area(&mut store, "assyria", terr_b, map_canon::Tenure::Held, Witness::Atlas);
+        layer_of(&mut store, LayerKind::Territory, vec![assyria]);
 
         let road1 = store.insert_border(Border(vec![uv(36.2, 36.16), uv(37.9, 27.3)]));
         let road2 = store.insert_border(Border(vec![uv(37.9, 27.3), uv(41.89, 12.49)]));
@@ -672,6 +676,104 @@ mod canon_provider_laws {
                 filtered.regions,
                 whole.regions.iter().filter(|r| r.piece != omitted).cloned().collect::<Vec<_>>());
         }
+    }
+
+    /// A SINGLETON PIECE SET IS A LEGAL QUESTION, AND IT IS ANSWERED.
+    /// Asking for one piece alone must yield exactly that piece —
+    /// nothing more, and nothing LESS. The subtractivity loop cannot
+    /// see this: it always keeps nine of the ten pieces, so a layer
+    /// selector that reached a layer only through some OTHER piece
+    /// still looked correct there. Markers is the case that bit: the
+    /// gazetteer's standing landmarks live in the ScriptureClaims
+    /// layer (map-compile's partition_bridge overlays every city
+    /// there), so a selector that hard-coded "markers mean Territory"
+    /// answered `pieces=markers` with an empty scene on the real canon.
+    #[test]
+    fn a_single_piece_answers_with_that_piece_alone() {
+        use map_types::{Piece, PieceSet};
+        let (p, sid) = every_piece_provider();
+        let only = |piece: Piece| {
+            p.render(&world_q_pieces(sid, -1400, PieceSet::empty().with(piece))).unwrap()
+        };
+        let markers = only(Piece::Markers);
+        assert!(!markers.markers.is_empty(), "markers alone still stand");
+
+        for piece in [
+            Piece::Ground,
+            Piece::Water,
+            Piece::Fills,
+            Piece::Borders,
+            Piece::Claims,
+            Piece::Labels,
+            Piece::Markers,
+            Piece::Journeys,
+        ] {
+            let s = only(piece);
+            let stamped: BTreeSet<_> = s
+                .regions
+                .iter()
+                .map(|r| r.piece)
+                .chain(s.boundaries.iter().map(|b| b.piece))
+                .chain(s.markers.iter().map(|m| m.piece))
+                .chain(s.labels.iter().map(|l| l.piece))
+                .collect();
+            assert_eq!(
+                stamped,
+                BTreeSet::from([piece]),
+                "asking for {piece:?} alone must answer with {piece:?} alone"
+            );
+        }
+        // The dress pieces contribute no scene elements at all — a
+        // declared property, not a gap.
+        for piece in [Piece::Chrome, Piece::Veil] {
+            let s = only(piece);
+            assert!(
+                s.regions.is_empty()
+                    && s.boundaries.is_empty()
+                    && s.markers.is_empty()
+                    && s.labels.is_empty(),
+                "{piece:?} is a dress piece: it contributes no scene elements"
+            );
+        }
+    }
+
+    /// THE ACCUMULATION TAIL KEEPS ITS RELIEF. A range render
+    /// age-tints the outline of every visited layer's areas — relief
+    /// included, which the At path never draws. A boundary that EXISTS
+    /// must name its piece, and a relief outline's piece is Ground;
+    /// reading `piece_of_boundary(Relief)` as None and guarding on it
+    /// deleted this output outright, where no single-instant golden
+    /// view could see it.
+    #[test]
+    fn an_accumulated_range_still_tints_relief_outlines() {
+        use map_types::{Piece, PieceSet};
+        let (p, sid) = every_piece_provider();
+        let over = |pieces: PieceSet| {
+            let mut q = world_q_pieces(sid, -1400, pieces);
+            q.time = TimeSelector::Over(
+                map_types::Interval::new(ts(-4004), Some(ts(-1400))).unwrap(),
+            );
+            p.render(&q).unwrap()
+        };
+        let whole = over(PieceSet::all());
+        assert!(
+            whole.boundaries.iter().any(|b| b.piece == Piece::Ground),
+            "the relief band's age-tinted outline survives a range render"
+        );
+        // and the attribution is real, not decorative: drop Ground and
+        // exactly those outlines go, with the rest untouched.
+        let without = over(PieceSet::all().without(Piece::Ground));
+        assert!(without.boundaries.iter().all(|b| b.piece != Piece::Ground));
+        assert_eq!(
+            without.boundaries,
+            whole
+                .boundaries
+                .iter()
+                .filter(|b| b.piece != Piece::Ground)
+                .cloned()
+                .collect::<Vec<_>>(),
+            "omitting ground disturbed some other piece's outlines"
+        );
     }
 
     /// BEHAVIOR PRESERVATION: the piece-set spelling of yesterday's

@@ -102,10 +102,15 @@ fn piece_of_region(l: LayerKind) -> Option<Piece> {
     }
 }
 
-/// The boundary half of the same total function.
+/// The boundary half of the same total function. A relief band's
+/// outline belongs to GROUND: the At path draws no relief outline, but
+/// the accumulation tail age-tints the outline of every visited
+/// layer's areas, relief included, and a boundary that EXISTS must
+/// name its piece. (Reading this arm as `None` and guarding on it
+/// deleted those outlines outright.)
 fn piece_of_boundary(l: LayerKind) -> Option<Piece> {
     match l {
-        LayerKind::Relief => None, // relief bands draw no outline today
+        LayerKind::Relief => Some(Piece::Ground),
         LayerKind::Water => Some(Piece::Water),
         LayerKind::Background | LayerKind::Territory => Some(Piece::Borders),
         LayerKind::ScriptureClaims => Some(Piece::Claims),
@@ -113,10 +118,42 @@ fn piece_of_boundary(l: LayerKind) -> Option<Piece> {
     }
 }
 
-/// Which layers can contribute anything to this piece set. A layer is
-/// visited when ANY of its pieces is wanted; the per-element `piece`
-/// stamp then does the fine-grained filtering, so fills, borders and
-/// claims are genuinely separable for the first time.
+/// THE EMITTABLE SET: every piece layer `l` can put into a scene — its
+/// region piece, its boundary piece, the pieces of any markers that
+/// stand in it, and Labels if anything in it is named. Total by
+/// construction: a new LayerKind fails to compile until it declares
+/// what it can emit, and there is no per-layer string of special cases
+/// for a later reader to misread.
+fn pieces_of_layer(l: LayerKind) -> PieceSet {
+    let mut s = PieceSet::empty();
+    if let Some(p) = piece_of_region(l) {
+        s = s.with(p);
+    }
+    if let Some(p) = piece_of_boundary(l) {
+        s = s.with(p);
+    }
+    match l {
+        // Bands of unnamed ground: no marker stands in them, and
+        // `push_area` skips a relief area's label by name.
+        LayerKind::Relief => s,
+        // A way's road, its stations and their names are ONE piece:
+        // nothing in this layer ships unless Journeys is wanted, so
+        // Labels does not belong in its emittable set.
+        LayerKind::Journeys => s,
+        // The gazetteer's standing landmarks are overlaid into
+        // ScriptureClaims (map-compile's partition_bridge puts every
+        // city there), and any layer's areas and points can be named.
+        LayerKind::Background
+        | LayerKind::Territory
+        | LayerKind::ScriptureClaims
+        | LayerKind::Water => s.with(Piece::Markers).with(Piece::Labels),
+    }
+}
+
+/// Which layers can contribute anything to this piece set: exactly
+/// those whose emittable set MEETS the wanted set. The per-element
+/// `piece` stamp then does the fine-grained filtering, so fills,
+/// borders and claims are genuinely separable for the first time.
 ///
 /// The ORDER is the order the old `LayerSet` walk produced — layer
 /// visit order is boundary and label paint order, and this task moves
@@ -131,12 +168,7 @@ fn layers_wanted(pieces: PieceSet) -> Vec<LayerKind> {
         LayerKind::Journeys,
     ]
     .into_iter()
-    .filter(|l| {
-        piece_of_region(*l).is_some_and(|p| pieces.contains(p))
-            || piece_of_boundary(*l).is_some_and(|p| pieces.contains(p))
-            || (pieces.contains(Piece::Markers) && *l == LayerKind::Territory)
-            || (pieces.contains(Piece::Journeys) && *l == LayerKind::Journeys)
-    })
+    .filter(|l| pieces_of_layer(*l).iter().any(|p| pieces.contains(p)))
     .collect()
 }
 
@@ -356,6 +388,18 @@ impl CanonProvider {
         style: &Style,
     ) {
         let _ = t;
+        // Nothing this area could contribute is wanted: leave before
+        // any ring work. A layer is visited when ANY of its pieces is
+        // asked for, so a Water layer visited only for its markers
+        // must not pay to simplify every coastline.
+        let wants_face = piece_of_region(layer).is_some_and(|p| q.pieces.contains(p));
+        let wants_edge = layer != LayerKind::Relief
+            && layer != LayerKind::Water
+            && piece_of_boundary(layer).is_some_and(|p| q.pieces.contains(p));
+        let wants_name = q.pieces.contains(Piece::Labels) && layer != LayerKind::Relief;
+        if !wants_face && !wants_edge && !wants_name {
+            return;
+        }
         let sources = self.sources_of(fid);
         // THE IDENTITY LAW, sharpened: fidelity may thin a feature,
         // never erase it — but only the feature's IDENTITY holds that
@@ -538,8 +582,11 @@ impl CanonProvider {
         }
         let sources = self.sources_of(fid);
         scene.attribution.extend(sources.iter().cloned());
-        // A way and its stations are one piece: the road IS the
-        // journey, and so is every station standing on it.
+        // A way, its stations and their names are ONE piece: the road
+        // IS the journey, and so is every station standing on it. The
+        // guard states that at the push site rather than leaning on
+        // `layers_wanted` to have excluded the layer — the two answer
+        // different questions, and only this one is per-element.
         if !q.pieces.contains(Piece::Journeys) {
             return;
         }

@@ -39,12 +39,13 @@ pub struct StyledRegion {
     pub holes: Vec<Ring>,
     pub paint: Paint,
     pub sources: BTreeSet<SourceId>,
-    /// WHICH PIECE this element belongs to. The scene type used to carry
-    /// no such notion, so the provider recorded paint rank at push time
-    /// and threw the rest away — which is why the encoder could only
-    /// group markers by paint, why one points buffer held every piece's
-    /// markers, and why omitting journeys changed the bytes of a buffer
-    /// other pieces were using (diagnosis §3.2).
+    /// WHICH PIECE this face belongs to — Ground, Water, Fills or
+    /// Claims. The scene type used to carry no such notion, so the
+    /// provider recorded a paint RANK at push time (`scene_at`'s
+    /// `paint_rank`, "recorded at push time because the scene type
+    /// carries no layer") and threw the rest away: a fill and its
+    /// border could not be asked for apart, and a claim could not be
+    /// told from a territory at all (diagnosis §3.2).
     pub piece: crate::piece::Piece,
 }
 
@@ -55,12 +56,11 @@ pub struct StyledBoundary {
     pub pts: Vec<UnitVec>,
     pub stroke: Stroke,
     pub sources: BTreeSet<SourceId>,
-    /// WHICH PIECE this element belongs to. The scene type used to carry
-    /// no such notion, so the provider recorded paint rank at push time
-    /// and threw the rest away — which is why the encoder could only
-    /// group markers by paint, why one points buffer held every piece's
-    /// markers, and why omitting journeys changed the bytes of a buffer
-    /// other pieces were using (diagnosis §3.2).
+    /// WHICH PIECE this edge belongs to — Borders, Claims, Water (a
+    /// river), Journeys (a road) or Ground (a range render's age-tinted
+    /// relief outline). The scene type used to carry no such notion, so
+    /// an outline was inseparable from the face it enclosed: turning
+    /// fills off took every border with it (diagnosis §3.2).
     pub piece: crate::piece::Piece,
 }
 
@@ -76,12 +76,13 @@ pub struct StyledMarker {
     /// one — selection follows markers by their place (law 10's
     /// spirit), never by guessing from position.
     pub place: Option<crate::boundary::AtlasPlaceRef>,
-    /// WHICH PIECE this element belongs to. The scene type used to carry
-    /// no such notion, so the provider recorded paint rank at push time
-    /// and threw the rest away — which is why the encoder could only
-    /// group markers by paint, why one points buffer held every piece's
-    /// markers, and why omitting journeys changed the bytes of a buffer
-    /// other pieces were using (diagnosis §3.2).
+    /// WHICH PIECE this standing point belongs to — Markers for a
+    /// gazetteer landmark, Journeys for a station on a walked road.
+    /// THE DIAGNOSIS'S OWN CASE: with no piece here the encoder could
+    /// only group markers by PAINT, so one points buffer held every
+    /// origin's markers, and omitting journeys changed the bytes of a
+    /// buffer other pieces were using — geometry appeared when a piece
+    /// was turned OFF (diagnosis §3.2).
     pub piece: crate::piece::Piece,
 }
 
@@ -109,12 +110,11 @@ pub struct PlacedLabel {
     pub face: LabelFace,
     /// the fully resolved typographic dress, straight from the style
     pub voice: crate::style::TypeVoice,
-    /// WHICH PIECE this element belongs to. The scene type used to carry
-    /// no such notion, so the provider recorded paint rank at push time
-    /// and threw the rest away — which is why the encoder could only
-    /// group markers by paint, why one points buffer held every piece's
-    /// markers, and why omitting journeys changed the bytes of a buffer
-    /// other pieces were using (diagnosis §3.2).
+    /// WHICH PIECE this name belongs to. Every label is the Labels
+    /// piece — a name is its own piece, not a property of the thing
+    /// named — which is what lets a caller ask for a silent map, or
+    /// for names alone over someone else's ground. The scene type
+    /// used to carry no such notion (diagnosis §3.2).
     pub piece: crate::piece::Piece,
 }
 
