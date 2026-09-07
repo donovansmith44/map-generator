@@ -64,28 +64,44 @@ blessOrCompare fname w = case Map.lookup "_last" (bound w) of
             | expected == v -> Right w
             | otherwise -> Left ("response differs from fixture " <> fname)
 
--- Ordering rule (R5, controller ruling): SPECIFIC step definitions must be
--- listed before GENERIC ones that could otherwise shadow them, wherever two
--- definitions can both classify the same body as "this is my step, run me"
--- (not merely "not this step") for the same input text. R4 makes a
--- terminator-not-found a fall-through, but it does NOT protect against a
--- capture failing to PARSE at all — that's a reportable error under R4/R5,
--- not a fall-through, and it makes two *different* StepDefs able to each
--- claim the same body when they share a literal substring. Concrete case a
--- reviewer found live in this list: "the response field style equals
--- canaan" is a legal body for BOTH the "the response field {text} equals
--- {text}" step above AND the `lit ""`-prefixed "{name} equals {name}" step
--- below (its `capUntil @BindName " equals "` would try to parse "the
--- response field style" as a BindName, fail on the spaces, and — because
--- that's a capture-parse failure rather than a missing literal — report an
--- error rather than falling through). Listing the "the response field ..."
--- step first means firstMatch (or its non-test callers) sees it before the
--- ambiguous generic step. This list-order workaround is NOT a structural
--- fix — it is not verified anywhere that a later append (Tasks 10-12) can't
--- reintroduce the same shadowing by inserting a step in the wrong spot.
--- Task 7's totality check is where the actual guarantee lives: it detects a
--- step body matching two or more definitions and fails, naming both. Do not
--- try to solve the ambiguity here.
+-- Ordering rule (R5, controller ruling) — UPDATED under R23, see below for
+-- what changed and what didn't. Originally: SPECIFIC step definitions must
+-- be listed before GENERIC ones that could otherwise shadow them, wherever
+-- two definitions can both classify the same body as "this is my step, run
+-- me" for the same input text. Two concrete cases were found live in this
+-- list: "the response field style equals canaan" is a legal body for BOTH
+-- the "the response field {text} equals {text}" step above AND the
+-- `lit ""`-prefixed "{name} equals {name}" step below (its
+-- `capUntil @BindName " equals "` tries to parse "the response field
+-- style" as a BindName and fails on the spaces); and separately, ANY
+-- "I render pieces ... in style X as sceneName" line is a legal body for
+-- BOTH the binding overload above AND the non-binding overload below it
+-- (whose `capRest @StyleName` swallows "X as sceneName" whole and fails to
+-- parse it as a style).
+--
+-- R23 (controller ruling) dissolved both of these STRUCTURALLY, not by
+-- ordering: World.Claim now has three states (NoMatch / ClaimError /
+-- Matched) instead of a single conflated Maybe, and a definition whose
+-- capture fails to parse (ClaimError) is no longer treated the same as one
+-- that actually matches (Matched). Both cases above have exactly one
+-- Matched definition and one ClaimError also-ran; Run.runScenario always
+-- runs a Matched action over a mere ClaimError, and Check.hs's totality
+-- law counts MATCHES, not claims, so neither case is ambiguous any more —
+-- regardless of list order. List order is therefore NOT load-bearing for
+-- correctness any more; a later append (Tasks 10-12) inserted in the
+-- "wrong" spot cannot silently reintroduce this kind of shadowing, because
+-- there is no shadowing left to reintroduce — a true structural match
+-- always wins over a mere claim, by construction.
+--
+-- Specific-before-generic remains good practice for ERROR QUALITY, though:
+-- when NO definition matches and only claims remain, runScenario and
+-- Check report the FIRST ClaimError in list order, so listing the more
+-- specific (usually more informative) definition first still shapes which
+-- message a human sees on a genuinely bad value. That's why this list
+-- keeps the order it has. Task 7's totality check (Check.hs) is where the
+-- law actually lives: a step matched by 0 definitions is an orphan, by 1
+-- is fine, by 2+ is ambiguous and fatal, and a step claimed-but-never-
+-- matched (a bad value) is its own fatal class, distinct from both.
 allSteps :: [StepDef]
 allSteps =
   [ -- generic wire steps

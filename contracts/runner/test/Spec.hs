@@ -359,56 +359,128 @@ main = hspec $ do
              , "    Then nobody wrote this step" ] of
         Left e -> expectationFailure (T.unpack e)
         Right f -> map snd (Check.orphans allSteps f) `shouldBe` ["nobody wrote this step"]
-    it "names ambiguous steps: a body claimed by two or more definitions (R18)" $ do
-      -- Task 5 review finding, recorded in Steps.hs's ordering comment:
-      -- "the response field style equals canaan" is a legal body for BOTH
-      -- the "the response field {text} equals {text}" step AND the
-      -- generic "{name} equals {name}" step below it — the generic step's
-      -- BindName capture tries to parse "the response field style" as a
-      -- bind name, fails on the spaces (a capture PARSE failure, not a
-      -- missing literal), and under R4/mkStep that's "this step, bad
-      -- value" (Just), not a fall-through (Nothing). So it counts as a
-      -- CLAIM, and TWO definitions claim this one body. Only allSteps'
-      -- list order (specific-before-generic) hides this from firstMatch
-      -- today; the totality check must catch it regardless of order,
-      -- which is exactly why this test uses the REAL allSteps and this
-      -- REAL colliding line rather than a synthetic fixture.
-      case parseFeature "amb.feature" $ T.unlines
-             [ "Feature: amb"
+    -- R23 (controller ruling): mkStep's old Maybe conflated "I match this
+    -- line" and "I recognize this shape but the value is bad" into one
+    -- Just, which is what made BOTH real collisions below look ambiguous
+    -- and left them protected only by allSteps' list order. World.Claim
+    -- now has three states (NoMatch / ClaimError / Matched), and a full
+    -- Matched always wins over a mere ClaimError — dissolving both
+    -- collisions structurally, with no per-step special-casing.
+    it "a line one definition MATCHES and another only CLAIMS resolves to \
+       \the matching definition's behavior, and check calls it unambiguous" $ do
+      -- Real collision #1 (Task 5 review / R18): "the response field scene
+      -- equals http://x/foo" MATCHES the field-equality step; the generic
+      -- "{name} equals {name}" step's BindName capture on "the response
+      -- field scene" fails to parse (spaces aren't a bind name) and so
+      -- only CLAIMS. Driven through runScenario (not just Check) to prove
+      -- the MATCHING definition's actual behavior runs — the field
+      -- genuinely gets compared and passes — not merely that Check stays
+      -- quiet about it.
+      let fake url = pure (Right (raw, v))
+            where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
+                  v   = fromJust (A.decodeStrict raw)
+          w0 = World "http://x" fake "test/fixtures" mempty False
+      case parseFeature "c1.feature" $ T.unlines
+             [ "Feature: c1"
              , "  Scenario: s"
              , "    When I GET /foo"
-             , "    Then the response field style equals canaan" ] of
-        Left e -> expectationFailure (T.unpack e)
-        Right f -> do
-          let ambs = Check.ambiguous allSteps f
-          map (\(_, b, _) -> b) ambs `shouldBe` ["the response field style equals canaan"]
-          case ambs of
-            [(_, _, sketches)] -> length sketches `shouldBe` 2
-            _ -> expectationFailure
-                   ("expected exactly one ambiguous step, got " <> show (length ambs))
-    it "an unambiguous, fully-defined step is neither an orphan nor ambiguous" $ do
-      -- NOTE: this deliberately does NOT use an "I render pieces ... as
-      -- sceneX" line. That family turns out to be ambiguous too (found
-      -- while writing this test, not asked for by the brief or R18):
-      -- StepDef 5 ("I render pieces {p} at year {y} in style {s}", no
-      -- "as") has a capRest @StyleName that greedily swallows the
-      -- trailing "canaan as sceneA" and fails to PARSE it as a style —
-      -- a capture-parse failure, which under R4/mkStep is a claim (Just),
-      -- not a fall-through. So StepDef 4 and StepDef 5 both claim every
-      -- "as sceneX" render line, including lines Task 6's own tests use.
-      -- Reported to the diagnosis; not this task's job to fix Steps.hs.
-      case parseFeature "ok.feature" $ T.unlines
-             [ "Feature: ok"
-             , "  Scenario: s"
-             , "    When I GET /foo" ] of
+             , "    Then the response field scene equals http://x/foo" ] of
         Left e -> expectationFailure (T.unpack e)
         Right f -> do
           Check.orphans allSteps f `shouldBe` []
           Check.ambiguous allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
+          case ftScenarios f of
+            [sc] -> do
+              v <- runScenario allSteps w0 sc
+              v `shouldBe` Passed
+            scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
+    it "the second real collision (render steps' \"as\"/no-\"as\" overloads) \
+       \is also unambiguous under R23" $ do
+      -- Real collision #2, found while implementing Task 7 (beyond what
+      -- R18 named): "I render pieces fills at year -1405 in style canaan
+      -- as sceneA" MATCHES the binding overload ("... as {name}"); the
+      -- non-binding overload's capRest @StyleName swallows the whole
+      -- remainder "canaan as sceneA" and fails to parse it as a style, so
+      -- it only CLAIMS. Asserted against the REAL allSteps and the REAL
+      -- line (not a synthetic fixture), and driven through runScenario to
+      -- prove the binding overload's action actually ran (the scene gets
+      -- bound), matching Task 6's own existing "the render step binds a
+      -- named response" behavior.
+      let fake url = pure (Right (raw, v))
+            where raw = TE.encodeUtf8 ("{\"scene\":\"" <> url <> "\",\"labels\":[]}")
+                  v   = fromJust (A.decodeStrict raw)
+          w0 = World "http://x" fake "test/fixtures" mempty False
+      case parseFeature "c2.feature" $ T.unlines
+             [ "Feature: c2"
+             , "  Scenario: s"
+             , "    When I render pieces fills at year -1405 in style canaan as sceneA" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
+          Check.valueErrors allSteps f `shouldBe` []
+          case ftScenarios f of
+            [sc] -> do
+              v <- runScenario allSteps w0 sc
+              v `shouldBe` Passed
+            scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
+    it "genuine ambiguity -- two definitions that both fully MATCH the same \
+       \body -- is still detected and fatal" $ do
+      -- No such case survives in the real allSteps after R23 (that's the
+      -- whole point), so this constructs a small StepDef list where two
+      -- definitions both actually match, to prove real ambiguity is still
+      -- caught and not accidentally dissolved along with the two fakes.
+      let dupDefs =
+            [ mkStep When (lit "I do the thing") (\() w -> pure (Right w))
+            , mkStep When (lit "I do the thing") (\() w -> pure (Right w))
+            ]
+      case parseFeature "dup.feature" $ T.unlines
+             [ "Feature: dup"
+             , "  Scenario: s"
+             , "    When I do the thing" ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case Check.ambiguous dupDefs f of
+          [(_, b, sketches)] -> do
+            b `shouldBe` "I do the thing"
+            length sketches `shouldBe` 2
+          other -> expectationFailure ("expected exactly one ambiguous step, got " <> show other)
+    it "a step whose shape matches but whose value doesn't parse is its own \
+       \value-error class, reported by check and NOT silently skipped by \
+       \runScenario when nothing else matches" $ do
+      -- "topografy" is not a piece. Both the binding and non-binding "I
+      -- render pieces ..." overloads share the same PieceSet capture, so
+      -- BOTH only CLAIM this line (with the same error) and NEITHER
+      -- matches -- genuinely different from the two collisions above,
+      -- where one definition always fully matched. There is no successful
+      -- match to fall back on, so this must be reported as its own class,
+      -- not folded into "orphan" (nobody's shape matched -- false, two
+      -- did) or "ambiguous" (two full matches -- false, zero did).
+      let body = "I render pieces water, topografy at year -1405 in style canaan as sceneA"
+      case parseFeature "bad.feature" $ T.unlines
+             [ "Feature: bad", "  Scenario: s", "    When " <> body ] of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.orphans allSteps f `shouldBe` []
+          Check.ambiguous allSteps f `shouldBe` []
+          case Check.valueErrors allSteps f of
+            [(_, b, errs)] -> do
+              b `shouldBe` body
+              errs `shouldSatisfy` (not . null)
+              mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "not a piece") errs
+            other -> expectationFailure
+                       ("expected exactly one value-error step, got " <> show other)
+          case ftScenarios f of
+            [sc] -> do
+              v <- runScenario allSteps (World "http://x" (\_ -> pure (Left "no")) "" mempty False) sc
+              case v of
+                Failed e -> e `shouldSatisfy` T.isInfixOf "not a piece"
+                _ -> expectationFailure "expected the bad piece name to fail, not pass"
+            scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe
-  [ f | StepDef k' _ _ m <- allSteps, k' == k, Just f <- [m t] ]
+  [ f | StepDef k' _ _ m <- allSteps, k' == k, Matched f <- [m t] ]
 
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'

@@ -44,19 +44,38 @@ httpTransport mgr url = do
     Right v -> Right (raw, v)
     Left e  -> Left (T.pack e <> " for " <> url)
 
+-- R23 (controller ruling): a step definition's answer to "does this line
+-- belong to me" is not a yes/no Maybe — it's one of THREE outcomes, and
+-- conflating two of them into a single `Just` is exactly what made two
+-- genuinely different definitions look "ambiguous" over the same line
+-- whenever one of them merely recognized the shape without its capture
+-- actually parsing (see Check.hs and Steps.hs's ordering comment for the
+-- concrete collisions this dissolves).
+data Claim
+  = NoMatch
+    -- ^ a literal didn't match: this step does not apply to this line at
+    -- all (R4's "expected literal"-prefixed case).
+  | ClaimError Text
+    -- ^ the shape matched (every literal was found) but a capture failed
+    -- to PARSE — a bad piece name, a style that isn't a style. This step
+    -- recognizes the line but the value in it is bad.
+  | Matched (World -> IO (Either Text World))
+    -- ^ the pattern matched AND every capture parsed: the runnable
+    -- action.
+
 data StepDef = StepDef
   { defKw     :: Keyword
   , defSketch :: Text
   , defUses   :: [(Text, Universe)]
-  , defRun    :: Text -> Maybe (World -> IO (Either Text World))
+  , defRun    :: Text -> Claim
   }
 
 mkStep :: Keyword -> StepP a -> (a -> World -> IO (Either Text World)) -> StepDef
 mkStep k p f = StepDef k (renderP p) (usesOf p) $ \body ->
   case matchP p body of
-    Right a -> Just (f a)
+    Right a -> Matched (f a)
     Left e
       -- a literal mismatch means "not this step" (try the next def);
       -- a CAPTURE failure means "this step, bad value" (report it)
-      | "expected literal" `T.isPrefixOf` e -> Nothing
-      | otherwise -> Just (\_ -> pure (Left e))
+      | "expected literal" `T.isPrefixOf` e -> NoMatch
+      | otherwise -> ClaimError e

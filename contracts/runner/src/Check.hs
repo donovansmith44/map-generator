@@ -8,46 +8,54 @@ import Gherkin.Parse (parseFeature)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>), takeExtension)
-import World (StepDef (..))
+import World (Claim (..), StepDef (..))
 
 -- The totality law (spec §4): every step in every feature matches EXACTLY
--- ONE definition, or CI fails naming the offenders. That "exactly one" has
--- two ways to fail, and both are the SAME law, not two separate checks:
---   0 definitions claim the step -> an orphan (nobody defines it)
---   1 definition claims it       -> fine, the law holds
---   2+ definitions claim it      -> ambiguous (more than one claims it)
--- `classify` is the one place that turns a step into one of those three
--- outcomes; `orphans` and `ambiguous` are just filters over it, and
--- `checkDir` reports both from a single traversal.
+-- ONE definition, or CI fails naming the offenders. Under R23, a
+-- definition's answer for one body is one of THREE outcomes (World.Claim:
+-- NoMatch / ClaimError / Matched), and "exactly one" is a law about how
+-- many definitions MATCH, not how many merely claim:
+--   0 definitions MATCH, 0 claim  -> an orphan (nobody defines it)
+--   0 definitions MATCH, 1+ claim -> a value error (recognized shape,
+--                                    bad value — a THIRD class, distinct
+--                                    from both orphan and ambiguous; see
+--                                    `classify` below)
+--   1 definition MATCHES          -> fine, the law holds (any number of
+--                                    other definitions merely claiming it
+--                                    does not matter — a full match wins)
+--   2+ definitions MATCH          -> ambiguous (more than one truly
+--                                    claims to run this line)
+-- `classify` is the one place a step becomes one of these outcomes;
+-- `orphans`, `ambiguous`, and `valueErrors` are just filters over it, and
+-- `checkDir` reports all three from a single traversal.
 
--- | The definitions (matching the step's keyword) that claim this body —
--- i.e. whose `defRun` returns `Just` rather than falling through. A
--- literal mismatch is "not this step" (Nothing, per R4); anything else,
--- including a capture that fails to PARSE, is a claim (Just) even when
--- the claimed value is bad — that's what makes cross-definition ambiguity
--- representable at all (Task 5 review finding; see Steps.hs's ordering
--- comment for the concrete "the response field style equals canaan" case
--- that only allSteps' list order hides today).
-claimants :: [StepDef] -> Keyword -> Text -> [StepDef]
-claimants defs k body =
-  [ d | d <- defs, defKw d == k, Just _ <- [defRun d (dehole body)] ]
+-- | How one step fares under the totality law, or Nothing if it holds
+-- (exactly one definition matches it, regardless of how many others
+-- merely claim it).
+data Violation
+  = VOrphan
+  | VAmbiguous [Text]
+    -- ^ the sketches of every definition that fully MATCHED.
+  | VValueError [(Text, Text)]
+    -- ^ (sketch, parse error) for every definition that claimed the shape
+    -- but whose capture didn't parse — and nothing else matched.
+  deriving (Eq, Show)
+
+classify :: [StepDef] -> Step -> Maybe Violation
+classify defs (Step k body _) = case (matched, errored) of
+  ([], [])  -> Just VOrphan
+  ([], _)   -> Just (VValueError errored)
+  ([_], _)  -> Nothing                    -- one real match wins outright
+  (ms, _)   -> Just (VAmbiguous ms)
   where
     -- property holes (e.g. <someYear>) must be substituted with a
     -- registered example value before matching, or every @property step
     -- looks like an orphan. Task 9 wires this to Prop.substituteExamples;
     -- until a hole name is registered, the step is an orphan — loudly.
     dehole = id
-
--- | How one step fares under the totality law, or Nothing if it holds
--- (exactly one definition claims it).
-data Violation = VOrphan | VAmbiguous [Text]
-  deriving (Eq, Show)
-
-classify :: [StepDef] -> Step -> Maybe Violation
-classify defs (Step k body _) = case claimants defs k body of
-  []  -> Just VOrphan
-  [_] -> Nothing
-  ds  -> Just (VAmbiguous (map defSketch ds))
+    results = [ (defSketch d, defRun d (dehole body)) | d <- defs, defKw d == k ]
+    matched = [ sk | (sk, Matched _) <- results ]
+    errored = [ (sk, e) | (sk, ClaimError e) <- results ]
 
 -- | Every violation across a feature: (scenario name, step body, kind).
 violations :: [StepDef] -> Feature -> [(Text, Text, Violation)]
@@ -56,14 +64,21 @@ violations defs f =
   | sc <- ftScenarios f, st <- scSteps sc
   , Just v <- [classify defs st] ]
 
--- | Steps matching zero definitions: (scenario, step body).
+-- | Steps matching zero definitions (and claimed by none either):
+-- (scenario, step body).
 orphans :: [StepDef] -> Feature -> [(Text, Text)]
 orphans defs f = [ (sc, b) | (sc, b, VOrphan) <- violations defs f ]
 
--- | Steps matching two or more definitions: (scenario, step body, the
--- competing definitions' human-readable sketches).
+-- | Steps that truly MATCH two or more definitions: (scenario, step body,
+-- the competing definitions' human-readable sketches).
 ambiguous :: [StepDef] -> Feature -> [(Text, Text, [Text])]
 ambiguous defs f = [ (sc, b, ss) | (sc, b, VAmbiguous ss) <- violations defs f ]
+
+-- | Steps whose shape is recognized but whose value fails to parse, with
+-- no other definition matching to fall back on: (scenario, step body,
+-- [(competing definition's sketch, its parse error)]).
+valueErrors :: [StepDef] -> Feature -> [(Text, Text, [(Text, Text)])]
+valueErrors defs f = [ (sc, b, es) | (sc, b, VValueError es) <- violations defs f ]
 
 -- Duplicated from app/Main.hs's `featureFiles`: importing Main from the
 -- library would create an import cycle (Main imports Check), and this
@@ -92,9 +107,12 @@ checkDir defs dir = do
     mapM_ (\(loc, tag, msg) -> TIO.putStrLn (tag <> " " <> loc <> ": " <> msg)) bad
     exitFailure
   where
-    label VOrphan        = "ORPHAN"
-    label (VAmbiguous _) = "AMBIGUOUS"
+    label VOrphan          = "ORPHAN"
+    label (VAmbiguous _)   = "AMBIGUOUS"
+    label (VValueError _)  = "BAD-VALUE"
     describe b VOrphan = b
     describe b (VAmbiguous sketches) =
       b <> " matches " <> T.pack (show (length sketches)) <> " definitions: "
         <> T.intercalate " | " sketches
+    describe b (VValueError errs) =
+      b <> " — " <> T.intercalate "; " [ sk <> ": " <> e | (sk, e) <- errs ]

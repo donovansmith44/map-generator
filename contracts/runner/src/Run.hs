@@ -19,7 +19,15 @@ runScenario defs w0 sc = go w0 (scSteps sc)
   where
     go _ [] = pure Passed
     go w (Step k body _ : rest) =
-      case [ f | StepDef k' _ _ m <- defs, k' == k, Just f <- [m body] ] of
+      -- R23: three outcomes, not two. Run the first full Matched action
+      -- if there is one — a Matched always wins over a mere ClaimError,
+      -- which is what lets two overlapping definitions coexist without
+      -- either being taught about the other (Check.hs has the concrete
+      -- collisions this resolves). Only when NOTHING matches do we fall
+      -- back to the best claimed error; only when nothing matches OR
+      -- claims is the step genuinely undefined.
+      let results = [ defRun d body | d <- defs, defKw d == k ]
+      in case [ f | Matched f <- results ] of
         (f : _) -> do
           r <- try (f w) :: IO (Either SomeException (Either Text World))
           case r of
@@ -27,7 +35,9 @@ runScenario defs w0 sc = go w0 (scSteps sc)
                                               <> T.pack (show ex)))
             Right (Left e)   -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 " <> e))
             Right (Right w') -> go w' rest
-        [] -> pure (Failed ("undefined step: " <> kwText k <> " " <> body))
+        [] -> case [ e | ClaimError e <- results ] of
+          (e : _) -> pure (Failed (kwText k <> " " <> body <> "\n    \10007 " <> e))
+          []      -> pure (Failed ("undefined step: " <> kwText k <> " " <> body))
     kwText Given = "Given"; kwText When = "When"; kwText Then = "Then"
 
 runFeatureFiles :: [StepDef] -> World -> [FilePath] -> IO [ScenarioResult]
