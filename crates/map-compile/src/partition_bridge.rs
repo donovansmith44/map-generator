@@ -51,7 +51,6 @@ pub fn gather_witnesses(
     // self-intersects; a raster union cannot).
     let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
 
-    // rivers: OSM's connected network, clipped at the water witnesses
     let mut water_rings: Vec<Vec<UnitVec>> = seas.clone();
     water_rings.extend(lakes.iter().map(|(_, r)| r.clone()));
     // A RIVER BELONGS TO THE MAP WHEN IT REACHES THE MAP'S WATER: the
@@ -926,7 +925,6 @@ fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, String, Vec<UnitVec>)>, S
         serde_json::from_str(&text).map_err(|e| format!("osm rivers: {e}"))?;
     let feats: Vec<&serde_json::Value> =
         v["features"].as_array().into_iter().flatten().collect();
-    // total length per network
     use std::collections::BTreeMap;
     let mut net_len: BTreeMap<String, f64> = BTreeMap::new();
     let line_of = |f: &serde_json::Value| -> Vec<UnitVec> {

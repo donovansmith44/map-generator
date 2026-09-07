@@ -44,7 +44,6 @@ impl Chart {
         x >= x0 - eps && x <= x1 + eps && y >= y0 - eps && y <= y1 + eps
     }
 
-    /// Map plane → degrees without the domain check (the raw affine).
     fn lon_lat(&self, x: f64, y: f64) -> (f64, f64) {
         (
             self.a[0][0] * x + self.a[0][1] * y + self.b[0],
@@ -142,7 +141,6 @@ mod chart_laws {
         .unwrap();
         let p = plate.to_sphere(2000.0, 3000.0).unwrap();
         let (sx, sy) = screen.from_sphere(&p).expect("in frame");
-        // and back the whole way
         let q = screen.to_sphere(sx, sy).unwrap();
         let (px, py) = plate.from_sphere(&q).unwrap();
         assert!((px - 2000.0).abs() < 1e-6 && (py - 3000.0).abs() < 1e-6);

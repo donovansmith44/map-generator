@@ -127,7 +127,6 @@ pub fn build_with(
 ) -> Result<Partition, BuildError> {
     let mut diagnostics = Vec::new();
 
-    // ---- 1. normalize witness rings into segments
     let mut segs: Vec<Seg> = Vec::new();
     let mut rings_norm: Vec<(String, FaceKind, Vec<UnitVec>, Option<String>)> = Vec::new();
     for w in regions {
@@ -217,7 +216,6 @@ pub fn build_with(
     // deterministic processing order regardless of caller order
     segs.sort_by(|s, t| key_of(&s.a).cmp(&key_of(&t.a)).then(key_of(&s.b).cmp(&key_of(&t.b))));
 
-    // ---- 2. candidate nodes: endpoints + pairwise arc intersections
     let mut cands: Vec<UnitVec> = Vec::new();
     for s in &segs {
         cands.push(s.a);
@@ -233,7 +231,6 @@ pub fn build_with(
     cands.sort_by(|a, b| key_of(a).cmp(&key_of(b)));
     cands.dedup_by(|a, b| key_of(a) == key_of(b));
 
-    // ---- 3. deterministic clustering
     let mut uf = Uf::new(cands.len());
     for i in 0..cands.len() {
         for j in i + 1..cands.len() {
@@ -265,14 +262,11 @@ pub fn build_with(
         }
     }
     let rep_index = |p: &UnitVec, cands: &[UnitVec], rep_of: &[usize]| -> usize {
-        // exact candidate lookup by key
         let k = key_of(p);
         let i = cands.binary_search_by(|c| key_of(c).cmp(&k)).expect("endpoint is a candidate");
         rep_of[i]
     };
 
-    // ---- 4. split every segment at every node on it
-    // atomic arcs collected as (rep_a, rep_b) with witness provenance
     let mut atomic: BTreeMap<(usize, usize), Vec<String>> = BTreeMap::new();
     for s in &segs {
         let ra = rep_index(&s.a, &cands, &rep_of_cand);
@@ -280,8 +274,6 @@ pub fn build_with(
         if ra == rb {
             continue; // collapsed by clustering
         }
-        // nodes on this segment: any rep within tau_edge of the arc,
-        // strictly between the endpoints
         let (nx, ny, nz) = s.a.cross_raw(&s.b);
         let nn = (nx * nx + ny * ny + nz * nz).sqrt();
         let n = (nx / nn, ny / nn, nz / nn);
@@ -295,7 +287,6 @@ pub fn build_with(
             if off > cfg.tau_edge {
                 continue;
             }
-            // project onto the supporting great circle
             let d = rp.x() * n.0 + rp.y() * n.1 + rp.z() * n.2;
             let Some(proj) = norm3(rp.x() - d * n.0, rp.y() - d * n.1, rp.z() - d * n.2) else {
                 continue;
@@ -328,7 +319,6 @@ pub fn build_with(
     // it is removed deterministically and the arrangement reassembled.
     let (vertices, mut edges, halves, faces) = 'outer: loop {
         let (vertices, edges, halves, mut faces, face_rep, wrap_face, edge_keys) = loop {
-        // canonical vertices = reps used by atomic arcs
         let mut used: Vec<usize> = atomic.keys().flat_map(|&(a, b)| [a, b]).collect();
         used.sort();
         used.dedup();
@@ -341,7 +331,6 @@ pub fn build_with(
         let rep_of_vid: BTreeMap<usize, usize> =
             vid_of_rep.iter().map(|(&r, &v)| (v, r)).collect();
 
-        // half-edge assembly
         let mut edges: Vec<PEdge> = Vec::new();
         let mut halves: Vec<PHalf> = Vec::new();
         let mut edge_keys: Vec<(usize, usize)> = Vec::new();
@@ -355,7 +344,6 @@ pub fn build_with(
             halves.push(PHalf { origin: b, edge: e, twin: h_ab, next: usize::MAX, prev: usize::MAX, face: usize::MAX });
             edges.push(PEdge { a, b, half_ab: h_ab, half_ba: h_ba, river: false, provenance: witnesses.clone() });
         }
-        // outgoing half-edges per vertex, sorted by bearing
         let mut out_at: Vec<Vec<usize>> = vec![Vec::new(); vertices.len()];
         for (hi, h) in halves.iter().enumerate() {
             out_at[h.origin].push(hi);
@@ -381,7 +369,6 @@ pub fn build_with(
             halves[nxt].prev = hi;
         }
 
-        // face cycles
         let mut cycle_of_half: Vec<usize> = vec![usize::MAX; halves.len()];
         let mut cycles: Vec<Vec<usize>> = Vec::new();
         for h0 in 0..halves.len() {
@@ -426,7 +413,6 @@ pub fn build_with(
             })
             .collect();
 
-        // group cycles into faces by containment signature
         let nc = cycles.len();
         let mut signature: Vec<Vec<usize>> = Vec::with_capacity(nc);
         for i in 0..nc {
@@ -498,7 +484,6 @@ pub fn build_with(
                 area + tau
             };
         }
-        // per-face representative point (first cycle's rep)
         let face_rep: Vec<UnitVec> = (0..faces.len())
             .map(|fi| {
                 let ci = (0..nc).find(|&i| cycle_face[i] == fi).expect("face has a cycle");
@@ -508,7 +493,6 @@ pub fn build_with(
         break (vertices, edges, halves, faces, face_rep, wrap_face, edge_keys);
     };
 
-    // ---- 9. classify faces against witness rings
     for (fi, face) in faces.iter_mut().enumerate() {
         let p = face_rep[fi];
         let mut kinds: Vec<(String, FaceKind, Option<String>)> = Vec::new();
@@ -596,7 +580,6 @@ pub fn build_with(
         }
     }
 
-    // ---- 10. sliver absorption (semantic, deterministic)
     let face_len: Vec<f64> = (0..faces.len())
         .map(|fi| {
             faces[fi]
@@ -621,7 +604,6 @@ pub fn build_with(
         if !pocket && faces[fi].area >= cfg.sliver_area {
             continue;
         }
-        // neighbor with the longest shared boundary
         let mut shared: BTreeMap<usize, f64> = BTreeMap::new();
         for cy in &faces[fi].cycles {
             for &h in cy {
@@ -679,7 +661,6 @@ pub fn build_with(
     for pl in polylines {
         let mut pts: Vec<UnitVec> = Vec::new();
         for p in &pl.pts {
-            // snap to a canonical vertex when within tau_vertex
             let mut best: Option<(f64, usize)> = None;
             for (vi, v) in vertices.iter().enumerate() {
                 let d = dist(p, v);
@@ -735,7 +716,6 @@ pub fn build_with(
 fn arc_intersection(s: &Seg, t: &Seg, tol: f64) -> Option<UnitVec> {
     let (n1x, n1y, n1z) = s.a.cross_raw(&s.b);
     let (n2x, n2y, n2z) = t.a.cross_raw(&t.b);
-    // p = n1 × n2
     let px = n1y * n2z - n1z * n2y;
     let py = n1z * n2x - n1x * n2z;
     let pz = n1x * n2y - n1y * n2x;

@@ -210,8 +210,6 @@ function insideRing(p, ring) {
   return insideRingGeneral(p, ring);
 }
 
-// ------------------------------------------------------ the limb clip
-
 // Radians between successive points walked along the limb — the same
 // curve the server closes a clipped ring on.
 const LIMB_STEP = 0.06;

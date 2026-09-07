@@ -55,7 +55,6 @@ pub fn bridge_filtered(
     // still exists outside those spans — a shadow is never a hole.
     shadow_spans: &BTreeMap<String, Vec<(i32, i32)>>,
 ) -> Result<(), String> {
-    // (interval, slug, feature) rows, then edge sweep.
     let mut rows: Vec<(map_types::Interval, String, map_canon::FeatureId)> = Vec::new();
 
     for (rid, hist) in &tl.regions {

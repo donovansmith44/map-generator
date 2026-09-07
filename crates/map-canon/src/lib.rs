@@ -302,8 +302,6 @@ pub struct Provenance {
     pub note: String,
 }
 
-// ---------------------------------------------------------- hashing
-
 fn hash_bytes(bytes: &[u8]) -> ContentHash {
     let mut h = DefaultHasher::new();
     bytes.hash(&mut h);
@@ -382,8 +380,6 @@ fn snapshot_bytes(s: &Snapshot) -> Vec<u8> {
     c.done()
 }
 
-// ---------------------------------------------------------- worlds
-
 /// A world through time: a set of (timestamp, snapshot) pairs KEYED by
 /// timestamp. No ordering is baked into the data; iteration order
 /// derives from the covenant's total order on Timestamps.
@@ -420,8 +416,6 @@ impl World {
         self.moments.range(..=t).next_back().map(|(_, s)| *s)
     }
 }
-
-// ---------------------------------------------------------- the store
 
 /// The canonical store: hash → object for every fact, layers of
 /// worlds, provenance per feature. Insertion dedups by construction —
@@ -618,8 +612,6 @@ fn feature_border_refs(f: &Feature) -> Vec<BorderId> {
     }
 }
 
-// ------------------------------------------------- spherical geometry
-
 fn latlon(p: &UnitVec) -> (f64, f64) {
     (p.z().asin().to_degrees(), p.y().atan2(p.x()).to_degrees())
 }
@@ -677,7 +669,6 @@ fn point_strictly_in_ring(p: &UnitVec, ring: &[UnitVec]) -> bool {
     }) {
         return false;
     }
-    // Local tangent frame at p.
     let pt = as_tuple(p);
     let seed = if p.x().abs() < 0.9 { (1.0, 0.0, 0.0) } else { (0.0, 1.0, 0.0) };
     let e1 = {

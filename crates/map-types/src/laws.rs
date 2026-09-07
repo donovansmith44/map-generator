@@ -61,10 +61,10 @@ fn intervals_coherent(intervals: &[&Interval]) -> bool {
     for w in intervals.windows(2) {
         let (a, b) = (w[0], w[1]);
         if b.from < a.from {
-            return false; // unordered
+            return false;
         }
         if a.intersects(b) {
-            return false; // overlapping
+            return false;
         }
     }
     intervals.iter().all(|i| i.to.map_or(true, |end| end > i.from))

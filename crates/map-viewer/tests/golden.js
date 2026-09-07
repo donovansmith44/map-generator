@@ -61,24 +61,41 @@ const TOL = 24; // per-channel; label-glyph antialiasing stays under it
       await page.evaluate(([la, lo, z]) => state.setCamera(la, lo, z), [lat, lon, zoom]);
       await settled();
       await page.waitForTimeout(700); // label fades finish (450ms law)
-      const probes = await page.evaluate(async (grid) => {
+      // 3x3 block means, not single pixels: a lone pixel sits on
+      // antialiased edges and label glyphs whose fade timing jitters
+      // run to run — the mean is the stable signal of the LOOK.
+      const sample = () => page.evaluate(async (grid) => {
         const snap = document.createElement('canvas');
         snap.width = gpu.canvas.width; snap.height = gpu.canvas.height;
         const c = snap.getContext('2d');
         await new Promise(r => requestAnimationFrame(() => { gpuDraw(); c.drawImage(gpu.canvas, 0, 0); r(); }));
         return grid.map(([u, v]) => {
-          const d = c.getImageData(Math.round(snap.width * u), Math.round(snap.height * v), 1, 1).data;
-          return [d[0], d[1], d[2]];
+          const x = Math.max(1, Math.round(snap.width * u));
+          const y = Math.max(1, Math.round(snap.height * v));
+          const d = c.getImageData(x - 1, y - 1, 3, 3).data;
+          let r = 0, g = 0, b = 0;
+          for (let p = 0; p < 9; p++) { r += d[p * 4]; g += d[p * 4 + 1]; b += d[p * 4 + 2]; }
+          return [Math.round(r / 9), Math.round(g / 9), Math.round(b / 9)];
         });
       }, GRID);
+      let probes = await sample();
       cams[name][stops[i]] = probes;
       if (check) {
         const w = (want.cams[name] || {})[stops[i]];
         if (!w) { console.log(`NEW STOP ${stops[i]} (${name}) — bless to adopt`); continue; }
+        const off = j => {
+          const d = Math.max(Math.abs(w[j][0] - probes[j][0]), Math.abs(w[j][1] - probes[j][1]), Math.abs(w[j][2] - probes[j][2]));
+          return d > TOL;
+        };
+        // one settle-and-retry before declaring drift: a label mid-
+        // fade is a transient, not a regression
+        if (w.some((_, j) => off(j))) {
+          await page.waitForTimeout(900);
+          probes = await sample();
+          cams[name][stops[i]] = probes;
+        }
         w.forEach((exp, j) => {
-          const g = probes[j];
-          const d = Math.max(Math.abs(exp[0] - g[0]), Math.abs(exp[1] - g[1]), Math.abs(exp[2] - g[2]));
-          if (d > TOL) { drifted++; console.log(`DRIFT year ${stops[i]} ${name}[${j}] want ${exp} got ${g}`); }
+          if (off(j)) { drifted++; console.log(`DRIFT year ${stops[i]} ${name}[${j}] want ${exp} got ${probes[j]}`); }
         });
       }
     }

@@ -210,8 +210,6 @@ impl Default for GpuSceneEncoder {
     }
 }
 
-// ------------------------------------------------------------ hashing
-
 fn hash64(bytes: &[u8]) -> u64 {
     // The project's content-address skeleton (map-types::ident): a
     // deterministic 64-bit std hash standing in for a real multihash.
@@ -253,8 +251,6 @@ fn style_key(style: &GpuStyle) -> StyleKey {
     }
     StyleKey(hash64(&c.done()))
 }
-
-// ------------------------------------------------- antimeridian split
 
 /// Nudge a point off the y=0 plane so its longitude lands firmly on
 /// the intended side of ±180 after f32 rounding.
@@ -356,8 +352,6 @@ fn split_ring_at_antimeridian(pts: &[UnitVec]) -> Vec<Vec<UnitVec>> {
     [clip(true), clip(false)].into_iter().filter(|piece| piece.len() >= 3).collect()
 }
 
-// ---------------------------------------------------------- densify
-
 /// Maximum edge length (radians) in a packed resource. A consumer
 /// clipping at the globe's limb folds hidden vertices onto the limb
 /// circle and joins them with chords; the chord's deviation from the
@@ -397,8 +391,6 @@ fn densify_run(pts: &[UnitVec], closed: bool) -> Vec<UnitVec> {
     }
     out
 }
-
-// ----------------------------------------------------- binary packing
 
 /// Packet magic: "MGR1" — map geometry resource, format 1.
 pub const RESOURCE_MAGIC: [u8; 4] = *b"MGR1";
@@ -482,8 +474,6 @@ fn pack(kind: ResourceKind, pts: &[UnitVec]) -> GeometryResource {
     }
 }
 
-// ------------------------------------------------------------ encoder
-
 impl GpuSceneEncoder {
     fn build(&self, scene: &Snapshot) -> EncodedScene {
         let mut resources: Vec<GeometryResource> = Vec::new();
@@ -562,7 +552,6 @@ impl GpuSceneEncoder {
                 });
             }
         }
-        // Markers batch by style: one Points resource per marker dress.
         let mut by_style: BTreeMap<StyleKey, (MarkerStyle, Vec<UnitVec>)> = BTreeMap::new();
         for m in &scene.markers {
             let sk = style_of(
@@ -660,8 +649,6 @@ impl SceneEncoder for GpuSceneEncoder {
         Ok(self.build(scene))
     }
 }
-
-// ---------------------------------------------------------- wire JSON
 
 impl EncodedScene {
     /// The manifest on the wire. Deterministic: features in paint
@@ -779,8 +766,6 @@ impl EncodedScene {
                 d.bounds.radius
             );
         }
-        // The page dress: resolved style data the renderer composes
-        // against — paper ground and the zonal band's proportions.
         let d = &m.dress;
         let _ = write!(
             s,

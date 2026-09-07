@@ -130,8 +130,6 @@ impl ResourceStore {
 
 mod templates;
 
-// ------------------------------------------------------------- styles
-
 /// A base style, taken apart by name — the spec every derived dress
 /// starts from.
 fn spec_of(base: &Style) -> map_types::style::StyleSpec {
@@ -218,8 +216,6 @@ fn tinted(base: &Style, paint: Paint) -> Style {
     Style::new(spec).expect("a tinted honest style is still honest")
 }
 
-// ---------------------------------------------------------- wiring
-
 fn tp(year: i32) -> Option<TimePoint> {
     Year::new(year).ok().map(TimePoint::year_only)
 }
@@ -286,8 +282,6 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         style_table.insert(held.id(), held);
         style_table.insert(current.id(), current);
     }
-    // The dress lookup the encoders read (paper, chrome, pattern
-    // geometry ride the encoder config, never the scene).
     let style_values = style_table.clone();
     let exp_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-exports");
@@ -443,8 +437,6 @@ fn scene_centroid(scene: &Snapshot) -> Option<(f64, f64)> {
     let (x, y, z) = (x / n, y / n, z / n);
     Some((z.asin().to_degrees(), y.atan2(x).to_degrees()))
 }
-
-// ------------------------------------------------------------ queries
 
 struct Params(BTreeMap<String, String>);
 
@@ -811,8 +803,6 @@ fn composed_scene(
     Ok((scene, face, single))
 }
 
-// ------------------------------------------------------------- routes
-
 /// The public route: bytes out, so binary resource payloads (spec
 /// §63) and text responses travel the same path.
 pub fn route(
@@ -1000,7 +990,6 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             }
         }
 
-        // The entity listing: what pieces exist at a timestamp.
         "/api/entities" => {
             let Some(canon) = app.canon.as_ref() else {
                 return bad("entities requires the canon (run map-compile build)");
@@ -1023,7 +1012,6 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             (200, "application/json", serde_json::Value::Array(rows).to_string(), Vec::new())
         }
 
-        // Raw composable data: the named entities as GeoJSON.
         "/api/features" => {
             let Some(canon) = app.canon.as_ref() else {
                 return bad("features requires the canon (run map-compile build)");
@@ -1190,8 +1178,6 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
         _ => (404, "text/plain", "not found".to_string(), Vec::new()),
     }
 }
-
-// -------------------------------------------------------------- serve
 
 fn handle(app: &App, mut stream: TcpStream) {
     let mut buf = [0u8; 8192];

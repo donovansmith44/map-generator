@@ -53,7 +53,6 @@ fn main() {
     eprintln!("  {} narratives", narrative_rows.len());
     payloads.push(("narratives.json".to_string(), narratives));
 
-    // Fan out: every narrative leg's event, dated and versed.
     let mut seen = std::collections::BTreeSet::new();
     let mut events = Vec::new();
     for n in &narrative_rows {
@@ -146,7 +145,6 @@ fn build(args: &[String]) {
     eprintln!("territory: {} polity eras", rep.polity_eras);
     report_md.push_str(&format!("- Territory: {} atlas polity eras\n", rep.polity_eras));
 
-    // ---- atlas witness: Journeys
     let narratives = parse_narratives(&read("narratives.json")).unwrap_or_else(|e| die(&e));
     let events = parse_vendored_events(&read("events.json")).unwrap_or_else(|e| die(&e));
     let exp_dir = std::path::Path::new("data/atlas-exports");
@@ -172,7 +170,6 @@ fn build(args: &[String]) {
     eprintln!("journeys: {} atlas narratives", rep.routes);
     report_md.push_str(&format!("- Journeys: {} atlas narratives\n", rep.routes));
 
-    // ---- reconciliation: authored routes vs atlas narratives
     let rec = parse_reconcile(
         &std::fs::read_to_string("data/authored/reconcile.json")
             .unwrap_or_else(|e| die(&format!("reconcile.json: {e}"))),
@@ -193,7 +190,6 @@ fn build(args: &[String]) {
         verdicts.kept.join(", ")
     ));
 
-    // Kept authored routes join the Journeys layer under their witness.
     let mut kept_spans = Vec::new();
     for r in authored.iter().filter(|r| verdicts.kept.contains(&r.tag.to_string())) {
         let end = r.to_year.unwrap_or(r.from_year).max(r.from_year);
@@ -233,7 +229,6 @@ fn build(args: &[String]) {
     append_ways(&mut store, &kept_spans).unwrap_or_else(|e| die(&e));
     eprintln!("journeys: +{} authored routes kept", kept_spans.len());
 
-    // ---- authored witness: ScriptureClaims (kingdoms dropped per reconcile)
     let drops: BTreeSet<String> = rec.region_drops.iter().map(|(s, _)| s.clone()).collect();
     let scripture = map_adapters::scripture_timeline_with(Some(&atlas));
     bridge_filtered(
@@ -257,7 +252,6 @@ fn build(args: &[String]) {
         drops.len()
     ));
 
-    // ---- natural-earth witness: Water
     let ne_dir = std::path::Path::new("data/natural-earth");
     let creation = atlas.creation_anchor().map(|(y, _)| y).unwrap_or(-4004);
     let tp0 = ts_or_die(creation);
@@ -351,7 +345,6 @@ fn build(args: &[String]) {
     report_md.push_str(&format!("- {summary}
 "));
 
-    // ---- natural-earth witness: Relief
     let terrain_bytes = std::fs::read("data/terrain/etopo_15min.bin")
         .unwrap_or_else(|e| die(&format!("terrain: {e}")));
     let grid = map_adapters::ElevationGrid::from_etopo_bin(&terrain_bytes)
@@ -370,7 +363,6 @@ fn build(args: &[String]) {
     .unwrap_or_else(|e| die(&e));
     eprintln!("relief: bridged");
 
-    // ---- basemap witness: Background
     let bm_dir = std::path::Path::new("data/historical-basemaps");
     let mut epochs = Vec::new();
     let mut paths: Vec<_> = std::fs::read_dir(bm_dir)

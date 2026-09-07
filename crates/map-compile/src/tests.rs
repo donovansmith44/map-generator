@@ -466,7 +466,6 @@ fn plate_partition_face_census() {
             eprintln!("POCKET {i} {:.1e} sr at ({la:.3},{lo:.3}) nbs={nbs:?}", f.area);
         }
     }
-    // stem probe: which faces cross lat 32.0 in the stem window?
     for (i, f) in p.faces.iter().enumerate() {
         let mut xs: Vec<f64> = Vec::new();
         for ring in p.face_rings(i) {
@@ -575,14 +574,12 @@ fn a_cohort_enters_time_at_its_moment() {
             at: map_types::UnitVec::from_lat_lon_deg(31.0, 35.0),
         }))
     };
-    // the world before: one feature standing from -4004
     let old = mk(&mut store, "old");
     let sid = store.insert_snapshot(Snapshot { features: [old].into() });
     let mut world = World::default();
     world.insert(ts(-4004), sid).unwrap();
     store.set_layer(LayerKind::ScriptureClaims, world);
 
-    // the cohort rises at -1406
     let tribe = mk(&mut store, "tribe");
     crate::partition_bridge::overlay_features_for_law(
         &mut store,
@@ -610,7 +607,6 @@ fn a_cohort_enters_time_at_its_moment() {
         None,
     )
     .unwrap();
-    // rebuild the span for the tribe: give it an until
     let mut store2 = CanonStore::default();
     let old2 = mk(&mut store2, "old");
     let sid2 = store2.insert_snapshot(Snapshot { features: [old2].into() });

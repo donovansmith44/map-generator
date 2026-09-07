@@ -102,10 +102,8 @@ fn fidelity_and_arc_sharing_on_fixture() {
         .collect();
     assert_eq!(shared.len(), 1, "exactly one two-point shared arc");
 
-    // The fidelity law, ring for ring.
     assert_eq!(fidelity_violations(&out, &epoch).unwrap(), Vec::<String>::new());
 
-    // And the ingested world is lawful under every data validator.
     let (chron, gaz) = empty_exports();
     assert_eq!(validate_all(&out.timeline, &chron, &gaz), vec![]);
 }
@@ -152,7 +150,6 @@ fn epoch_differences_are_narrated() {
     assert!(kinds.iter().any(|k| matches!(k, ChangeKind::Fall { .. })));
     assert!(kinds.iter().any(|k| matches!(k, ChangeKind::Shift { .. })));
 
-    // Fidelity holds at BOTH epochs, and the whole result is lawful.
     assert_eq!(fidelity_violations(&out, &e1).unwrap(), Vec::<String>::new());
     assert_eq!(fidelity_violations(&out, &e2).unwrap(), Vec::<String>::new());
     let (chron, gaz) = empty_exports();
@@ -354,15 +351,12 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     let (chron, _) = empty_exports();
     assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![]);
 
-    // The boundary really is Survey-sourced, closed, and justified by
-    // the verses themselves.
     let (_, hist) = survey_tl.boundaries.iter().next().unwrap();
     let b = &hist.versions[0].1;
     assert!(matches!(b.source, BoundarySource::Survey(_)));
     assert_eq!(b.pts.first(), b.pts.last(), "the circuit closes");
     assert!(!b.justification.grounds.is_empty(), "the text is the ground");
 
-    // Merged with the imported world, everything stays lawful.
     let e1 = EpochSource {
         year: -2000,
         label: "fixture_bc2000".to_string(),
@@ -563,7 +557,6 @@ fn real_source_ingests_lawfully() {
     assert!(!out.exemptions.iter().any(|e| matches!(e, Exemption::PreAnchorEpoch { .. })));
     assert!(out.exemptions.iter().any(|e| matches!(e, Exemption::UnnamedFeatures { .. })));
 
-    // Every data law holds over the whole ingested timeline.
     let (chron, gaz) = empty_exports();
     let violations = validate_all(tl, &chron, &gaz);
     assert!(
@@ -573,7 +566,6 @@ fn real_source_ingests_lawfully() {
         violations.first()
     );
 
-    // Fidelity at every single epoch.
     for e in &epochs {
         let v = fidelity_violations(&out, e).unwrap();
         assert!(v.is_empty(), "{}: {} violations, first: {:?}", e.label, v.len(), v.first());
@@ -629,7 +621,6 @@ fn terrain_contours_close_and_ingest_lawfully() {
     assert_eq!(r.class, map_types::RegionClass::Terrain(0));
     let (chron, gaz) = empty_exports();
     assert_eq!(validate_all(&tl, &chron, &gaz), vec![]);
-    // And the relief joins the scripture world lawfully.
     use crate::surveys::{merge_timelines, scripture_timeline, stand_in_gazetteer};
     let merged = merge_timelines(scripture_timeline(), tl).expect("relief merges");
     assert_eq!(validate_all(&merged, &chron, &stand_in_gazetteer()), vec![]);

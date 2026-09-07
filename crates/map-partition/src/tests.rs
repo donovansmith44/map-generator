@@ -97,14 +97,12 @@ fn adjacent_squares_share_one_border() {
     .unwrap();
     ok(&p);
     assert_eq!(p.faces.len(), 3, "west, east, background");
-    // no duplicate coincident edges
     let mut pairs: Vec<(usize, usize)> =
         p.edges.iter().map(|e| (e.a.min(e.b), e.a.max(e.b))).collect();
     let n = pairs.len();
     pairs.sort();
     pairs.dedup();
     assert_eq!(pairs.len(), n, "every canonical edge exists once");
-    // some edge separates the two claims directly
     let shared = p.edges.iter().any(|e| {
         let f1 = &p.faces[p.halves[e.half_ab].face];
         let f2 = &p.faces[p.halves[e.half_ba].face];
@@ -132,7 +130,6 @@ fn t_junctions_become_vertices() {
     .unwrap();
     ok(&p);
     assert_eq!(p.faces.len(), 3, "south, north, background — no lens, no dangle");
-    // the junction vertex at (0,15) exists
     let junction = uv(0.0, 15.0);
     assert!(
         p.vertices.iter().any(|v| v.angle_to(&junction) < 1e-5),

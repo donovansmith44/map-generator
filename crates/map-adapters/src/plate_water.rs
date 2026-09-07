@@ -631,7 +631,6 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
 }
 
 
-/// One traced ring or path, derived to the sphere through the chart.
 fn to_sphere_path(chart: &Chart, xy: &[(f64, f64)]) -> Vec<UnitVec> {
     xy.iter()
         .map(|(x, y)| chart.to_sphere(*x, *y).expect("plate geometry lives on the plate"))

@@ -171,7 +171,6 @@ pub fn load_exports(gazetteer_text: &str, chronology_text: &str) -> Result<Atlas
         return Err(ExportError::RootMismatch);
     }
 
-    // ---- gazetteer ----
     let mut places = Vec::new();
     let mut name_index = BTreeMap::new();
     let mut entries = BTreeMap::new();
@@ -218,7 +217,6 @@ pub fn load_exports(gazetteer_text: &str, chronology_text: &str) -> Result<Atlas
         );
     }
 
-    // ---- chronology ----
     let year = |v: i64| -> Result<TimePoint, ExportError> {
         Year::new(v as i32)
             .map(TimePoint::year_only)

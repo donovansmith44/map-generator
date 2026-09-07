@@ -151,8 +151,6 @@ fn build_epoch(
     snap: Option<f64>,
     exemptions: &mut Vec<Exemption>,
 ) -> EpochWorld {
-    // Collect every ring (outer and hole) of every named feature into
-    // one global list, remembering who owns what.
     struct Owner {
         name: String,
         part: usize,
@@ -240,7 +238,6 @@ fn source_justification(source: &SourceId) -> Justification {
 pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, IngestError> {
     let mut exemptions = Vec::new();
 
-    // Order epochs; exclude pre-anchor ones per the configured frame.
     let mut kept: Vec<&EpochSource> = Vec::new();
     let mut sorted: Vec<&EpochSource> = epochs.iter().collect();
     sorted.sort_by_key(|e| e.year);
@@ -256,7 +253,6 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
         kept.push(e);
     }
 
-    // Resolve each kept epoch.
     let mut worlds: Vec<EpochWorld> = Vec::new();
     for e in &kept {
         let features = parse_features(&e.text)
@@ -268,8 +264,6 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
     // open — the current edge of THIS source's knowledge.
     let starts: Vec<TimePoint> =
         worlds.iter().map(|w| tp(w.year, &w.label)).collect::<Result<_, _>>()?;
-    // interval(from, last): starts at epoch `from`, ends where the
-    // epoch after `last` begins — or stays open past the final epoch.
     let interval = |from: usize, last: usize| -> Interval {
         Interval { from: starts[from], to: starts.get(last + 1).copied() }
     };
@@ -340,7 +334,6 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
         for &k in &ks[1..] {
             let geom = &worlds[k].regions[name];
             if k != prev + 1 {
-                // Presence run ended: close label and geometry.
                 label_history.push((interval(run_start, prev), name.clone()));
                 geom_history.push((interval(geom_start, prev), prev_geom.clone()));
                 run_start = k;
@@ -465,8 +458,6 @@ pub fn fidelity_violations(
         }
     }
 
-    // Actual: reconstruct every ring of every region from the stored
-    // arc geometry at this epoch.
     for (name, want) in &expected {
         let rid = region_id(name);
         let Some(hist) = tl.regions.get(&rid) else {

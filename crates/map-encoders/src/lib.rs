@@ -52,8 +52,6 @@ fn scene_points<'a>(scene: &'a Snapshot) -> impl Iterator<Item = &'a UnitVec> {
         .chain(scene.labels.iter().map(|l| &l.at))
 }
 
-// ---------------------------------------------------------- projection
-
 /// How the sphere meets the page. Config, not architecture: adding a
 /// projection touches nothing upstream of the encoder.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -105,8 +103,6 @@ impl Default for SvgEncoder {
         }
     }
 }
-
-// -------------------------------------------------- shared svg pieces
 
 fn stroke_attrs(
     st: map_types::style::Stroke,
@@ -264,7 +260,7 @@ fn thin_offpage(chunk: Vec<(f64, f64)>, page: &Option<Bounds>) -> Vec<(f64, f64)
         |(x, y): &(f64, f64)| *x >= margin.0 && *x <= margin.2 && *y >= margin.1 && *y <= margin.3;
     let n = chunk.len();
     let mut out = Vec::with_capacity(n.min(64));
-    let mut run = 0usize; // consecutive far points since the last kept one
+    let mut run = 0usize;
     for (i, pt) in chunk.iter().enumerate() {
         let keep = near(pt)
             || i == 0
@@ -541,8 +537,6 @@ fn svg_head(width: f64, height: f64, scene: &Snapshot, paper: map_types::style::
     )
 }
 
-// ------------------------------------------------------- globe plumbing
-
 struct Globe {
     center: UnitVec,
     east: UnitVec,
@@ -661,8 +655,6 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
     // the final iteration always closed the last chain.
     debug_assert!(cur.is_none());
 
-    // Every crossing, tagged with its chain and end, sorted by the
-    // azimuth measured on the limb.
     struct Crossing {
         az: f64,
         chain: usize,
@@ -719,7 +711,6 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
         for _ in 0..chains.len() {
             used[k] = true;
             let (entry, verts, exit) = &chains[k];
-            // The chain, traversed from whichever end the walk arrived.
             let leave = if enter_at_entry {
                 run.push(*entry);
                 run.extend(verts.iter().copied());
@@ -744,10 +735,9 @@ fn clip_ring_front(pts: &[UnitVec], c: &UnitVec) -> Vec<Vec<UnitVec>> {
                 run.push(limb_point(a0 + sweep * s as f64 / steps as f64));
             }
             if next == start_slot {
-                break; // the loop closed where it began
+                break;
             }
             k = crossings[next].chain;
-            // Arriving at a chain's entry means walking it forward.
             enter_at_entry = crossings[next].is_entry;
         }
         out.push(run);
@@ -911,7 +901,6 @@ pub fn resolve_globe_view(
 }
 
 fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Option<f64>) -> String {
-    // Basis on the sphere at the view center.
     let east = UnitVec::normalize(-center.y(), center.x(), 0.0)
         .unwrap_or_else(|_| UnitVec::from_lat_lon_deg(0.0, 90.0)); // pole-on view
     let (nx, ny, nz) = center.cross_raw(&east);
@@ -996,8 +985,6 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
     };
     encode_chart(enc, scene, chart)
 }
-
-// ------------------------------------------------------------ flat plate
 
 fn flat_bounds(scene: &Snapshot) -> (f64, f64, f64, f64) {
     let mut b: Option<(f64, f64, f64, f64)> = None;
@@ -1185,8 +1172,6 @@ impl SceneEncoder for SvgEncoder {
     }
 }
 
-// ------------------------------------------------------------- GeoJSON
-
 /// Feature-collection output for downstream tooling. Regions become
 /// MultiPolygons, strokes LineStrings, markers and labels Points.
 pub struct GeoJsonEncoder;
@@ -1276,8 +1261,6 @@ impl SceneEncoder for GeoJsonEncoder {
         Ok(doc.to_string())
     }
 }
-
-// ---------------------------------------------------- transition JSON
 
 /// The transition backend for a web player: each semantic step becomes
 /// one JSON object, ids in stable hex, points as [lon, lat] pairs. The

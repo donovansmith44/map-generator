@@ -55,7 +55,6 @@ pub fn compile_narratives(
     let mut routes = 0usize;
 
     for n in narratives {
-        // Resolve stations: event → (place id, position, when).
         struct Station<'a> {
             place: &'a str,
             pos: UnitVec,
@@ -84,7 +83,6 @@ pub fn compile_narratives(
         if stations.len() < 2 {
             continue; // a single dated stop is not a walk
         }
-        // Fill missing whens from neighbors, forward then backward.
         let mut whens: Vec<Option<(i32, i32)>> = stations.iter().map(|s| s.when).collect();
         for i in 1..whens.len() {
             if whens[i].is_none() {

@@ -27,7 +27,6 @@
   }
   @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
 
-  /* ------------------------------------------------ instrument rail */
   #rail {
     background: var(--panel);
     border-right: 1px solid var(--edge);
@@ -62,7 +61,6 @@
   .radio-row label { display: flex; gap: 4px; align-items: center; margin: 0; color: var(--ink); }
   #frameinfo { color: var(--dim); font-size: 11px; margin-top: 4px; }
 
-  /* --------------------------------------------------- the scrubber */
   #readout { font-size: 22px; margin-bottom: 6px; }
   #readout small { color: var(--dim); font-size: 11px; display: block; }
   #scrub { position: relative; height: 34px; margin: 4px 0 6px; }
@@ -87,7 +85,6 @@
   #stepper button { width: 34px; }
   #stepper .spacer { flex: 1; color: var(--dim); align-self: center; text-align: center; }
 
-  /* --------------------------------------------- subject time chips */
   #selected { color: var(--dim); font-size: 11px; margin-top: 4px; }
   #mapped { margin-top: 8px; }
   #mapped .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -98,7 +95,6 @@
   }
   .chip.now { border-color: var(--stop); color: var(--stop); }
 
-  /* ------------------------------------------------------ the plate */
   #bench { display: flex; flex-direction: column; min-width: 0; }
   #plate {
     flex: 1; overflow: hidden; display: grid; padding: 14px;
@@ -143,7 +139,6 @@
   }
   #status b { color: var(--ink); font-weight: 400; }
 
-  /* -------------------------------------------------- log & overlay */
   #log { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   #log div { color: var(--dim); }
   #log .k { color: var(--stop); }
@@ -1449,7 +1444,6 @@ function drawLabels(proj, vb, k, ox, oy, rect) {
     glyphs.dirty = false;
   }
   for (const { e, d, alpha } of pending) {
-    // css position from viewBox position through the letterbox
     const cx = ox + k * d.x, cy = oy + k * d.y;
     gl.uniform2f(loc.uPos, cx - e.w / 2, cy - e.h * 0.75);
     gl.uniform2f(loc.uSize, e.w, e.h);
@@ -1811,8 +1805,6 @@ function gpuSetEnabled(on) {
   }
 }
 
-// ----------------------------------------------------- globe navigation
-
 function resetView() {
   state.view = { lat: null, lon: null, zoom: null };
   if (state.clearVisual) state.clearVisual(); // fall through to the resolved landing
@@ -1994,7 +1986,6 @@ function setupPlateNav() {
 
   plate.addEventListener("dblclick", () => { resetView(); render(); });
 
-  // Click toggles a region's focus; shift-click grows the selection.
   plate.addEventListener("click", e => {
     if (suppressClick) { suppressClick = false; return; }
     if (state.encoder) return; // an inspection panel is up
@@ -2014,8 +2005,6 @@ function setupPlateNav() {
     setSelection(next, { keepView: true });
   });
 }
-
-// ------------------------------------------------------- subject focus
 
 async function setSelection(keys, opts) {
   state.selection = keys;
@@ -2087,8 +2076,6 @@ async function loadMappedTimes() {
     state.selection.length > 1 ? "mapped at (all selected)" : "mapped at";
 }
 
-// ----------------------------------------------------------- scrubber
-
 function drawScrubber() {
   const scrub = $("scrub");
   scrub.innerHTML = "";
@@ -2111,8 +2098,6 @@ function drawScrubber() {
     ? `anchored at creation — ${state.anchor.frame}`
     : "scrub stops are change events — the piecewise timeline itself";
 }
-
-// ----------------------------------------------------- the time-lapse
 
 const player = { on: false, timer: null };
 

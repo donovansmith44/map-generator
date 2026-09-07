@@ -43,7 +43,6 @@ fn edge_key(a: QPoint, b: QPoint) -> EdgeKey {
 /// Split every ring into maximal runs of edges with identical user
 /// sets, then deduplicate runs by canonical polyline.
 pub fn extract(rings: &[Vec<QPoint>]) -> Extraction {
-    // Which rings use each undirected edge?
     let mut users: BTreeMap<EdgeKey, BTreeSet<usize>> = BTreeMap::new();
     for (r, pts) in rings.iter().enumerate() {
         for i in 0..pts.len() {
@@ -110,7 +109,6 @@ pub fn extract(rings: &[Vec<QPoint>]) -> Extraction {
             continue;
         }
 
-        // Walk junction to junction, starting at the first one.
         let mut cycle = Vec::with_capacity(junctions.len());
         for (j, &start) in junctions.iter().enumerate() {
             let end = junctions[(j + 1) % junctions.len()];

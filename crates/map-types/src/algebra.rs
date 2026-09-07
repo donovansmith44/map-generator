@@ -14,7 +14,6 @@ pub trait Monoid {
     fn combine(self, other: Self) -> Self;
 }
 
-/// Fold a sequence of monoid values from the identity.
 pub fn mconcat<M: Monoid>(xs: impl IntoIterator<Item = M>) -> M {
     xs.into_iter().fold(M::empty(), M::combine)
 }

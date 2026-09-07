@@ -23,8 +23,6 @@ pub use build::{build, build_with, BuildError, WitnessBorder, WitnessPolyline, W
 
 use map_types::UnitVec;
 
-// ------------------------------------------------------- primitives
-
 /// Neumaier-compensated summation: the completeness law is numerical,
 /// and naive accumulation over many faces bleeds precision.
 pub fn compensated_sum(xs: impl IntoIterator<Item = f64>) -> f64 {
@@ -65,11 +63,9 @@ pub fn cycle_area(pts: &[UnitVec]) -> f64 {
 /// perpendicular to p.
 pub fn tangent_frame(p: &UnitVec) -> ([f64; 3], [f64; 3]) {
     let (ax, ay, az) = if p.z().abs() < 0.9 { (0.0, 0.0, 1.0) } else { (1.0, 0.0, 0.0) };
-    // e1 = normalize(axis × p)
     let e1 = [ay * p.z() - az * p.y(), az * p.x() - ax * p.z(), ax * p.y() - ay * p.x()];
     let n = (e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]).sqrt();
     let e1 = [e1[0] / n, e1[1] / n, e1[2] / n];
-    // e2 = p × e1
     let e2 = [
         p.y() * e1[2] - p.z() * e1[1],
         p.z() * e1[0] - p.x() * e1[2],
@@ -83,7 +79,6 @@ pub fn tangent_frame(p: &UnitVec) -> ([f64; 3], [f64; 3]) {
 pub fn bearing(p: &UnitVec, q: &UnitVec) -> f64 {
     let (e1, e2) = tangent_frame(p);
     let d = p.dot(q);
-    // tangent component of q at p
     let t = [q.x() - d * p.x(), q.y() - d * p.y(), q.z() - d * p.z()];
     let u = t[0] * e1[0] + t[1] * e1[1] + t[2] * e1[2];
     let v = t[0] * e2[0] + t[1] * e2[1] + t[2] * e2[2];
@@ -112,8 +107,6 @@ pub fn winding(cycle: &[UnitVec], p: &UnitVec) -> i32 {
     }
     (total / (2.0 * std::f64::consts::PI)).round() as i32
 }
-
-// ------------------------------------------------------------ model
 
 /// What a face IS, semantically. Metadata never affects topology.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,7 +150,6 @@ pub type FaceId = usize;
 pub struct PEdge {
     pub a: VertexId,
     pub b: VertexId,
-    /// half-edge a→b and its twin b→a.
     pub half_ab: HalfId,
     pub half_ba: HalfId,
     /// river attribute: this border IS a river (style strokes it).
@@ -215,8 +207,6 @@ impl RiverSystem {
         if paths.is_empty() {
             return Err(RiverSystemError::Empty { id });
         }
-        // union-find over paths: connected iff some vertex of one path
-        // lies within tol of some vertex of the other
         let n = paths.len();
         let mut parent: Vec<usize> = (0..n).collect();
         fn find(parent: &mut Vec<usize>, mut x: usize) -> usize {
@@ -507,7 +497,6 @@ impl Partition {
         if !self.faces.iter().any(|f| f.kind == FaceKind::Background) {
             out.push("no Background face: a claim leaked through its borders".into());
         }
-        // completeness
         let residual = self.area_residual();
         if residual > 1e-10 {
             out.push(format!("completeness: |4π - Σ areas| = {residual:e}"));
@@ -519,7 +508,6 @@ impl Partition {
     /// order, ring winding, and construction path. Styles and claims
     /// ride separately — geometry identity is geometric.
     pub fn content_hash(&self) -> u64 {
-        // canonical vertex order: by quantized coordinate bytes
         let mut order: Vec<usize> = (0..self.vertices.len()).collect();
         let key = |v: &UnitVec| {
             let q = |x: f64| ((x * 1e9).round() as i64).to_be_bytes();

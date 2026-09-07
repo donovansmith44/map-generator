@@ -35,7 +35,6 @@ fn entity(s: &str) -> EntityId {
     EntityId(s.to_string())
 }
 
-/// Area over one ring, no holes.
 fn area(store: &mut CanonStore, ent: &str, ring: Border) -> FeatureId {
     let b = store.insert_border(ring);
     store.insert_feature(Feature::Area(Area {
@@ -430,7 +429,6 @@ fn presence_is_constant_within_every_derived_era() {
     }
     assert_eq!(eras.last().unwrap().until, None);
     for era in &eras {
-        // sample inside the era (its start, and a midpoint when bounded)
         for who in names {
             let at_start = book.present(who, &era.from);
             assert_eq!(

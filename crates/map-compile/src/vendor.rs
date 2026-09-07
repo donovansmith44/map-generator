@@ -10,8 +10,6 @@ use std::path::Path;
 
 use serde_json::Value;
 
-// ------------------------------------------------------- typed rows
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct PolityRow {
     pub id: String,
@@ -62,8 +60,6 @@ pub struct LandMask {
     pub rings: Vec<Vec<(f64, f64)>>,
 }
 
-// ------------------------------------------------------- field access
-
 fn field<'a>(v: &'a Value, ctx: &str, name: &str) -> Result<&'a Value, String> {
     v.get(name).ok_or_else(|| format!("{ctx}: missing field '{name}'"))
 }
@@ -113,8 +109,6 @@ fn delta_verses(v: &Value, name: &str) -> Vec<String> {
         .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
         .unwrap_or_default()
 }
-
-// ------------------------------------------------------- the parsers
 
 pub fn parse_polities(json: &str) -> Result<Vec<PolityRow>, String> {
     let v: Value = serde_json::from_str(json).map_err(|e| format!("polities: bad json: {e}"))?;
@@ -242,8 +236,6 @@ pub fn parse_land_mask(json: &str) -> Result<LandMask, String> {
     Ok(LandMask { rings: rings_field(&v, "land-mask", "rings")? })
 }
 
-// -------------------------------------------------- deterministic write
-
 /// Write vendored payloads plus a manifest. The pin is the content
 /// hash of every payload, in name order — same payloads, same pin,
 /// byte-identical manifest (no clocks, no randomness).
@@ -270,8 +262,6 @@ pub fn write_vendor(dir: &Path, payloads: &[(String, Vec<u8>)]) -> Result<u64, S
     .map_err(|e| format!("write manifest: {e}"))?;
     Ok(pin)
 }
-
-// ------------------------------------------------------- plain HTTP GET
 
 /// Minimal HTTP/1.1 GET for the local atlas API (no TLS — the atlas
 /// runs on loopback). Returns the body on 200, an error otherwise.

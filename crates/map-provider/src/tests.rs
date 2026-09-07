@@ -149,7 +149,6 @@ mod canon_provider_laws {
         let square = |lat0: f64, lon0: f64, d: f64| {
             Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
         };
-        // Territory: Assyria
         let b = store.insert_border(square(35.0, 42.0, 3.0));
         let assyria = store.insert_feature(Feature::Area(Area {
             entity: EntityId("assyria".into()),
@@ -169,7 +168,6 @@ mod canon_provider_laws {
         territory.insert(ts(-911), s0).unwrap();
         store.set_layer(LayerKind::Territory, territory);
 
-        // Journeys: two legs, 45..47 and 47..49
         let road1 = store.insert_border(Border(vec![uv(36.2, 36.16), uv(37.9, 27.3)]));
         let road2 = store.insert_border(Border(vec![uv(37.9, 27.3), uv(41.89, 12.49)]));
         let way = store.insert_feature(Feature::Way(Route {
@@ -194,7 +192,6 @@ mod canon_provider_laws {
         journeys.insert(ts(50), sj0).unwrap();
         store.set_layer(LayerKind::Journeys, journeys);
 
-        // Water: one static sea
         let sea = store.insert_border(square(31.0, 30.0, 4.0));
         let water = store.insert_feature(Feature::Area(Area {
             entity: EntityId("natural-earth:the-sea".into()),

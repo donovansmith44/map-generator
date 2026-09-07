@@ -88,7 +88,6 @@ fn year_index(y: i32) -> i32 {
     }
 }
 
-/// Which canon layers a LayerSet bit vocabulary asks for.
 fn layers_wanted(bits: LayerSet) -> Vec<LayerKind> {
     let mut out = Vec::new();
     if bits.contains(LayerSet::GEOMETRY) {
@@ -500,7 +499,6 @@ impl CanonProvider {
             stroke: *style.stroke_for(&map_types::EdgeCharacter::Way),
             sources: sources.clone(),
         });
-        // Stations, as reached, named from the gazetteer.
         let mut station_places: Vec<&atlas_graph_types::covenant::PlaceId> = Vec::new();
         if let Some(first) = route.legs.first() {
             station_places.push(&first.from);
@@ -786,7 +784,6 @@ impl MapProvider for CanonProvider {
                 }
             }
         }
-        // Stations of the ways alive now.
         let mut places: BTreeSet<atlas_graph_types::covenant::PlaceId> = BTreeSet::new();
         for (_, f) in self.active(LayerKind::Journeys, &at) {
             if let Feature::Way(r) = f {
@@ -823,7 +820,6 @@ impl MapProvider for CanonProvider {
                 let mut scene = self.scene_at(&end, q, None)?;
                 let style = self.style(q.style)?;
                 let ramp = style.age_ramp();
-                // Distinct feature versions alive anywhere in the range.
                 let mut seen: BTreeSet<FeatureId> = BTreeSet::new();
                 for layer in layers_wanted(q.layers) {
                     let Some(world) = self.store.layers().get(&layer) else { continue };
@@ -952,8 +948,6 @@ impl MapProvider for CanonProvider {
     }
 }
 
-// ------------------------------------------------------ pure helpers
-
 /// Equal-count resampling along a polyline (slerp between attested
 /// points) so a morph pairs vertices one-to-one.
 fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
@@ -983,7 +977,6 @@ fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
     out
 }
 
-/// Play a script backwards: fades swap, splits merge, morphs reverse.
 fn invert(script: TransitionScript) -> TransitionScript {
     let steps = script
         .steps
@@ -1019,7 +1012,6 @@ fn invert(script: TransitionScript) -> TransitionScript {
 /// own paint.
 pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
     use map_canon::{Feature, LayerKind};
-    // features living in palette-wearing layers
     let mut wearers: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     for (layer, world) in store.layers() {
         if matches!(layer, LayerKind::Water | LayerKind::Relief) {
@@ -1052,7 +1044,6 @@ pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
             }
         }
     }
-    // adjacency: entities sharing >= 2 vertex keys
     let ids: Vec<EntityId> = keys_of.keys().cloned().collect();
     let mut at_vertex: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
     for (i, id) in ids.iter().enumerate() {
