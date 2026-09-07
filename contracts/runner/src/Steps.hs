@@ -254,7 +254,9 @@ allSteps =
                   else pure $ do
                     expected <- fx
                     if actual' == expected then Right w
-                    else Left ("body differs from fixture " <> f <> " outside the mask")
+                    else Left ("body differs from fixture " <> f <> " outside the mask: "
+                               <> maybe "(no leaf difference found)" id
+                                    (firstDiff expected actual'))
   , mkStep Then (lit "the response field " *> ((,) <$> capUntil @FixtureRefFreeText " equals "
                                                    <*> capRest @FixtureRefFreeText)) $
       \(FixtureRefFreeText k, FixtureRefFreeText expct) w ->
@@ -547,7 +549,10 @@ allSteps =
                       Left e -> Left e
                       Right expected
                         | got == expected -> Right w
-                        | otherwise -> Left ("consumed projection " <> pn <> " differs from fixture " <> f)
+                        | otherwise -> Left ("consumed projection " <> pn
+                                             <> " differs from fixture " <> f <> ": "
+                                             <> maybe "(no leaf difference found)" id
+                                                  (firstDiff expected got))
   ]
   where
     scene n w = maybe (Left ("unbound " <> n)) (Right . snd) (Map.lookup n (bound w))

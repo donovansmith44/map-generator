@@ -2580,6 +2580,29 @@ main = hspec $ do
             other -> expectationFailure
                        ("expected exactly one orphan step, got " <> show other)
 
+  describe "fixture diffs on every comparison path (Stage 1 Task 3)" $ do
+    it "firstDiff names the path and both values on a nested leaf" $ do
+      let e = fromJust (A.decodeStrict "{\"a\":{\"b\":[1,2,3]}}")
+          g = fromJust (A.decodeStrict "{\"a\":{\"b\":[1,9,3]}}")
+      case firstDiff e g of
+        Nothing -> expectationFailure "no difference found in differing values"
+        Just m  -> do
+          m `shouldSatisfy` T.isInfixOf "$.a.b[1]"
+          m `shouldSatisfy` T.isInfixOf "2"
+          m `shouldSatisfy` T.isInfixOf "9"
+    it "firstDiff is Nothing on equal values (it does not invent differences)" $
+      let v = fromJust (A.decodeStrict "{\"a\":[1,2]}")
+      in firstDiff v v `shouldBe` Nothing
+    it "the masked whole-body failure names WHERE it differs" $ do
+      -- masked compare against a fixture that differs outside the mask
+      msg <- maskedFailureMessage
+      msg `shouldSatisfy` T.isInfixOf "outside the mask"
+      msg `shouldSatisfy` T.isInfixOf "$."
+    it "the consumed-projection failure names WHERE it differs" $ do
+      msg <- projectionFailureMessage
+      msg `shouldSatisfy` T.isInfixOf "consumed projection"
+      msg `shouldSatisfy` T.isInfixOf "$."
+
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,
 -- the same technique `System.IO.Silently` uses), then restores it and
@@ -2678,6 +2701,58 @@ firstMatch k t = fmap (\f w -> asEither <$> f w) (firstOutcome k t)
     asEither (StepOk w)        = Right w
     asEither (StepFailed e)    = Left e
     asEither (StepSkipped why) = Left ("UNEXPECTED SKIP: " <> why)
+
+-- Stage 1 Task 3: two small end-to-end helpers, each exercising a REAL
+-- comparison step from allSteps (not a direct call to firstDiff) against
+-- a fixture that differs at a known path -- same fake-transport idiom as
+-- the masked-fixture and consumed-projection describe blocks above (a
+-- fake transport returning a known body, the relevant step run via
+-- firstMatch, the Left text handed back instead of asserted on inline).
+-- fixtureDir points at the real test/fixtures directory where an
+-- existing checked-in fixture already differs at a usable path, or at a
+-- fresh temp directory where it doesn't (see projectionFailureMessage).
+maskedFailureMessage :: IO T.Text
+maskedFailureMessage = do
+  let o = "{\"version\":\"9.9.9\",\"graphPin\":\"0123456789abcdef\"}"
+      fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+      w = mkWorld "http://x" fake "test/fixtures"
+  Just get <- pure (firstMatch When "I GET /api/contract")
+  Right w1 <- get w
+  Just chk <- pure (firstMatch Then
+    "the response equals fixture \"contract\" masking graphPin as sixteen hex characters")
+  r <- chk w1
+  case r of
+    Left e  -> pure e
+    Right _ -> error "expected the unmasked body difference to fail"
+
+-- Uses a temp fixture directory rather than test/fixtures's checked-in
+-- "eras" fixtures: those are top-level ARRAYS, whose first differing
+-- path never contains a literal "$." (an array index appends as "[0]",
+-- not ".something") -- an accident of that fixture's own shape, not a
+-- limit of firstDiff. land-mask's Fields wrapper is a top-level OBJECT,
+-- so a diff nested inside its "rings" field names a path of the "$.
+-- something" shape the failure-message law actually asks for.
+projectionFailureMessage :: IO T.Text
+projectionFailureMessage = do
+  tmpBase <- getTemporaryDirectory
+  (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-projection-diff-test"
+  hClose uh
+  removeFile uniqueFile
+  let dir = uniqueFile <> "-dir"
+      o = "{\"rings\":[1,2,9],\"extra\":true}"
+      fake _ = pure (Right (o, fromJust (A.decodeStrict o)))
+      w = mkWorld "http://x" fake dir
+  createDirectoryIfMissing True dir
+  (`finally` removeDirectoryRecursive dir) $ do
+    BS.writeFile (dir </> "land.json") "{\"rings\":[1,2,3]}"
+    Just get <- pure (firstMatch When "I GET /api/land")
+    Right w1 <- get w
+    Just chk <- pure (firstMatch Then
+      "the consumed projection land-mask equals fixture \"land\"")
+    r <- chk w1
+    case r of
+      Left e  -> pure e
+      Right _ -> error "expected a genuinely differing consumed value to fail"
 
 -- ---------- fake-server helpers for the sweep's property tests ----------
 -- A fake scene body carrying exactly the pieces the URL turned ON. v0.1's
