@@ -712,6 +712,13 @@ impl CanonProvider {
 }
 
 impl CanonProvider {
+    /// Read-only escape hatch to the compiled store, for callers that
+    /// need the typed canon API directly (the census) rather than a
+    /// scene — encapsulation kept by exposing a reference, not fields.
+    pub fn store(&self) -> &CanonStore {
+        &self.store
+    }
+
     /// A COMPOSABLE PIECE: the same scene machinery filtered to the
     /// named entities — callers stack the resulting layers however
     /// they choose (the alignment law lives at the camera).

@@ -491,3 +491,61 @@ fn frame_edge_refuses_undeclared_endurance() {
     // An empty or absent layer has nothing to refuse.
     assert!(store.validate_frame_edge(LayerKind::Territory, &ts(100)).is_empty());
 }
+
+/// THE CENSUS LAW: for any instant, every standing feature appears in
+/// the table exactly once, with its tenure — the queryable image of
+/// the disposition function. (Stage 0 serves the baked tenure; the
+/// ledger stages make the whole derivation queryable.)
+#[test]
+fn the_census_is_total_and_sorted() {
+    let mut store = CanonStore::default();
+    let held = area(&mut store, "egypt", square(25.0, 26.0, 8.0));
+    let ring = store.insert_border(square(30.0, 34.0, 4.0));
+    let claim = store.insert_feature(Feature::Area(Area {
+        entity: entity("promise"),
+        name: "a promise".to_string(),
+        rings: BTreeSet::from([ring]),
+        holes: BTreeSet::new(),
+        tenure: Tenure::Claimed,
+    }));
+    let sid = store.insert_snapshot(Snapshot { features: BTreeSet::from([held, claim]) });
+    let mut world = World::default();
+    world.insert(ts(-1450), sid).unwrap();
+    store.set_layer(LayerKind::ScriptureClaims, world);
+
+    // A second layer, declared BEFORE ScriptureClaims in the LayerKind
+    // enum (Territory comes first) but AFTER it alphabetically by wire
+    // name ("scripture-claims" < "territory"). store.layers() is a
+    // BTreeMap<LayerKind, World>, so its natural iteration order is
+    // the enum order — Territory, then ScriptureClaims — which
+    // DISAGREES with the (layer-name, entity) order the wire needs.
+    // This is what makes the exact-order assertion below load-bearing:
+    // an unsorted census would emit the territory row FIRST, not last.
+    let zion = area(&mut store, "zion", square(31.0, 35.0, 1.0));
+    let zsid = store.insert_snapshot(Snapshot { features: BTreeSet::from([zion]) });
+    let mut tworld = World::default();
+    tworld.insert(ts(-1450), zsid).unwrap();
+    store.set_layer(LayerKind::Territory, tworld);
+
+    let rows = census(&store, &ts(-1000));
+    assert_eq!(rows.len(), 3, "every standing feature, exactly once");
+    let promise = rows.iter().find(|r| r.entity == "promise").expect("the claim is a row");
+    assert_eq!(promise.tenure, "claimed");
+    let egypt = rows.iter().find(|r| r.entity == "egypt").expect("held ground is a row");
+    assert_eq!(egypt.tenure, "held");
+
+    // Exact expected order — not a self-consistency check (sorting a
+    // copy and comparing to itself passes trivially). This fails if
+    // census stops sorting, because enum traversal order and wire
+    // (layer, entity) order genuinely disagree here.
+    assert_eq!(
+        rows.iter().map(|r| (r.layer, r.entity.as_str())).collect::<Vec<_>>(),
+        vec![
+            ("scripture-claims", "egypt"),
+            ("scripture-claims", "promise"),
+            ("territory", "zion"),
+        ],
+        "the table is sorted (layer, entity) — deterministic wire bytes"
+    );
+    assert!(census(&store, &ts(-2000)).is_empty(), "before the first moment: empty, not error");
+}

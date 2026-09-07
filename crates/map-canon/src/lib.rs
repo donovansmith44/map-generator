@@ -777,6 +777,63 @@ fn rings_overlap(ra: &[UnitVec], rb: &[UnitVec]) -> bool {
     probes(ra).iter().any(|p| deep(p, rb)) || probes(rb).iter().any(|p| deep(p, ra))
 }
 
+/// One row of THE CENSUS: the queryable image of every disposition at
+/// an instant — the instrument that makes a policy change reviewable
+/// as a table diff before any pixel moves.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CensusRow {
+    pub entity: String,
+    pub name: String,
+    pub layer: &'static str,
+    pub kind: &'static str,
+    pub tenure: &'static str,
+}
+
+fn layer_name(l: &LayerKind) -> &'static str {
+    match l {
+        LayerKind::Territory => "territory",
+        LayerKind::ScriptureClaims => "scripture-claims",
+        LayerKind::Journeys => "journeys",
+        LayerKind::Water => "water",
+        LayerKind::Relief => "relief",
+        LayerKind::Background => "background",
+    }
+}
+
+/// THE CENSUS: every feature standing at `at`, across every layer,
+/// exactly once, sorted by (layer, entity) for deterministic wire
+/// bytes. Before a layer's first moment it contributes nothing —
+/// querying before the world begins yields an empty table, not an
+/// error.
+pub fn census(store: &CanonStore, at: &Timestamp) -> Vec<CensusRow> {
+    let mut rows = Vec::new();
+    for (lk, world) in store.layers() {
+        let Some(sid) = world.state_at(at) else { continue };
+        let Some(snap) = store.snapshots().get(&sid) else { continue };
+        for fid in &snap.features {
+            let Some(f) = store.features().get(fid) else { continue };
+            let (entity, name, kind, tenure) = match f {
+                Feature::Area(a) => (
+                    a.entity.0.clone(),
+                    a.name.clone(),
+                    "area",
+                    match a.tenure {
+                        Tenure::Held => "held",
+                        Tenure::Claimed => "claimed",
+                    },
+                ),
+                Feature::Line(l) => (l.entity.0.clone(), l.name.clone(), "line", "held"),
+                Feature::Way(r) => (r.entity.0.clone(), r.name.clone(), "way", "held"),
+                Feature::Point(p) => (p.entity.0.clone(), p.name.clone(), "point", "held"),
+                Feature::Memory(m) => (m.entity.0.clone(), m.name.clone(), "memory", "held"),
+            };
+            rows.push(CensusRow { entity, name, layer: layer_name(lk), kind, tenure });
+        }
+    }
+    rows.sort_by(|a, b| (a.layer, &a.entity).cmp(&(b.layer, &b.entity)));
+    rows
+}
+
 pub mod persist;
 
 #[cfg(test)]

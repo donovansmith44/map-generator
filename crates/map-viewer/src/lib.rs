@@ -883,6 +883,44 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             (200, "application/json", body.to_string(), Vec::new())
         }
 
+        "/api/contract" => {
+            // The server declares what contract it speaks; a consumer
+            // refuses skew instead of discovering it (spec §4). The
+            // graph pin is the served world's own ETag, formatted for
+            // the wire — the contract suite pins it as 16 lowercase
+            // hex digits.
+            let version = include_str!("../../../contracts/VERSION").trim();
+            let body = serde_json::json!({
+                "version": version,
+                "lawsVersion": "0.0-preledger",
+                "graphPin": format!("{:016x}", app.world_etag),
+            });
+            (200, "application/json", body.to_string(), Vec::new())
+        }
+
+        "/api/census" => {
+            // THE CENSUS: every standing feature's disposition at an
+            // instant, queryable — a policy change becomes a table
+            // diff before any pixel moves (spec §4).
+            let Some(year) = p.year("year") else { return bad("year required") };
+            let Some(canon) = app.canon.as_ref() else {
+                return bad("census requires the canon (run map-compile build)");
+            };
+            let rows: Vec<serde_json::Value> = map_canon::census(canon.store(), &year)
+                .into_iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "entity": r.entity,
+                        "name": r.name,
+                        "layer": r.layer,
+                        "kind": r.kind,
+                        "tenure": r.tenure,
+                    })
+                })
+                .collect();
+            (200, "application/json", serde_json::Value::Array(rows).to_string(), Vec::new())
+        }
+
         "/api/subjects" => {
             let Some(at) = p.year("year") else { return bad("year required (no year zero)") };
             let rows: Vec<serde_json::Value> = app
