@@ -11,6 +11,7 @@ import Capture
 import Pattern
 import World
 import Steps
+import Run
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromJust, listToMaybe)
@@ -239,6 +240,44 @@ main = hspec $ do
       case r of
         Left e  -> e `shouldSatisfy` T.isInfixOf "has labels"
         Right _ -> expectationFailure "expected non-empty labels to fail"
+
+  describe "runner" $ do
+    it "runs a scenario to Passed and reports @target failures as expected-red" $ do
+      let feat = T.unlines
+            [ "Feature: t"
+            , "  Scenario: ok"
+            , "    When I render pieces fills at year -1405 in style canaan as a"
+            , "    And I render pieces fills at year -1405 in style canaan as b"
+            , "    Then a equals b"
+            , "  @target"
+            , "  Scenario: expected red"
+            , "    When I GET /api/nothing"
+            , "    Then the response field missing equals nope"
+            ]
+          fake _ = pure (Right ("{\"x\":1}", fromJust (A.decodeStrict "{\"x\":1}")))
+          w = World "http://x" fake "test/fixtures" mempty False
+      -- (Deviation from the brief's literal `let Right f = ...` / `head`:
+      -- both trigger -Wincomplete-uni-patterns / -Wx-partial under this
+      -- project's -Wall. Restructured as a case/list-pattern to keep the
+      -- same meaning with pristine test output; see task-6-report.md.)
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          [r1, r2] <- mapM (runScenario allSteps w) (ftScenarios f)
+          r1 `shouldBe` Passed
+          r2 `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
+    it "an undefined step fails naming the orphan" $ do
+      let w = World "http://x" (\_ -> pure (Left "no")) "" mempty False
+      case parseFeature "t.feature"
+             "Feature: t\n  Scenario: s\n    When I do something nobody defined" of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            v <- runScenario allSteps w sc
+            case v of
+              Failed e -> e `shouldSatisfy` T.isInfixOf "nobody defined"
+              _ -> expectationFailure "should have failed"
+          [] -> expectationFailure "expected at least one scenario"
 
 firstMatch :: Keyword -> T.Text -> Maybe (World -> IO (Either T.Text World))
 firstMatch k t = listToMaybe

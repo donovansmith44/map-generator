@@ -41,7 +41,7 @@ executable contract-runner
     hs-source-dirs:   app
     main-is:          Main.hs
     build-depends:    base, contract-runner, text, optparse-applicative,
-                      directory, filepath
+                      directory, filepath, containers, http-client
     default-language: GHC2021
 
 test-suite spec
