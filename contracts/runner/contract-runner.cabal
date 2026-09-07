@@ -1,0 +1,53 @@
+cabal-version:      3.0
+name:               contract-runner
+version:            0.1.0
+build-type:         Simple
+
+common warnings
+    ghc-options: -Wall -Wincomplete-patterns
+    default-extensions: OverloadedStrings
+
+library
+    import:           warnings
+    hs-source-dirs:   src
+    exposed-modules:  Gherkin.Ast
+                      Gherkin.Parse
+                      Gherkin.Render
+                      Capture
+                      Pattern
+                      World
+                      Steps
+                      Run
+                      Check
+                      Vocab
+                      Prop
+    build-depends:    base >=4.17 && <5,
+                      text,
+                      containers,
+                      bytestring,
+                      megaparsec >=9,
+                      aeson >=2,
+                      aeson-pretty,
+                      http-client,
+                      http-types,
+                      QuickCheck >=2.14,
+                      directory,
+                      filepath
+    default-language: GHC2021
+
+executable contract-runner
+    import:           warnings
+    hs-source-dirs:   app
+    main-is:          Main.hs
+    build-depends:    base, contract-runner, text, optparse-applicative,
+                      directory, filepath
+    default-language: GHC2021
+
+test-suite spec
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    build-depends:    base, contract-runner, hspec, QuickCheck, text,
+                      containers, aeson, bytestring
+    default-language: GHC2021
