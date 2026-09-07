@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+echo "pre-push: contract gates"
+make contract-gates
+BASE_REF="${1:-origin/master}" bash scripts/contract-semver-gate.sh "${BASE_REF:-origin/master}"

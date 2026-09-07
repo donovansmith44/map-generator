@@ -4,7 +4,7 @@
 
 PORT ?= 8090
 
-.PHONY: build test demo stop maps artifacts clean
+.PHONY: build test demo stop maps artifacts clean contract-gates ci
 
 build:
 	cargo build --release
@@ -35,3 +35,21 @@ artifacts: build
 clean:
 	cargo clean
 	rm -rf out
+
+# The toolchain-only gates: no server, no browser. Safe anywhere.
+contract-gates:
+	cd contracts/runner && cabal test
+	cd contracts/runner && cabal run contract-runner -- check ../map-api
+	cd contracts/runner && cabal run contract-runner -- check ../atlas-edge
+	cd contracts/runner && cabal run contract-runner -- vocab ../map-api
+	cd contracts/runner && cabal run contract-runner -- vocab ../atlas-edge
+	cargo test --workspace
+	bash scripts/tests/semver-gate.test.sh
+
+# Everything, including the gates that need the live servers (8090 ours,
+# 8080 the atlas) and the browser. Never binds a port itself.
+ci: contract-gates
+	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8090 ../map-api
+	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8080 ../atlas-edge
+	bash scripts/contract-semver-gate.sh $${BASE_REF:-origin/master}
+	node crates/map-viewer/tests/golden.js --check
