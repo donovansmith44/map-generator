@@ -78,6 +78,28 @@ data World = World
   -- different cameras in the same scenario -- a single "last camera"
   -- would answer for the wrong one exactly half the time.
   , cameras      :: Map Text (Center, Zoom)
+  -- Fix round 1, finding 4: a transport that does NOT treat a non-2xx as
+  -- an error.
+  --
+  -- `transport` and `transportRaw` both collapse every non-2xx into a
+  -- `Left` naming the code (`checkStatus` below). That is exactly right
+  -- for a law that needs the PAYLOAD -- a law reading a 404 error page as
+  -- if it were geometry is the defect `checkStatus` was added to close.
+  -- It is exactly wrong for a law about a REFUSAL, because it destroys
+  -- the only two things such a law needs to see: the status class, and
+  -- the body that is supposed to name what was refused. Reading a `Left`
+  -- as "the server refused, so the law is met" makes a 500, a 502, or a
+  -- route that does not exist at all into a satisfied contract -- the
+  -- same defect one layer up from the one this module's own comment
+  -- records having already been burned by.
+  --
+  -- So: a third transport, whose `Right` carries the status code and the
+  -- raw body whatever the code was, and whose `Left` is reserved for a
+  -- genuine transport failure. It is a separate field rather than a
+  -- widening of `transportRaw` so that the twenty-odd steps that must
+  -- NOT see an error page as data keep the transport that refuses to
+  -- hand them one.
+  , transportProbe :: Text -> IO (Either Text (Int, ByteString))
   }
 
 -- `transport` is a function and has no Show instance, so World cannot
@@ -140,6 +162,16 @@ httpTransportRaw mgr url = do
   pure $ do
     checkStatus url code
     Right (BL.toStrict (responseBody resp))
+
+-- The same request again, with NO status check at all: the code and the
+-- body, whatever they are. See `transportProbe`'s field comment for why
+-- a law about a refusal needs both and cannot be given either by the two
+-- transports above.
+httpTransportProbe :: Manager -> Text -> IO (Either Text (Int, ByteString))
+httpTransportProbe mgr url = do
+  req <- parseRequest (T.unpack url)
+  resp <- httpLbs req mgr
+  pure (Right (statusCode (responseStatus resp), BL.toStrict (responseBody resp)))
 
 -- R23 (controller ruling): a step definition's answer to "does this line
 -- belong to me" is not a yes/no Maybe — it's one of THREE outcomes, and

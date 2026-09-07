@@ -272,7 +272,13 @@ instance FromCapture Center where
       if la < (-89.9) || la > 89.9
         then Left ("latitude " <> a <> " is outside the frame: "
                    <> describeUniverse (universe (Proxy @Center)))
-        else if lo < (-180) || lo > 180
+        -- Fix round 1, finding 14: half-open, as the comment above
+        -- declares it. -180 and 180 are ONE meridian, and admitting
+        -- both spellings would make them two distinct `Center` values
+        -- to `distinctCenterLaw` -- a pair that is "distinct" while
+        -- naming the same camera. Unreachable from the generator
+        -- today; refused by the type so it stays unreachable.
+        else if lo <= (-180) || lo > 180
           then Left ("longitude " <> b <> " is outside the frame: "
                      <> describeUniverse (universe (Proxy @Center)))
           else Right (Center la lo)
@@ -361,7 +367,9 @@ instance FromCapture ScaleQual where
 -- from the server's own auto rule -- never chosen to make a scenario
 -- pass.
 --
--- The rule (crates/map-viewer/src/lib.rs:605-616, `auto_lod`, verified
+-- The rule (crates/map-viewer/src/lib.rs:581-586, `auto_lod` itself --
+-- lib.rs:605-616 is where it is CALLED, and where the width default
+-- lives; cited separately at `canonicalWidth` below). Verified
 -- byte-identical against explicit `lod=` at three zooms in the
 -- characterization's section 0):
 --

@@ -38,7 +38,8 @@ satisfiable by its own failure mode, which is the thing this project forbids
     two source files are clean in git, so an interrupted run cannot leave a
     mutation committed by accident.
 
-Expected result: BATCH A caught (4/4), BATCH B caught (7/7), tree restored.
+Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
+                 BATCH C caught (7/7), tree restored.
 """
 
 import os
@@ -127,6 +128,75 @@ EXPECT_B = [
     "the empty-list law fails on a body that is not a list at all",
     "a plain scenario whose ONLY run skipped is Failed",
     "a property whose iterations ALL skip is Failed",
+]
+
+# ---------------------------------------------------------------------------
+# BATCH C -- FIX ROUND 1.  The round-1 review found four laws pinned by tests
+# that the very mutation they exist to catch would survive.  These are those
+# mutations, so the claim "the gap is closed" is re-runnable rather than
+# testimonial -- which is the whole reason this file exists.
+#
+# C1 is the one that matters most: it is the reading the controller ratified
+# (R81), and it is the precise failure mode the live server exhibits (reversing
+# a span swaps fade_in/fade_out while rise/fall stand still, which the union
+# reading calls green).
+# ---------------------------------------------------------------------------
+BATCH_C = [
+    (
+        "C1: the plan-vs-timeline law reads the UNION of the two fade kinds "
+        "instead of matching them kind for kind",
+        "Steps.hs",
+        "            else if ins == rises && outs == falls then StepOk w",
+        "            else if Set.union ins outs == Set.union rises falls then StepOk w",
+    ),
+    (
+        "C2: the two-sided culling law checks only what LEAKED -- so a server "
+        "that culled the whole world is green (characterization C5's trap)",
+        "Steps.hs",
+        "            _ | null missing && null leaked -> StepOk w",
+        "            _ | null leaked -> StepOk w",
+    ),
+    (
+        "C3: the endpoint-fade law drops its fade-out half entirely",
+        "Steps.hs",
+        "              badOut = outAbsent ++ outStayed",
+        "              badOut = []",
+    ),
+    (
+        "C4: the endpoint-fade law drops the 'was already in the earlier scene' "
+        "disjunct of its fade-in half",
+        "Steps.hs",
+        "              badIn  = inAbsent ++ inAlready",
+        "              badIn  = inAbsent",
+    ),
+    (
+        "C5: the bogus-id law treats ANY other status -- a 500, a dead route -- "
+        "as the law being met (the round-1 bug, restored)",
+        "Steps.hs",
+        "  | otherwise =
+"
+        "      StepFailed (\"the batch answered HTTP \" <> tshow code <> \", which is an error, not a \
+"
+        "                  \refusal: a server that fell over has not met this law\")",
+        "  | otherwise = StepOk w",
+    ),
+    (
+        "C6: the vertex ladder checks only its FIRST rung, so ultra-vs-fine is "
+        "never weighed",
+        "Steps.hs",
+        "            _ | null (rungBad l1) && null (rungBad l2) -> StepOk w",
+        "            _ | null (rungBad l1) -> StepOk w",
+    ),
+]
+
+EXPECT_C = [
+    "the plan-vs-timeline law DISTINGUISHES the fade kinds",
+    "the two-sided culling law fails on the KEEPS half too",
+    "a fade-out region that was never in the earlier scene is red",
+    "a fade-out region still standing in the later scene is red",
+    "a fade-in region that was ALREADY in the earlier scene is red",
+    "a 5xx is NOT the law being met",
+    "the vertex ladder's SECOND rung is load-bearing",
 ]
 
 
@@ -224,6 +294,8 @@ def main():
         a = run_batch("BATCH A (correlations)", BATCH_A, EXPECT_A, originals)
         b = run_batch("BATCH B (skip discipline + the three new steps)",
                       BATCH_B, EXPECT_B, originals)
+        c = run_batch("BATCH C (fix round 1: the discriminating cases)",
+                      BATCH_C, EXPECT_C, originals)
     finally:
         for path, text in originals.items():
             write(path, text)
@@ -235,7 +307,7 @@ def main():
     if not baseline_ok:
         print("    FAIL: the tree did not restore cleanly -- %s" % fails)
 
-    ok = a and b and baseline_ok
+    ok = a and b and c and baseline_ok
     print("\n%s" % ("ALL MUTATIONS CAUGHT, TREE CLEAN" if ok else "MUTATION EVIDENCE FAILED"))
     sys.exit(0 if ok else 1)
 

@@ -3772,6 +3772,28 @@ main = hspec $ do
       -- every candidate still satisfies the group's own distinctness law
       filter (not . Prop.groupLaw g) cands `shouldBe` []
       cands `shouldSatisfy` (not . null)
+    -- Finding 11 (Minor). The whole justification for NOT re-expressing
+    -- `pair` in terms of `pairOrSolo` is that `pair`'s "rank 0, no
+    -- candidates" on a partial environment is a deliberate statement
+    -- about holes that mean nothing alone. Nothing asserted it: collapse
+    -- the two combinators tomorrow and nothing went red. A statement
+    -- worth a paragraph of reasoning is worth two lines of test.
+    it "a plain `pair` group offers NOTHING for a partial environment -- \
+       \the deliberate difference from `pairOrSolo`, which is the entire \
+       \reason the two combinators both exist" $ do
+      let styles = Prop.holeRegistry Map.! "someStyle"
+          nested = Prop.holeRegistry Map.! "someSubset"
+          half = Map.singleton "someStyle" "canaan"
+          halfNested = Map.singleton "someSubset" "fills"
+      Prop.groupShrink styles half `shouldBe` []
+      Prop.groupRank styles half `shouldBe` 0
+      Prop.groupShrink nested halfNested `shouldBe` []
+      Prop.groupRank nested halfNested `shouldBe` 0
+      -- and the contrast that makes it a CHOICE rather than a limitation:
+      -- the pairOrSolo group, given the same half an environment, really
+      -- does shrink
+      Prop.groupShrink (Prop.holeRegistry Map.! "someYear")
+        (Map.singleton "someYear" "-703") `shouldSatisfy` (not . null)
     it "an ABSENT partner is not applicable, but a PRESENT partner that \
        \cannot be read is a violation -- \"I could not check it\" and \
        \\"it holds\" must not be the same answer" $ do
@@ -3834,6 +3856,17 @@ main = hspec $ do
           Just f -> f (mkWorld "http://x" (\_ -> pure (Left "no")) "")
                         { bound = Map.fromList [ (n, ("", v)) | (n, v) <- binds ]
                         , cameras = Map.fromList cams }
+        -- Which of the three answers an outcome is, WITHOUT its
+        -- message: what the kind-distinction pin (finding 1) compares,
+        -- so it asserts "these two inputs are answered differently"
+        -- rather than "this one says exactly that sentence" -- the
+        -- former survives a reworded message and a reversed convention,
+        -- the latter does not.
+        outcomeTag :: StepOutcome -> T.Text
+        outcomeTag o = case o of
+          StepOk _      -> "ok"
+          StepFailed _  -> "failed"
+          StepSkipped _ -> "skipped"
         shouldPass :: StepOutcome -> Expectation
         shouldPass o = case o of
           StepOk _ -> pure ()
@@ -4005,7 +4038,11 @@ main = hspec $ do
       shouldPass =<<
         runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
           [("plan", p), ("after", sceneAfter), ("before", sceneBefore)] []
-      shouldFailWith "not new in after" =<<
+      -- message reworded by fix round 1, finding 8: the two disjuncts of
+      -- each half are now counted and named apart, so a reader chasing a
+      -- counterexample is pointed at the endpoint that actually
+      -- disagrees
+      shouldFailWith "1 of 1 fade-in region(s) never arrive in after" =<<
         runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
           [("plan", ghostPlan), ("after", sceneAfter), ("before", sceneBefore)] []
     it "the inversion law compares the constructed mirror WHOLE -- a \
@@ -4057,6 +4094,245 @@ main = hspec $ do
       shouldFailWith "carries no manifest entries" =<<
         runThen "every entry in sampled traces to a disposition and a border"
           [("sampled", manifest [] [] [] [])] []
+
+    -- ---------- fix round 1: the discriminating cases ----------
+
+    -- Finding 2 (Important). The four cases above never make `missing`
+    -- non-empty, so a step that computed only `leaked` passed all of
+    -- them -- leaving open the exact trap the step's own comment names
+    -- (characterization C5: "a law that asserts only 'far things are
+    -- absent', which culling everything satisfies"). This is that case:
+    -- `viewed` sent NOTHING, so there is nothing to leak and the only
+    -- fault is on the "keeps" side. A leaked-only step passes here.
+    it "the two-sided culling law fails on the KEEPS half too: a server \
+       \that culled the whole world leaks nothing, and must still be \
+       \red" $ do
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", manifest [] [] [] []), ("world", nearFar)] [("viewed", camAt0)]
+      shouldFailWith "1 in view but absent" o
+      shouldFailWith "region:near" o
+      -- and it is genuinely the keeps half, alone: nothing leaked
+      shouldFailWith "0 out of view but sent" o
+
+    -- Finding 3 (Important). The endpoint-fade law has two halves and
+    -- each half has two disjuncts; the original pair of cases exercised
+    -- ONE disjunct of ONE half, so deleting the whole fade-out clause,
+    -- or either "already there" disjunct, left the suite green. One
+    -- case per disjunct, each isolating its own.
+    it "the endpoint-fade law: a fade-in region that was ALREADY in the \
+       \earlier scene is red -- the disjunct a one-sided check misses, \
+       \since a region present in both is absent from neither" $ do
+      let withA = manifest [feat "region:aa" "r1"] [res "r1" 1 (east 0) 0.1] [] []
+      o <- runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
+             [("plan", plan [fadeIn "aa"]), ("after", withA), ("before", withA)] []
+      shouldFailWith "were already in before" o
+      -- and NOT the other disjunct: it did arrive in `after`
+      shouldFailWith "0 of 1 fade-in region(s) never arrive in after" o
+    it "the endpoint-fade law: a fade-out region that was never in the \
+       \earlier scene is red" $ do
+      o <- runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
+             [ ("plan", plan [fadeOut "cc"])
+             , ("after", manifest [] [] [] []), ("before", manifest [] [] [] []) ] []
+      shouldFailWith "1 of 1 fade-out region(s) were never in before" o
+      shouldFailWith "cc" o
+    it "the endpoint-fade law: a fade-out region still standing in the \
+       \later scene is red -- the fade-out half exercised at all, which \
+       \no earlier case did" $ do
+      let withC = manifest [feat "region:cc" "r1"] [res "r1" 1 (east 0) 0.1] [] []
+      o <- runThen "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after"
+             [("plan", plan [fadeOut "cc"]), ("after", withC), ("before", withC)] []
+      shouldFailWith "1 fade-out region(s) are still in after" o
+
+    -- Finding 1 (Important). R81's kind-wise bijection had no test that
+    -- the UNION reading would fail: mutate `ins == rises && outs ==
+    -- falls` to `union ins outs == union rises falls` and both original
+    -- cases stayed green -- on the one reading the controller ratified,
+    -- and on the precise failure mode the live server exhibits (report
+    -- section 8 finding 1: reversing a span swaps fade_in/fade_out while
+    -- rise/fall stand still, which the union reading calls green).
+    --
+    -- Written so the evidence survives R83's coming direction-aware
+    -- rewrite. The load-bearing assertion is the LAST one: the two
+    -- stories have the identical union and differ only in which kind
+    -- each id wears, so any implementation that distinguishes the kinds
+    -- must answer them DIFFERENTLY -- whichever pairing that
+    -- implementation considers correct for this input. Only the two
+    -- assertions above it encode today's forward convention, and those
+    -- are the ones R83 may legitimately flip.
+    it "the plan-vs-timeline law DISTINGUISHES the fade kinds: two \
+       \stories with the identical union of ids, differing only in which \
+       \id rose and which fell, cannot both be accepted (the union \
+       \reading accepts both)" $ do
+      let p = plan [fadeIn "aa", fadeOut "bb"]
+          matched = A.toJSON [change "rise" "region:aa", change "fall" "region:bb"]
+          swapped = A.toJSON [change "fall" "region:aa", change "rise" "region:bb"]
+          law = "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
+      -- today's forward convention: fade_in <-> rise, fade_out <-> fall
+      shouldPass =<< runThen law [("plan", p), ("story", matched)] []
+      swappedOutcome <- runThen law [("plan", p), ("story", swapped)] []
+      shouldFailWith "fade_in vs rise" swappedOutcome
+      shouldFailWith "fade_out vs fall" swappedOutcome
+      -- THE INVARIANT, independent of which pairing is the right one:
+      -- an implementation blind to the kinds answers these two
+      -- identically, because their unions are equal.
+      matchedOutcome <- runThen law [("plan", p), ("story", matched)] []
+      outcomeTag matchedOutcome `shouldNotBe` outcomeTag swappedOutcome
+
+    -- Finding 5 (Minor). The ladder's SECOND rung was clean in both the
+    -- failing and the passing fixtures, so deleting it left the suite
+    -- green -- while the step's comment calls the repeated names "what
+    -- makes this one ladder of two rungs rather than two unrelated
+    -- comparisons". This violates on rung 2 only.
+    it "the vertex ladder's SECOND rung is load-bearing: a violation \
+       \between ultra and fine is red even when fine-vs-coarse is clean" $ do
+      let scn2 a (b1, b2) =
+            manifest [feat "region:a" ("r1" <> a), feat "region:b" ("r2" <> a)]
+                     [res ("r1" <> a) b1 (east 0) 0.1, res ("r2" <> a) b2 (east 0) 0.1]
+                     [] []
+          coarse2 = scn2 "c" (5, 10)
+          fine2   = scn2 "f" (50, 100)   -- rung 1 clean
+          ultra2  = scn2 "u" (60, 9)     -- rung 2 violated on region:b
+      o <- runThen "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine"
+             [("coarse", coarse2), ("fine", fine2), ("ultra", ultra2)] []
+      shouldFailWith "region:b 9<100" o
+      shouldFailWith "fewer vertices in ultra than in fine" o
+
+    -- Finding 7 (Minor). Both horizon cases asserted failure, so a step
+    -- body mutated to always fail passed. The `null over -> StepOk`
+    -- branch needed a case of its own.
+    it "the horizon law PASSES when every feature is on the near side" $
+      shouldPass =<< runThen "no feature of viewed is beyond the horizon of 0,0"
+        [("viewed", manifest [feat "region:near" "rn"]
+                             [res "rn" 10 (east 0) 0.001] [] [])] []
+
+    -- Finding 6 (Minor). `renderInto` used to keep a name's old camera
+    -- when the same name was re-rendered WITHOUT one, so `cameraOf`
+    -- answered confidently with a view that scene no longer had.
+    it "re-rendering a bound name without a camera FORGETS its old \
+       \camera, rather than answering later laws with a stale view" $ do
+      let fake _ = pure (Right ("{}", A.object []))
+          w0 = mkWorld "http://x" fake ""
+          camLine = "I render pieces fills at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine as viewed"
+          plainLine = "I render pieces fills at year -1405 in style canaan as viewed"
+      case (firstMatch When camLine, firstMatch When plainLine) of
+        (Just fc, Just fp) -> do
+          r1 <- fc w0
+          case r1 of
+            Left e -> expectationFailure (T.unpack e)
+            Right w1 -> do
+              Map.lookup "viewed" (cameras w1) `shouldBe` Just (Center 31.5 35.0, Zoom 4)
+              r2 <- fp w1
+              case r2 of
+                Left e -> expectationFailure (T.unpack e)
+                Right w2 -> Map.lookup "viewed" (cameras w2) `shouldBe` Nothing
+        _ -> expectationFailure "a render line did not match any definition"
+
+    -- Finding 10 (Minor). The bound-response fixture step decides three
+    -- census scenarios and had no behavioural test at all -- neither its
+    -- happy path nor its `unbound` branch.
+    it "`{name} equals fixture` compares the BOUND response (not the \
+       \last one) against the fixture, and says so when the name is \
+       \unbound" $ do
+      let body = "eras equals fixture \"eras-single-test-consumed\""
+          fixtureValue = A.toJSON
+            [A.object [ "id" A..= ("e9" :: T.Text), "name" A..= ("Beta" :: T.Text)
+                      , "from_year" A..= (10 :: Int), "to_year" A..= (90 :: Int) ]]
+          worldWith binds = (mkWorld "http://x" (\_ -> pure (Left "no")) "test/fixtures")
+                              { bound = Map.fromList [ (n, ("", v)) | (n, v) <- binds ] }
+      case firstMatch Then body of
+        Nothing -> expectationFailure "no definition matched the bound-fixture line"
+        Just f -> do
+          -- the bound name matches the fixture even though "_last" is a
+          -- DIFFERENT body: the step must read `eras`, not the last
+          -- response
+          ok <- f (worldWith [("eras", fixtureValue), ("_last", A.object [])])
+          ok `shouldSatisfy` isRight
+          -- and a differing bound body is a real failure
+          bad <- f (worldWith [("eras", A.toJSON ([] :: [A.Value]))])
+          bad `shouldSatisfy` isLeft
+          -- and an unbound name says which name
+          missing <- f (worldWith [])
+          case missing of
+            Left e -> e `shouldSatisfy` T.isInfixOf "unbound eras"
+            Right _ -> expectationFailure "an unbound name must not pass"
+
+  -- Finding 4 (Important). The bogus-id @target's green path read "any
+  -- non-2xx means the server refused, so the law is met" -- which made a
+  -- 500, a 502, or a missing route into a satisfied contract, never
+  -- computed "by name" at all, and was the only new definition with no
+  -- behavioural test. `refusalVerdict` is now a pure exported core, and
+  -- these are its four answers.
+  describe "the step phase: \"refused by name\" is computed, and a \
+           \crashed server is not a refusal" $ do
+    let w0 = mkWorld "http://x" (\_ -> pure (Left "no")) ""
+        verdictTag o = case o of
+          StepOk _ -> "ok" :: T.Text
+          StepFailed e -> "failed: " <> e
+          StepSkipped e -> "skipped: " <> e
+        resident = "RESIDENTBYTES"
+    it "a 4xx whose body NAMES the missing id is the law being met" $
+      verdictTag (refusalVerdict w0 400 "unknown id 0000000000000000" resident)
+        `shouldBe` "ok"
+    it "a 4xx that does NOT name it is a different red -- the caller is \
+       \told no, and not which id was the problem" $
+      verdictTag (refusalVerdict w0 400 "bad request" resident)
+        `shouldSatisfy` T.isInfixOf "does not name 0000000000000000"
+    it "a 200 carrying exactly the resident id's bytes is the live \
+       \behaviour, and is red: silence, not an error" $
+      verdictTag (refusalVerdict w0 200 resident resident)
+        `shouldSatisfy` T.isInfixOf "silently dropping 0000000000000000"
+    it "a 200 carrying something else is still red, and says so \
+       \differently" $
+      verdictTag (refusalVerdict w0 200 "other bytes" resident)
+        `shouldSatisfy` T.isInfixOf "rather than refusing"
+    it "a 5xx is NOT the law being met -- a server that fell over has \
+       \not refused anything, and this is the mutation the old \
+       \implementation could not survive" $ do
+      verdictTag (refusalVerdict w0 500 "" resident)
+        `shouldSatisfy` T.isInfixOf "error, not a refusal"
+      verdictTag (refusalVerdict w0 502 "gateway" resident)
+        `shouldSatisfy` T.isInfixOf "error, not a refusal"
+      -- a 500 whose body happens to contain the id is STILL not a
+      -- refusal: the status class is what decides, not a substring
+      verdictTag (refusalVerdict w0 500 "0000000000000000" resident)
+        `shouldSatisfy` T.isInfixOf "error, not a refusal"
+    it "the whole step runs end to end through the probe transport, and \
+       \reports the live server's actual behaviour" $ do
+      let scn = A.object
+            [ "features" A..= ([] :: [A.Value])
+            , "resources" A..= [A.object [ "id" A..= ("aa" :: T.Text)
+                                         , "kind" A..= ("ring" :: T.Text)
+                                         , "bytes" A..= (3 :: Int)
+                                         , "vertices" A..= (1 :: Int) ]] ]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", ("", scn))]
+                , transportRaw = \_ -> pure (Right "RESIDENT")
+                , transportProbe = \_ -> pure (Right (200, "RESIDENT")) }
+      case firstOutcome Then "fetching scene's first resource alongside a bogus id is refused by name" of
+        Nothing -> expectationFailure "no definition matched the bogus-id line"
+        Just f -> do
+          o <- f w
+          verdictTag o `shouldSatisfy` T.isInfixOf "silently dropping"
+          -- and an honest server passes the same step
+          o2 <- f w { transportProbe = \_ -> pure (Right (404, "no such resource 0000000000000000")) }
+          verdictTag o2 `shouldBe` "ok"
+    it "a scene that publishes the known-absent id SKIPS, rather than \
+       \using an id that is not absent after all" $ do
+      let scn = A.object
+            [ "features" A..= ([] :: [A.Value])
+            , "resources" A..= [A.object [ "id" A..= ("0000000000000000" :: T.Text)
+                                         , "kind" A..= ("ring" :: T.Text)
+                                         , "bytes" A..= (3 :: Int)
+                                         , "vertices" A..= (1 :: Int) ]] ]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList [("scene", ("", scn))]
+                , transportRaw = \_ -> pure (Right "RESIDENT")
+                , transportProbe = \_ -> pure (Right (200, "RESIDENT")) }
+      case firstOutcome Then "fetching scene's first resource alongside a bogus id is refused by name" of
+        Nothing -> expectationFailure "no definition matched the bogus-id line"
+        Just f -> do
+          o <- f w
+          verdictTag o `shouldSatisfy` T.isInfixOf "cannot be used as a bogus id here"
 
   describe "the step phase: the render vocabulary builds the right URL" $ do
     let urlFor body = do
@@ -4185,6 +4461,7 @@ mkWorld :: T.Text -> (T.Text -> IO (Either T.Text (BS.ByteString, A.Value))) -> 
 mkWorld base tr dir = World base tr dir mempty False
   (\_ -> pure (Left "no raw transport configured for this test"))
   Nothing Map.empty
+  (\_ -> pure (Left "no probe transport configured for this test"))
 
 -- The step action a body resolves to, in its full three-outcome form
 -- (World.StepOutcome) -- used directly by the tests that are ABOUT

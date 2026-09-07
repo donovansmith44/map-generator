@@ -14,6 +14,7 @@ import Data.Set (Set, member)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
@@ -455,7 +456,12 @@ allSteps =
           then StepSkipped (n <> " carries no feature with bounds smaller than the whole \
                             \sphere; nothing here can be beyond any horizon")
           else if null over then StepOk w
-          else StepFailed (tshow (length over) <> " of " <> tshow (length caps)
+          -- Fix round 1, finding 15: the denominator is the population
+          -- the guard above actually reasoned about (caps that are not
+          -- the whole-sphere sentinel), not every cap -- a sentinel can
+          -- never be beyond any horizon, so counting it in the total
+          -- quietly understates the ratio.
+          else StepFailed (tshow (length over) <> " of " <> tshow (length reachable)
                            <> " features of " <> n <> " lie entirely beyond the horizon of "
                            <> renderCap c <> ": " <> listSome over)
     -- "a label is only sent when the thing it names is in view"
@@ -583,20 +589,35 @@ allSteps =
           outs <- fadeRegions "fade_out" sts
           fa <- featureIdSet =<< boundScene after w
           fb <- featureIdSet =<< boundScene before w
+          -- Fix round 1, finding 8: each half has TWO disjuncts, and
+          -- they name different scenes -- "never arrived in `after`" and
+          -- "was already in `before`" are different faults with
+          -- different fixes. Collapsing them into one message ("not new
+          -- in after") points a reader chasing a counterexample at the
+          -- wrong endpoint half the time, so they are counted and
+          -- reported apart.
           let regionOf i = "region:" <> i
-              badIn  = [ i | i <- Set.toList ins
-                           , not (regionOf i `Set.member` fa) || regionOf i `Set.member` fb ]
-              badOut = [ i | i <- Set.toList outs
-                           , not (regionOf i `Set.member` fb) || regionOf i `Set.member` fa ]
+              inAbsent  = [ i | i <- Set.toList ins,  not (regionOf i `Set.member` fa) ]
+              inAlready = [ i | i <- Set.toList ins,  regionOf i `Set.member` fb ]
+              outAbsent = [ i | i <- Set.toList outs, not (regionOf i `Set.member` fb) ]
+              outStayed = [ i | i <- Set.toList outs, regionOf i `Set.member` fa ]
+              badIn  = inAbsent ++ inAlready
+              badOut = outAbsent ++ outStayed
           pure $ if Set.null ins && Set.null outs
             then StepSkipped "this span's plan carries no fades; a law about what fades \
                              \in and out has nothing to examine"
             else if null badIn && null badOut then StepOk w
-            else StepFailed (tshow (length badIn) <> " of " <> tshow (Set.size ins)
-                             <> " fade-in region(s) are not new in " <> after <> " ("
-                             <> listSome badIn <> "); " <> tshow (length badOut) <> " of "
-                             <> tshow (Set.size outs) <> " fade-out region(s) are not gone from "
-                             <> after <> " (" <> listSome badOut <> ")")
+            else StepFailed (T.intercalate "; "
+                   [ tshow (length inAbsent) <> " of " <> tshow (Set.size ins)
+                     <> " fade-in region(s) never arrive in " <> after
+                     <> " (" <> listSome inAbsent <> ")"
+                   , tshow (length inAlready) <> " fade-in region(s) were already in "
+                     <> before <> " (" <> listSome inAlready <> ")"
+                   , tshow (length outAbsent) <> " of " <> tshow (Set.size outs)
+                     <> " fade-out region(s) were never in " <> before
+                     <> " (" <> listSome outAbsent <> ")"
+                   , tshow (length outStayed) <> " fade-out region(s) are still in "
+                     <> after <> " (" <> listSome outStayed <> ")" ])
     -- "the road back is the road there, reversed" -- characterization
     -- T5, which HOLDS exactly. Whole-body: the constructed mirror is
     -- compared against the served reverse plan step for step, with
@@ -677,22 +698,13 @@ allSteps =
                 ("this scene publishes " <> bogusResourceId <> ", the id this law uses \
                  \as its known-absent one; it cannot be used as a bogus id here"))
             | otherwise -> do
-                batch <- transportRaw w (baseUrl w <> "/api/resources?ids=" <> rid
-                                         <> "," <> bogusResourceId)
+                batch <- transportProbe w (baseUrl w <> "/api/resources?ids=" <> rid
+                                           <> "," <> bogusResourceId)
                 single <- transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)
                 pure $ case (batch, single) of
-                  -- A refusal IS the law being met: the transport turns
-                  -- a non-2xx into a Left, and that is the green case.
-                  (Left _, _) -> StepOk w
-                  (Right bb, Right b1)
-                    | bb == b1 -> StepFailed
-                        ("the batch answered 200 with exactly the bytes of the one resident \
-                         \id, silently dropping " <> bogusResourceId
-                         <> ": a caller cannot tell a missing payload from a short one")
-                    | otherwise -> StepFailed
-                        ("the batch answered 200 rather than refusing the unknown id "
-                         <> bogusResourceId <> " by name")
+                  (Left e, _) -> StepFailed e
                   (_, Left e) -> StepFailed e
+                  (Right (code, body), Right b1) -> refusalVerdict w code body b1
     -- derivability.feature (@target): the manifest publishes no
     -- disposition and no border attribution per entry, so the scene tier
     -- cannot today be traced back to the fact tier at all. Computed, not
@@ -789,22 +801,29 @@ allSteps =
                            <*> capUntil @Year " in style "
                            <*> capUntil @StyleName " as "
                            <*> capRest @BindName)) $
-      \(ps, y, st, BindName n) w -> do
-        r <- getUrl (sceneUrl (baseUrl w) ps y st) w
-        pure $ do
-          w' <- r >>= bindLast n
-          -- Task 11 / Phase S review fixes 2-3: the combine step
-          -- ("combining A and B equals rendering <someA> plus <someB>")
-          -- must render its own union scene at the SAME year AND STYLE
-          -- the two parts were rendered at, not a hardcoded pair (the
-          -- plan's own self-review flagged the year half of this bug;
-          -- review flagged that a hardcoded style is the same mistake).
-          -- Every binding render records the year+style it used, typed,
-          -- in `World.lastRender` (see World.hs); a @property scenario
-          -- substitutes ONE <someYear> value across the whole scenario
-          -- body, so sceneA and sceneB's renders (and therefore this
-          -- binding) always agree.
-          Right w' { lastRender = Just (y, st) }
+      -- Task 11 / Phase S review fixes 2-3: the combine step
+      -- ("combining A and B equals rendering <someA> plus <someB>")
+      -- must render its own union scene at the SAME year AND STYLE
+      -- the two parts were rendered at, not a hardcoded pair (the
+      -- plan's own self-review flagged the year half of this bug;
+      -- review flagged that a hardcoded style is the same mistake).
+      -- Every binding render records the year+style it used, typed,
+      -- in `World.lastRender` (see World.hs); a @property scenario
+      -- substitutes ONE <someYear> value across the whole scenario
+      -- body, so sceneA and sceneB's renders (and therefore this
+      -- binding) always agree.
+      --
+      -- Fix round 1, finding 6: this now goes through `renderInto` like
+      -- the six camera/detail shapes, rather than keeping its own copy
+      -- of bind-and-record. The URL is byte-identical (`sceneUrl` IS
+      -- `sceneUrlFull` with all three optional parts absent) and
+      -- `lastRender` is set exactly as before -- but the camera map is
+      -- now maintained here too, which is the whole point: this is the
+      -- step that binds a name WITHOUT a camera, so it is the one that
+      -- has to FORGET a camera an earlier line recorded under that name.
+      -- Fixing only `renderInto`'s own branch would have left the stale
+      -- view reachable through precisely this line.
+      \(ps, y, st, BindName n) -> renderInto (Just n) ps y (Just st) Nothing Nothing
   , mkStep When (lit "I render pieces "
                  *> ((,,) <$> capUntil @PieceSet " at year "
                           <*> capUntil @Year " in style "
@@ -1276,6 +1295,17 @@ fadeRegions kind sts = Set.fromList <$> traverse (textField "region") (stepsOfKi
 -- `/api/changes` is a flat array of change rows, each with a `kind` and
 -- a namespaced `subject`. The subjects of one kind, with the namespace
 -- stripped, are directly comparable with `fadeRegions` above.
+--
+-- Fix round 1, finding 9: a row of the right KIND but the wrong
+-- NAMESPACE (a `rise` on a `boundary:`) is dropped, DELIBERATELY and not
+-- by oversight -- a fade names a region, so a change about a boundary is
+-- not a change this law is quantified over. Saying so here because the
+-- drop is silent and this is exactly where the data model is known to be
+-- muddy: report section 8 finding 1 and characterization 4.7 both record
+-- journey (`Way`) entities whose end is logged as a region Fall. If that
+-- muddiness ever moves the other way -- a genuine region change filed
+-- under another namespace -- this filter would hide it, and the fix
+-- would belong here.
 changeSubjects :: Text -> Text -> Value -> Either Text (Set Text)
 changeSubjects kind ns v = case v of
   Array rows -> Set.fromList . concat <$> traverse one (V.toList rows)
@@ -1342,9 +1372,19 @@ renderInto mname ps y mst mcam mdet w = do
     w0 <- r
     w1 <- maybe (Right w0) (`bindLast` w0) mname
     Right w1 { lastRender = (,) y <$> mst
+               -- Fix round 1, finding 6: re-binding a name WITHOUT a
+               -- camera must FORGET the old one, not keep it. Otherwise
+               -- `cameraOf viewed` answers with a view that scene no
+               -- longer has -- precisely the "answering for a view you do
+               -- not have" this field was added to prevent, and it would
+               -- answer confidently. Not reachable from today's corpus
+               -- (no name is rendered twice with different camera-ness),
+               -- which is exactly why it needs a pin rather than a
+               -- reader's trust.
              , cameras = case (mname, mcam) of
                  (Just n, Just (CamSpec c z)) -> Map.insert n (c, z) (cameras w1)
-                 _ -> cameras w1 }
+                 (Just n, Nothing)            -> Map.delete n (cameras w1)
+                 (Nothing, _)                 -> cameras w1 }
 
 -- A handful of ids in a failure message, the same way `describeSetDiff`
 -- bounds its own: five is enough to recognize a pattern, and a scene
@@ -1463,6 +1503,57 @@ morphPoints byId fs s = do
 -- (naming the reason) rather than passing if it ever does.
 bogusResourceId :: Text
 bogusResourceId = "0000000000000000"
+
+-- Fix round 1, finding 4. What the batch route's answer means, as a
+-- pure function of (status, batch body, the resident id's own bytes) --
+-- exported and unit-tested, because the previous version of this
+-- decision lived inline and got the most important case exactly
+-- backwards.
+--
+-- It read `(Left _, _) -> StepOk w`, on the reasoning that a non-2xx is
+-- a refusal and a refusal meets the law. But `transportRaw`'s `Left` is
+-- produced for EVERY non-2xx, so a 500, a 502, or a server with no
+-- /api/resources route at all turned this @target green. A crashed
+-- server is not a satisfied contract; that is the shape of check this
+-- whole stage exists to outlaw (MEMORY: verify-distinct-not-nonnull),
+-- and World.hs's own comment records the project having already been
+-- burned by the identical mistake one layer down.
+--
+-- Four answers, and only one of them is green:
+--
+--   4xx naming the id      GREEN. This is the law: refused, BY NAME.
+--                          "By name" is computed, not assumed -- the
+--                          body must actually contain the id that was
+--                          refused, or a caller still cannot tell which
+--                          of the ids it asked for went missing.
+--   4xx not naming it      RED, and a DIFFERENT red: the server refused
+--                          the batch but did not say what it refused.
+--   2xx                    RED. Silence, which is the thing the
+--                          scenario's title forbids. Distinguished into
+--                          "exactly the resident bytes" (today's live
+--                          behaviour -- the unknown id filtered out) and
+--                          "something else", because those are two
+--                          different server behaviours.
+--   anything else (5xx...) RED. An error is not a refusal.
+refusalVerdict :: World -> Int -> BS.ByteString -> BS.ByteString -> StepOutcome
+refusalVerdict w code body resident
+  | code >= 400 && code < 500 =
+      if TE.encodeUtf8 bogusResourceId `BS.isInfixOf` body
+        then StepOk w
+        else StepFailed ("the batch refused with HTTP " <> tshow code
+                         <> ", but its body does not name " <> bogusResourceId
+                         <> ": a caller is told no, and not which id was the problem")
+  | code >= 200 && code < 300 =
+      if body == resident
+        then StepFailed ("the batch answered " <> tshow code <> " with exactly the bytes of \
+                         \the one resident id, silently dropping " <> bogusResourceId
+                         <> ": a caller cannot tell a missing payload from a short one")
+        else StepFailed ("the batch answered " <> tshow code
+                         <> " rather than refusing the unknown id " <> bogusResourceId
+                         <> " by name")
+  | otherwise =
+      StepFailed ("the batch answered HTTP " <> tshow code <> ", which is an error, not a \
+                  \refusal: a server that fell over has not met this law")
 
 -- ---------- Task 11: content-addressed resource ids ----------
 -- Every id in a bound scene's "resources" array, text order, extracted
