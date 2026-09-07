@@ -522,30 +522,69 @@ fn the_census_is_total_and_sorted() {
     // This is what makes the exact-order assertion below load-bearing:
     // an unsorted census would emit the territory row FIRST, not last.
     let zion = area(&mut store, "zion", square(31.0, 35.0, 1.0));
-    let zsid = store.insert_snapshot(Snapshot { features: BTreeSet::from([zion]) });
+    // A non-area feature alongside it (final-review cleanup, Fix 2): three
+    // "area" rows would let `kind` be hardcoded to "area" and still pass
+    // this assertion (see MEMORY: verify-distinct-not-nonnull — a check
+    // satisfiable by the failure mode isn't a check). A Point genuinely
+    // distinguishes: its census kind must come out "point", not "area".
+    let shiloh = store.insert_feature(Feature::Point(Landmark {
+        entity: entity("shiloh"),
+        name: "shiloh".to_string(),
+        at: uv(32.0, 35.0),
+    }));
+    let zsid =
+        store.insert_snapshot(Snapshot { features: BTreeSet::from([zion, shiloh]) });
     let mut tworld = World::default();
     tworld.insert(ts(-1450), zsid).unwrap();
     store.set_layer(LayerKind::Territory, tworld);
 
     let rows = census(&store, &ts(-1000));
-    assert_eq!(rows.len(), 3, "every standing feature, exactly once");
-    let promise = rows.iter().find(|r| r.entity == "promise").expect("the claim is a row");
-    assert_eq!(promise.tenure, "claimed");
-    let egypt = rows.iter().find(|r| r.entity == "egypt").expect("held ground is a row");
-    assert_eq!(egypt.tenure, "held");
 
-    // Exact expected order — not a self-consistency check (sorting a
-    // copy and comparing to itself passes trivially). This fails if
-    // census stops sorting, because enum traversal order and wire
-    // (layer, entity) order genuinely disagree here.
+    // The whole expected row set, in the exact expected order — not a
+    // self-consistency check (sorting a copy and comparing to itself
+    // passes trivially), and not one more single-field spot check
+    // stacked onto the last review's `tenure`-only assertions. `kind`
+    // (final-review cleanup, Fix 2) is part of the wire contract
+    // `/api/census` serves and that blessed fixtures pin, exactly like
+    // `entity`, `layer`, and `tenure` — so it belongs in the SAME
+    // whole-row assertion, not a bolted-on fourth check. This also still
+    // catches an unsorted census: enum traversal order (Territory, then
+    // ScriptureClaims — see the comment above on `zion`) disagrees with
+    // the (layer, entity) wire order, so a regression there fails this
+    // assertion too.
     assert_eq!(
-        rows.iter().map(|r| (r.layer, r.entity.as_str())).collect::<Vec<_>>(),
+        rows,
         vec![
-            ("scripture-claims", "egypt"),
-            ("scripture-claims", "promise"),
-            ("territory", "zion"),
+            CensusRow {
+                entity: "egypt".to_string(),
+                name: "egypt".to_string(),
+                layer: "scripture-claims",
+                kind: "area",
+                tenure: "held",
+            },
+            CensusRow {
+                entity: "promise".to_string(),
+                name: "a promise".to_string(),
+                layer: "scripture-claims",
+                kind: "area",
+                tenure: "claimed",
+            },
+            CensusRow {
+                entity: "shiloh".to_string(),
+                name: "shiloh".to_string(),
+                layer: "territory",
+                kind: "point",
+                tenure: "held",
+            },
+            CensusRow {
+                entity: "zion".to_string(),
+                name: "zion".to_string(),
+                layer: "territory",
+                kind: "area",
+                tenure: "held",
+            },
         ],
-        "the table is sorted (layer, entity) — deterministic wire bytes"
+        "the whole wire row set, in order — entity, name, layer, kind, and tenure all pinned"
     );
     assert!(census(&store, &ts(-2000)).is_empty(), "before the first moment: empty, not error");
 }

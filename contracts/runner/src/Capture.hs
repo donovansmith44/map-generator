@@ -29,11 +29,41 @@ didYouMean vocab w =
     _ -> ""
   where
     dist a b = lev (T.unpack a) (T.unpack b)
-    lev [] bs = length bs
-    lev as [] = length as
-    lev (a:as) (b:bs)
-      | a == b = lev as bs
-      | otherwise = 1 + minimum [lev as (b:bs), lev (a:as) bs, lev as bs]
+
+-- Bounded-time edit distance (Final review cleanup, Fix 1): the previous
+-- definition was the naive recursive Levenshtein, exponential in input
+-- length -- fine for the short garbage a real bad step produces, but a
+-- pathological long input (a garbage feature-file value) could hang
+-- `check`/`run` outright, and QuickCheck's own size ramp already had to
+-- be capped (`resize 8` in Spec.hs) just to keep ONE property test from
+-- hitting it. Fixed the algorithm itself, not the caller: this is the
+-- textbook Wagner-Fischer dynamic-programming table, built one row per
+-- character of `b` via `scanl` (each row reuses the previous row's
+-- values, so no cell is ever recomputed) -- O(length a * length b) time,
+-- same edit-distance definition (unit insert/delete/substitute cost) as
+-- the naive version it replaces, so genuine near-misses score exactly as
+-- before.
+lev :: String -> String -> Int
+lev a b = last (foldl transform [0 .. length a] b)
+  where
+    -- Every row this produces has length `length a + 1` (never []), but
+    -- that's a length invariant GHC can't see -- `head`/`tail` would
+    -- compile clean structurally but trip -Wx-partial (this project
+    -- builds with -Wall), and a bare `(x:xs')` function-clause pattern
+    -- with no `[]` equation trips -Wincomplete-patterns. An exhaustive
+    -- case with an unreachable-in-practice `[]` branch satisfies both
+    -- warnings honestly, without pretending the empty case is possible.
+    transform row c = case row of
+      [] -> []
+      (x : xs') -> scanl step (x + 1) (zip3 a row xs')
+      where
+        -- diag (x') carries the substitution cost; above (y, one column
+        -- back in the row just finished) carries a plain +1. Getting
+        -- these two swapped type-checks fine and still terminates, just
+        -- computes the wrong number -- checked against known distances
+        -- (e.g. "kitten" -> "sitting" = 3) in the test added alongside
+        -- this fix, not just eyeballed.
+        step z (ca, diag, above) = minimum [above + 1, z + 1, diag + fromEnum (ca /= c)]
 
 -- ---------- Piece / PieceSet ----------
 data Piece = Ground | Water | Fills | Borders | Claims | Labels | Markers

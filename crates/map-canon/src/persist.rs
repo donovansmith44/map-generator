@@ -39,16 +39,16 @@ fn unhex(s: &str) -> Result<ContentHash, String> {
     u64::from_str_radix(s, 16).map(ContentHash).map_err(|e| format!("bad id '{s}': {e}"))
 }
 
-fn layer_name(k: &LayerKind) -> &'static str {
-    match k {
-        LayerKind::Territory => "territory",
-        LayerKind::ScriptureClaims => "scripture-claims",
-        LayerKind::Journeys => "journeys",
-        LayerKind::Water => "water",
-        LayerKind::Relief => "relief",
-        LayerKind::Background => "background",
-    }
-}
+// Final-review cleanup, Fix 3: this used to be its own copy of the exact
+// same LayerKind -> wire-string mapping `lib.rs` defines for the census
+// (`layer_name`, brought in below by this module's own `use crate::*;`)
+// -- same strings, two definitions, no test tying them together, so
+// renaming a wire name in one would silently diverge the census from the
+// persisted canon. Call the one true definition instead of keeping a
+// second. `layer_from` (the inverse, right below) is untouched -- it has
+// no census-side counterpart to converge with -- but now gets its own
+// round-trip law test alongside this call site's change, so the two
+// directions stay provably honest with each other.
 
 fn layer_from(s: &str) -> Result<LayerKind, String> {
     Ok(match s {
@@ -358,3 +358,35 @@ pub fn from_bytes(bytes: &[u8]) -> Result<CanonStore, String> {
 // Silence unused-import lint gymnastics: BTreeMap is used via CanonStore internals.
 #[allow(unused)]
 fn _typecheck(_: &BTreeMap<(), ()>) {}
+
+#[cfg(test)]
+mod round_trip_tests {
+    use crate::LayerKind;
+
+    /// Final-review cleanup, Fix 3: `layer_name` (the census's mapping,
+    /// now the ONE definition -- this module used to keep its own
+    /// second copy of the same match arms) and `layer_from` (this
+    /// module's own inverse, just above) are two hand-written
+    /// directions over the same six wire strings, with nothing before
+    /// this test tying them together. A wire name changed in one but
+    /// not the other -- or a typo in `layer_from`'s match arms -- would
+    /// silently make the census and the persisted canon disagree about
+    /// what a layer is called on the wire, with no test catching it.
+    /// This pins name -> kind -> name for every LayerKind variant, not
+    /// just whichever ones happen to be exercised by another test.
+    #[test]
+    fn layer_name_and_layer_from_round_trip_every_kind() {
+        for kind in [
+            LayerKind::Territory,
+            LayerKind::ScriptureClaims,
+            LayerKind::Journeys,
+            LayerKind::Water,
+            LayerKind::Relief,
+            LayerKind::Background,
+        ] {
+            let name = crate::layer_name(&kind);
+            let back = super::layer_from(name).expect("every layer_name output must parse back");
+            assert_eq!(back, kind, "name -> kind -> name must round-trip for {name}");
+        }
+    }
+}

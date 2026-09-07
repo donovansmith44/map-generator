@@ -15,7 +15,7 @@ import Run
 import qualified Check
 import qualified Vocab
 import qualified Prop
-import Control.Exception (try, bracket, finally)
+import Control.Exception (try, bracket, evaluate, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.IORef (modifyIORef, newIORef, readIORef)
@@ -35,6 +35,7 @@ import System.FilePath ((</>))
 import System.IO
   (stdout, openTempFile, hClose, hFlush, hSetEncoding, utf8,
    hSetNewlineMode, noNewlineTranslation)
+import System.Timeout (timeout)
 
 main :: IO ()
 main = hspec $ do
@@ -109,6 +110,29 @@ main = hspec $ do
           e `shouldSatisfy` T.isInfixOf "topografy"
           e `shouldSatisfy` T.isInfixOf "ground"   -- the full universe is listed
         Right _ -> expectationFailure "accepted a non-piece"
+    -- Final-review cleanup, Fix 1: `lev` (Capture.hs) was rewritten from a
+    -- naive exponential recursion to a polynomial DP table. This pins the
+    -- one thing that fix must NOT change -- a genuine one-letter typo
+    -- still names the real word it's closest to, by the same <=3 gate.
+    it "a genuine one-letter typo still gets did-you-mean naming the \
+       \intended word (the rewritten lev must score exactly as before)" $
+      case parseCap @Piece "watre" of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "Did you mean: water?"
+        Right _ -> expectationFailure "accepted a typo as a real piece"
+    it "a long garbage capture returns promptly instead of hanging \
+       \(Final review cleanup, Fix 1: lev is now O(n*m), not exponential, \
+       \in input length -- the exponential version could hang `check`/`run` \
+       \outright on a long garbage feature-file value, not merely run slow)" $ do
+      -- 300 chars is instant for the O(n*m) replacement and nowhere near
+      -- computable in any realistic time for the old exponential `lev`
+      -- (which QuickCheck's own size ramp already had to be capped, at a
+      -- mere `resize 8`, to avoid hitting -- see the property test above).
+      let garbage = T.replicate 300 "q"
+      result <- timeout (10 * 1000 * 1000) (evaluate (didYouMean styleNames garbage))
+      case result of
+        Nothing -> expectationFailure
+          "didYouMean did not return within 10s on a 300-char garbage input"
+        Just r  -> r `shouldBe` ""  -- nowhere near any real style name
     it "years parse within the frame and refuse outside it" $ do
       parseCap @Year "-1405" `shouldBe` Right (Year (-1405))
       parseCap @Year "9999" `shouldSatisfy` isLeft
