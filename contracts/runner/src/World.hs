@@ -2,16 +2,41 @@ module World where
 
 import Data.Aeson (Value, eitherDecodeStrict)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Gherkin.Ast (Keyword)
 import Capture (StyleName, Universe, Year)
 import Pattern
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
+
+-- Final-review Fix 4: the ONE explicit-UTF-8 reader for a .feature file,
+-- shared by every call site that reads one (Run.runFeatureFiles,
+-- Check.checkDir, Prop.runWithProperties, Vocab.vocabDir) -- there used to
+-- be two DISAGREEING readers instead of one. Three sites called plain
+-- `TIO.readFile`, whose text-handle decoder uses the process's LOCALE
+-- encoding, not UTF-8 -- verified empirically on this toolchain: the
+-- locale encoding here is CP437, and `TIO.readFile` silently mangled a
+-- 3-byte UTF-8 em dash (U+2014) into three separate CP437 characters
+-- instead of raising an error (no exception, no warning -- a silent
+-- corruption). Vocab.hs alone got this right, decoding the raw bytes as
+-- UTF-8 explicitly, with a comment recording exactly that experiment --
+-- correct, not the wrong half of the disagreement. The corpus is full of
+-- em dashes (every feature title uses one) and the Stage 0 diagnosis
+-- table is generated straight from `Run.runFeatureFiles`'s output, so the
+-- three-site version was the live bug: the mojibake actually visible in
+-- this review's own console output ("the scene ΓÇö a picture...") is
+-- this defect firing, not a cosmetic footnote. One shared function
+-- collapses the disagreement structurally -- a future fifth call site
+-- gets the correct decode for free instead of a fresh chance to guess
+-- wrong.
+readFeatureFile :: FilePath -> IO Text
+readFeatureFile p = TE.decodeUtf8 <$> BS.readFile p
 
 data World = World
   { baseUrl      :: Text

@@ -10,7 +10,7 @@ import qualified Prop
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>), takeExtension)
-import World (Claim (..), StepDef (..))
+import World (Claim (..), StepDef (..), readFeatureFile)
 
 -- The totality law (spec §4): every step in every feature matches EXACTLY
 -- ONE definition, or CI fails naming the offenders. Under R23, a
@@ -127,7 +127,9 @@ checkDir :: [StepDef] -> FilePath -> IO ()
 checkDir defs dir = do
   files <- featureFilesLocal dir
   bad <- fmap concat . mapM (\p -> do
-    src <- TIO.readFile p
+    -- Fix 4: shared explicit-UTF-8 reader, not a plain TIO.readFile --
+    -- see World.readFeatureFile's comment.
+    src <- readFeatureFile p
     pure $ case parseFeature p src of
       Left e  -> [(T.pack p, "PARSE", e)]
       Right f -> [ (T.pack p <> " / " <> s, label v, describe b v)

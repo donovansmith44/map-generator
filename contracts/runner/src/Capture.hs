@@ -88,11 +88,24 @@ instance FromCapture PieceSet where
 -- ---------- Year ----------
 newtype Year = Year Int deriving (Eq, Ord, Show)
 
+-- Final-review Fix 3: year 0 does not exist in this calendar (1 BC is
+-- immediately followed by AD 1) -- a domain law, put in the type rather
+-- than left for the server to reject at run time. Before this fix,
+-- Year's universe silently ADMITTED 0 (both the Ranged description below
+-- and Prop.genYear's generator), so a drawn 0 made the (non-@target)
+-- subjects/census determinism properties hard-red for a reason that has
+-- nothing to do with either law -- a random, toolchain-timing-dependent
+-- false failure, not a real one. See MEMORY: types-over-tricks -- the
+-- fix belongs in parseCap/the generator/the universe description
+-- together, not as a special-cased runtime check bolted onto one call
+-- site.
 instance FromCapture Year where
   capName _ = "year"
-  universe _ = Ranged "-4004" "100" "negative means BC; -1405 is 1405 BC"
+  universe _ = Ranged "-4004" "100" "negative means BC; -1405 is 1405 BC; year 0 does not exist"
   renderCap (Year y) = T.pack (show y)
   parseCap t = case reads (T.unpack (T.strip t)) of
+    [(0, "")] -> Left $ "year 0 does not exist in this calendar (1 BC is followed by AD 1). "
+                             <> describeUniverse (universe (Proxy @Year))
     [(y, "")] | y >= (-4004) && y <= 100 -> Right (Year y)
     [(y, "")] -> Left $ "year " <> T.pack (show y) <> " is outside the frame. "
                       <> describeUniverse (universe (Proxy @Year))

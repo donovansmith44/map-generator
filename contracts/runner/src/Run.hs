@@ -6,7 +6,6 @@ import qualified Data.Text as T
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
 import World
-import qualified Data.Text.IO as TIO
 
 data Verdict = Passed | Failed Text | Skipped Text deriving (Eq, Show)
 
@@ -57,7 +56,10 @@ runFeatureFiles :: [StepDef] -> World -> [FilePath] -> IO [ScenarioResult]
 runFeatureFiles defs w paths = fmap concat . mapM one $ paths
   where
     one p = do
-      src <- TIO.readFile p
+      -- Fix 4: the shared explicit-UTF-8 reader (World.readFeatureFile),
+      -- not a plain TIO.readFile -- see its own comment for why that
+      -- silently corrupted this corpus's em dashes on this toolchain.
+      src <- readFeatureFile p
       case parseFeature p src of
         Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e)]
         Right f -> mapM (\sc -> ScenarioResult (ftTitle f) (scName sc) (scTags sc)

@@ -11,7 +11,7 @@ import Check (featureFilesLocal)
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
 import System.Exit (exitFailure)
-import World (Claim (..), StepDef (..))
+import World (Claim (..), StepDef (..), readFeatureFile)
 
 -- Reused rather than duplicated: `module Check where` carries no export
 -- list, so `featureFilesLocal` is already exposed, and Vocab -> Check
@@ -266,16 +266,22 @@ vocabDir defs dir writeMode = do
     -- every file before deciding anything is always safe to do.
     readAndParse :: FilePath -> IO (Either Text (FilePath, Text, Feature))
     readAndParse p = do
-      -- NOT TIO.readFile: verified empirically that this toolchain's
-      -- default text-handle decoder is NOT UTF-8 (it silently mangles a
-      -- 3-byte UTF-8 em dash into three separate Latin/Cyrillic-ish
-      -- characters instead of raising an error), which would corrupt
-      -- every non-ASCII prose line in the corpus (titles and scenario
-      -- names use em dashes throughout) the moment it round-trips through
-      -- a write. Decoding the raw bytes as UTF-8 explicitly is the read-
-      -- side half of the same fix as the encodeUtf8 write below.
-      raw <- BS.readFile p
-      let src = TE.decodeUtf8 raw
+      -- Final-review Fix 4: this used to decode the raw bytes as UTF-8
+      -- itself (verified empirically that this toolchain's default
+      -- text-handle decoder is NOT UTF-8 -- it silently mangles a 3-byte
+      -- em dash rather than raising an error, corrupting every em-dash
+      -- prose line in the corpus the moment it round-tripped through a
+      -- write). That experiment was correct, but doing it only HERE left
+      -- Run.hs/Check.hs/Prop.hs's plain `TIO.readFile` calls looking
+      -- fine by omission when they were not -- the very corruption this
+      -- comment warned about, just at the other three call sites instead
+      -- of this one. Now shared: World.readFeatureFile carries this
+      -- reasoning once, for all four readers, so there is one correct
+      -- decode instead of one right answer and three accidental wrong
+      -- ones. The write side (encodeUtf8 below) still needs its own
+      -- explicit encode; only the read side collapses into the shared
+      -- function.
+      src <- readFeatureFile p
       pure $ case parseFeature p src of
         Left e  -> Left (T.pack p <> ": " <> e)
         Right f -> Right (p, src, f)

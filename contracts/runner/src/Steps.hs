@@ -8,6 +8,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isSpace)
 import Data.Foldable (asum)
+import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set, member)
 import qualified Data.Set as Set
@@ -54,6 +55,54 @@ loadFixture w name = do
       raw <- BS.readFile path
       pure (either (Left . T.pack) Right (eitherDecodeStrict raw))
 
+-- Final-review Fix 5 (deferred minor, promoted): against a 2.4 MB
+-- manifest, "response differs from fixture X" names the fixture but not
+-- WHAT differs -- not a diagnosis at all, just a pointer back to a huge
+-- file the reader must now diff by hand. `firstDiff` walks both trees
+-- together and reports the FIRST point they disagree -- a JSON path plus
+-- the two values found there -- so `blessOrCompare`'s failure is
+-- actionable on its own. Built to short-circuit: `firstJust` never
+-- forces a later sibling once an earlier one has already reported a
+-- difference, so a huge manifest that differs near the front is never
+-- walked in full just to produce this message.
+firstDiff :: Value -> Value -> Maybe Text
+firstDiff = go "$"
+  where
+    go path expected actual
+      | expected == actual = Nothing
+      | otherwise = case (expected, actual) of
+          (Object oe, Object oa) ->
+            let ke = sort (map K.toText (KM.keys oe))
+                ka = sort (map K.toText (KM.keys oa))
+            in if ke /= ka
+                 then Just (path <> ": object keys differ -- fixture has ["
+                            <> T.intercalate ", " ke <> "], response has ["
+                            <> T.intercalate ", " ka <> "]")
+                 else firstJust
+                        [ go (path <> "." <> k) ve va
+                        | k <- ke
+                        , Just ve <- [KM.lookup (K.fromText k) oe]
+                        , Just va <- [KM.lookup (K.fromText k) oa]
+                        ]
+          (Array ae, Array aa)
+            | V.length ae /= V.length aa ->
+                Just (path <> ": array length differs -- fixture has "
+                      <> tshow (V.length ae) <> " element(s), response has "
+                      <> tshow (V.length aa))
+            | otherwise ->
+                firstJust
+                  [ go (path <> "[" <> tshow i <> "]") (ae V.! i) (aa V.! i)
+                  | i <- [0 .. V.length ae - 1] ]
+          _ -> Just (path <> ": fixture has " <> bounded expected
+                     <> ", response has " <> bounded actual)
+    -- Short-circuiting "any": stops at the first Just without forcing the
+    -- rest of the list (standard lazy foldr-based `any`/`asum` shape).
+    firstJust :: [Maybe Text] -> Maybe Text
+    firstJust = foldr (\x acc -> case x of Just _ -> x; Nothing -> acc) Nothing
+    tshow = T.pack . show
+    bounded v = let s = T.pack (show v)
+                in if T.length s > 120 then T.take 120 s <> "..." else s
+
 blessOrCompare :: Text -> World -> IO (Either Text World)
 blessOrCompare fname w = case Map.lookup "_last" (bound w) of
   Nothing -> pure (Left "no response to compare")
@@ -67,7 +116,8 @@ blessOrCompare fname w = case Map.lookup "_last" (bound w) of
           Left e -> Left e
           Right expected
             | expected == v -> Right w
-            | otherwise -> Left ("response differs from fixture " <> fname)
+            | otherwise -> Left ("response differs from fixture " <> fname <> ": "
+                                 <> maybe "(no leaf difference found)" id (firstDiff expected v))
 
 -- Ordering rule (R5, controller ruling) — UPDATED under R23, see below for
 -- what changed and what didn't. Originally: SPECIFIC step definitions must
@@ -293,14 +343,32 @@ allSteps =
     -- bytes -- see resources.feature's own title); dress rides styles,
     -- not payload ids, so restyling one piece must leave every id set
     -- EQUAL, not merely overlapping.
+    --
+    -- Final-review Fix 2: equal geometry ids alone only proves HALF of
+    -- this step's own name -- "never in geometry". A server that ignored
+    -- `style=` entirely (never re-dressed anything) would ALSO leave the
+    -- id sets equal and satisfy the old check, without ever demonstrating
+    -- "differ only in dress" at all. Masking the shared geometry id array
+    -- OUT of each whole bound body and requiring the REMAINDER to
+    -- genuinely differ proves the other half: something besides geometry
+    -- really did change between the two renders. This does not weaken
+    -- the geometry check -- both conditions are required, `&&`-style
+    -- (short-circuited as two sequential Either binds below).
   , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " and "
                                 <*> (capUntil @BindName " differ only in dress, never in geometry"))) $
       \(BindName a, BindName b) w ->
         pure $ do
           ra <- resourceSet a w
           rb <- resourceSet b w
-          if ra == rb then Right w
-          else Left "restyle changed geometry ids: dress is not local"
+          if ra /= rb
+            then Left "restyle changed geometry ids: dress is not local"
+            else do
+              va <- scene a w
+              vb <- scene b w
+              if setField "resources" Null va == setField "resources" Null vb
+                then Left ("dress did not actually change: " <> a <> " and " <> b
+                           <> " are identical once geometry ids are masked out")
+                else Right w
     -- Task 11: /api/resource returns a BINARY body -- transportRaw, not
     -- the JSON-decoding transport, is used here (see World.hs).
   , mkStep Then (lit "fetching " *> (capUntil @BindName "'s first resource twice yields identical bytes")) $

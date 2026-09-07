@@ -32,7 +32,9 @@ import System.Directory
   (getTemporaryDirectory, createDirectoryIfMissing, removeDirectoryRecursive, removeFile)
 import System.Exit (ExitCode)
 import System.FilePath ((</>))
-import System.IO (stdout, openTempFile, hClose, hFlush, hSetEncoding, utf8)
+import System.IO
+  (stdout, openTempFile, hClose, hFlush, hSetEncoding, utf8,
+   hSetNewlineMode, noNewlineTranslation)
 
 main :: IO ()
 main = hspec $ do
@@ -110,9 +112,29 @@ main = hspec $ do
     it "years parse within the frame and refuse outside it" $ do
       parseCap @Year "-1405" `shouldBe` Right (Year (-1405))
       parseCap @Year "9999" `shouldSatisfy` isLeft
-    prop "renderCap is a right inverse of parseCap for years" $
-      \(y :: Int) -> let y' = (-4004) + (abs y `mod` 4105) in
-        parseCap @Year (renderCap (Year y')) === Right (Year y')
+    -- Final-review Fix 3: year 0 does not exist in this calendar (1 BC is
+    -- immediately followed by AD 1) -- excluded from Year's universe BY
+    -- TYPE, not merely rejected by the server at run time. A drawn 0 used
+    -- to slip through parseCap and the generator both, making the
+    -- (non-@target) subjects/census determinism properties hard-red for a
+    -- reason unrelated to either law whenever a run happened to draw it.
+    it "year 0 is rejected -- there is no year zero in this calendar" $ do
+      case parseCap @Year "0" of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "year 0 does not exist"
+        Right _ -> expectationFailure "accepted year 0, which does not exist"
+    prop "renderCap is a right inverse of parseCap for years, excluding \
+         \year 0 (there is no year zero)" $
+      \(y :: Int) ->
+        -- Map an arbitrary Int onto -4004..100 EXCLUDING 0: candidate
+        -- ranges over the 4104 consecutive values -4004..99, and every
+        -- non-negative candidate is shifted up by one to skip 0 --
+        -- covering -4004..-1 and 1..100 exactly, with no year-0 case ever
+        -- generated (unlike a plain `mod 4105`, which would hit 0 about
+        -- 1 run in 4105 and intermittently break this law once Year
+        -- genuinely excludes it).
+        let candidate = (-4004) + (abs y `mod` 4104)
+            y' = if candidate >= 0 then candidate + 1 else candidate
+        in parseCap @Year (renderCap (Year y')) === Right (Year y')
     it "the empty piece set renders as none and round-trips" $ do
       renderCap (PieceSet Set.empty) `shouldBe` "none"
       parseCap @PieceSet "none" `shouldBe` Right (PieceSet Set.empty)
@@ -146,8 +168,17 @@ main = hspec $ do
       case matchP p "I render pieces water, topografy at year -1405" of
         Left e  -> e `shouldSatisfy` T.isInfixOf "not a piece"
         Right _ -> expectationFailure "matched garbage"
+    -- Final-review Fix 5 (deferred minor, promoted): this used to assert
+    -- only `isLeft` -- a test promising more than it delivers ("says
+    -- which literal") while checking nothing about WHICH literal, inside
+    -- the very suite built to outlaw exactly that gap (see MEMORY:
+    -- verify-distinct-not-nonnull). `lit`'s own error text already names
+    -- the literal it expected (Pattern.hs's `lit`); the test now checks
+    -- the message actually names it.
     it "a literal mismatch says which literal" $
-      matchP p "I paint pieces water at year 0" `shouldSatisfy` isLeft
+      case matchP p "I paint pieces water at year 1" of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "I render pieces"
+        Right _ -> expectationFailure "expected a literal mismatch to fail"
     it "declares its vocabulary uses" $
       map fst (usesOf p) `shouldBe` ["pieces", "year"]
     it "renders a human sketch" $
@@ -167,6 +198,48 @@ main = hspec $ do
       case matchP p "I render pieces water, topografy at year -1405" of
         Left e  -> e `shouldSatisfy` (not . T.isPrefixOf "expected literal")
         Right _ -> expectationFailure "matched garbage"
+    -- Final-review Fix 5 (deferred minor, promoted): the "expected
+    -- literal" prefix is load-bearing for the ENTIRE three-state Claim
+    -- classification (World.mkStep, R4) -- it is the one signal that
+    -- separates NoMatch ("not this step, try the next one") from
+    -- ClaimError ("this step, but the value is bad"). Nothing pinned that
+    -- a genuine capture failure (parseCap, not a missing literal) never
+    -- accidentally produces that exact prefix; a future FromCapture
+    -- instance that did would silently misclassify a bad value as a step
+    -- that "doesn't apply" instead of reporting it, with nothing going
+    -- red to say so. Probed over arbitrary text against every
+    -- FromCapture instance actually registered in this runner.
+    -- `resize 8`: a bad piece/style/projection name's parseCap runs it
+    -- through Capture.didYouMean, whose Levenshtein distance (`lev`) is
+    -- the naive, unmemoized recursive definition -- fine for the short
+    -- garbage names a real bad step actually produces, but exponential
+    -- in input length, so QuickCheck's default size ramp (up to ~99,
+    -- growing every test) would eventually hand it a string long enough
+    -- to hang the whole suite. Bounding the generated string's size
+    -- keeps this property fast while still covering the space of
+    -- realistic bad captures (empty, single-char, short garbage,
+    -- comma-separated junk) that the law actually needs to hold over.
+    prop "no registered FromCapture instance's parseCap error ever begins \
+         \\"expected literal\" -- capRest's Left must never be mistaken \
+         \for a NoMatch (R4)" $ forAll (resize 8 arbitrary) $ \s ->
+      let t = T.pack (s :: String)
+          voidR :: Either T.Text a -> Either T.Text ()
+          voidR = either Left (const (Right ()))
+          leftOf (Left e)  = [e]
+          leftOf (Right ()) = []
+          errs = concatMap leftOf
+            [ voidR (parseCap @Piece t)
+            , voidR (parseCap @PieceSet t)
+            , voidR (parseCap @Year t)
+            , voidR (parseCap @StyleName t)
+            , voidR (parseCap @FixtureRef t)
+            , voidR (parseCap @FixtureRefFreeText t)
+            , voidR (parseCap @UrlPath t)
+            , voidR (parseCap @BindName t)
+            , voidR (parseCap @MaskShape t)
+            , voidR (parseCap @ProjName t)
+            ]
+      in all (not . T.isPrefixOf "expected literal") errs
 
   describe "world and steps" $ do
     let -- The body echoes the URL it was fetched from (rather than a fixed
@@ -377,6 +450,85 @@ main = hspec $ do
         (A.decodeStrict written :: Maybe A.Value) `shouldBe`
           A.decodeStrict "{\"version\":\"0.1.0\",\"graphPin\":\"MASKED\"}"
 
+  describe "blessOrCompare diagnostics (Final review Fix 5): report WHAT \
+           \differs, not just the fixture's name" $ do
+    -- Against a 2.4 MB manifest, "response differs from fixture X" names
+    -- the fixture but not what actually differs -- not a diagnosis, just
+    -- a pointer back at a huge file. `firstDiff` (Steps.hs) is exercised
+    -- here through the real step, over real JSON, at three shapes of
+    -- disagreement: a plain top-level field, a value nested inside an
+    -- array of objects, and a genuine shape (key-set) mismatch.
+    it "names the first differing top-level field, with both values" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-blesscompare-field-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          fixtureBytes = "{\"a\":1,\"b\":2}"
+          actualBytes  = "{\"a\":1,\"b\":3}"
+          fake _ = pure (Right (actualBytes, fromJust (A.decodeStrict actualBytes)))
+          w = mkWorld "http://x" fake dir
+      createDirectoryIfMissing True dir
+      BS.writeFile (dir </> "foo.json") fixtureBytes
+      (`finally` removeDirectoryRecursive dir) $ do
+        Just get <- pure (firstMatch When "I GET /api/foo")
+        Right w1 <- get w
+        Just chk <- pure (firstMatch Then "the response equals fixture \"foo\"")
+        r <- chk w1
+        case r of
+          Left e -> do
+            e `shouldSatisfy` T.isInfixOf "foo"
+            e `shouldSatisfy` T.isInfixOf "$.b"
+            e `shouldSatisfy` T.isInfixOf "2"
+            e `shouldSatisfy` T.isInfixOf "3"
+          Right _ -> expectationFailure "expected a genuine field difference to fail"
+    it "names the first differing path inside a nested array, not merely \
+       \the fixture's name" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-blesscompare-array-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          fixtureBytes = "{\"resources\":[{\"id\":\"r1\"},{\"id\":\"r2\"}]}"
+          actualBytes  = "{\"resources\":[{\"id\":\"r1\"},{\"id\":\"rX\"}]}"
+          fake _ = pure (Right (actualBytes, fromJust (A.decodeStrict actualBytes)))
+          w = mkWorld "http://x" fake dir
+      createDirectoryIfMissing True dir
+      BS.writeFile (dir </> "scene.json") fixtureBytes
+      (`finally` removeDirectoryRecursive dir) $ do
+        Just get <- pure (firstMatch When "I GET /api/scene")
+        Right w1 <- get w
+        Just chk <- pure (firstMatch Then "the response equals fixture \"scene\"")
+        r <- chk w1
+        case r of
+          Left e -> do
+            e `shouldSatisfy` T.isInfixOf "$.resources[1].id"
+            e `shouldSatisfy` T.isInfixOf "r2"
+            e `shouldSatisfy` T.isInfixOf "rX"
+          Right _ -> expectationFailure "expected a genuine nested-array difference to fail"
+    it "names the keys that differ when the two shapes themselves disagree" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-blesscompare-shape-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          fixtureBytes = "{\"a\":1}"
+          actualBytes  = "{\"a\":1,\"extra\":true}"
+          fake _ = pure (Right (actualBytes, fromJust (A.decodeStrict actualBytes)))
+          w = mkWorld "http://x" fake dir
+      createDirectoryIfMissing True dir
+      BS.writeFile (dir </> "shape.json") fixtureBytes
+      (`finally` removeDirectoryRecursive dir) $ do
+        Just get <- pure (firstMatch When "I GET /api/shape")
+        Right w1 <- get w
+        Just chk <- pure (firstMatch Then "the response equals fixture \"shape\"")
+        r <- chk w1
+        case r of
+          Left e -> do
+            e `shouldSatisfy` T.isInfixOf "keys differ"
+            e `shouldSatisfy` T.isInfixOf "extra"
+          Right _ -> expectationFailure "expected a genuine key-set difference to fail"
+
   describe "scene algebra steps (Task 11): piece attribution, composition, dress-locality, resource identity" $ do
     it "every feature entry carries a piece field: passes when every entry has one" $ do
       let v = A.object ["features" A..= ([ A.object ["piece" A..= ("ground" :: T.Text)]
@@ -512,16 +664,48 @@ main = hspec $ do
         Left e  -> e `shouldSatisfy` T.isInfixOf "no year/style recorded"
         Right _ -> expectationFailure "expected combining with no prior render to fail"
 
-    it "dress-locality: two restyled scenes with identical resource ids pass" $ do
+    -- Final-review Fix 2: equal geometry ids alone is satisfiable by a
+    -- server that ignores `style=` outright, so the step must also prove
+    -- the remainder genuinely changed once geometry ids are masked out
+    -- (see Steps.hs's own comment on this definition). The old version of
+    -- this test used byte-IDENTICAL bodies for "dressed" and "redressed"
+    -- (same ids, nothing else either) and asserted `isRight` -- exactly
+    -- the case the fix closes, so it now needs a genuinely differing
+    -- dress (a "dress" field standing in for the real payload's
+    -- style-dependent fields) to still pass.
+    it "dress-locality: two restyled scenes with identical resource ids \
+       \but genuinely different dress pass" $ do
+      let sceneVal :: T.Text -> [T.Text] -> A.Value
+          sceneVal dress ids = A.object
+            [ "resources" A..= map (\i -> A.object ["id" A..= i]) ids
+            , "dress" A..= dress ]
+          w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                { bound = Map.fromList
+                    [ ("dressed", (BS.empty, sceneVal "canaan" ["r1", "r2"]))
+                    , ("redressed", (BS.empty, sceneVal "slate" ["r1", "r2"])) ] }
+          run = fromJust $ firstMatch Then "dressed and redressed differ only in dress, never in geometry"
+      r <- run w
+      r `shouldSatisfy` isRight
+    -- The case the fix actually closes: equal geometry ids AND an
+    -- otherwise byte-identical body (nothing restyled at all) must now
+    -- FAIL -- a server that silently ignored `style=` used to satisfy
+    -- this step's old, ids-only check.
+    it "dress-locality: identical bodies (dress unchanged too) fail -- \
+       \equal geometry ids alone must not be enough to pass" $ do
       let sceneVal :: [T.Text] -> A.Value
-          sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
+          sceneVal ids = A.object
+            [ "resources" A..= map (\i -> A.object ["id" A..= i]) ids
+            , "dress" A..= ("same" :: T.Text) ]
           w = (mkWorld "http://x" (\_ -> pure (Left "no")) "")
                 { bound = Map.fromList
                     [ ("dressed", (BS.empty, sceneVal ["r1", "r2"]))
                     , ("redressed", (BS.empty, sceneVal ["r1", "r2"])) ] }
           run = fromJust $ firstMatch Then "dressed and redressed differ only in dress, never in geometry"
       r <- run w
-      r `shouldSatisfy` isRight
+      case r of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "did not actually change"
+        Right _ -> expectationFailure
+          "expected an unchanged body (dress included) to fail, not pass on ids alone"
     it "dress-locality: a genuine geometry-id difference fails, naming that dress is not local" $ do
       let sceneVal :: [T.Text] -> A.Value
           sceneVal ids = A.object ["resources" A..= map (\i -> A.object ["id" A..= i]) ids]
@@ -907,6 +1091,72 @@ main = hspec $ do
               _ -> expectationFailure "expected ambiguity to fail loudly, not silently pick one"
           scs -> expectationFailure ("expected one scenario, got " <> show (length scs))
 
+  describe "Fix 4: one shared UTF-8 reader across every .feature read path" $ do
+    -- Verified empirically (this toolchain's locale encoding is CP437, not
+    -- UTF-8, via World.readFeatureFile's own comment): a plain
+    -- `TIO.readFile` silently mangles a 3-byte em dash instead of raising
+    -- an error. `Run.runFeatureFiles`, `Check.checkDir`, and
+    -- `Prop.runWithProperties` all used to read a feature file that way;
+    -- only `Vocab.vocabDir` decoded explicitly. Each of the three is
+    -- exercised here against a REAL file on disk containing a real em
+    -- dash, so this pins the actual IO read path (`World.readFeatureFile`),
+    -- not just `parseFeature`'s in-memory behavior on text that was
+    -- already correctly decoded some other way.
+    it "Run.runFeatureFiles preserves an em dash in a feature title read \
+       \from disk" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-fix4-run-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "emdash.feature"
+          feat = T.unlines
+            [ "Feature: the scene \8212 a picture"
+            , "  Scenario: s"
+            , "    When I GET /api/whatever" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 feat)
+      (`finally` removeDirectoryRecursive dir) $ do
+        let w = mkWorld "http://x" (\_ -> pure (Right ("{}", A.object []))) dir
+        [r] <- runFeatureFiles allSteps w [path]
+        srFeature r `shouldBe` "the scene \8212 a picture"
+    it "Prop.runWithProperties preserves an em dash in a feature title \
+       \read from disk" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-fix4-prop-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "emdash.feature"
+          feat = T.unlines
+            [ "Feature: the scene \8212 a picture"
+            , "  Scenario: s"
+            , "    When I GET /api/whatever" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 feat)
+      (`finally` removeDirectoryRecursive dir) $ do
+        let w = mkWorld "http://x" (\_ -> pure (Right ("{}", A.object []))) dir
+        [r] <- Prop.runWithProperties allSteps w 5 [path]
+        srFeature r `shouldBe` "the scene \8212 a picture"
+    it "Check.checkDir preserves an em dash in an orphan step's reported \
+       \body, not just in the file's title" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-fix4-check-test"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "emdash.feature"
+          feat = T.unlines
+            [ "Feature: t"
+            , "  Scenario: s"
+            , "    When nobody wrote this step \8212 a fixture-worthy orphan" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 feat)
+      (out, result) <- (`finally` removeDirectoryRecursive dir)
+        (captureStdout (Check.checkDir allSteps dir))
+      result `shouldSatisfy` isLeft
+      out `shouldSatisfy` T.isInfixOf "nobody wrote this step \8212 a fixture-worthy orphan"
+
   describe "totality" $ do
     it "names the orphan steps" $ do
       -- (Deviation from the brief's literal `let Right f = ...`: an
@@ -1232,7 +1482,7 @@ main = hspec $ do
           lookup "pieces" (Vocab.expectedVocab allSteps f)
             `shouldBe` Just "any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water"
           lookup "year" (Vocab.expectedVocab allSteps f)
-            `shouldBe` Just "whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC)"
+            `shouldBe` Just "whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist)"
     it "flags drift when the file's table disagrees" $ do
       case parseFeature "t.feature" $ T.unlines
              [ "Feature: t"
@@ -1573,6 +1823,39 @@ main = hspec $ do
             v2 <- Prop.runScenarioProperty allSteps w 25 sc
             v1 `shouldBe` v2
           [] -> expectationFailure "expected at least one scenario"
+    -- Final-review Fix 1 (Critical): scene.feature's composition property
+    -- registers `someA` and `someB` against the SAME generator
+    -- (`genPieces`). Before this fix, `renderHole`'s seed depended ONLY
+    -- on the iteration index, so `unGen` (pure) returned the identical
+    -- PieceSet for someA and someB on every single iteration -- the
+    -- composition scenario's "combine the parts, get the whole" assertion
+    -- degenerated to `x == x \`union\` x`, true for ANY server behaviour,
+    -- and its "target already met" green was an artifact of the
+    -- generator wiring, not a fact about the server. This is a
+    -- DISTINCTNESS assertion, not a non-nullity one (MEMORY:
+    -- verify-distinct-not-nonnull): it directly demonstrates that two
+    -- holes sharing a generator draw independently across a run, by
+    -- finding at least one iteration where they genuinely differ -- the
+    -- exact property whose absence made the composition law
+    -- unfalsifiable.
+    it "renderHole draws independently per hole name: two holes sharing \
+       \the SAME generator (someA/someB's real situation in scene.feature) \
+       \genuinely differ at least once across a run of iterations" $ do
+      let someHole = Prop.SomeHole Prop.genPieces
+          draws = [ (Prop.renderHole "someA" someHole i, Prop.renderHole "someB" someHole i)
+                  | i <- [0 .. 49] ]
+      draws `shouldSatisfy` any (uncurry (/=))
+    -- The seed is still a PURE function of (name, i) -- no wall-clock or
+    -- other live entropy crept in alongside the independence fix. Same
+    -- name, same iteration must always render identically (this is what
+    -- lets a single @property scenario substitute one <someA> value
+    -- consistently across every step body that mentions it within one
+    -- iteration).
+    it "renderHole is still deterministic: the same hole name at the same \
+       \iteration always renders identically" $ do
+      let someHole = Prop.SomeHole Prop.genPieces
+      Prop.renderHole "someA" someHole 7 `shouldBe` Prop.renderHole "someA" someHole 7
+      Prop.renderHole "someB" someHole 13 `shouldBe` Prop.renderHole "someB" someHole 13
     -- Requirement 4: the empty piece set (the scene monoid's identity) MUST
     -- be in genPieces' codomain, and MUST round-trip through substitution
     -- into a body the real step vocabulary still parses ("none", not "").
@@ -1597,7 +1880,7 @@ main = hspec $ do
       let feat = T.unlines
             [ "Feature: t"
             , "  Scenario: s"
-            , "    When I render pieces <somePieces> at year 0 in style canaan as a" ]
+            , "    When I render pieces <somePieces> at year 1 in style canaan as a" ]
           fake url = pure (Right (bs, fromJust (A.decodeStrict bs)))
             where bs = TE.encodeUtf8 ("{\"echo\":\"" <> url <> "\"}")
           w = mkWorld "http://x" fake ""
@@ -1608,7 +1891,7 @@ main = hspec $ do
             let sc' = Prop.substitute (Map.fromList [("somePieces", "none")]) sc
             case scSteps sc' of
               (Step _ b _ : _) ->
-                b `shouldBe` "I render pieces none at year 0 in style canaan as a"
+                b `shouldBe` "I render pieces none at year 1 in style canaan as a"
               [] -> expectationFailure "expected a step"
             v <- runScenario allSteps w sc'
             v `shouldBe` Passed
@@ -1735,14 +2018,34 @@ captureStdout act = do
   (path, h) <- openTempFile tmpDir "capture.txt"
   (`finally` removeFile path) $ do
     result <- (`finally` hClose h) $ do
+      -- Both settings on BOTH handles, defensively: `hDuplicateTo`
+      -- redirects the live process `stdout` onto `h`'s underlying OS
+      -- handle, but empirically does not reliably carry over `h`'s own
+      -- TextEncoding/NewlineMode onto the now-redirected `stdout` (a real
+      -- em dash written by `act` through `stdout` crashed with
+      -- "commitAndReleaseBuffer: invalid argument" before `stdout` itself
+      -- was also forced to UTF-8 here) -- and `noNewlineTranslation`
+      -- keeps this test harness's own LF bytes from being silently
+      -- rewritten to CRLF on Windows the same way Vocab.hs's write side
+      -- had to guard against for the real corpus.
       hSetEncoding h utf8
+      hSetNewlineMode h noNewlineTranslation
       bracket (hDuplicate stdout)
               (\old -> hDuplicateTo old stdout >> hClose old)
               (\_ -> do
                   hDuplicateTo h stdout
+                  hSetEncoding stdout utf8
+                  hSetNewlineMode stdout noNewlineTranslation
                   try act `finally` hFlush stdout)
-    txt <- TIO.readFile path
-    pure (txt, result)
+    -- Read-side counterpart of Fix 4: the write side above is forced to
+    -- UTF-8, but a plain `TIO.readFile` here would read those same bytes
+    -- back through the LOCALE decoder (verified elsewhere in this file to
+    -- be CP437 on this toolchain, not UTF-8), silently mangling any em
+    -- dash a captured diagnosis line contains -- the identical defect
+    -- Fix 4 closes for feature-file reads, just inside this test helper
+    -- instead of the library.
+    raw <- BS.readFile path
+    pure (TE.decodeUtf8 raw, result)
 
 -- Task 11 added `transportRaw` to `World`; touching all ~14 existing
 -- `World base transport dir mempty False` construction sites with a new
