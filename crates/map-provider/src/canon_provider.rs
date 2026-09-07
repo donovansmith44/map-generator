@@ -103,11 +103,11 @@ fn piece_of_region(l: LayerKind) -> Option<Piece> {
 }
 
 /// The boundary half of the same total function. A relief band's
-/// outline belongs to GROUND: the At path draws no relief outline, but
-/// the accumulation tail age-tints the outline of every visited
-/// layer's areas, relief included, and a boundary that EXISTS must
-/// name its piece. (Reading this arm as `None` and guarding on it
-/// deleted those outlines outright.)
+/// outline belongs to GROUND: the At path draws no relief outline (see
+/// `area_draws_outline`), but the accumulation tail age-tints the
+/// outline of every visited layer's areas, relief included, and a
+/// boundary that EXISTS must name its piece. (Reading this arm as
+/// `None` and guarding on it deleted those outlines outright.)
 fn piece_of_boundary(l: LayerKind) -> Option<Piece> {
     match l {
         LayerKind::Relief => Some(Piece::Ground),
@@ -118,12 +118,34 @@ fn piece_of_boundary(l: LayerKind) -> Option<Piece> {
     }
 }
 
+// The two facts about what an AREA itself emits, each stated ONCE.
+// `pieces_of_layer` reads them to build a layer's emittable set and
+// `push_area` reads them to decide what to build, so the set and the
+// push sites cannot drift apart: change a predicate here and both
+// move together.
+
+/// Relief bands and water faces ship as FILL alone — a stroke on a
+/// shoreline draws a seam through the sea, and a band's edge is its
+/// fill's edge. Read by `push_area` (both its early return and its
+/// outline block) and named by `piece_of_boundary`'s doc.
+fn area_draws_outline(l: LayerKind) -> bool {
+    !matches!(l, LayerKind::Relief | LayerKind::Water)
+}
+
+/// A relief band is unnamed ground: it has no name to place. Every
+/// other layer's areas carry theirs. Read by `push_area`'s early
+/// return and its label block, and by `pieces_of_layer` to DERIVE
+/// whether the layer contributes Labels at all.
+fn area_is_named(l: LayerKind) -> bool {
+    !matches!(l, LayerKind::Relief)
+}
+
 /// THE EMITTABLE SET: every piece layer `l` can put into a scene — its
-/// region piece, its boundary piece, the pieces of any markers that
-/// stand in it, and Labels if anything in it is named. Total by
+/// region piece, its boundary piece, Labels if it has names to place,
+/// and the piece of any marker that stands in it. Total by
 /// construction: a new LayerKind fails to compile until it declares
-/// what it can emit, and there is no per-layer string of special cases
-/// for a later reader to misread.
+/// where a standing point may be found, and there is no per-layer
+/// string of special cases for a later reader to misread.
 fn pieces_of_layer(l: LayerKind) -> PieceSet {
     let mut s = PieceSet::empty();
     if let Some(p) = piece_of_region(l) {
@@ -132,21 +154,26 @@ fn pieces_of_layer(l: LayerKind) -> PieceSet {
     if let Some(p) = piece_of_boundary(l) {
         s = s.with(p);
     }
+    // Labels is DERIVED from the same predicate `push_area` reads, so
+    // the two can never disagree: a layer contributes names when it
+    // HAS areas and those areas are named. Journeys has no areas at
+    // all (a way is a line, never a face) and its station names ride
+    // with the Journeys piece, so it contributes no Labels — which is
+    // why nothing in that layer ships unless Journeys is wanted.
+    if piece_of_region(l).is_some() && area_is_named(l) {
+        s = s.with(Piece::Labels);
+    }
+    // Where a STANDING POINT may be found. The only per-layer
+    // knowledge left, and the compiler makes a new layer declare it.
     match l {
-        // Bands of unnamed ground: no marker stands in them, and
-        // `push_area` skips a relief area's label by name.
-        LayerKind::Relief => s,
-        // A way's road, its stations and their names are ONE piece:
-        // nothing in this layer ships unless Journeys is wanted, so
-        // Labels does not belong in its emittable set.
-        LayerKind::Journeys => s,
-        // The gazetteer's standing landmarks are overlaid into
-        // ScriptureClaims (map-compile's partition_bridge puts every
-        // city there), and any layer's areas and points can be named.
+        LayerKind::Relief => s,   // no point stands in a band of ground
+        LayerKind::Journeys => s, // a way's stations are stamped Journeys, not Markers
+        // The gazetteer's cities are overlaid into ScriptureClaims by
+        // map-compile's partition_bridge; any of these may hold one.
         LayerKind::Background
         | LayerKind::Territory
         | LayerKind::ScriptureClaims
-        | LayerKind::Water => s.with(Piece::Markers).with(Piece::Labels),
+        | LayerKind::Water => s.with(Piece::Markers),
     }
 }
 
@@ -393,10 +420,9 @@ impl CanonProvider {
         // asked for, so a Water layer visited only for its markers
         // must not pay to simplify every coastline.
         let wants_face = piece_of_region(layer).is_some_and(|p| q.pieces.contains(p));
-        let wants_edge = layer != LayerKind::Relief
-            && layer != LayerKind::Water
+        let wants_edge = area_draws_outline(layer)
             && piece_of_boundary(layer).is_some_and(|p| q.pieces.contains(p));
-        let wants_name = q.pieces.contains(Piece::Labels) && layer != LayerKind::Relief;
+        let wants_name = area_is_named(layer) && q.pieces.contains(Piece::Labels);
         if !wants_face && !wants_edge && !wants_name {
             return;
         }
@@ -455,7 +481,7 @@ impl CanonProvider {
         // The outline ships only if ITS piece is wanted — an area's
         // fill and its border are separable for the first time.
         if let Some(piece) = piece_of_boundary(layer).filter(|p| q.pieces.contains(*p)) {
-            if layer != LayerKind::Relief && layer != LayerKind::Water {
+            if area_draws_outline(layer) {
                 for ring in &outer {
                     scene.boundaries.push(StyledBoundary {
                         boundary: bid_of(&a.entity),
@@ -467,7 +493,7 @@ impl CanonProvider {
                 }
             }
         }
-        if q.pieces.contains(Piece::Labels) && layer != LayerKind::Relief {
+        if wants_name {
             if let Some(at) =
                 self.label_anchor.get(&fid).copied().or_else(|| centroid(&outer)) {
                 let labeling = style.labeling();
@@ -953,6 +979,17 @@ impl MapProvider for CanonProvider {
                 let ramp = style.age_ramp();
                 let mut seen: BTreeSet<FeatureId> = BTreeSet::new();
                 for layer in layers_wanted(q.pieces) {
+                    // An age-tinted outline is still an outline: the
+                    // same total function attributes it, and it is a
+                    // property of the LAYER, not of any one moment.
+                    // (The attribution table named no row for this
+                    // tail; the push site is the authority, and it
+                    // pushes boundaries.)
+                    let Some(age_piece) =
+                        piece_of_boundary(layer).filter(|p| q.pieces.contains(*p))
+                    else {
+                        continue;
+                    };
                     let Some(world) = self.store.layers().get(&layer) else { continue };
                     let moments: Vec<Timestamp> = world
                         .moments()
@@ -967,16 +1004,6 @@ impl MapProvider for CanonProvider {
                             continue;
                         }
                         let toward = i as f64 / n as f64;
-                        // An age-tinted outline is still an outline: the
-                        // same total function attributes it. (The table
-                        // named no row for the accumulation tail; the
-                        // push site is the authority, and it pushes
-                        // boundaries.)
-                        let Some(age_piece) =
-                            piece_of_boundary(layer).filter(|p| q.pieces.contains(*p))
-                        else {
-                            continue;
-                        };
                         for (fid, f) in self.active(layer, t) {
                             if !seen.insert(fid) {
                                 continue;

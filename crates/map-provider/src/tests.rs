@@ -737,6 +737,49 @@ mod canon_provider_laws {
         }
     }
 
+    /// THE OWNER'S RULING, 2026-09-07: LABELS ARE SEPARATE FROM
+    /// SURFACES. Asking for names without the seas keeps the sea's
+    /// NAME and drops only its water — its fill and its river lines.
+    ///
+    /// This is a deliberate change from the old `topo=0` behavior,
+    /// where a water label could only ship if the water layer's FILL
+    /// was also asked for. That coupling is precisely the piece
+    /// entanglement this stage dissolves: a name is its own piece, so
+    /// a caller may have the Sea of Galilee written on bare ground, or
+    /// a silent map with every surface intact. The owner ruled to keep
+    /// it when the re-review raised it.
+    #[test]
+    fn a_name_does_not_need_its_surface() {
+        use map_types::{Piece, PieceSet};
+        let (p, sid) = every_piece_provider();
+        let named_without_water = PieceSet::all().without(Piece::Water);
+        let scene = p.render(&world_q_pieces(sid, -1400, named_without_water)).unwrap();
+
+        // the sea keeps its name...
+        assert!(
+            scene.labels.iter().any(|l| l.text == "the-sea"),
+            "the sea's NAME survives its fill being unwanted (labels are a piece of their own)"
+        );
+        // ...and nothing of the water surface itself survives: no
+        // fill, no river line.
+        assert!(scene.regions.iter().all(|r| r.piece != Piece::Water));
+        assert!(scene.boundaries.iter().all(|b| b.piece != Piece::Water));
+        assert!(
+            !scene.regions.iter().any(|r| r.entity.as_deref() == Some("the-sea")),
+            "the sea's own ground stays home"
+        );
+
+        // The converse of the same ruling: surfaces without names. The
+        // sea's water ships, its name does not.
+        let silent = PieceSet::all().without(Piece::Labels);
+        let scene = p.render(&world_q_pieces(sid, -1400, silent)).unwrap();
+        assert!(scene.labels.is_empty(), "a silent map is a legal map");
+        assert!(
+            scene.regions.iter().any(|r| r.entity.as_deref() == Some("the-sea")),
+            "and the water is untouched by the silence"
+        );
+    }
+
     /// THE ACCUMULATION TAIL KEEPS ITS RELIEF. A range render
     /// age-tints the outline of every visited layer's areas — relief
     /// included, which the At path never draws. A boundary that EXISTS
@@ -782,6 +825,16 @@ mod canon_provider_laws {
     /// below were measured against the pre-`piece` provider on this
     /// same fixture. Piece attribution is new information, not a new
     /// answer.
+    ///
+    /// WHAT THIS COVERS, AND WHAT IT DELIBERATELY DOES NOT. This pins
+    /// the DEFAULT path — every flag as the UI ships it — and that
+    /// path is unchanged. It is NOT extended to the `topo=0`
+    /// combination, which the owner ruled on 2026-09-07 SHOULD change:
+    /// a water label no longer needs the water's fill to ship. That
+    /// ruling has its own pin, `a_name_does_not_need_its_surface`.
+    /// Two different questions, two different tests; folding the
+    /// changed combination in here would turn a preservation law into
+    /// a record of whatever the code now does.
     #[test]
     fn todays_defaults_render_exactly_what_they_rendered_before() {
         let (p, sid) = provider();
