@@ -1667,7 +1667,25 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
         scene.markers.len() as u32,
         "the split moved markers between buffers; it did not add or lose any"
     );
-    // Three buckets: (Markers, a), (Markers, b), (Journeys, a).
+    // Three buckets: (a, Markers), (b, Markers), (a, Journeys).
     assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Markers).count(), 2);
     assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Journeys).count(), 1);
+
+    // Paint order is key order, and the key is STYLE-major: the marker
+    // entries' style keys are non-decreasing, which is exactly the
+    // sequence the pre-split encoder emitted (it keyed on style alone).
+    // Piece-major grouping would interleave them — (a, b, a) here — and
+    // reorder markers of unrelated paints against each other, changing
+    // pixels the split has no business changing.
+    let style_seq: Vec<_> = enc
+        .manifest
+        .features
+        .iter()
+        .filter(|f| f.feature.starts_with("markers"))
+        .map(|f| f.style)
+        .collect();
+    assert!(
+        style_seq.windows(2).all(|w| w[0] <= w[1]),
+        "marker entries must stay style-major, preserving the pre-split paint order"
+    );
 }

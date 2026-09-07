@@ -565,7 +565,7 @@ impl GpuSceneEncoder {
                 });
             }
         }
-        // MARKERS, BY PIECE AND PAINT. The previous key was paint alone,
+        // MARKERS, BY PAINT AND PIECE. The previous key was paint alone,
         // so every piece's markers landed in one buffer whose CONTENTS
         // depended on which pieces were enabled — turning journeys off
         // changed a buffer that Markers was also using, changing its
@@ -573,15 +573,23 @@ impl GpuSceneEncoder {
         // subset of the full scene's (diagnosis §3.2). The piece is now
         // part of the grouping key, so a piece's buffer is a function of
         // that piece alone.
-        let mut by_piece_style: BTreeMap<(Piece, StyleKey), Vec<UnitVec>> = BTreeMap::new();
+        //
+        // The key is (style, piece) and NOT (piece, style) on purpose:
+        // paint order here is key order, so keying style-major
+        // reproduces the pre-split sequence exactly — every new ordering
+        // question is confined to WITHIN a formerly-merged bucket, where
+        // there was no answer to preserve. Piece-major would instead
+        // re-sort every marker entry against every other one, changing
+        // pixels wherever markers of unrelated paints overlap.
+        let mut by_style_piece: BTreeMap<(StyleKey, Piece), Vec<UnitVec>> = BTreeMap::new();
         for m in &scene.markers {
             let sk = style_of(
                 &mut styles,
                 GpuStyle::Marker { color: m.style.color, size: m.style.size },
             );
-            by_piece_style.entry((m.piece, sk)).or_default().push(m.at);
+            by_style_piece.entry((sk, m.piece)).or_default().push(m.at);
         }
-        for ((piece, sk), pts) in by_piece_style {
+        for ((sk, piece), pts) in by_style_piece {
             let (id, geom) = add(&mut resources, &mut seen, ResourceKind::Points, &pts);
             features.push(FeatureInstance {
                 feature: format!("markers:{}", piece.name()),
