@@ -1533,46 +1533,141 @@ fn limb_fixtures_match_rust() {
     );
 }
 
-// ---------------------------------------- Stage 1 Task 1: shared buffer
+// ------------------------------- Stage 1 Task 10: the buffer, split
 
-/// TASK 1 (Stage 1): the shared-buffer finding, pinned so it cannot
-/// change silently. Two markers of DIFFERENT semantic origin — one a
-/// journey station, one a gazetteer landmark — wearing the SAME
-/// MarkerStyle land in ONE `points` resource today. That is the whole
-/// of the composition red: omitting either origin changes the other's
-/// bytes, hence its content address, hence the resource set.
-///
-/// Task 10 inverts this test. Until then it is the record.
+fn marker_of(lat: f64, lon: f64, paint: MarkerStyle, piece: map_types::Piece) -> StyledMarker {
+    StyledMarker { at: uv(lat, lon), style: paint, sources: Default::default(), place: None, piece }
+}
+
+/// TASK 10 (Stage 1): the inversion of Task 1's pin. Two markers of
+/// different pieces wearing the SAME paint now land in TWO buffers, so
+/// omitting one piece cannot change the other's bytes.
 #[test]
-fn markers_from_two_origins_share_one_points_buffer() {
+fn markers_of_different_pieces_never_share_a_points_buffer() {
+    use map_types::Piece;
+
     let paint = MarkerStyle { color: Rgba(10, 20, 30, 255), size: 3.0 };
-    // The two ORIGINS the docstring names, now sayable: a journey
-    // station and a gazetteer landmark. They still land in one buffer
-    // today — that is the red this test pins.
-    let mk = |lat: f64, lon: f64, piece: map_types::Piece| StyledMarker {
-        at: uv(lat, lon),
-        style: paint,
-        sources: Default::default(),
-        place: None,
-        piece,
-    };
     let mut scene = Snapshot::empty();
     scene.markers = vec![
-        mk(31.0, 35.0, map_types::Piece::Journeys),
-        mk(32.0, 35.5, map_types::Piece::Markers),
+        marker_of(31.0, 35.0, paint, Piece::Markers),
+        marker_of(32.0, 35.0, paint, Piece::Journeys),
     ];
+    let enc = gpu_encode(&scene);
 
-    let encoded = GpuSceneEncoder::default().encode(&scene).expect("encode");
+    let points: Vec<_> =
+        enc.resources.iter().filter(|r| r.descriptor.kind == ResourceKind::Points).collect();
+    assert_eq!(points.len(), 2, "one buffer per (piece, paint), not per paint");
+    assert!(points.iter().all(|r| r.descriptor.vertex_count == 1));
 
-    let points: Vec<_> = encoded
-        .resources
+    // Every marker feature entry names the piece it holds, and the two
+    // entries are told apart by that name — not by paint, which is one
+    // and the same here.
+    let keys: BTreeSet<&str> = enc
+        .manifest
+        .features
         .iter()
-        .filter(|r| r.descriptor.kind == ResourceKind::Points)
+        .filter(|f| f.feature.starts_with("markers"))
+        .map(|f| f.feature.as_str())
         .collect();
-    assert_eq!(points.len(), 1, "today: one shared points buffer for every marker origin");
-    assert_eq!(points[0].descriptor.vertex_count, 2, "both markers packed into it");
+    assert_eq!(
+        keys,
+        ["markers:journeys", "markers:markers"].into_iter().collect::<BTreeSet<_>>(),
+        "the feature key names what the entry holds"
+    );
 
-    let marker_entries: Vec<_> =
-        encoded.manifest.features.iter().filter(|f| f.feature == "markers").collect();
-    assert_eq!(marker_entries.len(), 1, "one undifferentiated 'markers' entry");
+    // THE LAW THE WHOLE STAGE IS FOR: dropping one piece leaves the
+    // other's resource byte-identical.
+    let only_markers = scene.restrict(map_types::PieceSet::empty().with(Piece::Markers));
+    let enc2 = gpu_encode(&only_markers);
+    let kept: Vec<_> =
+        enc2.resources.iter().filter(|r| r.descriptor.kind == ResourceKind::Points).collect();
+    assert_eq!(kept.len(), 1);
+    assert!(
+        points.iter().any(|r| r.descriptor.id == kept[0].descriptor.id),
+        "the surviving piece's buffer kept its content address"
+    );
+    assert!(
+        points.iter().any(|r| r.payload == kept[0].payload),
+        "and its bytes, not merely its length"
+    );
+}
+
+/// Attribution is present AND correct AND varies — §6.3's trap refused:
+/// a server that stamps one value on everything must fail this.
+#[test]
+fn every_manifest_entry_names_its_piece_correctly() {
+    use map_types::Piece;
+
+    // A Fills region, a Borders boundary, a Journeys station marker and
+    // a Labels label — four pieces, one scene.
+    let mut scene = sample_scene();
+    scene.markers[0].piece = Piece::Journeys;
+    let enc = gpu_encode(&scene);
+
+    let seen: BTreeSet<_> = enc.manifest.features.iter().map(|f| f.piece).collect();
+    assert!(
+        seen.contains(&Piece::Fills)
+            && seen.contains(&Piece::Borders)
+            && seen.contains(&Piece::Journeys)
+    );
+    assert!(seen.len() >= 3, "a constant attribution is not an attribution");
+    assert!(enc.manifest.labels.iter().all(|l| l.piece == Piece::Labels));
+    assert!(enc.manifest.markers.iter().all(|m| m.piece == Piece::Journeys));
+
+    // Each entry names ITS OWN piece, not just some piece: the region
+    // entry says fills, the boundary entry says borders.
+    for f in &enc.manifest.features {
+        let expect = if f.feature.starts_with("region:") {
+            Piece::Fills
+        } else if f.feature.starts_with("boundary:") {
+            Piece::Borders
+        } else {
+            Piece::Journeys
+        };
+        assert_eq!(f.piece, expect, "entry {} misattributed", f.feature);
+    }
+
+    let json = enc.manifest_json();
+    assert!(json.contains("\"piece\":\"fills\"") && json.contains("\"piece\":\"borders\""));
+    assert!(json.contains("\"piece\":\"journeys\"") && json.contains("\"piece\":\"labels\""));
+}
+
+/// The split conserves vertices: markers are regrouped, never dropped
+/// and never duplicated. Summing over the marker FEATURE entries (not
+/// over the deduped resource list) is the honest count — two pieces
+/// standing on identical points legitimately share one address, and
+/// each entry still accounts for its own markers.
+#[test]
+fn splitting_the_points_buffer_conserves_every_marker_vertex() {
+    use map_types::Piece;
+
+    let a = MarkerStyle { color: Rgba(10, 20, 30, 255), size: 3.0 };
+    let b = MarkerStyle { color: Rgba(200, 40, 40, 255), size: 5.0 };
+    let mut scene = Snapshot::empty();
+    scene.markers = vec![
+        marker_of(31.0, 35.0, a, Piece::Markers),
+        marker_of(32.0, 35.0, a, Piece::Markers),
+        marker_of(33.0, 35.0, b, Piece::Markers),
+        marker_of(34.0, 35.0, a, Piece::Journeys),
+        marker_of(35.0, 35.0, a, Piece::Journeys),
+    ];
+    let enc = gpu_encode(&scene);
+
+    let by_id: std::collections::BTreeMap<_, _> =
+        enc.resources.iter().map(|r| (r.descriptor.id, &r.descriptor)).collect();
+    let total: u32 = enc
+        .manifest
+        .features
+        .iter()
+        .filter(|f| f.feature.starts_with("markers"))
+        .map(|f| by_id[&f.resource].vertex_count)
+        .sum();
+    assert_eq!(
+        total,
+        scene.markers.len() as u32,
+        "the split moved markers between buffers; it did not add or lose any"
+    );
+    // Three buckets: (Markers, a), (Markers, b), (Journeys, a).
+    assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Markers).count(), 2);
+    assert_eq!(enc.manifest.features.iter().filter(|f| f.piece == Piece::Journeys).count(), 1);
 }

@@ -23,8 +23,8 @@ use std::fmt::Write as _;
 use std::hash::{Hash, Hasher};
 
 use map_types::ident::{Canon, ContentHash};
-use map_types::style::{MarkerStyle, Rgba, StrokePattern};
-use map_types::{EncodeError, MapAddressed, SceneEncoder, Snapshot, UnitVec};
+use map_types::style::{Rgba, StrokePattern};
+use map_types::{EncodeError, MapAddressed, Piece, SceneEncoder, Snapshot, UnitVec};
 
 /// A rendering representation's content address (§7): kind + payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -101,9 +101,13 @@ pub struct GeometryResource {
 /// in the manifest is paint order — overlay order is meaning.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FeatureInstance {
-    /// "region:HEX" | "boundary:HEX" | "markers" — the same keys the
-    /// rest of the wire speaks.
+    /// "region:HEX" | "boundary:HEX" | "markers:PIECE" — the same keys
+    /// the rest of the wire speaks.
     pub feature: String,
+    /// The piece this entry belongs to (spec §3): what a consumer names
+    /// when it omits, and what makes an entry's presence a function of
+    /// its own piece alone.
+    pub piece: Piece,
     pub geometry: GeometryId,
     pub resource: ResourceId,
     pub style: StyleKey,
@@ -149,6 +153,10 @@ pub struct LabelResource {
     pub voice_tracking_em: f64,
     pub voice_advance_em: f64,
     pub priority: u32,
+    /// The piece this label belongs to (§3) — journey station labels
+    /// ride Journeys, water names ride Water: a label's piece is not
+    /// always Labels, so it is carried, never derived downstream.
+    pub piece: Piece,
 }
 
 /// One marker with its semantic identity — hit testing maps a click
@@ -158,6 +166,9 @@ pub struct MarkerResource {
     pub at: (f64, f64, f64),
     pub place: Option<String>,
     pub size: f64,
+    /// The piece this marker belongs to (§3): a journey station and a
+    /// gazetteer landmark are different things wearing the same paint.
+    pub piece: Piece,
 }
 
 /// The page dress the retained renderer composes against — resolved
@@ -523,6 +534,7 @@ impl GpuSceneEncoder {
                         add(&mut resources, &mut seen, ResourceKind::RingLoop, &piece);
                     features.push(FeatureInstance {
                         feature: format!("region:{:016x}", r.region.0 .0),
+                        piece: r.piece,
                         geometry: geom,
                         resource: id,
                         style: sk,
@@ -546,24 +558,34 @@ impl GpuSceneEncoder {
                 let (id, geom) = add(&mut resources, &mut seen, ResourceKind::LineStrip, &piece);
                 features.push(FeatureInstance {
                     feature: format!("boundary:{:016x}", b.boundary.0 .0),
+                    piece: b.piece,
                     geometry: geom,
                     resource: id,
                     style: sk,
                 });
             }
         }
-        let mut by_style: BTreeMap<StyleKey, (MarkerStyle, Vec<UnitVec>)> = BTreeMap::new();
+        // MARKERS, BY PIECE AND PAINT. The previous key was paint alone,
+        // so every piece's markers landed in one buffer whose CONTENTS
+        // depended on which pieces were enabled — turning journeys off
+        // changed a buffer that Markers was also using, changing its
+        // content address, so `noJourneys`' resource set was not a
+        // subset of the full scene's (diagnosis §3.2). The piece is now
+        // part of the grouping key, so a piece's buffer is a function of
+        // that piece alone.
+        let mut by_piece_style: BTreeMap<(Piece, StyleKey), Vec<UnitVec>> = BTreeMap::new();
         for m in &scene.markers {
             let sk = style_of(
                 &mut styles,
                 GpuStyle::Marker { color: m.style.color, size: m.style.size },
             );
-            by_style.entry(sk).or_insert_with(|| (m.style, Vec::new())).1.push(m.at);
+            by_piece_style.entry((m.piece, sk)).or_default().push(m.at);
         }
-        for (sk, (_, pts)) in by_style {
+        for ((piece, sk), pts) in by_piece_style {
             let (id, geom) = add(&mut resources, &mut seen, ResourceKind::Points, &pts);
             features.push(FeatureInstance {
-                feature: "markers".to_string(),
+                feature: format!("markers:{}", piece.name()),
+                piece,
                 geometry: geom,
                 resource: id,
                 style: sk,
@@ -606,6 +628,7 @@ impl GpuSceneEncoder {
                     voice_tracking_em: l.voice.tracking_em,
                     voice_advance_em: l.voice.advance_em,
                     priority: i as u32,
+                    piece: l.piece,
                 }
             })
             .collect();
@@ -617,6 +640,7 @@ impl GpuSceneEncoder {
                 at: (m.at.x(), m.at.y(), m.at.z()),
                 place: m.place.as_ref().map(|p| p.0 .0.clone()),
                 size: m.style.size,
+                piece: m.piece,
             })
             .collect();
 
@@ -661,9 +685,10 @@ impl EncodedScene {
         for (i, f) in m.features.iter().enumerate() {
             let _ = write!(
                 s,
-                "{}{{\"feature\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"}}",
+                "{}{{\"feature\":\"{}\",\"piece\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"}}",
                 if i > 0 { "," } else { "" },
                 f.feature,
+                f.piece.name(),
                 f.geometry.0 .0,
                 f.resource.0 .0,
                 f.style.0
@@ -733,6 +758,7 @@ impl EncodedScene {
                     "advance": l.voice_advance_em,
                 },
                 "priority": l.priority,
+                "piece": l.piece.name(),
             });
             s.push_str(&row.to_string());
         }
@@ -745,6 +771,7 @@ impl EncodedScene {
                 "at": [m2.at.0, m2.at.1, m2.at.2],
                 "place": m2.place,
                 "size": m2.size,
+                "piece": m2.piece.name(),
             });
             s.push_str(&row.to_string());
         }
