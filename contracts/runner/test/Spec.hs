@@ -8,6 +8,7 @@ import Gherkin.Ast
 import Gherkin.Parse
 import Gherkin.Render
 import Capture
+import Pattern
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft)
 import qualified Data.Set as Set
@@ -100,6 +101,37 @@ main = hspec $ do
       \ps -> parseCap @PieceSet (renderCap ps) === Right ps
     it "every style name round-trips" $
       mapM_ (\n -> fmap renderCap (parseCap @StyleName n) `shouldBe` Right n) styleNames
+
+  describe "step patterns" $ do
+    let p = lit "I render pieces " *> ((,) <$> capUntil @PieceSet " at year " <*> capRest @Year)
+    it "matches and yields typed captures" $
+      matchP p "I render pieces water, ground at year -1405"
+        `shouldBe` Right (PieceSet (Set.fromList [Ground, Water]), Year (-1405))
+    it "a bad capture fails with the capture's own error, not a match miss" $
+      case matchP p "I render pieces water, topografy at year -1405" of
+        Left e  -> e `shouldSatisfy` T.isInfixOf "not a piece"
+        Right _ -> expectationFailure "matched garbage"
+    it "a literal mismatch says which literal" $
+      matchP p "I paint pieces water at year 0" `shouldSatisfy` isLeft
+    it "declares its vocabulary uses" $
+      map fst (usesOf p) `shouldBe` ["pieces", "year"]
+    it "renders a human sketch" $
+      renderP p `shouldBe` "I render pieces {pieces} at year {year}"
+    -- R4: capUntil's terminator-not-found error is a LITERAL-class mismatch
+    -- (the plan's own comment: "the terminator IS the next literal"), so it
+    -- must be classified the same way lit's own mismatch is — by starting
+    -- with the exact prefix "expected literal". Task 5's mkStep falls
+    -- through to the next step definition on that prefix and reports any
+    -- other error. A capture PARSE failure (a value that doesn't parse) is
+    -- NOT a literal mismatch and must not carry that prefix, or steps that
+    -- should report a bad value would instead silently fall through.
+    it "classifies literal-vs-capture failures (R4): terminator-not-found is literal, capture-parse failure is not" $ do
+      case matchP p "I render pieces water, ground at yeer -1405" of
+        Left e  -> e `shouldSatisfy` T.isPrefixOf "expected literal"
+        Right _ -> expectationFailure "matched despite a missing terminator"
+      case matchP p "I render pieces water, topografy at year -1405" of
+        Left e  -> e `shouldSatisfy` (not . T.isPrefixOf "expected literal")
+        Right _ -> expectationFailure "matched garbage"
 
 -- '|' is deliberately excluded from the alphabet: the renderer emits
 -- table rows as "| a | b |" with no escaping, so a cell containing '|'
