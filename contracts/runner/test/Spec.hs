@@ -2746,9 +2746,22 @@ main = hspec $ do
               (sc : _) -> do
                 (minEnv, _) <- Prop.shrinkToMinimalWith
                                  (Map.singleton "someYear" g)
+                                 "the first failing run said so"
                                  allSteps (mkWorld "http://x" fake "") sc start
                 (,) minEnv <$> readIORef calls
               [] -> expectationFailure "expected a scenario" >> pure (Map.empty, 0)
+    it "a failing draw that does NOT reproduce still reports what the \
+       \failing run said -- the one piece of evidence about an \
+       \intermittent law, and it used to be discarded at exactly the \
+       \moment it mattered (observed live: the golden gate's determinism \
+       \law went red once and passed on re-run, and the report named the \
+       \non-reproduction without a word about what had differed)" $ do
+      let fake _ = pure (Right ("{}", A.object []))
+          sc = Scenario "l" [] [ Step When "I GET /api/eras" Nothing ]
+      (_, msg) <- Prop.shrinkToMinimal "DRIFT year -1405 levant[7] want 1,2,3 got 4,5,6"
+                    allSteps (mkWorld "http://x" fake "") sc Map.empty
+      msg `shouldSatisfy` T.isInfixOf "did not reproduce"
+      msg `shouldSatisfy` T.isInfixOf "DRIFT year -1405 levant[7] want 1,2,3 got 4,5,6"
     it "a ping-ponging shrinker -- the brief's own bug class, rebuilt -- \
        \cannot make the greedy loop spin: the candidate that climbs back \
        \is REFUSED, so the loop stops at a genuine local minimum after \
@@ -3309,7 +3322,8 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             (minEnv, _) <- Prop.shrinkToMinimalWith
-                             reg allSteps (mkWorld "http://x" fake "") sc
+                             reg "the first failing run said so"
+                             allSteps (mkWorld "http://x" fake "") sc
                              (Map.fromList [(subKey, "3"), (superKey, "5")])
             -- The loop reaches the GOOD local minimum, not the bad
             -- partial one (which would have been {twoA = 3, twoB = 2},

@@ -1061,8 +1061,8 @@ runScenarioProperty defs w n sc =
             -- minimum before saying anything, so the diagnosis names the
             -- smallest binding that still breaks the law rather than the
             -- first one that happened to.
-            Failed _ -> do
-              (minEnv, minMsg) <- shrinkToMinimal defs w sc env
+            Failed firstMsg -> do
+              (minEnv, minMsg) <- shrinkToMinimal firstMsg defs w sc env
               pure . (\v -> LawRun v skips n) . Failed $
                 minMsg <> withBindings minEnv
                   -- The original counterexample stays visible: shrinking
@@ -1126,7 +1126,7 @@ renderBindings env =
 -- piece in a minimal counterexample is evidence that it fails alone --
 -- not, on its own, evidence that it is the only piece that would.
 shrinkToMinimal
-  :: [StepDef] -> World -> Scenario -> Map Text Text -> IO (Map Text Text, Text)
+  :: Text -> [StepDef] -> World -> Scenario -> Map Text Text -> IO (Map Text Text, Text)
 shrinkToMinimal = shrinkToMinimalWith holeRegistry
 
 -- The loop over an INJECTED registry. Everything real calls
@@ -1138,18 +1138,31 @@ shrinkToMinimal = shrinkToMinimalWith holeRegistry
 -- misbehaving group and drives the real loop with it.
 shrinkToMinimalWith
   :: Map Text HoleGroup
+  -> Text
   -> [StepDef] -> World -> Scenario -> Map Text Text -> IO (Map Text Text, Text)
-shrinkToMinimalWith reg defs w sc env0 = do
+shrinkToMinimalWith reg firstMsg defs w sc env0 = do
   -- The starting message is re-derived rather than handed in, so that
   -- EVERY message this function can report -- the original included --
   -- comes from the same code path. The fallback is not "no text
   -- available": a draw that failed once and passes on an identical
   -- re-run is a finding in its own right (determinism is a law here),
   -- and the report says so instead of showing an empty reason.
+  --
+  -- AND IT QUOTES WHAT THE FIRST RUN SAID. `firstMsg` is the failure the
+  -- caller actually saw, handed in precisely because the re-derivation
+  -- above can come back clean -- and when it does, the re-derived
+  -- nothing was the ONLY thing being reported, so the one piece of
+  -- evidence about a genuinely intermittent law was discarded at the
+  -- exact moment it mattered most. Observed, not theorised: the golden
+  -- gate's determinism law went red on one iteration and passed on
+  -- re-run, and the report named the non-reproduction without saying a
+  -- word about WHAT had differed. A law about determinism that loses its
+  -- evidence to non-determinism is the worst possible place for this.
   e0 <- failureOf env0
   go (1000 :: Int) env0
-     (maybe "the failing draw did not reproduce on re-run -- this law is \
-            \not deterministic" id e0)
+     (maybe ("the failing draw did not reproduce on re-run -- this law is \
+             \not deterministic. What the failing run said:\n    " <> firstMsg)
+            id e0)
   where
     failureOf env = do
       v <- runScenario defs w (substitute env sc)
