@@ -4479,6 +4479,14 @@ main = hspec $ do
           StepFailed e -> e `shouldSatisfy` T.isInfixOf needle
           StepOk _ -> expectationFailure "expected a failure, got a pass"
           StepSkipped e -> expectationFailure ("expected a failure, got skip: " <> T.unpack e)
+        -- A failure that must NOT say a particular thing. Two defects
+        -- reported under one sentence is the shape review M-2 is about,
+        -- and only a negative assertion can catch it: asserting the right
+        -- words are present stays green when the wrong ones are there too.
+        shouldFailWithout needle o = case o of
+          StepFailed e -> e `shouldSatisfy` (not . T.isInfixOf needle)
+          StepOk _ -> expectationFailure "expected a failure, got a pass"
+          StepSkipped e -> expectationFailure ("expected a failure, got skip: " <> T.unpack e)
         shouldSkipWith needle o = case o of
           StepSkipped e -> e `shouldSatisfy` T.isInfixOf needle
           StepOk _ -> expectationFailure "expected a skip, got a pass"
@@ -4537,7 +4545,7 @@ main = hspec $ do
       let none = manifest [] [] [lbl "region:a" (east 0), lbl "region:b" (east 1)] []
       o <- runThen "every label of viewed carries a placement" [("viewed", none)] []
       shouldFailWith "2 of 2 labels" o
-      shouldFailWith "carries no placement" o
+      shouldFailWith "carry no placement at all" o
       shouldFailWith "not where its words are drawn" o
     it "... and it PASSES against an answer that does settle one, so the \
        \red above is about the server rather than the step" $
@@ -4561,6 +4569,24 @@ main = hspec $ do
       o <- runThen "every label of viewed carries a placement"
              [("viewed", manifest [] [] [placed "region:a" (0.1, 0.1, 0.1, 0.4)] [])] []
       shouldFailWith "encloses no area" o
+    it "... and a MALFORMED placement is a different answer from an ABSENT \
+       \one: the day the field arrives wrong must not read like the day it \
+       \had not arrived (review M-2)" $ do
+      bad <- runThen "every label of viewed carries a placement"
+               [("viewed", manifest [] [] [placed "region:a" (0.1, 0.1, 0.1, 0.4)] [])] []
+      shouldFailWith "publish a placement that is not one" bad
+      shouldFailWithout "carry no placement at all" bad
+      absent <- runThen "every label of viewed carries a placement"
+                  [("viewed", manifest [] [] [lbl "region:a" (east 0)] [])] []
+      shouldFailWith "carry no placement at all" absent
+      shouldFailWithout "publish a placement that is not one" absent
+    it "... and when BOTH go wrong at once it reports the two populations \
+       \separately, never one count covering both" $ do
+      o <- runThen "every label of viewed carries a placement"
+             [("viewed", manifest [] [] [ lbl "region:absent" (east 0)
+                                        , placed "region:broken" (0.2, 0.2, 0.2, 0.2) ] [])] []
+      shouldFailWith "1 of 2 labels of viewed carry no placement at all" o
+      shouldFailWith "1 of 2 labels of viewed publish a placement that is not one" o
     it "... and an edge that overflows to Infinity through the real JSON \
        \path is refused too -- a non-finite edge disables every \
        \comparison the two laws below make" $ do
@@ -4605,11 +4631,29 @@ main = hspec $ do
       o <- runThen "no two labels of viewed overlap"
              [("viewed", manifest [] [] [ placed "region:a" (0.2, 0.2, 0.2, 0.2)
                                         , placed "region:b" (0.2, 0.2, 0.2, 0.2) ] [])] []
-      shouldFailWith "carry no settled placement" o
+      shouldFailWith "publish a placement that is not one" o
       shouldFailWith "encloses no area" o
     it "... and an empty draw SKIPS: two of nothing cannot overlap" $
       shouldSkipWith "two of nothing cannot overlap" =<<
         runThen "no two labels of viewed overlap" [("viewed", manifest [] [] [] [])] []
+    -- Review finding I-1, pinned. The guard used to be on the LABELS, so
+    -- ONE settled label fell through to `null collided -> StepOk`: green,
+    -- with srSkips = 0, having examined zero pairs. `Run.lawTally` cannot
+    -- rescue that -- it only catches the case where EVERY iteration
+    -- skipped -- so nothing else in the suite would have noticed. The
+    -- population this law quantifies over is pairs, and the emptiness
+    -- guard has to be on the same population the count is.
+    it "... and a ONE-LABEL draw SKIPS rather than reporting green: two of \
+       \one cannot overlap, and a law that examined zero of its own \
+       \population has not held (review I-1)" $
+      shouldSkipWith "two of one cannot overlap" =<<
+        runThen "no two labels of viewed overlap"
+          [("viewed", manifest [] [] [placed "region:solo" (0.1, 0.1, 0.3, 0.3)] [])] []
+    it "... and TWO labels do not skip -- so the guard above is about the \
+       \pair count, not a blanket excuse" $
+      shouldPass =<< runThen "no two labels of viewed overlap"
+        [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.2, 0.2)
+                                   , placed "region:b" (0.5, 0.5, 0.6, 0.6) ] [])] []
 
     it "the legibility law needs the view it names: a scene rendered with \
        \NO camera is an error, not a pass" $
@@ -4664,6 +4708,23 @@ main = hspec $ do
                                   [lbl "region:a" (east 0), lbl "region:ghost" (east 1)] [])] []
       shouldFailWith "1 of 2 labels" o
       shouldFailWith "region:ghost" o
+    -- Review finding M-1, pinned. The law used to read subjects through
+    -- `labelAnchors`, which also demands a well-formed `anchor` vector on
+    -- every label and fails the whole manifest without one -- so a label
+    -- with a broken anchor made this law report a vector-parse error in
+    -- place of a naming verdict: red for a reason the law is not about.
+    -- A law should only be able to fail for its own reason.
+    it "... and it judges a label by its SUBJECT alone: a malformed anchor \
+       \is not this law's business, and must not turn its verdict into \
+       \someone else's error (review M-1)" $ do
+      let noAnchor s = A.object ["subject" A..= (s :: T.Text), "anchor" A..= ("bent" :: T.Text)]
+      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+        [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
+                             [noAnchor "region:a"] [])] []
+      o <- runThen "every label of viewed names a feature of viewed"
+             [("viewed", manifest [] [] [noAnchor "region:ghost"] [])] []
+      shouldFailWith "1 of 1 labels" o
+      shouldFailWithout "unit vector" o
     it "... and it refuses a line that names TWO answers: with two names \
        \the sentence no longer states the law" $
       shouldFailWith "but names two" =<<
