@@ -40,7 +40,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
                  BATCH C caught (8/8), BATCH D caught (12/12),
-                 BATCH E caught (22/22 laws, 20 mutations),
+                 BATCH E caught (23/23 laws, 20 mutations),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -787,6 +787,11 @@ EXPECT_E = [
     "a law that judges it TWICE costs twice as much",
     "the budget only ever lowers a count",
     "the report table carries the skip count in its own column",
+    # E7's second law, and the reason the sharpened mutation is better than
+    # the header-literal one it replaced: dropping the count from the ROW
+    # is visible to every test that reads a real table, not only to the one
+    # that reads back the same literal that was changed.
+    "classifies @target vs. hard-red through runFeatureFiles, hardReds, and reportTable",
     "a check run names the mode and the declared subset",
     "a bless run does NOT pass --check",
     "no declared subset means no --stops at all",
