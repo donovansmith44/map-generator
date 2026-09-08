@@ -70,7 +70,12 @@ import World (Claim (..), StepDef (..), readFeatureFile)
 expectedVocab :: [StepDef] -> Feature -> [(Text, Text)]
 expectedVocab defs f = nub
   [ (name, describeUniverse u)
-  | sc <- ftScenarios f
+  -- R97: `runnableScenarios`, so a Background step contributes its
+  -- universes too -- deholed under the tags of the scenario it runs in,
+  -- which is the same gate every other step goes through. A feature
+  -- whose shared render lives in the Background would otherwise derive a
+  -- table missing the very terms that render uses.
+  | sc <- runnableScenarios f
   , st <- scSteps sc
   , let body = Prop.deholeFor (scTags sc) (stepBody st)
   , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m body]
@@ -128,9 +133,15 @@ isTableRow l =
 -- normally does) sit BETWEEN the preamble prose and a "Vocabulary:"
 -- header, so treating blank-as-boundary would stop the scan before ever
 -- reaching a real block that comes right after one.
+-- R97: `Background:` is an anchor exactly as a tag line and a
+-- `Scenario:` line are. Without it the insertion scan would walk PAST a
+-- background and splice the Vocabulary block INSIDE it -- between the
+-- `Background:` header and its steps -- which is both invalid Gherkin
+-- and a silent rewrite of the owner's file.
 isBoundary :: Text -> Bool
 isBoundary l =
-  let s = T.strip l in "@" `T.isPrefixOf` s || "Scenario: " `T.isPrefixOf` s
+  let s = T.strip l
+  in "@" `T.isPrefixOf` s || "Scenario: " `T.isPrefixOf` s || s == "Background:"
 
 -- Skip the FEATURE-level header (any leading comment/blank lines, any
 -- FEATURE-level tag line such as "@smoke" before "Feature: ...", and the

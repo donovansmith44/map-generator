@@ -11,6 +11,8 @@ renderFeature f = T.unlines $
   ++ map ("  " <>) (ftPreamble f)
   ++ (if null (ftVocab f) then []
       else "" : "  Vocabulary:" : [ "    | " <> k <> " | " <> v <> " |" | (k, v) <- ftVocab f ])
+  ++ (if null (ftBackground f) then []
+      else "" : "  Background:" : concatMap step (ftBackground f))
   ++ concatMap scenario (ftScenarios f)
   where
     tagLine ts = T.unwords [ "@" <> t | Tag t <- ts ]

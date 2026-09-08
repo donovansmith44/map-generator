@@ -107,8 +107,11 @@ runFeatureFiles defs w paths = fmap concat . mapM one $ paths
       src <- readFeatureFile p
       case parseFeature p src of
         Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0]
+        -- R97: `runnableScenarios`, not `ftScenarios` -- the feature's
+        -- Background is prepended to every scenario here, at the one
+        -- boundary that turns a parsed feature into things to run.
         Right f -> mapM (\sc -> mk (ftTitle f) sc . lawOnce <$> runScenario defs w sc)
-                        (ftScenarios f)
+                        (runnableScenarios f)
     mk ft sc (LawRun v s) = ScenarioResult ft (scName sc) (scTags sc) v s
 
 isTarget :: ScenarioResult -> Bool

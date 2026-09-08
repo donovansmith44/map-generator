@@ -1582,7 +1582,7 @@ main = hspec $ do
             , (Then, "selfDiff equals fixture \"census-diff-empty\"")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
-          f = Feature "exemplars" [] [] [] [Scenario "s" [] steps]
+          f = Feature "exemplars" [] [] [] [] [Scenario "s" [] steps]
           matchedSketchFor (k, b) =
             [ defSketch d | d <- allSteps, defKw d == k, Matched _ <- [defRun d b] ]
       Check.orphans allSteps f `shouldBe` []
@@ -2048,6 +2048,60 @@ main = hspec $ do
           ]
         -- and running it again changes nothing: the block it just wrote
         -- is found where it left it, not re-inserted somewhere else
+        Vocab.vocabDir allSteps dir True
+        twice <- TE.decodeUtf8 <$> BS.readFile path
+        twice `shouldBe` rewritten
+    -- R97 requirement 3, in the placement tests rather than beside them:
+    -- `Background:` is an anchor exactly as a tag line and `Scenario:`
+    -- are. Catches the mutation of leaving it out of `Vocab.isBoundary`,
+    -- which makes the insertion scan walk PAST the background and splice
+    -- the table between the `Background:` header and its own steps --
+    -- invalid Gherkin, and a silent rewrite of a file the owner wrote.
+    it "a fresh Vocabulary block goes ABOVE a Background, never inside \
+       \it -- `Background:` is an anchor like `Scenario:`" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-vocab-background"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          path = dir </> "bg.feature"
+          original = T.unlines
+            [ "Feature: t"
+            , "  a preamble line"
+            , ""
+            , "  Background:"
+            , "    When I render pieces fills at year -1405 in style canaan as base"
+            , ""
+            , "  Scenario: s"
+            , "    Then base's labels are empty"
+            ]
+      createDirectoryIfMissing True dir
+      BS.writeFile path (TE.encodeUtf8 original)
+      (`finally` removeDirectoryRecursive dir) $ do
+        Vocab.vocabDir allSteps dir True
+        rewritten <- TE.decodeUtf8 <$> BS.readFile path
+        -- whole file, so placement is pinned rather than probed with a
+        -- substring several wrong layouts would also satisfy
+        rewritten `shouldBe` T.unlines
+          [ "Feature: t"
+          , "  a preamble line"
+          , ""
+          , "  Vocabulary:"
+          , "    | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |"
+          , "    | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |"
+          , "    | style | any of: canaan, parchment, slate |"
+          , ""
+          , "  Background:"
+          , "    When I render pieces fills at year -1405 in style canaan as base"
+          , ""
+          , "  Scenario: s"
+          , "    Then base's labels are empty"
+          ]
+        -- The table's very existence is the other half: those three rows
+        -- come from the BACKGROUND's step, since the only scenario step
+        -- contributes none. `expectedVocab` reading `ftScenarios`
+        -- instead of `runnableScenarios` derives an EMPTY table here and
+        -- deletes the block outright.
         Vocab.vocabDir allSteps dir True
         twice <- TE.decodeUtf8 <$> BS.readFile path
         twice `shouldBe` rewritten
@@ -3307,6 +3361,286 @@ main = hspec $ do
             other -> expectationFailure
                        ("expected exactly one orphan step, got " <> show other)
 
+  -- ================= R97: Background =================
+  --
+  -- Every case below names the mutation it catches. The two shapes this
+  -- feature could have had -- a first-class AST field, or an expansion
+  -- performed at parse time -- differ in exactly what these pin: with
+  -- expansion the scenarios would carry the background's steps (the
+  -- first case), and an undefined background step would be reported once
+  -- per scenario rather than once per feature (the check cases).
+  -- `renderFeature` writing a background back is covered by the existing
+  -- round-trip property, which now generates them.
+  describe "R97: Background parses into its own field" $ do
+    let bgFeature = T.unlines
+          [ "Feature: t"
+          , "  prose"
+          , ""
+          , "  Background:"
+          , "    When I render pieces fills at year -1405 in style canaan as base"
+          , ""
+          , "  @property"
+          , "  Scenario: first"
+          , "    Then base's labels are empty"
+          , ""
+          , "  Scenario: second"
+          , "    Then base equals base"
+          ]
+    it "the background lands in ftBackground and the scenarios keep ONLY \
+       \their own steps -- the whole AST, so a parse-time expansion \
+       \(which would copy the background into every scenario) fails here" $
+      case parseFeature "bg.feature" bgFeature of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> f `shouldBe` Feature
+          { ftTitle = "t", ftTags = [], ftPreamble = ["prose"], ftVocab = []
+          , ftBackground =
+              [Step When "I render pieces fills at year -1405 in style canaan as base" Nothing]
+          , ftScenarios =
+              [ Scenario "first" [Tag "property"] [Step Then "base's labels are empty" Nothing]
+              , Scenario "second" [] [Step Then "base equals base" Nothing] ] }
+    it "a feature with NO background parses to an empty one, and the rest \
+       \of the AST is exactly what it has always been (requirement 5)" $
+      case parseFeature "nobg.feature" (T.unlines
+             [ "Feature: t", "  prose", "  Scenario: s", "    When I GET /foo" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> f `shouldBe` Feature
+          { ftTitle = "t", ftTags = [], ftPreamble = ["prose"], ftVocab = []
+          , ftBackground = []
+          , ftScenarios = [Scenario "s" [] [Step When "I GET /foo" Nothing]] }
+    it "a SECOND Background is a parse error naming the file and line -- \
+       \not a silent last-wins, which is the shape where the file says \
+       \one thing and the runner does another" $
+      case parseFeature "two.feature" (T.unlines
+             [ "Feature: t"
+             , "  Background:"
+             , "    When I GET /a"
+             , "  Background:"
+             , "    When I GET /b"
+             , "  Scenario: s"
+             , "    When I GET /c" ]) of
+        Right f -> expectationFailure ("expected a parse error, got " <> show f)
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "two.feature:4"
+          e `shouldSatisfy` T.isInfixOf "only one Background"
+    it "a Background AFTER a scenario is a parse error naming the line -- \
+       \a background that does not precede what it sets up is not one" $
+      case parseFeature "late.feature" (T.unlines
+             [ "Feature: t"
+             , "  Scenario: s"
+             , "    When I GET /c"
+             , "  Background:"
+             , "    When I GET /a" ]) of
+        Right f -> expectationFailure ("expected a parse error, got " <> show f)
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "late.feature:4"
+          e `shouldSatisfy` T.isInfixOf "must come before the first Scenario"
+    it "a Background speaks the SAME step grammar as a scenario body: \
+       \And resolves against the previous keyword, so a background is \
+       \not a second dialect" $
+      case parseFeature "and.feature" (T.unlines
+             [ "Feature: t"
+             , "  Background:"
+             , "    When I GET /a"
+             , "    And I GET /b"
+             , "  Scenario: s"
+             , "    Then base equals base" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> ftBackground f `shouldBe`
+          [ Step When "I GET /a" Nothing, Step When "I GET /b" Nothing ]
+
+  describe "R97: the background reaches the things that run steps" $ do
+    let bgSrc = T.unlines
+          [ "Feature: t"
+          , "  Background:"
+          , "    When I GET /background"
+          , ""
+          , "  Scenario: one"
+          , "    When I GET /one"
+          , ""
+          , "  Scenario: two"
+          , "    When I GET /two" ]
+    it "runnableScenarios prepends the background to EVERY scenario, in \
+       \order -- catches both dropping it and appending it after the \
+       \scenario's own steps (a scenario that re-binds a name the \
+       \background bound must win)" $
+      case parseFeature "run.feature" bgSrc of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> runnableScenarios f `shouldBe`
+          [ Scenario "one" [] [ Step When "I GET /background" Nothing
+                              , Step When "I GET /one" Nothing ]
+          , Scenario "two" [] [ Step When "I GET /background" Nothing
+                              , Step When "I GET /two" Nothing ] ]
+    it "a feature with no background is left exactly alone by \
+       \runnableScenarios" $
+      case parseFeature "plain.feature" (T.unlines
+             [ "Feature: t", "  Scenario: s", "    When I GET /x" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> runnableScenarios f `shouldBe` ftScenarios f
+    it "the runner really fetches the background FIRST, once per \
+       \scenario -- driven through the real runFeatureFiles, asserting \
+       \the whole URL sequence rather than that some background URL \
+       \appeared somewhere" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-run"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+      createDirectoryIfMissing True dir
+      BS.writeFile (dir </> "t.feature") (TE.encodeUtf8 bgSrc)
+      (`finally` removeDirectoryRecursive dir) $ do
+        seen <- newIORef []
+        let fake u = modifyIORef seen (u :) >> pure (Right ("[]", A.toJSON ([] :: [Int])))
+            w = mkWorld "http://x" fake ""
+        rs <- runFeatureFiles allSteps w [dir </> "t.feature"]
+        map srVerdict rs `shouldBe` [Passed, Passed]
+        urls <- reverse <$> readIORef seen
+        urls `shouldBe` [ "http://x/background", "http://x/one"
+                        , "http://x/background", "http://x/two" ]
+
+  -- R97 requirement 1. These are the two cases the brief names, and they
+  -- are why the background is expanded at the CONSUMPTION boundary
+  -- rather than drawn as a separate preamble: once its steps are in
+  -- `scSteps`, `holesOf` sees them, one draw per iteration covers both,
+  -- and `substitute` and the shrinker reach both for free.
+  describe "R97: a hole in the background is the SAME hole as in the body" $ do
+    let runFeat src fake n = do
+          tmpBase <- getTemporaryDirectory
+          (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-prop"
+          hClose uh
+          removeFile uniqueFile
+          let dir = uniqueFile <> "-dir"
+          createDirectoryIfMissing True dir
+          BS.writeFile (dir </> "t.feature") (TE.encodeUtf8 src)
+          (`finally` removeDirectoryRecursive dir) $ do
+            rs <- Prop.runWithProperties allSteps (mkWorld "http://x" fake "") n
+                    [dir </> "t.feature"]
+            pure (map srVerdict rs)
+    it "one binding per iteration: <someYear> in the background and \
+       \<someYear> in the scenario render the SAME year, so the two \
+       \responses are equal over 100 iterations -- a separately-drawn \
+       \background reddens this at the first iteration" $ do
+      let fake u = pure (Right (TE.encodeUtf8 u, A.toJSON u))
+      vs <- runFeat (T.unlines
+              [ "Feature: t"
+              , "  Background:"
+              , "    When I render pieces fills at year <someYear> in style canaan as fromBackground"
+              , ""
+              , "  @property"
+              , "  Scenario: one binding"
+              , "    When I render pieces fills at year <someYear> in style canaan as fromScenario"
+              , "    Then fromBackground equals fromScenario"
+              ]) fake 100
+      vs `shouldBe` [Passed]
+    it "... and the name really is bound BY the background: the same \
+       \scenario with the background's step removed cannot find it, so \
+       \the green above is the background running, not two renders the \
+       \scenario made itself" $ do
+      let fake u = pure (Right (TE.encodeUtf8 u, A.toJSON u))
+      vs <- runFeat (T.unlines
+              [ "Feature: t"
+              , "  @property"
+              , "  Scenario: one binding"
+              , "    When I render pieces fills at year <someYear> in style canaan as fromScenario"
+              , "    Then fromBackground equals fromScenario"
+              ]) fake 1
+      case vs of
+        [Failed e] -> e `shouldSatisfy` T.isInfixOf "unbound"
+        other -> expectationFailure ("expected an unbound-name failure, got " <> show other)
+    it "a CORRELATED PAIR split across the boundary still correlates: \
+       \<someStyle> in the background and <someOtherStyle> in the \
+       \scenario are one group's single draw, so dress-locality holds \
+       \over 100 iterations -- two independent draws collide one \
+       \iteration in three and redden this" $ do
+      let fake u = pure (Right (TE.encodeUtf8 u, A.object
+            [ "resources" A..= ([A.object ["id" A..= ("r1" :: T.Text)]] :: [A.Value])
+            , "dress" A..= styleInUrl u ]))
+      vs <- runFeat (T.unlines
+              [ "Feature: t"
+              , "  Background:"
+              , "    When I render pieces fills at year -1405 in style <someStyle> as dressed"
+              , ""
+              , "  @property"
+              , "  Scenario: correlated across the boundary"
+              , "    When I render pieces fills at year -1405 in style <someOtherStyle> as redressed"
+              , "    Then dressed and redressed differ only in dress, never in geometry"
+              ]) fake 100
+      vs `shouldBe` [Passed]
+    it "shrinking reaches a background hole: <someYear> appears ONLY in \
+       \the background, and a failing law still narrows it to the year \
+       \order's landmark -- so the hole was drawn, substituted AND \
+       \shrunk through a step no scenario body contains" $ do
+      -- The hole is deliberately absent from the scenario. With it in
+      -- both places, a mutation that dropped the background entirely
+      -- would still shrink the scenario's own copy and satisfy this --
+      -- a test the mutation it guards survives.
+      let fake u = pure (Right (TE.encodeUtf8 u, A.toJSON u))
+      vs <- runFeat (T.unlines
+              [ "Feature: t"
+              , "  Background:"
+              , "    When I render pieces fills at year <someYear> in style canaan as fromBackground"
+              , ""
+              , "  @property"
+              , "  Scenario: never true"
+              , "    When I render pieces ground at year -1405 in style canaan as other"
+              , "    Then fromBackground equals other"
+              ]) fake 100
+      case vs of
+        [Failed e] -> e `shouldSatisfy` T.isInfixOf "someYear = -1405"
+        other -> expectationFailure ("expected a shrunk failure, got " <> show other)
+
+  describe "R97: check sees background steps" $ do
+    it "an undefined step in a Background is reported ONCE, named by the \
+       \feature rather than by any scenario -- catches both skipping it \
+       \entirely and reporting it once per scenario (which a parse-time \
+       \expansion would do, twice here)" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-check"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          featPath = dir </> "probe.feature"
+          feat = T.unlines
+            [ "Feature: probe"
+            , "  Background:"
+            , "    When nobody wrote this background step"
+            , ""
+            , "  Scenario: one"
+            , "    When I GET /a"
+            , ""
+            , "  Scenario: two"
+            , "    When I GET /b" ]
+          expected = T.concat
+            [ "ORPHAN ", T.pack featPath
+            , " / Background: nobody wrote this background step\n" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile featPath (TE.encodeUtf8 feat)
+      (out, result) <- captureStdout (Check.checkDir allSteps dir)
+      removeDirectoryRecursive dir
+      result `shouldSatisfy` isLeft
+      -- the WHOLE output: exactly one row, and it is the background's
+      out `shouldBe` expected
+    it "a background step that DOES match is not reported and the \
+       \feature is clean -- so the row above is about that step, not \
+       \about backgrounds being reported unconditionally" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-check-ok"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+      createDirectoryIfMissing True dir
+      BS.writeFile (dir </> "ok.feature") (TE.encodeUtf8 (T.unlines
+        [ "Feature: probe"
+        , "  Background:"
+        , "    When I GET /a"
+        , ""
+        , "  Scenario: one"
+        , "    Then the response is the empty list" ]))
+      (out, result) <- captureStdout (Check.checkDir allSteps dir)
+      removeDirectoryRecursive dir
+      result `shouldSatisfy` isRight
+      out `shouldBe` "totality: every step has exactly one definition; \
+                     \every property hole varies\n"
+
   describe "fixture diffs on every comparison path (Stage 1 Task 3)" $ do
     it "firstDiff names the path and both values on a nested leaf" $ do
       let e = fromJust (A.decodeStrict "{\"a\":{\"b\":[1,2,3]}}")
@@ -3382,7 +3716,7 @@ main = hspec $ do
        \UNIQUE match -- not a silent swallow by the plain GET step, \
        \whose UrlPath capture rejects the embedded space" $ do
       let steps = [ Step When b Nothing | b <- getLines ]
-          f = Feature "getas" [] [] [] [Scenario "s" [] steps]
+          f = Feature "getas" [] [] [] [] [Scenario "s" [] steps]
       Check.orphans allSteps f `shouldBe` []
       Check.ambiguous allSteps f `shouldBe` []
       Check.valueErrors allSteps f `shouldBe` []
@@ -3419,7 +3753,7 @@ main = hspec $ do
             , "I GET /api/subjects?year=-1405&nonsense=x as first"
             , "I GET /api/nosuchroute?year=-1405 as first"     -- no such route
             ]
-          f = Feature "opaque" [] [] [] [Scenario "s" [] [ Step When b Nothing | b <- bogus ]]
+          f = Feature "opaque" [] [] [] [] [Scenario "s" [] [ Step When b Nothing | b <- bogus ]]
       Check.orphans allSteps f `shouldBe` []
       Check.ambiguous allSteps f `shouldBe` []
       Check.valueErrors allSteps f `shouldBe` []
@@ -3432,7 +3766,7 @@ main = hspec $ do
       -- The contrast is what makes the limit above a property of
       -- UrlPath rather than a weakness of `check`: an out-of-frame year
       -- in a `{year}` capture is a value error, immediately.
-      let f = Feature "typed" [] [] []
+      let f = Feature "typed" [] [] [] []
                 [Scenario "s" []
                   [Step When "I render pieces fills at year -9999 in style canaan" Nothing]]
       Check.valueErrors allSteps f `shouldSatisfy` (not . null)
@@ -4608,8 +4942,12 @@ instance Arbitrary Feature where
     tgs <- sublistOf [Tag "smoke", Tag "wip"]
     pre <- listOf safeText
     vs  <- listOf ((,) <$> safeText <*> safeText)
+    -- R97: a generated feature may carry a Background, so the
+    -- round-trip law below covers one without a second property. Often
+    -- empty, which is the shape every existing corpus file has.
+    bg  <- listOf genStep
     ss  <- listOf1 genScenario
-    pure (Feature t tgs pre vs ss)
+    pure (Feature t tgs pre vs bg ss)
     where
       genScenario = do
         n  <- safeText

@@ -39,7 +39,8 @@ satisfiable by its own failure mode, which is the thing this project forbids
     mutation committed by accident.
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
-                 BATCH C caught (8/8), tree restored.
+                 BATCH C caught (8/8), BATCH D caught (7/7),
+                 tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
 -----------------------------------------------------------
@@ -79,7 +80,9 @@ import sys
 RUNNER = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(RUNNER, "..", ".."))
 
-SRC = {name: os.path.join(RUNNER, "src", name) for name in ("Prop.hs", "Run.hs", "Steps.hs")}
+SRC = {name: os.path.join(RUNNER, "src", name)
+       for name in ("Prop.hs", "Run.hs", "Steps.hs", "Vocab.hs", "Check.hs")}
+SRC["Ast.hs"] = os.path.join(RUNNER, "src", "Gherkin", "Ast.hs")
 
 # ---------------------------------------------------------------------------
 # BATCH A -- the CORRELATIONS.  Both mutations replace a correlation-by-
@@ -262,6 +265,67 @@ EXPECT_C = [
     "the vertex ladder's SECOND rung is load-bearing",
 ]
 
+# ---------------------------------------------------------------------------
+# BATCH D -- R97's Background.  The feature could have been built two ways: a
+# first-class AST field (what it is) or an expansion performed at parse time.
+# These mutations are the ways the chosen design can be got WRONG, one per
+# consumption boundary, plus the two that would have made the other design
+# look equivalent.
+# ---------------------------------------------------------------------------
+BATCH_D = [
+    (
+        "D1: the property runner reads ftScenarios, so a background never runs "
+        "and its holes are never part of the scenario's draw",
+        "Prop.hs",
+        "        Right f -> mapM (run1 (ftTitle f)) (runnableScenarios f)",
+        "        Right f -> mapM (run1 (ftTitle f)) (ftScenarios f)",
+    ),
+    (
+        "D2: the plain runner reads ftScenarios, so a background never runs",
+        "Run.hs",
+        "                        (runnableScenarios f)",
+        "                        (ftScenarios f)",
+    ),
+    (
+        "D3: `Background:` is not an anchor, so a Vocabulary block is spliced "
+        "INSIDE the background, between its header and its steps",
+        "Vocab.hs",
+        '  in "@" `T.isPrefixOf` s || "Scenario: " `T.isPrefixOf` s || s == "Background:"',
+        '  in "@" `T.isPrefixOf` s || "Scenario: " `T.isPrefixOf` s',
+    ),
+    (
+        "D4: the derived vocabulary ignores background steps, so a feature "
+        "whose shared render lives in the background loses its whole table",
+        "Vocab.hs",
+        "  | sc <- runnableScenarios f",
+        "  | sc <- ftScenarios f",
+    ),
+    (
+        "D5: check stops reporting background steps at all -- an undefined "
+        "step in a background is silently skipped",
+        "Check.hs",
+        "  | st <- ftBackground f",
+        "  | st <- ([] :: [Step])",
+    ),
+    (
+        "D6: the background is APPENDED after each scenario's own steps "
+        "instead of prepended, so setup runs after the law that needs it",
+        "Ast.hs",
+        "  [ sc { scSteps = ftBackground f ++ scSteps sc } | sc <- ftScenarios f ]",
+        "  [ sc { scSteps = scSteps sc ++ ftBackground f } | sc <- ftScenarios f ]",
+    ),
+]
+
+EXPECT_D = [
+    "one binding per iteration",
+    "a CORRELATED PAIR split across the boundary still correlates",
+    "shrinking reaches a background hole",
+    "the runner really fetches the background FIRST",
+    "a fresh Vocabulary block goes ABOVE a Background",
+    "an undefined step in a Background is reported ONCE",
+    "runnableScenarios prepends the background to EVERY scenario",
+]
+
 
 def read(path):
     with open(path, encoding="utf-8", newline="") as fh:
@@ -359,6 +423,7 @@ def main():
                       BATCH_B, EXPECT_B, originals)
         c = run_batch("BATCH C (fix round 1: the discriminating cases)",
                       BATCH_C, EXPECT_C, originals)
+        d = run_batch("BATCH D (R97: Background)", BATCH_D, EXPECT_D, originals)
     finally:
         for path, text in originals.items():
             write(path, text)
@@ -370,7 +435,7 @@ def main():
     if not baseline_ok:
         print("    FAIL: the tree did not restore cleanly -- %s" % fails)
 
-    ok = a and b and c and baseline_ok
+    ok = a and b and c and d and baseline_ok
     print("\n%s" % ("ALL MUTATIONS CAUGHT, TREE CLEAN" if ok else "MUTATION EVIDENCE FAILED"))
     sys.exit(0 if ok else 1)
 

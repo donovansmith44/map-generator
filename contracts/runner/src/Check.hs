@@ -102,6 +102,38 @@ violations defs f =
   , st <- scSteps sc
   , Just v <- [classify (scTags sc) defs st] ]
 
+-- | R97 requirement 2: the totality law counts BACKGROUND steps too, and
+-- a background step that no definition matches is reported rather than
+-- silently skipped.
+--
+-- Reported ONCE, named by the feature, because that is what it is: the
+-- background belongs to the feature, not to any scenario, and there is
+-- no scenario name to give it. (This is also why `Check` does not use
+-- `runnableScenarios` for the totality law, unlike `Run`, `Prop` and
+-- `Vocab` -- under that expansion one undefined background step would be
+-- reported once per scenario, N copies of a single defect under N
+-- names.)
+--
+-- The TAGS a background step is classified under are the honest
+-- difficulty here. A background runs before every scenario, and
+-- `deholeFor` substitutes a hole only for a @property scenario -- so the
+-- same background step can be a clean match in one scenario and a bad
+-- value in the next, and there is no single answer. So it is checked
+-- under EVERY scenario's tags and reports the FIRST treatment that
+-- fails: a background is only sound if it is sound for every scenario it
+-- runs in. A feature with a background and no scenarios has nothing to
+-- run it, so there is nothing to check.
+backgroundViolations :: [StepDef] -> Feature -> [(Text, Violation)]
+backgroundViolations defs f =
+  [ (stepBody st, v)
+  | st <- ftBackground f
+  , Just v <- [firstViolation st] ]
+  where
+    firstViolation st = case [ v | sc <- ftScenarios f
+                                 , Just v <- [classify (scTags sc) defs st] ] of
+      (v : _) -> Just v
+      []      -> Nothing
+
 -- | Steps matching zero definitions (and claimed by none either):
 -- (scenario, step body).
 orphans :: [StepDef] -> Feature -> [(Text, Text)]
@@ -147,9 +179,19 @@ checkDir defs dir = do
     pure $ case parseFeature p src of
       Left e  -> [(T.pack p, "PARSE", e)]
       Right f ->
-        [ (T.pack p <> " / " <> s, label v, describe b v) | (s, b, v) <- violations defs f ]
+        -- R97: the background's own rows come FIRST and are named by the
+        -- feature alone -- there is no scenario to name, and a step that
+        -- fails here fails for every scenario in the file, so it is the
+        -- first thing a reader should see.
+        [ (T.pack p <> " / Background", label v, describe b v)
+        | (b, v) <- backgroundViolations defs f ]
+        ++ [ (T.pack p <> " / " <> s, label v, describe b v) | (s, b, v) <- violations defs f ]
+        -- The degenerate-hole law reads the scenario WITH its
+        -- background: a hole that appears only in the background is
+        -- still a hole this scenario quantifies over, and one that never
+        -- varies is the same defect wherever it was written.
         ++ [ (T.pack p <> " / " <> scName sc, "DEGENERATE-HOLE", describeDefect d)
-           | sc <- ftScenarios f
+           | sc <- runnableScenarios f
            , Prop.isProperty (scTags sc)
            , d <- Prop.holeDefects 30 sc ]) $ files
   if null bad then TIO.putStrLn

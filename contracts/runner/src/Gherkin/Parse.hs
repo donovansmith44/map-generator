@@ -21,18 +21,34 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
       | isComment l = go0 rest tags
       | "@" `T.isPrefixOf` strip l = go0 rest (tags ++ tagsOf l)
       | Just t <- T.stripPrefix "Feature: " (strip l) =
-          goBody rest (Feature t tags [] [] [])
+          goBody rest (Feature t tags [] [] [] [])
       | otherwise = err n ("expected Feature:, got " <> strip l)
 
     tagsOf l = [ Tag (T.drop 1 w) | w <- T.words (strip l), "@" `T.isPrefixOf` w ]
 
     goBody [] f = Right (doneFeature f)
-    goBody ls@((_, l) : rest) f
+    goBody ls@((n, l) : rest) f
       | isComment l = goBody rest f
       | strip l == "Vocabulary:" =
           case vocabRows rest of
             Left e -> Left e
             Right (vs, rest') -> goBody rest' f { ftVocab = ftVocab f ++ vs }
+      -- R97: the background sits after the description (and its
+      -- Vocabulary table) and before the first scenario. Reached only
+      -- from `goBody`, which is left for good the moment a tag or
+      -- Scenario line appears -- so a Background AFTER a scenario can
+      -- never be parsed as one, and is caught by `goScenarios`'s own
+      -- "expected Scenario or tags" arm with the line named.
+      | strip l == "Background:" =
+          if not (null (ftBackground f))
+            -- Requirement 4: a second background is an ERROR, not a
+            -- silent last-wins. Last-wins is the shape where a file
+            -- says one thing and the runner does another, which is
+            -- precisely what a corpus may not do.
+            then err n "a feature may have only one Background:"
+            else case goBackground rest [] Nothing of
+              Left e -> Left e
+              Right (sts, rest') -> goBody rest' f { ftBackground = sts }
       | "@" `T.isPrefixOf` strip l || "Scenario: " `T.isPrefixOf` strip l =
           goScenarios ls f []
       | otherwise = goBody rest f { ftPreamble = ftPreamble f ++ [strip l] }
@@ -54,9 +70,42 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
            then Just (map T.strip (T.splitOn "|" (T.dropEnd 1 (T.drop 1 s))))
            else Nothing
 
+    -- The background's own steps, read with exactly the step grammar a
+    -- scenario's body uses -- And/But resolve against the previous
+    -- keyword here too, so a background is not a second, subtly
+    -- different dialect. Ends at the first tag or Scenario line, which
+    -- is handed back unconsumed.
+    goBackground :: [(Int, Text)] -> [Step] -> Maybe Keyword
+                 -> Either Text ([Step], [(Int, Text)])
+    goBackground [] acc _ = Right (acc, [])
+    goBackground ls@((n, l) : rest) acc prevKw
+      | isComment l = goBackground rest acc prevKw
+      | "@" `T.isPrefixOf` strip l || "Scenario: " `T.isPrefixOf` strip l =
+          Right (acc, ls)
+      | strip l == "Background:" = err n "a feature may have only one Background:"
+      -- a table row attaches to the step just read, exactly as it does
+      -- inside a scenario body
+      | Just row <- tableRow l
+      , (s0 : older) <- reverse acc =
+          goBackground rest
+            (reverse (s0 { stepArg = Just (addRowB (stepArg s0) row) } : older)) prevKw
+      | otherwise =
+          case kwOf (strip l) prevKw of
+            Just (k, b) -> goBackground rest (acc ++ [Step k b Nothing]) (Just k)
+            Nothing -> err n ("not a step: " <> strip l)
+      where
+        addRowB (Just (Table rs)) r = Table (rs ++ [r])
+        addRowB _ r = Table [r]
+
     goScenarios [] f acc = Right (doneFeature f { ftScenarios = ftScenarios f ++ reverse acc })
     goScenarios ((n, l) : rest) f acc
       | isComment l = goScenarios rest f acc
+      -- A Background reached from here is one that comes AFTER a
+      -- scenario. It is an error either way (nothing below accepts the
+      -- line), but a reader deserves the reason rather than "not a
+      -- step": a background sets up the scenarios that follow it, so a
+      -- background with nothing following it is a contradiction.
+      | strip l == "Background:" = err n backgroundTooLate
       | "@" `T.isPrefixOf` strip l =
           goScenario rest f acc (tagsOf l) n
       | Just t <- T.stripPrefix "Scenario: " (strip l) =
@@ -73,6 +122,7 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
       Right (doneFeature f { ftScenarios = ftScenarios f ++ reverse (sc : acc) })
     goSteps ls@((n, l) : rest) f acc sc prevKw
       | isComment l = goSteps rest f acc sc prevKw
+      | strip l == "Background:" = err n backgroundTooLate
       | "@" `T.isPrefixOf` strip l || "Scenario: " `T.isPrefixOf` strip l =
           goScenarios ls f (sc : acc)
       | Just row <- tableRow l
@@ -95,5 +145,9 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
       <|> (do b <- T.stripPrefix "And " s <|> T.stripPrefix "But " s
               k <- prev
               pure (k, b))
+
+    backgroundTooLate =
+      "Background: must come before the first Scenario: it sets up the "
+      <> "scenarios that follow it"
 
     doneFeature = id

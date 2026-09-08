@@ -1269,7 +1269,12 @@ runWithProperties defs w n files = fmap concat . mapM one $ files
       src <- readFeatureFile p
       case parseFeature p src of
         Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0]
-        Right f -> mapM (run1 (ftTitle f)) (ftScenarios f)
+        -- R97: `runnableScenarios` -- so a hole in the Background is the
+        -- SAME hole as one in the scenario body. `holesOf` scans
+        -- `scSteps`, so one draw per iteration covers both, and
+        -- `substitute` and the shrinker reach both. A separately-drawn
+        -- preamble could get out of step with the body it sets up.
+        Right f -> mapM (run1 (ftTitle f)) (runnableScenarios f)
     run1 ft sc
       | isProperty (scTags sc) =
           mk ft sc <$> runScenarioProperty defs w n sc
