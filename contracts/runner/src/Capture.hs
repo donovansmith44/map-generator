@@ -37,6 +37,11 @@ module Capture
   , tierLod
   , ScaleQual (..)
   , applyScale
+  , Probe (..)
+  , probeCount
+  , centreProbe
+  , GateCamera (..)
+  , gateCameraNames
   ) where
 
 import Data.List (sort, sortOn)
@@ -46,7 +51,14 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 
-data Universe = Enumerated [Text] | Ranged Text Text Text | Described Text
+-- A Ranged universe's third field is a CAVEAT, and a caveat is a thing
+-- a type may or may not have: Year's window carries one that a reader
+-- genuinely needs ("year 0 does not exist"), while a probe index from 0
+-- to 24 is the whole of what there is to say. `Maybe`, not "" -- an
+-- empty string standing for "no note" is the stringly-typed sentinel
+-- this house refuses elsewhere, and it renders as "from 0 to 24 ()",
+-- an empty parenthetical that is worse than no parenthetical at all.
+data Universe = Enumerated [Text] | Ranged Text Text (Maybe Text) | Described Text
   deriving (Eq, Show)
 
 class FromCapture a where
@@ -58,7 +70,8 @@ class FromCapture a where
 -- The one sentence a dummy reads in the Vocabulary table.
 describeUniverse :: Universe -> Text
 describeUniverse (Enumerated vs)   = "any of: " <> T.intercalate ", " vs
-describeUniverse (Ranged lo hi m)  = "whole number from " <> lo <> " to " <> hi <> " (" <> m <> ")"
+describeUniverse (Ranged lo hi m)  =
+  "whole number from " <> lo <> " to " <> hi <> maybe "" (\c -> " (" <> c <> ")") m
 describeUniverse (Described d)     = d
 
 didYouMean :: [Text] -> Text -> Text
@@ -191,7 +204,8 @@ newtype Year = Year Int deriving (Eq, Ord, Show)
 -- site.
 instance FromCapture Year where
   capName _ = "year"
-  universe _ = Ranged "-4004" "100" "negative means BC; -1405 is 1405 BC; year 0 does not exist"
+  universe _ = Ranged "-4004" "100"
+    (Just "negative means BC; -1405 is 1405 BC; year 0 does not exist")
   renderCap (Year y) = T.pack (show y)
   parseCap t = case reads (T.unpack (T.strip t)) of
     [(0, "")] -> Left $ "year 0 does not exist in this calendar (1 BC is followed by AD 1). "
@@ -361,6 +375,77 @@ instance FromCapture ScaleQual where
                           <> didYouMean (map fst vs) (T.strip t)
                           <> "\n  Scale words are: "
                           <> T.intercalate ", " (sort (map fst vs)))
+
+-- ---------- Probe: one of the golden gate's colour samples ----------
+-- The gate samples 25 colours per view, on a 5x5 grid of the frame
+-- (crates/map-viewer/tests/golden.js's GRID: the fractions 0.2, 0.35,
+-- 0.5, 0.65, 0.8 crossed with themselves, in that order). A probe is an
+-- INDEX into that grid, and the frame is the gate's own -- 25 samples,
+-- so 0 to 24, and neither endpoint is a number chosen here.
+--
+-- Ranged with no caveat: "a whole number from 0 to 24" is the entire
+-- truth about a probe, unlike a year, whose window has a hole in it.
+newtype Probe = Probe Int deriving (Eq, Ord, Show)
+
+probeCount :: Int
+probeCount = 25
+
+-- The CENTRE of the frame, and the bottom of the probe order: grid
+-- index 12 is (0.5, 0.5), the middle sample of the middle row. The
+-- landmark a probe counterexample narrows toward, for the reason -1405
+-- is a year's and 31.5,35.0 is a camera's -- it is the one sample every
+-- reader of a golden view already has in their head, the place you look
+-- when you look at the map at all.
+centreProbe :: Probe
+centreProbe = Probe 12
+
+instance FromCapture Probe where
+  capName _ = "probe"
+  universe _ = Ranged "0" (T.pack (show (probeCount - 1))) Nothing
+  renderCap (Probe p) = T.pack (show p)
+  parseCap t = case reads (T.unpack (T.strip t)) of
+    [(p, "")] | p >= 0 && p < probeCount -> Right (Probe p)
+    [(p, "")] -> Left ("probe " <> T.pack (show p) <> " is outside the grid. "
+                       <> describeUniverse (universe (Proxy @Probe)))
+    _ -> Left ("'" <> T.strip t <> "' is not a probe. "
+               <> describeUniverse (universe (Proxy @Probe)))
+
+-- ---------- GateCamera: the two framings the golden views hold ----------
+-- The gate probes every era stop at exactly two cameras (golden.js's
+-- CAMS): `levant`, the beloved framing around the twelve tribes, and
+-- `hemisphere`, the whole visible face of the globe. A closed set of
+-- two, so Enumerated -- it is a vocabulary a reader must learn before
+-- writing a gate scenario, exactly like the piece and style lists.
+--
+-- The NAMES only, not their lat/lon/zoom: the gate publishes its own
+-- camera table into the page it drives, so a camera's numbers live in
+-- one place (golden.js) and this side names them rather than restating
+-- them.
+data GateCamera = Levant | Hemisphere deriving (Eq, Ord, Show, Bounded, Enum)
+
+gateCameraText :: GateCamera -> Text
+gateCameraText = T.toLower . T.pack . show
+
+-- Declaration order, NOT sorted, unlike Piece and ScaleQual: this pair
+-- has an order of its own that alphabetising would destroy. The gate
+-- walks levant first and the hemisphere second at every stop, and the
+-- corpus's Vocabulary block says "levant, hemisphere" because that is
+-- the order the views are held in, not because of where the letters
+-- fall.
+gateCameraNames :: [Text]
+gateCameraNames = map gateCameraText [minBound .. maxBound]
+
+instance FromCapture GateCamera where
+  capName _ = "camera"
+  universe _ = Enumerated gateCameraNames
+  renderCap = gateCameraText
+  parseCap t =
+    let vs = [ (gateCameraText c, c) | c <- [minBound .. maxBound] ]
+    in case lookup (T.strip t) vs of
+         Just c  -> Right c
+         Nothing -> Left ("'" <> T.strip t <> "' is not a camera."
+                          <> didYouMean (map fst vs) (T.strip t)
+                          <> "\n  Cameras are: " <> T.intercalate ", " gateCameraNames)
 
 -- ---------- DetailTier: how much geometry ----------
 -- Three tiers a person actually uses, and their lod numbers are DERIVED

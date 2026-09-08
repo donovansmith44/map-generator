@@ -18,7 +18,7 @@ import Capture
 import Gherkin.Ast
 import Gherkin.Parse (parseFeature)
 import Run
-import World (StepDef, World, readFeatureFile)
+import World (Claim (..), StepDef (..), StepCost (..), World, costSeconds, readFeatureFile)
 
 -- ---------- holes, drawn in CORRELATED GROUPS ----------
 --
@@ -716,6 +716,50 @@ zoomOrder = Order zoomRank shr
            , zoomRank z' < zoomRank z
            , zoomDerivesTwoCameras z' ]
 
+-- ---------- the golden gate's own two holes ----------
+--
+-- <someProbe>: which of the gate's 25 colour samples a law is stated
+-- about. A flat draw over the whole grid, because the grid IS the
+-- codomain -- there is no sub-window to avoid here the way <someZoom>
+-- has one, and no partner to be distinct from.
+genProbe :: Gen Probe
+genProbe = Probe <$> chooseInt (0, probeCount - 1)
+
+-- Toward the CENTRE of the frame (grid index 12, the sample at
+-- 0.5, 0.5), which is `Capture.centreProbe` and the reason is stated
+-- there: it is the probe a reader of a golden view already has in their
+-- head. Same shape as `yearOrder` and `centerShrinks` -- the landmark
+-- is rank 0 and reachable in one jump from anywhere, ordinary integer
+-- shrinks are offered alongside it, and BOTH are filtered to candidates
+-- that genuinely rank lower. That filter is not decoration: `shrink`
+-- moves toward ZERO while this rank measures distance from TWELVE, so
+-- an unfiltered candidate that overshoots the centre would rank higher
+-- and the greedy loop could walk in a circle -- the exact -1405 <->
+-- -1400 cycle `yearOrder` was written to rule out.
+probeRank :: Probe -> Int
+probeRank p@(Probe i)
+  | p == centreProbe = 0
+  | otherwise = 1 + abs (i - c)
+  where Probe c = centreProbe
+
+probeOrder :: Order Probe
+probeOrder = Order probeRank shr
+  where
+    shr p@(Probe i) =
+      [ p' | p' <- [ centreProbe | p /= centreProbe ] ++ map Probe (shrink i)
+           , probeRank p' < probeRank p ]
+
+-- <someCamera>: which of the gate's two framings. Two values, so the
+-- draw is `elements` over the whole type and the order has exactly one
+-- move in it -- toward `Levant`, the beloved framing around the twelve
+-- tribes and the camera this project's every conversation is about. The
+-- hemisphere shrinks to it; it shrinks to nothing, being the bottom.
+genGateCamera :: Gen GateCamera
+genGateCamera = elements [minBound .. maxBound]
+
+gateCameraOrder :: Order GateCamera
+gateCameraOrder = Order fromEnum (\c -> takeWhile (< c) [minBound .. maxBound])
+
 -- The property `genZoom`'s window delivers and `zoomOrder` must
 -- preserve, stated ONCE as a predicate over the value: both derived
 -- cameras really are other cameras. Read off `Capture.zoomDoubled`/
@@ -763,6 +807,17 @@ holeGroups =
   , pair "centerPair"   "someCenter" "someOtherCenter"
       genCenterPair   centerPairOrder distinctCenterLaw
   , soloLawful "someZoom" genZoom zoomOrder zoomLaw
+    -- R99, the golden gate's two. Solo and lawless, and both facts are
+    -- deliberate: the gate's two property laws quantify over a probe
+    -- AND a camera together, but they need no RELATIONSHIP between them
+    -- -- every one of the fifty pairs is a legal place for a change to
+    -- land, and a law about "probe P of camera C" compares the gate's
+    -- verdict against the change that was made, never one draw against
+    -- another. There is nothing here for a group law to establish, and
+    -- `const True` on a group that correlates nothing is the honest
+    -- statement of that, not an omission.
+  , solo "someProbe"  genProbe       probeOrder
+  , solo "someCamera" genGateCamera  gateCameraOrder
   ]
 
 -- Every hole name, mapped to the group that draws it. A partition of the
@@ -985,7 +1040,7 @@ runScenarioProperty defs w n sc =
   case unregistered of
     (h : _) -> pure $ LawRun
       (Failed ("unregistered property hole <" <> h <> "> in scenario \""
-               <> scName sc <> "\" -- add it to Prop.holeRegistry")) 0
+               <> scName sc <> "\" -- add it to Prop.holeRegistry")) 0 0
     [] -> loop 0 0 ""
   where
     hs = dedupe (holesOf sc)
@@ -1008,7 +1063,7 @@ runScenarioProperty defs w n sc =
             -- first one that happened to.
             Failed _ -> do
               (minEnv, minMsg) <- shrinkToMinimal defs w sc env
-              pure . flip LawRun skips . Failed $
+              pure . (\v -> LawRun v skips n) . Failed $
                 minMsg <> withBindings minEnv
                   -- The original counterexample stays visible: shrinking
                   -- must SHARPEN the report, never hide what was
@@ -1257,6 +1312,60 @@ checkPropertyRuns n
         <> "less thoroughly -- it does not check it at all, and every such law "
         <> "would report green having examined nothing."
 
+-- ---------- the iteration budget ----------
+--
+-- What one iteration of a law COSTS, in seconds: the declared cost
+-- (World.StepCost) of every definition this scenario's steps match.
+--
+-- SUM, not maximum, and that is the whole reason it is computed rather
+-- than written down: "the same map judged twice gives the same verdict"
+-- judges the map TWICE, so an iteration of it costs two gate runs, and
+-- a law that grew a third judging step would cost three without anybody
+-- having to remember to change a number.
+--
+-- Matched, not merely claimed, and deholed under the scenario's own
+-- tags -- the same rule `Vocab.expectedVocab` reads a step by, because
+-- it is the same question ("which definition actually runs this line?")
+-- and a second answer to it would be a second place to drift.
+iterationCost :: [StepDef] -> Scenario -> Int
+iterationCost defs sc = sum
+  [ costSeconds (defCost d)
+  | st <- scSteps sc
+  , let body = deholeFor (scTags sc) (stepBody st)
+  , d <- defs, defKw d == stepKw st, Matched _ <- [defRun d body] ]
+
+-- WHAT A LAW MAY SPEND. Five minutes.
+--
+-- Not a tuned number: a full run of the golden gate itself -- 89 stops,
+-- two cameras, the thing these laws are about -- is about twenty-five
+-- minutes, and no single law ABOUT an instrument may cost more than a
+-- fifth of running the instrument. Past that the laws stop being run,
+-- which is the only way they can fail that nobody notices.
+--
+-- It bounds a law from above and never props one up: a cheap law is
+-- untouched by it (every step `Instant`, so the requested count
+-- stands), and no law can be given MORE iterations than were asked for.
+lawSecondsBudget :: Int
+lawSecondsBudget = 300
+
+-- How many iterations this law actually gets: what was asked for, or
+-- what the budget affords, whichever is smaller — and never fewer than
+-- one, because a law that runs zero times reports green having examined
+-- nothing (`checkPropertyRuns` refuses that at the front door and this
+-- must not smuggle it back in through the side).
+--
+-- The count it returns is REPORTED, not just used: `LawRun` carries it
+-- and `reportTable` prints it, so a law that ran 6 of a requested 100
+-- says 6 on the page. A short run that reads like a full one is the
+-- same defect as a gate that judges three stops and says "all golden
+-- views hold" -- R54 in a new coat, and the reason this number is a
+-- column rather than a comment.
+iterationsFor :: [StepDef] -> Int -> Scenario -> Int
+iterationsFor defs requested sc
+  | cost <= 0 = requested
+  | otherwise = max 1 (min requested (lawSecondsBudget `div` cost))
+  where cost = iterationCost defs sc
+
 -- Plain scenarios run once; @property scenarios run `n` times over
 -- generated bindings (first failure's Verdict already carries its
 -- binding values, from runScenarioProperty above).
@@ -1268,7 +1377,7 @@ runWithProperties defs w n files = fmap concat . mapM one $ files
       -- see World.readFeatureFile's comment.
       src <- readFeatureFile p
       case parseFeature p src of
-        Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0]
+        Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0 0]
         -- R97: `runnableScenarios` -- so a hole in the Background is the
         -- SAME hole as one in the scenario body. `holesOf` scans
         -- `scSteps`, so one draw per iteration covers both, and
@@ -1277,7 +1386,7 @@ runWithProperties defs w n files = fmap concat . mapM one $ files
         Right f -> mapM (run1 (ftTitle f)) (runnableScenarios f)
     run1 ft sc
       | isProperty (scTags sc) =
-          mk ft sc <$> runScenarioProperty defs w n sc
+          mk ft sc <$> runScenarioProperty defs w (iterationsFor defs n sc) sc
       | otherwise =
           mk ft sc . lawOnce <$> runScenario defs w sc
-    mk ft sc (LawRun v s) = ScenarioResult ft (scName sc) (scTags sc) v s
+    mk ft sc (LawRun v s r) = ScenarioResult ft (scName sc) (scTags sc) v s r

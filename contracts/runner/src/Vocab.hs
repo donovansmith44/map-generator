@@ -78,8 +78,8 @@ expectedVocab defs f = nub
   | sc <- runnableScenarios f
   , st <- scSteps sc
   , let body = Prop.deholeFor (scTags sc) (stepBody st)
-  , StepDef k _ us m <- defs, k == stepKw st, Matched _ <- [m body]
-  , (name, u) <- us, isVocab u ]
+  , d <- defs, defKw d == stepKw st, Matched _ <- [defRun d body]
+  , (name, u) <- defUses d, isVocab u ]
   where
     isVocab (Described _) = False
     isVocab _             = True

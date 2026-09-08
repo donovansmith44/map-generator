@@ -19,7 +19,7 @@ import Control.Exception (try, bracket, evaluate, finally)
 import Data.Proxy (Proxy (..))
 import Data.Either (isLeft, isRight)
 import Data.List (isInfixOf, nub, sort)
-import Data.IORef (modifyIORef, newIORef, readIORef)
+import Data.IORef (modifyIORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (fromJust, listToMaybe)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
@@ -1237,12 +1237,14 @@ main = hspec $ do
           -- just compute it silently
           -- (the sweep: the table now carries a skip-count column too --
           -- every one of these laws ran in full, so each shows 0)
+          -- (R99: and an iteration count before it -- a plain scenario
+          -- is given exactly one iteration, so each shows 1)
           let table = reportTable results
           table `shouldSatisfy` T.isInfixOf "| hard red | \10060 RED"
           table `shouldSatisfy`
-            T.isInfixOf "| expected red | \128308 red (expected \8212 @target) | 0 |"
+            T.isInfixOf "| expected red | \128308 red (expected \8212 @target) | 1 | 0 |"
           table `shouldSatisfy`
-            T.isInfixOf "| target already met | \128994 green (target already met!) | 0 |"
+            T.isInfixOf "| target already met | \128994 green (target already met!) | 1 | 0 |"
           table `shouldSatisfy` T.isInfixOf "| PARSE | \10060 RED"
         rs -> expectationFailure ("expected exactly 4 results, got " <> show (length rs))
     -- Review finding (Task 6 round 1), fix 3: the exception branch of
@@ -1589,6 +1591,30 @@ main = hspec $ do
             , (Then, "fetching scene's first resource alongside a bogus id is refused by name")
             , (Then, "every entry in sampled traces to a disposition and a border")
             , (Then, "selfDiff equals fixture \"census-diff-empty\"")
+              -- R99, golden-gate.feature's eighteen, again in the
+              -- corpus's own words (with the two holes at an example
+              -- value, exactly as `check` sees them). These drive a
+              -- browser at run time and nothing here runs one: the
+              -- bijection is a law about the STEP SET, and it holds or
+              -- fails without a viewer, a gate, or a network.
+            , (When, "I judge the unchanged map as first")
+            , (When, "I repaint probe 7 of levant in the drawn map")
+            , (When, "I repaint probe 7 of levant by less than the gate's tolerance")
+            , (When, "I judge the repainted map as judged")
+            , (When, "I judge a map that never stops moving")
+            , (When, "I judge a map whose renderer has died")
+            , (When, "I judge a map that draws nothing as blank")
+            , (When, "I judge a map that never loaded as absent")
+            , (When, "I bless against a map that never stops moving")
+            , (When, "I judge a map that offers fewer stops than the baseline holds")
+            , (Then, "first and second are the same verdict, drift for drift")
+            , (Then, "judged reports drift at probe 7 of levant, and nowhere else")
+            , (Then, "judged holds")
+            , (Then, "blank and absent are different verdicts")
+            , (Then, "the gate stops and says the view would not hold still")
+            , (Then, "the gate stops and says the renderer is down")
+            , (Then, "nothing is written and the gate says the view would not hold still")
+            , (Then, "the gate stops and says which stops it never saw")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [] [Scenario "s" [] steps]
@@ -2175,7 +2201,7 @@ main = hspec $ do
             -- (the sweep: a law's run is now its verdict AND how many
             -- iterations never ran -- this one has no precondition, so
             -- all 25 genuinely ran)
-            v `shouldBe` LawRun Passed 0
+            v `shouldBe` LawRun Passed 0 25
           [] -> expectationFailure "expected at least one scenario"
     it "reports the failing binding when the law breaks" $ do
       let feat = T.unlines
@@ -2436,7 +2462,7 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             r <- Prop.runScenarioProperty allSteps w 100 sc
-            r `shouldBe` LawRun Passed 0
+            r `shouldBe` LawRun Passed 0 100
           [] -> expectationFailure "expected at least one scenario"
     it "the dress-locality law runs GREEN over 100 iterations against a \
        \server that repaints without moving anything -- end-to-end \
@@ -2458,7 +2484,7 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             r <- Prop.runScenarioProperty allSteps w 100 sc
-            r `shouldBe` LawRun Passed 0
+            r `shouldBe` LawRun Passed 0 100
           [] -> expectationFailure "expected at least one scenario"
     it "a scenario over CORRELATED holes still produces byte-identical \
        \verdicts run to run, counterexample text included" $ do
@@ -2531,9 +2557,10 @@ main = hspec $ do
       -- What the corpus may quantify over is a published surface; it
       -- gets a whole-body pin like any other.
       Map.keys Prop.holeRegistry `shouldBe`
-        [ "someA", "someB", "someCenter", "someDetail", "someOtherCenter"
-        , "someOtherDetail", "someOtherStyle", "someOtherYear", "somePiece"
-        , "somePieces", "someStyle", "someSubset", "someSuperset", "someYear"
+        [ "someA", "someB", "someCamera", "someCenter", "someDetail"
+        , "someOtherCenter", "someOtherDetail", "someOtherStyle"
+        , "someOtherYear", "somePiece", "somePieces", "someProbe"
+        , "someStyle", "someSubset", "someSuperset", "someYear"
         , "someZoom" ]
     it "somePiece is registered as its own solo group and shrinks toward \
        \the earliest piece" $ do
@@ -2817,7 +2844,7 @@ main = hspec $ do
         Right f -> case ftScenarios f of
           (sc : _) -> do
             r <- Prop.runScenarioProperty allSteps (mkWorld "http://x" fake "") 20 sc
-            r `shouldBe` LawRun Passed 0
+            r `shouldBe` LawRun Passed 0 20
           [] -> expectationFailure "expected at least one scenario"
     it "shrinking consumes no fresh randomness: the same failing run twice \
        \yields the byte-identical minimal counterexample" $ do
@@ -2933,7 +2960,7 @@ main = hspec $ do
     it "a plain scenario whose ONLY run skipped is Failed, not green: the \
        \n = 1 instance of the same discipline the property runner applies" $
       case lawOnce (Skipped "nothing to fetch") of
-        LawRun (Failed e) 1 -> do
+        LawRun (Failed e) 1 1 -> do
           e `shouldSatisfy` T.isInfixOf "law never ran"
           e `shouldSatisfy` T.isInfixOf "nothing to fetch"
         other -> expectationFailure
@@ -2957,7 +2984,7 @@ main = hspec $ do
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
           (sc : _) -> do
-            LawRun v skips <- Prop.runScenarioProperty allSteps w 25 sc
+            LawRun v skips _ <- Prop.runScenarioProperty allSteps w 25 sc
             v `shouldBe` Passed
             skips `shouldSatisfy` (> 0)
             skips `shouldSatisfy` (< 25)
@@ -2976,7 +3003,7 @@ main = hspec $ do
         Left e -> expectationFailure (T.unpack e)
         Right f -> case ftScenarios f of
           (sc : _) -> do
-            LawRun v skips <- Prop.runScenarioProperty allSteps w 25 sc
+            LawRun v skips _ <- Prop.runScenarioProperty allSteps w 25 sc
             skips `shouldBe` 25
             case v of
               Failed e -> do
@@ -3026,15 +3053,15 @@ main = hspec $ do
             atOne <- Prop.runScenarioProperty allSteps w 1 sc
             lawVerdict atOne `shouldSatisfy` \v -> case v of Failed _ -> True; _ -> False
             atZero <- Prop.runScenarioProperty allSteps w 0 sc
-            atZero `shouldBe` LawRun Passed 0   -- the vacuous green, unreachable via the CLI
+            atZero `shouldBe` LawRun Passed 0 0 -- the vacuous green, unreachable via the CLI
           [] -> expectationFailure "expected at least one scenario"
     it "the report table carries the skip count in its own column, so a \
        \green law with thin coverage is visible as such" $ do
-      let rs = [ ScenarioResult "f" "thinly covered" [] Passed 12
-               , ScenarioResult "f" "fully covered" [] Passed 0 ]
-      reportTable rs `shouldSatisfy` T.isInfixOf "| thinly covered | \9989 green | 12 |"
-      reportTable rs `shouldSatisfy` T.isInfixOf "| fully covered | \9989 green | 0 |"
-      reportTable rs `shouldSatisfy` T.isInfixOf "| verdict | skipped |"
+      let rs = [ ScenarioResult "f" "thinly covered" [] Passed 12 100
+               , ScenarioResult "f" "fully covered" [] Passed 0 100 ]
+      reportTable rs `shouldSatisfy` T.isInfixOf "| thinly covered | \9989 green | 100 | 12 |"
+      reportTable rs `shouldSatisfy` T.isInfixOf "| fully covered | \9989 green | 100 | 0 |"
+      reportTable rs `shouldSatisfy` T.isInfixOf "| verdict | ran | skipped |"
 
   -- ---------- hole distinctness: the check that would have caught §7.0 ----------
   describe "hole distinctness (Stage 1 Task 5)" $ do
@@ -5199,6 +5226,253 @@ main = hspec $ do
             Right w -> Map.lookup "viewed" (cameras w)
                          `shouldBe` Just (Center 31.5 35.0, Zoom 4)
 
+  -- ---------- R99: the golden gate answers to its own laws ----------
+  describe "R99: the probe and the camera the gate's laws quantify over" $ do
+    prop "a probe round-trips through the capture the corpus reads it with" $ \(i :: Int) ->
+      let n = abs i `mod` probeCount
+      in parseCap (renderCap (Probe n)) === Right (Probe n)
+    it "the grid's ends are in and its neighbours are out: 0 and 24 parse, \
+       \-1 and 25 do not, and neither does a word" $ do
+      parseCap @Probe "0" `shouldBe` Right (Probe 0)
+      parseCap @Probe "24" `shouldBe` Right (Probe 24)
+      parseCap @Probe "25" `shouldSatisfy` isLeft
+      parseCap @Probe "-1" `shouldSatisfy` isLeft
+      parseCap @Probe "middle" `shouldSatisfy` isLeft
+    it "the two cameras are the gate's own two, in the gate's own order -- \
+       \alphabetising them would put the hemisphere before the levant, \
+       \which is neither the order the views are held in nor the order \
+       \the corpus's Vocabulary block states" $ do
+      universe (Proxy @GateCamera) `shouldBe` Enumerated ["levant", "hemisphere"]
+      parseCap @GateCamera "levant" `shouldBe` Right Levant
+      parseCap @GateCamera "hemisphere" `shouldBe` Right Hemisphere
+      parseCap @GateCamera "leant" `shouldSatisfy` isLeft
+    it "a Ranged universe with no caveat reads as the bare sentence, and \
+       \one with a caveat still speaks it -- an empty parenthetical is a \
+       \caveat that is not there" $ do
+      describeUniverse (universe (Proxy @Probe)) `shouldBe` "whole number from 0 to 24"
+      describeUniverse (universe (Proxy @Year)) `shouldSatisfy`
+        T.isInfixOf "(negative means BC"
+    it "every probe candidate ranks strictly lower than the probe it came \
+       \from, the centre of the frame offers none, and it is reachable in \
+       \one jump from the far corner" $ do
+      let probes = [ Probe i | i <- [0 .. probeCount - 1] ]
+          rank = Prop.rankOf Prop.probeOrder
+          cands = Prop.shrinkWith Prop.probeOrder
+      [ (p, c) | p <- probes, c <- cands p, rank c >= rank p ] `shouldBe` []
+      cands centreProbe `shouldBe` []
+      cands (Probe 24) `shouldSatisfy` elem centreProbe
+    it "the camera order bottoms out at the levant, the framing every \
+       \golden view is anchored to" $ do
+      Prop.shrinkWith Prop.gateCameraOrder Hemisphere `shouldBe` [Levant]
+      Prop.shrinkWith Prop.gateCameraOrder Levant `shouldBe` []
+      Prop.rankOf Prop.gateCameraOrder Levant `shouldBe` 0
+
+  describe "R99: the iteration budget is DERIVED from a measured cost" $ do
+    let lawOf bodies = Scenario "l" [Tag "property"] [ Step When b Nothing | b <- bodies ]
+        once  = lawOf ["I judge the unchanged map as first"]
+        twice = lawOf [ "I judge the unchanged map as first"
+                      , "I judge the unchanged map as second" ]
+    it "a law of instant steps is untouched by the budget: it gets exactly \
+       \what was asked for" $ do
+      Prop.iterationCost allSteps (lawOf ["I GET /api/eras"]) `shouldBe` 0
+      Prop.iterationsFor allSteps 100 (lawOf ["I GET /api/eras"]) `shouldBe` 100
+    it "a law that judges the map once gets the budget divided by one gate run" $
+      Prop.iterationsFor allSteps 100 once
+        `shouldBe` Prop.lawSecondsBudget `div` gateRunSeconds
+    it "a law that judges it TWICE costs twice as much and runs fewer \
+       \times -- the cost is SUMMED over the steps, so a law cannot gain a \
+       \gate run without paying for it" $ do
+      Prop.iterationCost allSteps twice
+        `shouldBe` 2 * Prop.iterationCost allSteps once
+      Prop.iterationsFor allSteps 100 twice
+        `shouldSatisfy` (< Prop.iterationsFor allSteps 100 once)
+    it "the budget only ever lowers a count, and never lowers one to zero \
+       \-- a law that runs no iterations reports green having examined \
+       \nothing, which is the thing checkPropertyRuns refuses at the front \
+       \door" $ do
+      Prop.iterationsFor allSteps 2 once `shouldBe` 2
+      Prop.iterationsFor allSteps 100
+        (lawOf (replicate 20 "I judge a map that never stops moving")) `shouldBe` 1
+
+  describe "R99: one invocation of the gate becomes one command line" $ do
+    let gate = "C:/repo/crates/map-viewer/tests/golden.js"
+        beside n = "C:/repo/crates/map-viewer/tests" </> "conditions" </> n
+    it "a check run names the mode and the declared subset, and nothing else" $
+      gateArgv gate (GateInvocation False [-1405] Nothing Nothing)
+        `shouldBe` [gate, "--check", "--stops", "-1405"]
+    it "a bless run does NOT pass --check, and names the baseline it writes" $
+      gateArgv gate (GateInvocation True [-1405] (Just "/tmp/x.json") Nothing)
+        `shouldBe` [gate, "--stops", "-1405", "--baseline", "/tmp/x.json"]
+    it "no declared subset means no --stops at all: the gate's own default \
+       \is every stop, and a runner that spelled that out would be \
+       \restating the gate's frame instead of leaving it to the gate" $
+      gateArgv gate (GateInvocation False [] Nothing Nothing)
+        `shouldBe` [gate, "--check"]
+    it "a condition is resolved BESIDE the gate, and its declared argument \
+       \travels as JSON on the same command line" $
+      gateArgv gate (GateInvocation False [-1446, -1405] Nothing
+                      (Just (GateCondition "fewer-stops.js"
+                              (Just (A.object ["drop" A..= [(-1446 :: Int)]])))))
+        `shouldBe` [ gate, "--check", "--stops", "-1446,-1405"
+                   , "--condition", beside "fewer-stops.js"
+                   , "--condition-arg", "{\"drop\":[-1446]}" ]
+    it "a repaint states the probe, the camera and which side of the \
+       \tolerance it lands -- the two property laws are exactly those two \
+       \sides, so a condition that lost the distinction would make one of \
+       \them the other" $ do
+      let far = repaintCondition (Probe 7) Levant RepaintFar
+          under = repaintCondition (Probe 7) Levant RepaintUnder
+      condScript far `shouldBe` "repaint.js"
+      condArg far `shouldBe`
+        Just (A.object ["probe" A..= (7 :: Int), "camera" A..= ("levant" :: T.Text)
+                       , "by" A..= ("far" :: T.Text)])
+      condArg under `shouldSatisfy` (/= condArg far)
+    it "a gate that cannot be RUN says which environment it is missing, \
+       \and names both variables -- a law that silently did not run the \
+       \gate would be a green tick for no evidence" $ do
+      gateEnvHelp `shouldSatisfy` T.isInfixOf "GOLDEN_GATE_JS"
+      gateEnvHelp `shouldSatisfy` T.isInfixOf "GOLDEN_GATE_HARNESS"
+
+  describe "R99: the verdict the gate prints, read back" $ do
+    it "reads the LAST verdict line, so a line printed earlier cannot \
+       \stand in for the answer" $ do
+      let out = "...1/1 stops\nGATE VERDICT {\"verdict\":\"DRIFT\"}\n\
+                \GATE VERDICT {\"verdict\":\"HOLD\"}\n"
+      fmap gvTag (gateVerdictOf out) `shouldBe` Right "HOLD"
+    it "a gate that printed NO verdict is a Left quoting what it did say \
+       \-- never a verdict invented on its behalf" $ do
+      let r = gateVerdictOf "gate: check\nTypeError: gpu is not defined\n"
+      case r of
+        Left e -> e `shouldSatisfy` T.isInfixOf "TypeError"
+        Right v -> expectationFailure ("expected no verdict, got " <> show (gvTag v))
+    it "drift comes back as (camera, probe) pairs with the gate's own \
+       \count beside them, so a truncated list is visible as such" $ do
+      let out = "GATE VERDICT {\"verdict\":\"DRIFT\",\"driftCount\":9,\
+                \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+      case gateVerdictOf out of
+        Left e -> expectationFailure (T.unpack e)
+        Right v -> do
+          gvDrift v `shouldBe` [("levant", 7)]
+          gvDriftCount v `shouldBe` 9
+    it "a verdict with no drift field at all reads as no drift, not as a \
+       \broken verdict -- HOLD carries none" $
+      fmap gvDriftCount (gateVerdictOf "GATE VERDICT {\"verdict\":\"HOLD\"}") `shouldBe` Right 0
+
+  describe "R99: the gate's laws are red for the reason they name" $ do
+    -- A gate a TEST writes: no browser, no viewer, no map. What is being
+    -- checked here is the LAW's reading of a verdict, and a law that
+    -- could only be exercised by running a real gate for fifty seconds
+    -- is a law whose failure modes never get exercised at all.
+    let gateSaying outs = do
+          left <- newIORef (outs :: [T.Text])
+          pure $ \_ -> do
+            said <- readIORef left
+            case said of
+              (o : rest) -> writeIORef left rest >> pure (Right o)
+              []         -> pure (Left "the law ran the gate more times than the test scripted")
+        runLaw outs bodies = do
+          g <- gateSaying outs
+          let w = (mkWorld "http://x" (\_ -> pure (Left "no server here")) "") { runGate = g }
+          runScenario allSteps w (Scenario "l" [] bodies)
+        verdict v = "GATE VERDICT " <> v
+        hold = verdict "{\"verdict\":\"HOLD\",\"judged\":[-1405]}"
+        redOf r = case r of
+          Failed e -> e
+          other    -> error ("expected a red, got " <> show other)
+
+    it "\"judged holds\" is green on HOLD and red on DRIFT, naming what the \
+       \gate said instead" $ do
+      let law o = runLaw [o]
+            [ Step When "I repaint probe 7 of levant by less than the gate's tolerance" Nothing
+            , Step When "I judge the repainted map as judged" Nothing
+            , Step Then "judged holds" Nothing ]
+      held <- law hold
+      held `shouldBe` Passed
+      called <- law (verdict "{\"verdict\":\"DRIFT\",\"driftCount\":3,\
+                             \\"detail\":\"3 probe(s) drifted\"}")
+      redOf called `shouldSatisfy` T.isInfixOf "was called DRIFT"
+
+    it "judging a repainted map with nothing repainted is a hard failure, \
+       \not a skip: no redraw fixes a scenario that judges a change it \
+       \never made" $ do
+      r <- runLaw [hold] [ Step When "I judge the repainted map as judged" Nothing ]
+      redOf r `shouldSatisfy` T.isInfixOf "nothing has been repainted"
+
+    it "\"reports drift at probe P of camera C, and nowhere else\" refuses \
+       \a gate that found drift somewhere else, and refuses one whose \
+       \count outruns the list it printed" $ do
+      let run1 v = runLaw [verdict v]
+            [ Step When "I repaint probe 7 of levant in the drawn map" Nothing
+            , Step When "I judge the repainted map as judged" Nothing
+            , Step Then "judged reports drift at probe 7 of levant, and nowhere else" Nothing ]
+      here <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":1,\
+                   \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+      here `shouldBe` Passed
+      elsewhere <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":2,\
+                        \\"drift\":[{\"camera\":\"levant\",\"probe\":7},\
+                        \{\"camera\":\"hemisphere\",\"probe\":2}]}"
+      redOf elsewhere `shouldSatisfy` T.isInfixOf "away from the repainted probe"
+      truncated <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":40,\
+                        \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+      redOf truncated `shouldSatisfy` T.isInfixOf "truncated"
+      quiet <- run1 "{\"verdict\":\"HOLD\"}"
+      redOf quiet `shouldSatisfy` T.isInfixOf "the gate said HOLD"
+
+    it "\"the same verdict, drift for drift\" compares the WHOLE verdict, \
+       \not its headline -- the defect this feature was written for said \
+       \REGRESSION twice with two different failing sets" $ do
+      let two a b = runLaw [verdict a, verdict b]
+            [ Step When "I judge the unchanged map as first" Nothing
+            , Step When "I judge the unchanged map as second" Nothing
+            , Step Then "first and second are the same verdict, drift for drift" Nothing ]
+      same <- two "{\"verdict\":\"HOLD\",\"judged\":[-1405]}" "{\"verdict\":\"HOLD\",\"judged\":[-1405]}"
+      same `shouldBe` Passed
+      sameHeadline <- two
+        "{\"verdict\":\"DRIFT\",\"driftCount\":4,\"drift\":[{\"camera\":\"levant\",\"probe\":1}]}"
+        "{\"verdict\":\"DRIFT\",\"driftCount\":3,\"drift\":[{\"camera\":\"levant\",\"probe\":2}]}"
+      redOf sameHeadline `shouldSatisfy` T.isInfixOf "answered differently"
+
+    it "\"different verdicts\" refuses two answers that agree, AND refuses \
+       \an all-clear -- a gate that called a map showing nothing HOLD is \
+       \the instrument that blessed a black baseline" $ do
+      let two a b = runLaw [verdict a, verdict b]
+            [ Step When "I judge a map that draws nothing as blank" Nothing
+            , Step When "I judge a map that never loaded as absent" Nothing
+            , Step Then "blank and absent are different verdicts" Nothing ]
+      good <- two "{\"verdict\":\"DRIFT\"}" "{\"verdict\":\"NOT-ARRIVED\"}"
+      good `shouldBe` Passed
+      agree <- two "{\"verdict\":\"DRIFT\"}" "{\"verdict\":\"DRIFT\"}"
+      redOf agree `shouldSatisfy` T.isInfixOf "the same answer"
+      clear <- two "{\"verdict\":\"HOLD\"}" "{\"verdict\":\"NOT-ARRIVED\"}"
+      redOf clear `shouldSatisfy` T.isInfixOf "all-clear"
+
+    it "\"the gate stops and says X\" wants the verdict X AND a reason: a \
+       \tag with nothing behind it names a category, not a fault" $ do
+      let law o = runLaw [verdict o]
+            [ Step When "I judge a map whose renderer has died" Nothing
+            , Step Then "the gate stops and says the renderer is down" Nothing ]
+      ok <- law "{\"verdict\":\"RENDERER-DOWN\",\"detail\":\"the WebGL context is gone\"}"
+      ok `shouldBe` Passed
+      wrongTag <- law "{\"verdict\":\"NOT-STILL\",\"detail\":\"SETTLE CEILING\"}"
+      redOf wrongTag `shouldSatisfy` T.isInfixOf "answered NOT-STILL, not RENDERER-DOWN"
+      mute <- law "{\"verdict\":\"RENDERER-DOWN\"}"
+      redOf mute `shouldSatisfy` T.isInfixOf "said nothing about why"
+
+    it "\"says which stops it never saw\" pins the NAMED set whole, not \
+       \merely that the list was non-empty -- R101 is about the gate \
+       \saying which, and a gate that failed while naming the wrong stops \
+       \would pass a non-empty check" $ do
+      let law o = runLaw [verdict o]
+            [ Step When "I judge a map that offers fewer stops than the baseline holds" Nothing
+            , Step Then "the gate stops and says which stops it never saw" Nothing ]
+      ok <- law "{\"verdict\":\"MISSING-STOPS\",\"missing\":[-1446],\"detail\":\"1 stop\"}"
+      ok `shouldBe` Passed
+      wrong <- law "{\"verdict\":\"MISSING-STOPS\",\"missing\":[-1000],\"detail\":\"1 stop\"}"
+      redOf wrong `shouldSatisfy` T.isInfixOf "not [-1446]"
+      ungated <- law "{\"verdict\":\"HOLD\",\"missing\":[-1446]}"
+      redOf ungated `shouldSatisfy` T.isInfixOf "answered HOLD, not MISSING-STOPS"
+
+
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a
 -- temp file for the duration of `act` (via GHC.IO.Handle's fd-duplication,
 -- the same technique `System.IO.Silently` uses), then restores it and
@@ -5310,13 +5584,18 @@ mkWorld base tr dir = World base tr dir mempty False
   (\_ -> pure (Left "no raw transport configured for this test"))
   Nothing Map.empty
   (\_ -> pure (Left "no probe transport configured for this test"))
+  -- R99: the gate a test does NOT configure must refuse to run, never
+  -- quietly answer -- a step that read a verdict out of a stub would be
+  -- checking the stub.
+  (\_ -> pure (Left "no golden gate configured for this test"))
+  Nothing
 
 -- The step action a body resolves to, in its full three-outcome form
 -- (World.StepOutcome) -- used directly by the tests that are ABOUT
 -- skipping.
 firstOutcome :: Keyword -> T.Text -> Maybe (World -> IO StepOutcome)
 firstOutcome k t = listToMaybe
-  [ f | StepDef k' _ _ m <- allSteps, k' == k, Matched f <- [m t] ]
+  [ f | d <- allSteps, defKw d == k, Matched f <- [defRun d t] ]
 
 -- The two-outcome view, for the great majority of steps that cannot skip
 -- at all. An UNEXPECTED skip is surfaced as a loud, named failure rather

@@ -40,6 +40,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
                  BATCH C caught (8/8), BATCH D caught (12/12),
+                 BATCH E caught (17/17 laws, 14 mutations),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -93,7 +94,11 @@ RUNNER = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(RUNNER, "..", ".."))
 
 SRC = {name: os.path.join(RUNNER, "src", name)
-       for name in ("Prop.hs", "Run.hs", "Steps.hs", "Vocab.hs", "Check.hs")}
+       for name in ("Prop.hs", "Run.hs", "Steps.hs", "Vocab.hs", "Check.hs",
+                    # R99 (BATCH E) mutates these two as well: the gate's own
+                    # laws rest on a capture type and on how one invocation
+                    # becomes one command line.
+                    "Capture.hs", "World.hs")}
 SRC["Ast.hs"] = os.path.join(RUNNER, "src", "Gherkin", "Ast.hs")
 SRC["Parse.hs"] = os.path.join(RUNNER, "src", "Gherkin", "Parse.hs")
 
@@ -514,7 +519,148 @@ SOLO_RUNS = [
     ("D10:", ["a degenerate hole written ONLY in a background is caught by the"]),
 ]
 
-ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D
+# ---------------------------------------------------------------------------
+# BATCH E -- R99, THE GOLDEN GATE'S OWN LAWS.
+#
+# Everything the gate's laws rest on that is NOT the gate itself: the two
+# types they quantify over, the order a counterexample narrows along, the
+# budget that decides how many times an expensive law runs, and -- the
+# largest share -- the readings the Then steps make of the verdict the gate
+# prints.
+#
+# These mutate Haskell and are caught by `cabal test`, with no browser and
+# no viewer: that is the point of the fake gate in Spec's "the gate's laws
+# are red for the reason they name" block.  A mutation of golden.js itself
+# could only be caught by a run that launches Chromium for fifty seconds
+# per law, which is why the gate's own falsifiability is demonstrated in
+# the report by DRIVING it under conditions rather than by mutating it
+# here.
+# ---------------------------------------------------------------------------
+BATCH_E = [
+    (
+        "E1: a Ranged universe prints an empty parenthetical when it has no "
+        "caveat, so the corpus's own Vocabulary row stops matching its type",
+        "Capture.hs",
+        '  "whole number from " <> lo <> " to " <> hi <> maybe "" (\\c -> " (" <> c <> ")") m',
+        '  "whole number from " <> lo <> " to " <> hi <> " (" <> maybe "" id m <> ")"',
+    ),
+    (
+        "E2: a probe outside the gate's 5x5 grid parses anyway, so <someProbe> "
+        "could name a sample that does not exist",
+        "Capture.hs",
+        '    [(p, "")] | p >= 0 && p < probeCount -> Right (Probe p)',
+        '    [(p, "")] | p >= -99 && p < 99 -> Right (Probe p)',
+    ),
+    (
+        "E3: the cameras are alphabetised, which puts the hemisphere before "
+        "the levant -- neither the order the views are held in nor the order "
+        "the corpus's Vocabulary block states",
+        "Capture.hs",
+        "gateCameraNames = map gateCameraText [minBound .. maxBound]",
+        "gateCameraNames = sort (map gateCameraText [minBound .. maxBound])",
+    ),
+    (
+        "E4: the probe order offers candidates that do not rank lower, so a "
+        "counterexample can walk in a circle instead of narrowing",
+        "Prop.hs",
+        "           , probeRank p' < probeRank p ]",
+        "           , True ]",
+    ),
+    (
+        "E5: an iteration's cost is the largest step rather than the sum, so a "
+        "law that judges the map twice is budgeted as if it judged it once",
+        "Prop.hs",
+        "iterationCost defs sc = sum",
+        "iterationCost defs sc = maximum . (0 :) $",
+    ),
+    (
+        "E6: the budget may RAISE a count above what was asked for",
+        "Prop.hs",
+        "  | otherwise = max 1 (min requested (lawSecondsBudget `div` cost))",
+        "  | otherwise = max 1 (lawSecondsBudget `div` cost)",
+    ),
+    (
+        "E7: the report table drops its iteration column, so a law that ran 6 "
+        "of a requested 100 reads exactly like one that ran all 100",
+        "Run.hs",
+        '     "| feature | scenario | verdict | ran | skipped |"',
+        '     "| feature | scenario | verdict | skipped |"',
+    ),
+    (
+        "E8: --check is passed on a BLESS run and withheld on a check run",
+        "World.hs",
+        '  ++ [ "--check" | not (invBless inv) ]',
+        '  ++ [ "--check" | invBless inv ]',
+    ),
+    (
+        "E9: the determinism law compares only the gate's headline, not the "
+        "whole verdict -- the defect the feature was written for said "
+        "REGRESSION twice with two different failing sets",
+        "Steps.hs",
+        "        if gvBody va == gvBody vb then Right w",
+        "        if gvTag va == gvTag vb then Right w",
+    ),
+    (
+        "E10: 'different verdicts' accepts the all-clear, so a gate that "
+        "called a map showing nothing HOLD would satisfy the law",
+        "Steps.hs",
+        '        if gvTag va == "HOLD" || gvTag vb == "HOLD"',
+        '        if gvTag va == "NO-SUCH-VERDICT"',
+    ),
+    (
+        "E11: 'and nowhere else' stops looking anywhere else, so a gate that "
+        "reported drift at every probe would satisfy the detection law",
+        "Steps.hs",
+        "        else if not (null elsewhere)",
+        "        else if not (null (drop 99 elsewhere))",
+    ),
+    (
+        "E12: a verdict tag with no reason behind it is accepted, so 'says "
+        "the renderer is down' is satisfied by a gate that names a category "
+        "and nothing else",
+        "Steps.hs",
+        "    else if T.null (T.strip (gvDetail v))",
+        "    else if T.null (T.strip (gvTag v))",
+    ),
+    (
+        "E13: the missing-stops law checks only that SOMETHING was named, so "
+        "a gate that failed while naming the wrong stops would pass",
+        "Steps.hs",
+        "        if sort (gvMissing v) == sort [gateDroppedStop] then Right w",
+        "        if not (null (gvMissing v)) then Right w",
+    ),
+    (
+        "E14: the FIRST verdict line is read instead of the last, so a line "
+        "printed before the gate's final word can stand in for the answer",
+        "Steps.hs",
+        "      v <- either (Left . T.pack) Right (eitherDecodeStrict (TE.encodeUtf8 (last ls)))",
+        "      v <- either (Left . T.pack) Right (eitherDecodeStrict (TE.encodeUtf8 (head ls)))",
+    ),
+]
+
+# R99's expectations. E8 reddens the whole argv block, because every one of
+# those laws reads the same command line; the rest each name one law.
+EXPECT_E = [
+    "a Ranged universe with no caveat reads as the bare sentence",
+    "the grid's ends are in and its neighbours are out",
+    "the two cameras are the gate's own two, in the gate's own order",
+    "every probe candidate ranks strictly lower",
+    "a law that judges it TWICE costs twice as much",
+    "the budget only ever lowers a count",
+    "the report table carries the skip count in its own column",
+    "a check run names the mode and the declared subset",
+    "a bless run does NOT pass --check",
+    "no declared subset means no --stops at all",
+    "a condition is resolved BESIDE the gate",
+    "compares the WHOLE verdict",
+    "refuses two answers that agree",
+    "refuses a gate that found drift somewhere else",
+    "wants the verdict X AND a reason",
+    "pins the NAMED set whole",
+    "reads the LAST verdict line",
+]
+
+ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D + BATCH_E
 
 
 def run_one(label_fragment, expected, originals):
@@ -549,6 +695,7 @@ PHASES = [
     ("B", "BATCH B (skip discipline + the three new steps)", BATCH_B, EXPECT_B),
     ("C", "BATCH C (fix round 1: the discriminating cases)", BATCH_C, EXPECT_C),
     ("D", "BATCH D (R97: Background)", BATCH_D, EXPECT_D),
+    ("E", "BATCH E (R99: the golden gate's own laws)", BATCH_E, EXPECT_E),
 ]
 
 PHASE_NAMES = [ p[0] for p in PHASES ] + ["SOLO"]

@@ -33,6 +33,7 @@ library
                       QuickCheck >=2.14,
                       directory,
                       filepath,
+                      process,
                       vector
     default-language: GHC2021
 

@@ -1,11 +1,12 @@
 module Steps where
 
-import Data.Aeson (Value (..), eitherDecodeStrict)
+import Data.Aeson (Value (..), eitherDecodeStrict, object, (.=))
 import qualified Data.Aeson.Key as K
 import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
+import Control.Monad (when)
 import Data.Char (isSpace)
 import Data.Foldable (asum)
 import Data.List (sort, tails)
@@ -16,7 +17,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
 import System.FilePath ((</>))
 import Capture
 import Gherkin.Ast (Keyword (..))
@@ -1213,6 +1214,188 @@ allSteps =
                                              <> " differs from fixture " <> f <> ": "
                                              <> maybe "(no leaf difference found)" id
                                                   (firstDiff expected got))
+
+    -- ============ R99: THE GOLDEN GATE'S OWN LAWS ============
+    --
+    -- These steps do not talk to the map server at all. They run the
+    -- golden gate (crates/map-viewer/tests/golden.js) as a program,
+    -- under a DECLARED CONDITION, and read the verdict it prints.
+    --
+    -- Everything the laws need from the gate goes through the one
+    -- affordance the gate has: a condition script installed in the page
+    -- before the page's own scripts, plus its declared argument. There
+    -- is no step below that switches the gate into a mode; there are
+    -- steps that name a condition FILE, and the gate has never heard of
+    -- any of them. That is what keeps eight situations from becoming
+    -- eight flags.
+    --
+    -- Every one of these runs the gate over a DECLARED SUBSET of stops
+    -- (`gateLawStops`), and the gate says so in its own banner and
+    -- verdict. A law about detection does not need 89 eras to be true,
+    -- and at ~49 seconds a stop it could not afford them.
+
+    -- The unchanged map: no condition at all. The determinism law
+    -- judges it twice and compares the two answers whole.
+  , costing gateRunSeconds $
+      mkStep When (lit "I judge the unchanged map as " *> capRest @BindName) $
+        \(BindName n) w -> judgeGate n (gateCheck gateLawStops Nothing) w
+
+    -- A repaint states WHAT changed; the judging step that follows
+    -- states that the gate was asked about it. Two lines, because the
+    -- law is about the relationship between them -- so the change has
+    -- to survive from one to the other, which is what World.pending is.
+  , mkStep When (lit "I repaint probe " *> ((,) <$> capUntil @Probe " of "
+                                                <*> capUntil @GateCamera " in the drawn map")) $
+      \(p, cam) w -> pure (Right w { pending = Just (repaintCondition p cam RepaintFar) })
+  , mkStep When (lit "I repaint probe " *> ((,) <$> capUntil @Probe " of "
+                                                <*> capUntil @GateCamera
+                                                      " by less than the gate's tolerance")) $
+      \(p, cam) w -> pure (Right w { pending = Just (repaintCondition p cam RepaintUnder) })
+  , costing gateRunSeconds $
+      mkStep When (lit "I judge the repainted map as " *> capRest @BindName) $
+        \(BindName n) w -> case pending w of
+          -- Broken, not skipped: a scenario that judges a repainted map
+          -- without having repainted one is a mis-written law, and no
+          -- redraw fixes it.
+          Nothing -> pure (Left "nothing has been repainted -- this step judges a map an \
+                                \earlier step changed, and no earlier step changed one")
+          Just c  -> judgeGate n (gateCheck gateLawStops (Just c)) w
+
+  , costing gateWedgedSeconds $
+      mkStep When (lit "I judge a map that never stops moving") $
+        \() w -> judgeGate gateName (gateCheck gateLawStops (Just (condition "never-settles.js"))) w
+  , costing gateDeadSeconds $
+      mkStep When (lit "I judge a map whose renderer has died") $
+        \() w -> judgeGate gateName (gateCheck gateLawStops (Just (condition "renderer-dies.js"))) w
+  , costing gateRunSeconds $
+      mkStep When (lit "I judge a map that draws nothing as " *> capRest @BindName) $
+        \(BindName n) w -> judgeGate n (gateCheck gateLawStops (Just (condition "blank.js"))) w
+  , costing gateRunSeconds $
+      mkStep When (lit "I judge a map that never loaded as " *> capRest @BindName) $
+        \(BindName n) w -> judgeGate n (gateCheck gateLawStops (Just (condition "never-arrives.js"))) w
+
+    -- The one law that BLESSES. It writes to a scratch baseline, never
+    -- the owner's fixture -- the gate refuses that combination outright,
+    -- but the point of naming a scratch file is not to be protected from
+    -- the gate: it is that "nothing is written" has to be a fact the law
+    -- can check, and a law that could only check it by risking
+    -- golden-views.json would never be run at all. The file is removed
+    -- first, so its ABSENCE afterwards is this run's answer and not a
+    -- leftover from the last one.
+  , costing gateWedgedSeconds $
+      mkStep When (lit "I bless against a map that never stops moving") $
+        \() w -> do
+          scratch <- gateBlessScratch
+          gone <- doesFileExist scratch
+          when gone (removeFile scratch)
+          judgeGate gateName
+            (GateInvocation True gateLawStops (Just scratch) (Just (condition "never-settles.js"))) w
+
+  , costing gateTwoStopSeconds $
+      mkStep When (lit "I judge a map that offers fewer stops than the baseline holds") $
+        \() w -> judgeGate gateName
+          (gateCheck gateFewerStopsSubset
+            (Just (GateCondition "fewer-stops.js" (Just (object ["drop" .= [gateDroppedStop]]))))) w
+
+    -- THE WHOLE VERDICT, TWICE, EQUAL. Not "both said HOLD" -- the
+    -- defect this feature was written for answered HOLD, then
+    -- REGRESSION 4, then REGRESSION 3, no two failing SETS alike, so a
+    -- law that compared only the headline would have been green through
+    -- the middle of it. "Drift for drift" is the corpus's own words for
+    -- whole-body equality, and every field the gate prints is
+    -- deterministic, so the whole body is what is compared.
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " and "
+                                <*> capUntil @BindName
+                                      " are the same verdict, drift for drift")) $
+      \(BindName a, BindName b) w -> pure $ do
+        va <- verdictNamed a w
+        vb <- verdictNamed b w
+        if gvBody va == gvBody vb then Right w
+        else Left ("the gate answered differently about the same map -- " <> a <> " said "
+                   <> gvTag va <> ", " <> b <> " said " <> gvTag vb <> ". First difference: "
+                   <> maybe "(no leaf difference found)" id (firstDiff (gvBody va) (gvBody vb)))
+
+    -- "and nowhere else" is the half that makes this a law about
+    -- DETECTION rather than about noise: a gate that reported drift
+    -- everywhere would satisfy "reports drift at probe P" and be
+    -- useless. Both halves are checked, and so is the gate's own count
+    -- against the list it printed -- a truncated list cannot be read for
+    -- "nowhere else", and saying so is the only honest answer.
+  , mkStep Then (lit "" *> ((,,) <$> capUntil @BindName " reports drift at probe "
+                                 <*> capUntil @Probe " of "
+                                 <*> capUntil @GateCamera ", and nowhere else")) $
+      \(BindName n, p@(Probe pi'), cam) w -> pure $ do
+        v <- verdictNamed n w
+        let here = (renderCap cam, pi')
+            elsewhere = [ d | d <- gvDrift v, d /= here ]
+        if gvTag v /= "DRIFT"
+          then Left ("probe " <> renderCap p <> " of " <> renderCap cam
+                     <> " was repainted and the gate said " <> gvTag v <> gvWhy v)
+        else if here `notElem` gvDrift v
+          then Left ("the gate found drift, but not at the probe that changed: it reported "
+                     <> tshow (gvDrift v))
+        else if not (null elsewhere)
+          then Left ("the gate reported drift away from the repainted probe: " <> tshow elsewhere)
+        else if gvDriftCount v /= length (gvDrift v)
+          then Left ("the gate counted " <> tshow (gvDriftCount v) <> " drifted probe(s) and "
+                     <> "listed " <> tshow (length (gvDrift v)) <> " -- the list is truncated, "
+                     <> "so \"and nowhere else\" cannot be read off it")
+        else Right w
+
+  , mkStep Then (lit "" *> capUntil @BindName " holds") $
+      \(BindName n) w -> pure $ do
+        v <- verdictNamed n w
+        if gvTag v == "HOLD" && gvDriftCount v == 0 then Right w
+        else Left ("a change under the gate's own tolerance was called " <> gvTag v
+                   <> " (" <> tshow (gvDriftCount v) <> " drifted probe(s))" <> gvWhy v)
+
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName " and "
+                                <*> capUntil @BindName " are different verdicts")) $
+      \(BindName a, BindName b) w -> pure $ do
+        va <- verdictNamed a w
+        vb <- verdictNamed b w
+        -- Distinct AND neither of them the all-clear. Two DIFFERENT
+        -- ways of being fine would satisfy the letter of "different
+        -- verdicts" and miss the point entirely: the map that never
+        -- arrived is the one that got a black baseline blessed, and a
+        -- gate that called it HOLD would be the same instrument that
+        -- did it.
+        if gvTag va == "HOLD" || gvTag vb == "HOLD"
+          then Left ("the gate called a map that shows nothing " <> gvTag va <> "/" <> gvTag vb
+                     <> " -- one of them is the all-clear")
+        else if gvTag va == gvTag vb
+          then Left ("the gate gave the same answer -- " <> gvTag va <> " -- to a map that "
+                     <> "drew nothing and to a map that never arrived; nothing in its verdict "
+                     <> "tells them apart")
+        else Right w
+
+  , mkStep Then (lit "the gate stops and says the view would not hold still") $ \() w ->
+      pure (gateSaid "NOT-STILL" w)
+  , mkStep Then (lit "the gate stops and says the renderer is down") $ \() w ->
+      pure (gateSaid "RENDERER-DOWN" w)
+
+  , mkStep Then (lit "nothing is written and the gate says the view would not hold still") $
+      \() w -> do
+        scratch <- gateBlessScratch
+        written <- doesFileExist scratch
+        pure $ do
+          _ <- gateSaid "NOT-STILL" w
+          if written
+            then Left ("the gate blessed a map that never held still: it wrote " <> T.pack scratch)
+            else Right w
+
+    -- R101: the gate's own share of R54. "Says which stops it never saw"
+    -- is two claims -- that it FAILED, and that it NAMED them -- and the
+    -- named set is pinned whole against the stops this scenario's
+    -- condition actually removed, not merely checked for being
+    -- non-empty.
+  , mkStep Then (lit "the gate stops and says which stops it never saw") $ \() w ->
+      pure $ do
+        v <- verdictNamed gateName w
+        _ <- gateSaid "MISSING-STOPS" w
+        if sort (gvMissing v) == sort [gateDroppedStop] then Right w
+        else Left ("the gate failed, but named " <> tshow (gvMissing v)
+                   <> " as the stops it never saw, not " <> tshow [gateDroppedStop])
   ]
   where
     -- The step phase promoted this to `boundScene` (top level): twenty
@@ -2227,3 +2410,195 @@ instance FromCapture ProjName where
     else Left ("'" <> s <> "' is not a projection."
               <> didYouMean (Map.keys projections) s
               <> "\n  Projections are: " <> T.intercalate ", " (Map.keys projections))
+
+-- ============ R99: DRIVING THE GOLDEN GATE ============
+--
+-- The gate is a program, not an endpoint. These are the pieces the
+-- steps above are built from: where a law's run is pointed, how a
+-- condition is named, and how the one line the gate prints becomes a
+-- value with a type.
+
+-- WHERE THE LAWS LOOK. -1405 is the frame's landmark -- the year every
+-- fixture, every golden view and every conversation in this project is
+-- anchored to (the same year `Prop.yearOrder` shrinks toward, for the
+-- same reason). A law about whether the gate can SEE a change does not
+-- become more true at 89 eras than at one, and at ~49 seconds a stop it
+-- would cost forty minutes an iteration to pretend otherwise.
+--
+-- This is a declared subset and the gate says so in its own banner and
+-- verdict, so a run under it can never be read as a full one.
+gateLawStops :: [Int]
+gateLawStops = [-1405]
+
+-- The stop the "fewer stops" law takes away, and the pair it takes it
+-- from. -1446 is the other year the owner's golden views are known by
+-- (the 1405/1446 BC pair MEMORY names as beloved), so the stop that
+-- goes missing is one whose absence a reader would feel.
+gateDroppedStop :: Int
+gateDroppedStop = -1446
+
+gateFewerStopsSubset :: [Int]
+gateFewerStopsSubset = gateDroppedStop : gateLawStops
+
+-- MEASURED, on this machine, against the running viewer -- not
+-- estimated, and not tuned. Each is what one run of the step that
+-- declares it actually took, and `Prop.iterationsFor` divides the law
+-- budget by the sum of them.
+--
+--   gateRunSeconds       one one-stop check run: 48.6 s measured
+--                        (node golden.js --check --stops -1405).
+--   gateTwoStopSeconds   the same over two stops.
+--   gateWedgedSeconds    a run that ends at the settle ceiling: the
+--                        ceiling itself (120 s) plus the boot before
+--                        it. 125 s measured.
+--   gateDeadSeconds      a run whose renderer dies: 1.6 s measured, and
+--                        that number is the law's whole point. Before
+--                        the hardening the same run took 125 s, because
+--                        a dead renderer surfaced only as a settle
+--                        ceiling. Five leaves room for a cold browser
+--                        launch; a regression that made a death wait
+--                        out the ceiling again would show up here as a
+--                        law overrunning its declared cost by twenty-
+--                        five times, rather than as nothing at all.
+gateRunSeconds, gateTwoStopSeconds, gateWedgedSeconds, gateDeadSeconds :: Int
+gateRunSeconds     = 50
+gateTwoStopSeconds = 70
+gateWedgedSeconds  = 130
+gateDeadSeconds    = 5
+
+-- The name a verdict is bound under when the corpus does not give it
+-- one: four of the eight laws judge a map and then say what the gate
+-- said, with no name in between ("the gate stops and says ..."). Same
+-- convention as `_last` for the last HTTP response.
+gateName :: Text
+gateName = "_gate"
+
+-- Where the bless law writes. A scratch file, derived rather than
+-- configured so both the step that runs the bless and the step that
+-- checks nothing was written name the same path by construction
+-- instead of by agreement.
+gateBlessScratch :: IO FilePath
+gateBlessScratch = (</> "golden-gate-bless-probe.json") <$> getTemporaryDirectory
+
+gateCheck :: [Int] -> Maybe GateCondition -> GateInvocation
+gateCheck stops = GateInvocation False stops Nothing
+
+condition :: FilePath -> GateCondition
+condition script = GateCondition script Nothing
+
+-- WHICH WAY A PROBE IS MOVED, as a type rather than a string: the two
+-- property laws are exactly the two sides of the gate's tolerance, and
+-- the difference between them is the whole content of both. A `Text`
+-- here would let a typo mean "no repaint at all", which the gate would
+-- report as HOLD -- a green for a law that never ran.
+data RepaintBy = RepaintFar | RepaintUnder deriving (Eq, Show)
+
+repaintByText :: RepaintBy -> Text
+repaintByText RepaintFar   = "far"
+repaintByText RepaintUnder = "under"
+
+repaintCondition :: Probe -> GateCamera -> RepaintBy -> GateCondition
+repaintCondition (Probe p) cam by = GateCondition "repaint.js" . Just $ object
+  [ "probe" .= p, "camera" .= renderCap cam, "by" .= repaintByText by ]
+
+-- ---------- the verdict, read back ----------
+
+-- What the gate said, with a type. `gvBody` keeps the WHOLE object
+-- alongside the fields the laws read individually, because the
+-- determinism law compares two runs whole and a projection of the
+-- verdict would be exactly the "some field agrees" poke the owner's
+-- whole-body law forbids.
+data GateVerdict = GateVerdict
+  { gvTag        :: Text
+  , gvDrift      :: [(Text, Int)]
+  , gvDriftCount :: Int
+  , gvMissing    :: [Int]
+  , gvDetail     :: Text
+  , gvBody       :: Value
+  } deriving (Eq, Show)
+
+gateVerdictPrefix :: Text
+gateVerdictPrefix = "GATE VERDICT "
+
+-- The LAST verdict line, decoded. Last rather than first because a
+-- condition or a page error can print, and the gate's own contract is
+-- that its final word is one line -- reading the first would let an
+-- earlier line about something else stand in for the answer.
+--
+-- Pure, so the steps' reading of a verdict is testable against text a
+-- test writes, with no browser and no viewer.
+gateVerdictOf :: Text -> Either Text GateVerdict
+gateVerdictOf out =
+  case [ T.drop (T.length gateVerdictPrefix) l
+       | raw <- T.lines out, let l = T.stripStart raw
+       , gateVerdictPrefix `T.isPrefixOf` l ] of
+    [] -> Left ("the gate printed no verdict line. It said:\n" <> lastSaid out)
+    ls -> do
+      v <- either (Left . T.pack) Right (eitherDecodeStrict (TE.encodeUtf8 (last ls)))
+      gateVerdictOfValue v
+
+-- The tail of what a gate that never reached a verdict printed. Bounded
+-- for the reason `bounded` bounds a JSON body: the failure a reader
+-- needs is at the end, and the whole of a wedged run's output is pages
+-- of progress lines.
+lastSaid :: Text -> Text
+lastSaid out = T.unlines (drop (length ls - 12) ls)
+  where ls = [ l | l <- T.lines out, not (T.null (T.strip l)) ]
+
+gateVerdictOfValue :: Value -> Either Text GateVerdict
+gateVerdictOfValue v = do
+  tag <- textField "verdict" v
+  drifts <- case field "drift" v of
+    Left _           -> Right []
+    Right (Array a)  -> traverse driftOf (V.toList a)
+    Right other      -> Left ("the gate's drift is not a list: " <> bounded other)
+  pure (GateVerdict tag drifts (countOf (length drifts)) missing detail v)
+  where
+    driftOf d = (,) <$> textField "camera" d <*> intField "probe" d
+    countOf dflt = either (const dflt) id (intField "driftCount" v)
+    missing = case field "missing" v of
+      Right (Array a) -> [ round n | Number n <- V.toList a ]
+      _               -> []
+    detail = either (const "") id (textField "detail" v)
+
+-- Run the gate and bind what it said under a name. A gate that could
+-- not be RUN is a Left (see World.nodeGate); a gate that ran and
+-- refused is a verdict, which is the thing every one of these laws is
+-- about.
+--
+-- The pending condition is cleared here and only here: it belongs to
+-- the judging step that consumed it, and leaving it set would let the
+-- next judging step in the same scenario silently inherit a repaint it
+-- never asked for.
+judgeGate :: Text -> GateInvocation -> World -> IO (Either Text World)
+judgeGate name inv w = do
+  said <- runGate w inv
+  pure $ do
+    out <- said
+    gv <- gateVerdictOf out
+    Right w { bound = Map.insert name (TE.encodeUtf8 out, gvBody gv) (bound w)
+            , pending = Nothing }
+
+verdictNamed :: Text -> World -> Either Text GateVerdict
+verdictNamed n w = case Map.lookup n (bound w) of
+  Nothing
+    | n == gateName -> Left "no gate run to read a verdict from"
+    | otherwise     -> Left ("no verdict is bound as " <> n)
+  Just (_, v) -> gateVerdictOfValue v
+
+-- "the gate stops and says X": the verdict is X, and it is X for a
+-- stated reason. A verdict tag with an empty detail is a gate that
+-- named a category without naming the thing -- which is most of the
+-- distance between "the run failed" and "the renderer is down".
+gateSaid :: Text -> World -> Either Text World
+gateSaid tag w = do
+  v <- verdictNamed gateName w
+  if gvTag v /= tag
+    then Left ("the gate answered " <> gvTag v <> ", not " <> tag <> gvWhy v)
+    else if T.null (T.strip (gvDetail v))
+      then Left ("the gate answered " <> tag <> " but said nothing about why")
+      else Right w
+
+gvWhy :: GateVerdict -> Text
+gvWhy v | T.null (T.strip (gvDetail v)) = ""
+        | otherwise = " (" <> gvDetail v <> ")"

@@ -72,6 +72,7 @@ main = do
       mgr <- newManager defaultManagerSettings
       let w = World (T.pack base) (httpTransport mgr) (dir </> "fixtures") Map.empty bless
                     (httpTransportRaw mgr) Nothing Map.empty (httpTransportProbe mgr)
+                    nodeGate Nothing
       files <- featureFiles dir
       results <- Prop.runWithProperties allSteps w runs files
       TIO.putStrLn (reportTable results)

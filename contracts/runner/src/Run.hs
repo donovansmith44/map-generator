@@ -16,7 +16,15 @@ data Verdict = Passed | Failed Text | Skipped Text deriving (Eq, Show)
 -- truth. Keeping them in one value (rather than returning a bare Verdict
 -- and reporting skips out of band) is what lets `runWithProperties`,
 -- `reportTable`, and the tests all see the same number.
-data LawRun = LawRun { lawVerdict :: Verdict, lawSkips :: Int }
+-- R99: and how many iterations it actually RAN. A @property law's
+-- count is no longer always the number that was asked for -- an
+-- expensive law is given what the budget affords (Prop.iterationsFor)
+-- -- and a run of 6 that reads like a run of 100 is the same defect as
+-- a gate that judges three stops and reports that all golden views
+-- hold. The number a law examined is part of what its verdict means,
+-- so it travels WITH the verdict rather than being reconstructible
+-- from a flag the reader has to remember.
+data LawRun = LawRun { lawVerdict :: Verdict, lawSkips :: Int, lawRuns :: Int }
   deriving (Eq, Show)
 
 -- The skip discipline, in the ONE place that states it: a law that never
@@ -34,8 +42,8 @@ lawTally iterations skipped lastWhy v
   | iterations > 0 && skipped >= iterations =
       LawRun (Failed ("law never ran: all " <> tshow iterations
                       <> " iteration(s) skipped -- last precondition unmet: " <> lastWhy))
-             skipped
-  | otherwise = LawRun v skipped
+             skipped iterations
+  | otherwise = LawRun v skipped iterations
   where tshow = T.pack . show
 
 -- A plain, un-quantified scenario runs exactly once, and the same
@@ -46,9 +54,13 @@ lawOnce v             = lawTally 1 0 "" v
 
 data ScenarioResult = ScenarioResult
   { srFeature :: Text, srScenario :: Text, srTags :: [Tag], srVerdict :: Verdict
+  , srSkips :: Int
     -- ^ how many iterations of this law never ran (a precondition the
     -- drawn binding could not meet). 0 for a law with no preconditions.
-  , srSkips :: Int }
+  , srRuns :: Int
+    -- ^ how many iterations it was given at all. 1 for a plain scenario;
+    -- for a @property law, what `Prop.iterationsFor` afforded it.
+  }
   deriving (Eq, Show)
 
 runScenario :: [StepDef] -> World -> Scenario -> IO Verdict
@@ -106,13 +118,13 @@ runFeatureFiles defs w paths = fmap concat . mapM one $ paths
       -- silently corrupted this corpus's em dashes on this toolchain.
       src <- readFeatureFile p
       case parseFeature p src of
-        Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0]
+        Left e  -> pure [ScenarioResult (T.pack p) "PARSE" [] (Failed e) 0 0]
         -- R97: `runnableScenarios`, not `ftScenarios` -- the feature's
         -- Background is prepended to every scenario here, at the one
         -- boundary that turns a parsed feature into things to run.
         Right f -> mapM (\sc -> mk (ftTitle f) sc . lawOnce <$> runScenario defs w sc)
                         (runnableScenarios f)
-    mk ft sc (LawRun v s) = ScenarioResult ft (scName sc) (scTags sc) v s
+    mk ft sc (LawRun v s r) = ScenarioResult ft (scName sc) (scTags sc) v s r
 
 isTarget :: ScenarioResult -> Bool
 isTarget = elem (Tag "target") . srTags
@@ -132,11 +144,20 @@ hardReds rs = [ r | r <- rs, not (isTarget r), Failed _ <- [srVerdict r] ]
 -- verdict. A green law with a large skip count is a real finding — the
 -- law holds, but over far less of its claimed domain than the run
 -- suggests — and it is invisible unless the number is on the page.
+--
+-- R99: `ran` gets a column beside it, for the same reason. A law's
+-- iteration count is no longer always the number that was requested --
+-- an expensive law is given what `Prop.lawSecondsBudget` affords -- and
+-- "this law holds" over 6 draws and over 100 are different claims. A
+-- table that printed only the verdict would let a six-draw green read
+-- exactly like a hundred-draw one, which is the defect this stage
+-- spends its whole time refusing elsewhere.
 reportTable :: [ScenarioResult] -> Text
 reportTable rs = T.unlines $
-     "| feature | scenario | verdict | skipped |"
-   : "|---|---|---|---|"
+     "| feature | scenario | verdict | ran | skipped |"
+   : "|---|---|---|---|---|"
    : [ "| " <> srFeature r <> " | " <> srScenario r <> " | " <> cell r
+       <> " | " <> T.pack (show (srRuns r))
        <> " | " <> T.pack (show (srSkips r)) <> " |" | r <- rs ]
   where
     cell r = case (srVerdict r, isTarget r) of
