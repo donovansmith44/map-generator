@@ -23,10 +23,6 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     When I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine
     Then the response equals fixture "scene-1405-levant-cam"
 
-  # Characterization: regions and boundaries are never culled today —
-  # 917 feature ids at every zoom, even for an antipodal camera. This
-  # law states what a camera SHOULD mean; it is red until culling is
-  # real, and no weaker law is worth pinning.
   @target @property
   Scenario: everything in view is sent, and nothing far beyond the view is
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
@@ -39,9 +35,6 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someOtherCenter> zoom <someZoom> detail fine as there
     Then every resource here and there share is byte-identical in both
 
-  # Green today for the kinds the camera actually culls (markers 9->31
-  # and labels 833->856 across the zoom ladder, zero violations). The
-  # feature-level version of this law is the @target above.
   @property
   Scenario: zooming out only reveals markers and labels — it never removes them
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as narrow
@@ -54,15 +47,11 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> halved detail fine as narrow
     Then every marker and label of wide still in narrow's view is kept by narrow
 
-  # Characterization: an antipodal camera still receives all 917 ids.
   @target @property
   Scenario: the far side of the globe is never sent
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     Then no feature of viewed is beyond the horizon of <someCenter>
 
-  # The screenshots' law. Characterization: 99.3% of labels (827/833)
-  # anchor outside a 0.09-degree viewport, the farthest 148 degrees
-  # away — the GPU path does no label-anchor culling at all.
   @target @property
   Scenario: a label is only sent when the thing it names is in view
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed

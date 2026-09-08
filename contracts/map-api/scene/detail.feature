@@ -12,17 +12,12 @@ Feature: detail — how much geometry, never which geometry
     | style | any of: canaan, parchment, slate |
     | detail | any of: coarse, fine, ultra |
 
-  # Characterization: feature-id invariance across lod in [0, 6] holds
-  # EXACTLY today. Green, and load-bearing.
   @property
   Scenario: detail changes how much is drawn, never what exists
     When I render pieces <somePieces> at year <someYear> in style <someStyle> detail <someDetail> as one
     And I render pieces <somePieces> at year <someYear> in style <someStyle> detail <someOtherDetail> as other
     Then one and other draw the same features
 
-  # Characterization: vertex monotonicity HOLDS below lod 1e-4 and
-  # FAILS above it — 498/917 violations on the 1.5e-3 -> 1e-2 rung;
-  # the vertex curve is U-shaped with its minimum at lod 0.01.
   @target
   Scenario: leaning in never loses geometry
     When I render pieces all at year -1405 in style canaan detail coarse as coarse
@@ -30,10 +25,6 @@ Feature: detail — how much geometry, never which geometry
     And I render pieces all at year -1405 in style canaan detail ultra as ultra
     Then every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine
 
-  # Characterization: 490/917 features carry MORE vertices at zoom 0.05
-  # than at zoom 90 (+31,199 total; worst single case 1388 vs 5),
-  # because below-limit rings ship unsimplified. Leaning out must never
-  # cost more than leaning in.
   @target
   Scenario: the world at a glance is never heavier than the street corner
     When I render pieces all at year -1405 in style canaan detail coarse as glance

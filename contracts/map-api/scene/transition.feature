@@ -29,18 +29,12 @@ Feature: the transition — how the map moves between two moments
     And I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=<someStyle> as second
     Then first equals second
 
-  # Characterization: HOLDS today as an id-bijection (rise/fall/shift
-  # <-> fade_in/fade_out/morph). Green, and load-bearing.
   @property
   Scenario: the plan and the timeline tell one story, wherever you scrub
     When I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=<someStyle> as plan
     And I GET /api/changes?from=<someYear>&to=<someOtherYear> as story
     Then every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan
 
-  # Characterization: PARTIAL today — 56 fade-step region ids never
-  # exist as a region feature at any of the 89 stops (journey entities
-  # whose end is logged as a region Fall). Red until the data model
-  # squares that circle.
   @target @property
   Scenario: what fades in arrives, what fades out departs — between any two moments
     When I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=canaan as plan
@@ -48,18 +42,12 @@ Feature: the transition — how the map moves between two moments
     And I render pieces all at year <someOtherYear> in style canaan as after
     Then every fade-in region of plan is in after and not before, and every fade-out region is in before and not after
 
-  # Characterization: HOLDS exactly today (deep-equal mirror at 1486
-  # steps). Green.
   @property
   Scenario: the road back is the road there, reversed
     When I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=<someStyle> as there
     And I GET /api/transition?from=<someOtherYear>&to=<someYear>&zoom=90.0000&style=<someStyle> as back
     Then back is there with every morph reversed and every fade inverted
 
-  # Characterization: /api/transition defaults to detail 6.0, which
-  # collapses every morph to 2 points — the animation plans are
-  # geometrically empty by default. A morph must carry the geometry of
-  # the border it moves.
   @target
   Scenario: a border morphs with its real shape, not a stick figure
     When I GET /api/transition?from=-1407&to=-1405&zoom=90.0000&style=canaan as plan

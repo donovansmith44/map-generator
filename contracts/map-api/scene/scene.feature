@@ -3,14 +3,14 @@ Feature: the scene — a picture composed from pieces
   identity, and combining parts is the same as rendering the whole. These
   laws are stated over EVERY piece and EVERY dress, because that is what
   the algebra claims — not over the corner of it today's wire can express.
+  The scenarios pinned against a fixture name a fixed year and dress of
+  necessity: a whole body cannot be blessed against a year the run picks
+  for itself.
 
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
     | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
     | style | any of: canaan, parchment, slate |
-
-  # --- PINNED EXAMPLES: regression anchors. Coordinates fixed of necessity;
-  #     a whole-body fixture cannot be blessed against a generated year.
 
   Scenario: the twelve tribes scene, whole
     When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in style canaan
@@ -23,8 +23,6 @@ Feature: the scene — a picture composed from pieces
   Scenario: default-totality — an omitted dress is the declared classical default
     When I render pieces ground, water, fills, borders, labels, journeys at year -1405 in no style
     Then the response equals fixture "scene-1405-default-dress"
-
-  # --- LAWS: quantified over every dimension they claim.
 
   @property
   Scenario: asking for the same map twice gives the same map
