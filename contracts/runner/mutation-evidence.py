@@ -584,9 +584,13 @@ SOLO_RUNS = [
     # E16 and E17 are here for a different reason: they are two of the
     # three mutations that survived round 1, and a fix whose only evidence
     # is a batch total is the shape of defect that let them survive.
+    # E5 reddens THREE laws on its own, which is the subsumption stated
+    # rather than remembered: making the cost the largest step instead of
+    # the sum halves what the determinism law is charged, so the literal
+    # iteration counts move too.
     ("E5:", ["a law that judges it TWICE costs twice as much",
-             # the subsumption itself, asserted rather than remembered
-             "the budget only ever lowers a count"]),
+             "the budget only ever lowers a count",
+             "a law that judges the map once gets SIX iterations"]),
     ("E6:", ["the budget only ever lowers a count"]),
     ("E12:", ["wants the verdict X AND a reason"]),
     ("E13:", ["pins the NAMED set whole"]),
