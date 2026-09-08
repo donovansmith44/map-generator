@@ -285,15 +285,25 @@ if (CONDITION_ARG_TEXT !== null) {
     process.exit(2);
   }
 }
+// The declared subset, parsed strictly. An EMPTY element is refused by
+// name rather than coerced: `"".split(',')` is `[""]`, never `[]`, so a
+// length check can never fire, and `Number("")` is 0 — a finite number,
+// so a not-a-year check does not catch it either. `--stops -1405,` used
+// to be accepted as two stops and announce `-1405, 0`, and year 0 does
+// not exist in this calendar. It failed safe only because year 0 is in
+// neither the map nor the baseline, which is safety by luck.
 const STOPS_ARG = valueOf('--stops', null);
 const REQUESTED = STOPS_ARG === null ? null : STOPS_ARG.split(',').map(s => {
-  const y = Number(s.trim());
-  if (!Number.isFinite(y)) { console.error(`--stops: '${s}' is not a year`); process.exit(2); }
+  const t = s.trim();
+  if (t === '') {
+    console.error(`--stops: '${STOPS_ARG}' has an empty stop in it; every element must be a year`);
+    process.exit(2);
+  }
+  const y = Number(t);
+  if (!Number.isInteger(y)) { console.error(`--stops: '${t}' is not a year`); process.exit(2); }
+  if (y === 0) { console.error('--stops: year 0 does not exist in this calendar'); process.exit(2); }
   return y;
 });
-if (REQUESTED !== null && REQUESTED.length === 0) {
-  console.error('--stops: an empty subset judges nothing'); process.exit(2);
-}
 
 // A DRIVEN OR SUBSETTED BLESS NEVER TOUCHES THE DEFAULT BASELINE. The
 // owner's golden-views.json is the one artefact in this repository
@@ -356,17 +366,21 @@ const say = (verdict, extra) => {
   const page = await browser.newPage({ viewport: { width: 1100, height: 1100 } });
   page.on('pageerror', e => console.log('PAGE ERROR:', e.message));
 
-  // The gate's own constants, published into the page BEFORE anything
-  // else runs there. A condition that has to locate probe 7 of the
-  // levant camera would otherwise restate the grid and the camera
-  // table, and a restated constant is a constant that drifts.
-  await page.addInitScript(`globalThis.GOLDEN = ${JSON.stringify({ cams: CAMS, grid: GRID, tol: TOL })};`);
-  if (CONDITION_ARG !== null) await page.addInitScript(`globalThis.CONDITION = ${JSON.stringify(CONDITION_ARG)};`);
-  if (CONDITION) await page.addInitScript({ path: CONDITION });
-
-  // Everything that can go wrong from here on ends in ONE verdict.
+  // Everything that can go wrong from here on ends in ONE verdict —
+  // INCLUDING installing the condition. These three lines used to sit
+  // outside the try, so an unreadable --condition file exited with a raw
+  // Node stack and NO verdict line at all, contradicting the invariant
+  // this file's own header states. A caller reading for a verdict got
+  // silence, which is the one answer the gate promises never to give.
   let code = 1;
   try {
+    // The gate's own constants, published into the page BEFORE anything
+    // else runs there. A condition that has to locate probe 7 of the
+    // levant camera would otherwise restate the grid and the camera
+    // table, and a restated constant is a constant that drifts.
+    await page.addInitScript(`globalThis.GOLDEN = ${JSON.stringify({ cams: CAMS, grid: GRID, tol: TOL })};`);
+    if (CONDITION_ARG !== null) await page.addInitScript(`globalThis.CONDITION = ${JSON.stringify(CONDITION_ARG)};`);
+    if (CONDITION) await page.addInitScript({ path: CONDITION });
     code = await run(page);
   } catch (e) {
     const msg = String((e && e.message) || e);

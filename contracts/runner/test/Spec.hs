@@ -29,8 +29,10 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import Control.Monad (when)
 import System.Directory
-  (getTemporaryDirectory, createDirectoryIfMissing, removeDirectoryRecursive, removeFile)
+  (doesFileExist, getTemporaryDirectory, createDirectoryIfMissing,
+   removeDirectoryRecursive, removeFile)
 import System.Exit (ExitCode)
 import System.FilePath ((</>))
 import System.IO
@@ -5276,9 +5278,19 @@ main = hspec $ do
        \what was asked for" $ do
       Prop.iterationCost allSteps (lawOf ["I GET /api/eras"]) `shouldBe` 0
       Prop.iterationsFor allSteps 100 (lawOf ["I GET /api/eras"]) `shouldBe` 100
-    it "a law that judges the map once gets the budget divided by one gate run" $
-      Prop.iterationsFor allSteps 100 once
-        `shouldBe` Prop.lawSecondsBudget `div` gateRunSeconds
+    it "a law that judges the map once gets SIX iterations -- the literal \
+       \number, because an assertion that recomputes the formula from the \
+       \same two constants it is checking is true for any value of either \
+       \and pins nothing (review finding R3: doubling lawSecondsBudget \
+       \doubled what every property law costs, with the suite still green)" $ do
+      Prop.iterationsFor allSteps 100 once `shouldBe` 6
+      -- and the determinism law, which judges the map twice, gets three
+      Prop.iterationsFor allSteps 100 twice `shouldBe` 3
+      -- the two numbers the six is MADE of, pinned beside it so a reader
+      -- sees why it is six and a change to either is a visible edit here
+      -- rather than a silent doubling of what the corpus costs
+      Prop.lawSecondsBudget `shouldBe` 300
+      gateRunSeconds `shouldBe` 50
     it "a law that judges it TWICE costs twice as much and runs fewer \
        \times -- the cost is SUMMED over the steps, so a law cannot gain a \
        \gate run without paying for it" $ do
@@ -5345,35 +5357,74 @@ main = hspec $ do
       case r of
         Left e -> e `shouldSatisfy` T.isInfixOf "TypeError"
         Right v -> expectationFailure ("expected no verdict, got " <> show (gvTag v))
-    it "drift comes back as (camera, probe) pairs with the gate's own \
-       \count beside them, so a truncated list is visible as such" $ do
+    it "drift comes back as (stop, camera, probe) triples with the gate's \
+       \own count beside them -- the STOP is KEPT, because \"and nowhere \
+       \else\" is a claim about all three axes and a reading that projected \
+       \one away would be blind along it" $ do
       let out = "GATE VERDICT {\"verdict\":\"DRIFT\",\"driftCount\":9,\
-                \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+                \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7}]}"
       case gateVerdictOf out of
         Left e -> expectationFailure (T.unpack e)
         Right v -> do
-          gvDrift v `shouldBe` [("levant", 7)]
+          gvDrift v `shouldBe` [(-1405, "levant", 7)]
           gvDriftCount v `shouldBe` 9
     it "a verdict with no drift field at all reads as no drift, not as a \
        \broken verdict -- HOLD carries none" $
       fmap gvDriftCount (gateVerdictOf "GATE VERDICT {\"verdict\":\"HOLD\"}") `shouldBe` Right 0
+    it "a DRIFT body that omits its own count is a Left, never a count \
+       \guessed from the list it printed: the truncation guard compares \
+       \those two, so a default of `length drifts` would make them agree by \
+       \construction and the guard vacuous" $ do
+      let out = "GATE VERDICT {\"verdict\":\"DRIFT\",\
+                \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7}]}"
+      case gateVerdictOf out of
+        Left e -> e `shouldSatisfy` T.isInfixOf "no driftCount"
+        Right v -> expectationFailure ("expected a Left, got " <> show (gvDriftCount v))
+    it "the judged stops and the baseline come back too: the \"nowhere \
+       \else\" law needs to know which stops an answer was owed for, and \
+       \the bless law needs to know which file the gate says it was \
+       \working on" $ do
+      let out = "GATE VERDICT {\"verdict\":\"HOLD\",\"judged\":[-1446,-1405],\
+                \\"baseline\":\"C:/tmp/b.json\"}"
+      case gateVerdictOf out of
+        Left e -> expectationFailure (T.unpack e)
+        Right v -> do
+          gvJudged v `shouldBe` [-1446, -1405]
+          gvBaseline v `shouldBe` "C:/tmp/b.json"
 
   describe "R99: the gate's laws are red for the reason they name" $ do
     -- A gate a TEST writes: no browser, no viewer, no map. What is being
     -- checked here is the LAW's reading of a verdict, and a law that
     -- could only be exercised by running a real gate for fifty seconds
     -- is a law whose failure modes never get exercised at all.
-    let gateSaying outs = do
+    --
+    -- It RECORDS what it was asked, and it may ACT. Both were missing and
+    -- both were holes (review findings R1, R2): a fake that threw the
+    -- `GateInvocation` away made it impossible for any test to observe
+    -- WHICH condition a step built -- so swapping `RepaintUnder` for
+    -- `RepaintFar` at a step's call site, which collapses the two
+    -- @property laws into one, left the whole suite green. And a fake
+    -- that could not touch the filesystem made "nothing is written"
+    -- untestable, so the one law whose entire point is that the owner's
+    -- fixture was not overwritten had no negative case at all.
+    let gateRecording outs act = do
+          seen <- newIORef []
           left <- newIORef (outs :: [T.Text])
-          pure $ \_ -> do
-            said <- readIORef left
-            case said of
-              (o : rest) -> writeIORef left rest >> pure (Right o)
-              []         -> pure (Left "the law ran the gate more times than the test scripted")
-        runLaw outs bodies = do
-          g <- gateSaying outs
-          let w = (mkWorld "http://x" (\_ -> pure (Left "no server here")) "") { runGate = g }
-          runScenario allSteps w (Scenario "l" [] bodies)
+          let g inv = do
+                modifyIORef seen (++ [inv])
+                act inv
+                said <- readIORef left
+                case said of
+                  (o : rest) -> writeIORef left rest >> pure (Right o)
+                  []         -> pure (Left "the law ran the gate more times than the test scripted")
+          pure (seen, g)
+        worldWith g = (mkWorld "http://x" (\_ -> pure (Left "no server here")) "") { runGate = g }
+        runLawWith act outs bodies = do
+          (seen, g) <- gateRecording outs act
+          v <- runScenario allSteps (worldWith g) (Scenario "l" [] bodies)
+          invs <- readIORef seen
+          pure (v, invs)
+        runLaw outs bodies = fst <$> runLawWith (\_ -> pure ()) outs bodies
         verdict v = "GATE VERDICT " <> v
         hold = verdict "{\"verdict\":\"HOLD\",\"judged\":[-1405]}"
         redOf r = case r of
@@ -5405,18 +5456,31 @@ main = hspec $ do
             [ Step When "I repaint probe 7 of levant in the drawn map" Nothing
             , Step When "I judge the repainted map as judged" Nothing
             , Step Then "judged reports drift at probe 7 of levant, and nowhere else" Nothing ]
-      here <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":1,\
-                   \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+          judged2 = "\"judged\":[-1446,-1405]"
+      here <- run1 ("{\"verdict\":\"DRIFT\",\"driftCount\":1,\"judged\":[-1405],\
+                    \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7}]}")
       here `shouldBe` Passed
-      elsewhere <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":2,\
-                        \\"drift\":[{\"camera\":\"levant\",\"probe\":7},\
-                        \{\"camera\":\"hemisphere\",\"probe\":2}]}"
+      elsewhere <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":2,\"judged\":[-1405],\
+                        \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7},\
+                        \{\"stop\":-1405,\"camera\":\"hemisphere\",\"probe\":2}]}"
       redOf elsewhere `shouldSatisfy` T.isInfixOf "away from the repainted probe"
-      truncated <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":40,\
-                        \\"drift\":[{\"camera\":\"levant\",\"probe\":7}]}"
+      truncated <- run1 "{\"verdict\":\"DRIFT\",\"driftCount\":40,\"judged\":[-1405],\
+                        \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7}]}"
       redOf truncated `shouldSatisfy` T.isInfixOf "truncated"
       quiet <- run1 "{\"verdict\":\"HOLD\"}"
       redOf quiet `shouldSatisfy` T.isInfixOf "the gate said HOLD"
+      -- ACROSS STOPS (review finding I-5): a gate that saw the repainted
+      -- probe move at one of the two stops it judged and not at the
+      -- other has not caught the change "wherever it lands", and the
+      -- earlier reading -- which projected the stop away -- called that
+      -- green
+      oneStopOnly <- run1 ("{\"verdict\":\"DRIFT\",\"driftCount\":1," <> judged2 <> ",\
+                           \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7}]}")
+      redOf oneStopOnly `shouldSatisfy` T.isInfixOf "misses at another"
+      bothStops <- run1 ("{\"verdict\":\"DRIFT\",\"driftCount\":2," <> judged2 <> ",\
+                         \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":7},\
+                         \{\"stop\":-1446,\"camera\":\"levant\",\"probe\":7}]}")
+      bothStops `shouldBe` Passed
 
     it "\"the same verdict, drift for drift\" compares the WHOLE verdict, \
        \not its headline -- the defect this feature was written for said \
@@ -5428,8 +5492,10 @@ main = hspec $ do
       same <- two "{\"verdict\":\"HOLD\",\"judged\":[-1405]}" "{\"verdict\":\"HOLD\",\"judged\":[-1405]}"
       same `shouldBe` Passed
       sameHeadline <- two
-        "{\"verdict\":\"DRIFT\",\"driftCount\":4,\"drift\":[{\"camera\":\"levant\",\"probe\":1}]}"
-        "{\"verdict\":\"DRIFT\",\"driftCount\":3,\"drift\":[{\"camera\":\"levant\",\"probe\":2}]}"
+        "{\"verdict\":\"DRIFT\",\"driftCount\":4,\
+        \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":1}]}"
+        "{\"verdict\":\"DRIFT\",\"driftCount\":3,\
+        \\"drift\":[{\"stop\":-1405,\"camera\":\"levant\",\"probe\":2}]}"
       redOf sameHeadline `shouldSatisfy` T.isInfixOf "answered differently"
 
     it "\"different verdicts\" refuses two answers that agree, AND refuses \
@@ -5445,6 +5511,12 @@ main = hspec $ do
       redOf agree `shouldSatisfy` T.isInfixOf "the same answer"
       clear <- two "{\"verdict\":\"HOLD\"}" "{\"verdict\":\"NOT-ARRIVED\"}"
       redOf clear `shouldSatisfy` T.isInfixOf "all-clear"
+      -- and it names WHICH TWO answers, not merely two: a gate that
+      -- answered with two unrelated crashes differs, and tells its
+      -- reader nothing about whether the map drew nothing or never
+      -- arrived (review finding I-6)
+      crashes <- two "{\"verdict\":\"NOT-STILL\"}" "{\"verdict\":\"RENDERER-DOWN\"}"
+      redOf crashes `shouldSatisfy` T.isInfixOf "not the two this law is about"
 
     it "\"the gate stops and says X\" wants the verdict X AND a reason: a \
        \tag with nothing behind it names a category, not a fault" $ do
@@ -5471,6 +5543,119 @@ main = hspec $ do
       redOf wrong `shouldSatisfy` T.isInfixOf "not [-1446]"
       ungated <- law "{\"verdict\":\"HOLD\",\"missing\":[-1446]}"
       redOf ungated `shouldSatisfy` T.isInfixOf "answered HOLD, not MISSING-STOPS"
+
+    -- R1. THE LAW WHOSE POINT IS THAT NOTHING WAS WRITTEN.
+    --
+    -- Its verdict half was pinned and its FILE half was not, so deleting
+    -- the file check changed nothing anywhere in the suite -- in the one
+    -- law standing between a view that will not hold still and the
+    -- owner's golden fixture. The fake gate now acts on the filesystem
+    -- the way a real one would, which is the only way to exercise it:
+    -- the mutant gate refuses in words and blesses anyway, and the law
+    -- has to catch it.
+    it "\"nothing is written\" catches a gate that says NOT-STILL and \
+       \writes the baseline anyway -- the verdict and the file are two \
+       \claims, and a law that checked only the first would pass the \
+       \exact run that destroyed the fixture" $ do
+      scratch <- gateBlessScratch
+      let blessLaw act = fst <$> runLawWith act
+            [ verdict ("{\"verdict\":\"NOT-STILL\",\"detail\":\"SETTLE CEILING\",\
+                       \\"baseline\":" <> T.pack (show scratch) <> "}") ]
+            [ Step When "I bless against a map that never stops moving" Nothing
+            , Step Then "nothing is written and the gate says the view would not hold still" Nothing ]
+      -- an honest refusal: says NOT-STILL, writes nothing
+      refused <- blessLaw (\_ -> pure ())
+      refused `shouldBe` Passed
+      -- the same words, and it blessed anyway
+      blessed <- blessLaw (\inv -> case invBaseline inv of
+                             Just b  -> writeFile b "{\"cams\":{}}"
+                             Nothing -> pure ())
+      redOf blessed `shouldSatisfy` T.isInfixOf "blessed a map that never held still"
+      -- and the law is not satisfiable by a gate that wrote somewhere
+      -- else entirely: the file it finds absent must be the file the
+      -- gate says it was working on
+      elsewhere <- fst <$> runLawWith (\_ -> pure ())
+            [ verdict "{\"verdict\":\"NOT-STILL\",\"detail\":\"SETTLE CEILING\",\
+                      \\"baseline\":\"C:/somewhere/else.json\"}" ]
+            [ Step When "I bless against a map that never stops moving" Nothing
+            , Step Then "nothing is written and the gate says the view would not hold still" Nothing ]
+      redOf elsewhere `shouldSatisfy` T.isInfixOf "says it was blessing"
+      -- leave nothing behind for the next run to misread
+      still <- doesFileExist scratch
+      when still (removeFile scratch)
+
+    -- R2. WHICH INVOCATION EACH STEP BUILDS, PINNED WHOLE.
+    --
+    -- Nothing connected a STEP to the invocation it produced, so the
+    -- constructor that decides which side of the tolerance a repaint
+    -- lands on -- the entire distinction between the two @property laws
+    -- -- could be swapped at its call site with the whole suite still
+    -- green, and only a ten-minute browser run would notice. Six other
+    -- situation-to-condition mappings and the bless invocation had the
+    -- same hole. One whole-list assertion closes all eight: every
+    -- judging step in the corpus, in the order the corpus writes them,
+    -- with the mode, the stops, the baseline and the condition each
+    -- carries.
+    it "every judging step builds the invocation its own law names -- the \
+       \whole list, in order, so a step that reached for the wrong \
+       \condition, the wrong side of the tolerance, the wrong stops or the \
+       \wrong mode is a red here rather than a browser run away" $ do
+      scratch <- gateBlessScratch
+      (_, invs) <- runLawWith (\_ -> pure ()) (replicate 10 hold)
+        [ Step When "I judge the unchanged map as first" Nothing
+        , Step When "I repaint probe 7 of levant in the drawn map" Nothing
+        , Step When "I judge the repainted map as far" Nothing
+        , Step When "I repaint probe 3 of hemisphere by less than the gate's tolerance" Nothing
+        , Step When "I judge the repainted map as near" Nothing
+        , Step When "I judge a map that never stops moving" Nothing
+        , Step When "I judge a map whose renderer has died" Nothing
+        , Step When "I judge a map that draws nothing as blank" Nothing
+        , Step When "I judge a map that never loaded as absent" Nothing
+        , Step When "I bless against a map that never stops moving" Nothing
+        , Step When "I judge a map that offers fewer stops than the baseline holds" Nothing ]
+      let check' = GateInvocation False gateLawStops Nothing
+          cond n = Just (GateCondition n Nothing)
+      invs `shouldBe`
+        [ check' Nothing
+        , check' (Just (repaintCondition (Probe 7) Levant RepaintFar))
+        , check' (Just (repaintCondition (Probe 3) Hemisphere RepaintUnder))
+        , check' (cond "never-settles.js")
+        , check' (cond "renderer-dies.js")
+        , check' (cond "blank.js")
+        , check' (cond "never-arrives.js")
+        , GateInvocation True gateLawStops (Just scratch) (cond "never-settles.js")
+        , GateInvocation False gateFewerStopsSubset Nothing
+            (Just (GateCondition "fewer-stops.js"
+                    (Just (A.object ["drop" A..= [gateDroppedStop]]))))
+        ]
+      still <- doesFileExist scratch
+      when still (removeFile scratch)
+
+    -- I-4b. A GATE-DRIVING STEP THAT LOSES ITS COST GETS 100 ITERATIONS.
+    --
+    -- `iterationsFor`'s `cost <= 0 = requested` guard is right for the
+    -- fifty-odd steps that are one local HTTP call, and it means a
+    -- COSTLY step that lost its `costing` annotation would silently ask
+    -- for a hundred iterations of a fifty-second run -- eighty-three
+    -- minutes for one law, with the suite green. The set of costly steps
+    -- is therefore pinned WHOLE, by sketch and by cost: a dropped
+    -- annotation is a missing row, and a new gate-driving step added
+    -- without one is a missing row too.
+    it "every step that drives the gate declares what it costs, and the \
+       \whole set of them is pinned -- a dropped `costing` is a hundred \
+       \iterations of a fifty-second step, silently" $
+      sort [ (defSketch d, defCost d) | d <- allSteps, defCost d /= Instant ]
+        `shouldBe` sort
+          [ ("I judge the unchanged map as {name}", Seconds gateRunSeconds)
+          , ("I judge the repainted map as {name}", Seconds gateRunSeconds)
+          , ("I judge a map that draws nothing as {name}", Seconds gateRunSeconds)
+          , ("I judge a map that never loaded as {name}", Seconds gateRunSeconds)
+          , ("I judge a map that never stops moving", Seconds gateWedgedSeconds)
+          , ("I bless against a map that never stops moving", Seconds gateWedgedSeconds)
+          , ("I judge a map whose renderer has died", Seconds gateDeadSeconds)
+          , ("I judge a map that offers fewer stops than the baseline holds",
+             Seconds gateTwoStopSeconds)
+          ]
 
 
 -- Fix 5's stdout-capture helper: redirects the process's real stdout to a

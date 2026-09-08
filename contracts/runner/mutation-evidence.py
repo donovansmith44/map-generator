@@ -40,7 +40,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
                  BATCH C caught (8/8), BATCH D caught (12/12),
-                 BATCH E caught (18/18 laws, 14 mutations),
+                 BATCH E caught (22/22 laws, 20 mutations),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -419,6 +419,34 @@ def write(path, text):
         fh.write(text)
 
 
+def line_ending(text):
+    """This file's dominant line ending, as the two characters it is written
+    with.  Not cosmetic: the search strings below are written with "\\n", and
+    this repository has MIXED endings with no `.gitattributes` -- on a machine
+    with `core.autocrlf=true` a fresh clone checks some of these sources out as
+    CRLF while the authoring tree holds them as LF.  `read()` uses newline=""
+    and therefore PRESERVES whatever is on disk rather than normalizing it, so
+    every multi-line search string is ending-sensitive and a clone would find
+    zero occurrences of a string the authoring tree finds once.
+
+    That is a REPRODUCIBILITY defect and it is fixed here rather than papered
+    over: the search and replacement text is translated into the file's own
+    ending before matching, so the mutation lands identically either way, and
+    the file is written back in exactly the ending it arrived in -- no
+    normalize-and-continue, and no silent rewriting of a file's endings as a
+    side effect of mutating one line of it.  The exactly-once assertion in
+    `apply_batch` is unchanged and still aborts loudly if the translated text
+    does not match: a search string that has genuinely rotted must still fail
+    loudly rather than being massaged until it matches something.
+    """
+    return "\r\n" if text.count("\r\n") > text.count("\n") - text.count("\r\n") else "\n"
+
+
+def to_ending(text, ending):
+    """`text` (written with "\\n") rendered in `ending`."""
+    return text.replace("\r\n", "\n").replace("\n", ending)
+
+
 def require_clean():
     """Refuse to run against a dirty tree: the restore step below rewrites these
     files wholesale, so an uncommitted edit of theirs could be lost."""
@@ -440,19 +468,37 @@ def apply_batch(mutations):
     for label, filename, old, new in mutations:
         path = SRC[filename]
         text = read(path)
-        hits = text.count(old)
+        # written with "\n"; matched in whatever this file actually uses
+        ending = line_ending(text)
+        old_here, new_here = to_ending(old, ending), to_ending(new, ending)
+        hits = text.count(old_here)
         if hits != 1:
             raise SystemExit(
-                "MUTATION ROTTED: %s\n  in %s\n  search text found %d times, expected "
-                "exactly 1.\n  The code moved; update this script's search text before "
-                "trusting any result from it." % (label, filename, hits)
+                "MUTATION ROTTED: %s\n  in %s (line endings: %s)\n  search text found %d "
+                "times, expected exactly 1.\n  The code moved; update this script's search "
+                "text before trusting any result from it."
+                % (label, filename, repr(ending), hits)
             )
-        write(path, text.replace(old, new, 1))
+        write(path, text.replace(old_here, new_here, 1))
         print("    applied  %s" % label)
 
 
 def failing_tests():
-    """Run the suite and return (list of failing test names, total examples)."""
+    """Run the suite and return (failing test names, total line, ran at all?).
+
+    The third value is the one the closing baseline check needs and used to be
+    thrown away (review finding I-2).  `fails` is empty both when the suite is
+    GREEN and when it never BUILT, and the two must not be the same answer:
+    with only the first two values, a restored tree that no longer compiles
+    printed `ALL MUTATIONS CAUGHT, TREE CLEAN` -- a check satisfiable by the
+    exact failure mode it exists to rule out, in the script whose subject is
+    checks satisfiable by their failure mode.
+
+    `ran` is true only when the suite actually produced a summary line. A
+    non-zero return code with a summary line is an ordinary red run (which is
+    what a mutation is SUPPOSED to produce); no summary line at all is a build
+    failure or a crash, and that is never evidence of anything.
+    """
     proc = subprocess.run(
         ["cabal", "test"], cwd=RUNNER, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
@@ -460,14 +506,19 @@ def failing_tests():
     out = proc.stdout + proc.stderr
     fails = re.findall(r"^\s*\d+\) (.+)$", out, re.M)
     total = re.search(r"(\d+) examples?, (\d+) failures?", out)
-    return fails, (total.group(0) if total else "??")
+    if total is None:
+        print("    the suite produced no summary line (exit %d) -- it did not run:"
+              % proc.returncode)
+        for line in out.strip().splitlines()[-8:]:
+            print("      | %s" % line)
+    return fails, (total.group(0) if total else "DID NOT RUN"), total is not None
 
 
 def run_batch(name, mutations, expected, originals):
     print("\n=== %s: applying %d mutation(s) ===" % (name, len(mutations)))
     try:
         apply_batch(mutations)
-        fails, total = failing_tests()
+        fails, total, _ran = failing_tests()
         print("    %s" % total)
     finally:
         for path, text in originals.items():
@@ -517,6 +568,32 @@ SOLO_RUNS = [
              "the treatment it gets there is the UNTAGGED one"]),
     ("D9:", ["an EMPTY Background: is a parse error naming the file and line"]),
     ("D10:", ["a degenerate hole written ONLY in a background is caught by the"]),
+    # BATCH E's own solo runs (review finding I-1). The batch total is a
+    # statement about the UNION, and three subsumptions in E make it
+    # silent about individual mutations:
+    #
+    #   * E5 (cost is `maximum`, not `sum`) alone reddens E6's law as
+    #     well as its own -- demonstrated by the reviewer, so `PASS`
+    #     would have printed even if E6 were a no-op;
+    #   * E19 and E20 redden assertions that live INSIDE tests E11 and
+    #     E10 already claim, so they have no expectation of their own by
+    #     design and this is the only place they are answered;
+    #   * E12 and E13 share the `gateSaid` path, so either could be
+    #     carrying the other.
+    #
+    # E16 and E17 are here for a different reason: they are two of the
+    # three mutations that survived round 1, and a fix whose only evidence
+    # is a batch total is the shape of defect that let them survive.
+    ("E5:", ["a law that judges it TWICE costs twice as much",
+             # the subsumption itself, asserted rather than remembered
+             "the budget only ever lowers a count"]),
+    ("E6:", ["the budget only ever lowers a count"]),
+    ("E12:", ["wants the verdict X AND a reason"]),
+    ("E13:", ["pins the NAMED set whole"]),
+    ("E16:", ["catches a gate that says NOT-STILL and writes the baseline anyway"]),
+    ("E17:", ["every judging step builds the invocation its own law names"]),
+    ("E19:", ["refuses a gate that found drift somewhere else"]),
+    ("E20:", ["refuses two answers that agree"]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -580,11 +657,19 @@ BATCH_E = [
         "  | otherwise = max 1 (lawSecondsBudget `div` cost)",
     ),
     (
-        "E7: the report table drops its iteration column, so a law that ran 6 "
-        "of a requested 100 reads exactly like one that ran all 100",
+        # Round 2 (review finding M-4): this used to edit only the HEADER
+        # string literal, leaving the data cell intact -- so the mutant still
+        # printed the true count and merely mislabelled the column, and the
+        # test that caught it read back the same literal that had been
+        # changed.  Near-tautological, and not the failure mode the label
+        # claims.  The ROW BUILDER is the thing that would have to break for
+        # a six-iteration run to read like a hundred-iteration one, so that
+        # is what is broken here.
+        "E7: the report table drops the iteration count from its ROWS, so a "
+        "law that ran 6 of a requested 100 reads exactly like one that ran all 100",
         "Run.hs",
-        '     "| feature | scenario | verdict | ran | skipped |"',
-        '     "| feature | scenario | verdict | skipped |"',
+        '       <> " | " <> T.pack (show (srRuns r))\n',
+        "",
     ),
     (
         "E8: --check is passed on a BLESS run and withheld on a check run",
@@ -636,6 +721,55 @@ BATCH_E = [
         "      v <- either (Left . T.pack) Right (eitherDecodeStrict (TE.encodeUtf8 (last ls)))",
         "      v <- either (Left . T.pack) Right (eitherDecodeStrict (TE.encodeUtf8 (head ls)))",
     ),
+    # ---- round 2: the three the reviewer's own mutations found unpinned ----
+    #
+    # Each of these SURVIVED the first round -- applied, verified on disk,
+    # `cabal test` still 359 examples 0 failures.  They are here because a
+    # finding that is fixed but not mutated is a finding that can come back.
+    (
+        "E15: the law budget doubles, so every property law silently costs "
+        "twice the wall clock it declares",
+        "Prop.hs",
+        "lawSecondsBudget = 300",
+        "lawSecondsBudget = 600",
+    ),
+    (
+        "E16: the bless law stops checking whether anything was WRITTEN, "
+        "keeping only its verdict half -- the one law standing between a view "
+        "that will not hold still and the owner's golden fixture",
+        "Steps.hs",
+        "          else if written",
+        "          else if False",
+    ),
+    (
+        "E17: the under-tolerance law repaints FAR, collapsing the two "
+        "@property laws into one -- a change under the gate's tolerance and a "
+        "change anywhere become the same law",
+        "Steps.hs",
+        "      \\(p, cam) w -> pure (Right w { pending = Just (repaintCondition p cam RepaintUnder) })",
+        "      \\(p, cam) w -> pure (Right w { pending = Just (repaintCondition p cam RepaintFar) })",
+    ),
+    (
+        "E18: a gate-driving step loses its declared cost, so it reports zero "
+        "and is given the full 100 iterations of a fifty-second run",
+        "Steps.hs",
+        "  , costing gateDeadSeconds $",
+        "  , id $",
+    ),
+    (
+        "E19: 'and nowhere else' stops checking that the repainted probe "
+        "drifted at every stop judged, going blind along the stop axis",
+        "Steps.hs",
+        "        else if stopsHit /= owed",
+        "        else if False && stopsHit /= owed",
+    ),
+    (
+        "E20: 'different verdicts' stops naming WHICH two verdicts, so two "
+        "unrelated crashes satisfy a law about telling blank from absent",
+        "Steps.hs",
+        "        else if Set.fromList [gvTag va, gvTag vb] /= blankAndAbsentVerdicts",
+        "        else if False",
+    ),
 ]
 
 # R99's expectations. E8 reddens the whole argv block, because every one of
@@ -663,6 +797,16 @@ EXPECT_E = [
     "wants the verdict X AND a reason",
     "pins the NAMED set whole",
     "reads the LAST verdict line",
+    # Round 2's four new laws. E19 and E20 deliberately have NO entry of
+    # their own: each reddens a test another mutation already claims (the
+    # "nowhere else" law and the "different verdicts" law each grew a new
+    # assertion rather than a new test), so the batch total says nothing
+    # about them and they are answered by SOLO_RUNS below instead. That is
+    # the honest bookkeeping, not a gap.
+    "a law that judges the map once gets SIX iterations",
+    "catches a gate that says NOT-STILL and writes the baseline anyway",
+    "every judging step builds the invocation its own law names",
+    "every step that drives the gate declares what it costs",
 ]
 
 ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D + BATCH_E
@@ -730,11 +874,26 @@ def main(argv=None):
             write(path, text)
 
     print("\n=== baseline: the restored tree must be green again ===")
-    fails, total = failing_tests()
+    fails, total, ran = failing_tests()
     print("    %s" % total)
-    baseline_ok = not fails
-    if not baseline_ok:
+    # Three things, not one: the suite RAN, it was green, and the files this
+    # script rewrites are byte-identical to what git holds. A restored tree
+    # that does not compile, or one left with a mutation on disk, must never
+    # reach "TREE CLEAN" (review finding I-2).
+    baseline_ok = ran and not fails
+    if not ran:
+        print("    FAIL: the restored tree did not build, so its greenness is unknown")
+    elif fails:
         print("    FAIL: the tree did not restore cleanly -- %s" % fails)
+    dirty = subprocess.run(
+        ["git", "-C", REPO, "status", "--porcelain", "--"] + list(SRC.values()),
+        capture_output=True, text=True,
+    ).stdout.strip()
+    if dirty:
+        print("    FAIL: these files are not as git holds them after restore:\n%s" % dirty)
+        baseline_ok = False
+    else:
+        print("    every mutated file is byte-identical to git")
 
     ok = all(r for _, r in results) and baseline_ok
     print("\n    phases run: %s" % ", ".join(w for w, _ in results))

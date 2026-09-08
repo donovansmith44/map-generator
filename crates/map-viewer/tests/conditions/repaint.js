@@ -5,9 +5,15 @@
 // "far"   — the block is repainted to the far end of its own range, so
 //           the change is at least 127 per channel: unmissable, and
 //           independent of what was there.
-// "under" — the block moves by UNDER_TOLERANCE units toward the middle
-//           of the range, so the change is real, is never clamped away,
-//           and is strictly smaller than the gate's tolerance.
+// "under" — the block moves toward the middle of the range by HALF the
+//           gate's own declared tolerance, so the change is real, is
+//           never clamped away, and is strictly smaller than the
+//           tolerance whatever that tolerance is. Read off `GOLDEN.tol`,
+//           which the gate publishes precisely so a condition need not
+//           restate its constants: a hardcoded 12 was this file's own
+//           README violated ("a restated constant is a constant that
+//           drifts"), and it would have made this law spuriously red the
+//           day TOL dropped below it.
 //
 // The observation is made THE WAY THE GATE MAKES IT: the block is read
 // back through a 2D snapshot, exactly as `sampleOnce` reads it, so the
@@ -23,7 +29,8 @@
 (() => {
   const C = typeof CONDITION !== 'undefined' ? CONDITION : null;
   if (!C) throw new Error('condition repaint: needs --condition-arg {"probe":..,"camera":..,"by":..}');
-  const UNDER_TOLERANCE = 12;
+  // strictly under the gate's tolerance, derived from it, never restated
+  const UNDER_TOLERANCE = Math.max(1, Math.floor(GOLDEN.tol / 2));
 
   const arm = () => {
     if (typeof gpuDraw !== 'function' || typeof gpu === 'undefined' || !gpu.gl

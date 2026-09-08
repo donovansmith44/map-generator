@@ -360,7 +360,7 @@ data Precondition a = Broken Text | Unmet Text | Met a
 -- the brief forbids, and it goes stale the moment a law gains a step or
 -- the machine gets faster. This is the cost itself, stated by the thing
 -- that has it, from which the count is computed.
-data StepCost = Instant | Seconds Int deriving (Eq, Show)
+data StepCost = Instant | Seconds Int deriving (Eq, Ord, Show)
 
 costSeconds :: StepCost -> Int
 costSeconds Instant     = 0
