@@ -40,7 +40,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
                  BATCH C caught (8/8), BATCH D caught (12/12),
-                 BATCH E caught (17/17 laws, 14 mutations),
+                 BATCH E caught (18/18 laws, 14 mutations),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -645,6 +645,11 @@ EXPECT_E = [
     "the grid's ends are in and its neighbours are out",
     "the two cameras are the gate's own two, in the gate's own order",
     "every probe candidate ranks strictly lower",
+    # E4 reddens TWO laws, and the second is the point of having it: the
+    # generic order law quantifies over every group in the registry, so a
+    # new group whose shrinker breaks well-foundedness is caught whether
+    # or not anyone remembered to write it a law of its own.
+    "every shrink candidate of every group RANKS strictly below",
     "a law that judges it TWICE costs twice as much",
     "the budget only ever lowers a count",
     "the report table carries the skip count in its own column",
