@@ -1568,6 +1568,15 @@ main = hspec $ do
             , (Then, "every marker and label of wide still in narrow's view is kept by narrow")
             , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
             , (Then, "every label of viewed anchors in view")
+              -- label-placement.feature's four, in the corpus's own
+              -- words. The exemplar bijection is what keeps this list
+              -- honest: a fifth definition added without a fifth
+              -- exemplar, or an exemplar that some OTHER definition
+              -- happens to match, fails the set equality below.
+            , (Then, "every label of viewed carries a placement")
+            , (Then, "no two labels of viewed overlap")
+            , (Then, "every label of viewed is legible at the view it was asked for")
+            , (Then, "every label of viewed names a feature of viewed")
             , (Then, "one and other draw the same features")
             , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
             , (Then, "no shared resource of glance carries more vertices than it does in corner")
@@ -4342,6 +4351,59 @@ main = hspec $ do
   -- own sentence, with a happy case and a negative whose REASON is
   -- pinned -- not merely that it failed. A step that fails for the wrong
   -- reason is a step that will pass for the wrong reason later.
+  -- The type the three placement laws are stated over, pinned as a type:
+  -- its constructor's law, and the two predicates built on it. Stated
+  -- here rather than only through the steps because that is what makes
+  -- it a type with a law instead of four numbers the steps agree to
+  -- interpret the same way -- and because the constructor's refusals are
+  -- exactly what stops the overlap and legibility laws being satisfiable
+  -- by their own failure mode.
+  describe "LabelBox: the place the words go" $ do
+    let box l t r b = labelBox l t r b
+        ok l t r b = case box l t r b of
+          Right v -> v
+          Left e  -> error ("test box rejected: " <> T.unpack e)
+    it "a real box is made, and remembers its four edges" $
+      box 0.1 0.2 0.3 0.4 `shouldBe` Right (LabelBox 0.1 0.2 0.3 0.4)
+    it "a box that encloses no area is REFUSED -- an empty box overlaps \
+       \nothing and fits inside anything, which would make both laws \
+       \stated over it satisfiable by an answer that draws no words" $ do
+      box 0.1 0.2 0.1 0.4 `shouldSatisfy` isLeft
+      box 0.1 0.2 0.3 0.2 `shouldSatisfy` isLeft
+      box 0.3 0.2 0.1 0.4 `shouldSatisfy` isLeft
+    it "a non-finite edge is REFUSED -- every comparison against a NaN \
+       \is False, which silently satisfies both laws" $ do
+      box 0.1 0.2 (0 / 0) 0.4 `shouldSatisfy` isLeft
+      box 0.1 0.2 (1 / 0) 0.4 `shouldSatisfy` isLeft
+    it "overlapping is symmetric, and a box overlaps itself" $ do
+      let a = ok 0.1 0.1 0.3 0.3
+          b = ok 0.2 0.2 0.4 0.4
+      overlaps a b `shouldBe` True
+      overlaps b a `shouldBe` True
+      overlaps a a `shouldBe` True
+    it "boxes that merely touch, on either axis, do not overlap" $ do
+      overlaps (ok 0.1 0.1 0.3 0.3) (ok 0.3 0.1 0.5 0.3) `shouldBe` False
+      overlaps (ok 0.1 0.1 0.3 0.3) (ok 0.1 0.3 0.3 0.5) `shouldBe` False
+    it "boxes that meet on ONE axis only do not overlap: overlapping \
+       \needs both" $
+      overlaps (ok 0.1 0.1 0.3 0.3) (ok 0.2 0.5 0.4 0.7) `shouldBe` False
+    it "the page a view is asked for is the unit square, and it contains \
+       \itself" $ do
+      unitPage `shouldBe` LabelBox 0 0 1 1
+      fitsInside unitPage unitPage `shouldBe` True
+    it "fitsInside takes the WHOLE box: one edge over the page is enough to \
+       \be outside it" $ do
+      fitsInside (ok 0.1 0.1 0.9 0.9) unitPage `shouldBe` True
+      fitsInside (ok 0.9 0.1 1.1 0.9) unitPage `shouldBe` False
+      fitsInside (ok (-0.1) 0.1 0.5 0.9) unitPage `shouldBe` False
+    prop "distinctPairs pairs every element with every later one, exactly \
+         \once and never with itself -- n(n-1)/2 pairs" $ \(xs :: [Int]) ->
+      let ps = distinctPairs (nub xs)
+          n  = length (nub xs)
+      in length ps == n * (n - 1) `div` 2
+         && all (uncurry (/=)) ps
+         && length (nub [ (min a b, max a b) | (a, b) <- ps ]) == length ps
+
   describe "the step phase: the new steps run, and fail for the stated \
            \reason" $ do
     let vec :: (Double, Double, Double) -> A.Value
@@ -4355,6 +4417,14 @@ main = hspec $ do
         feat f r = A.object ["feature" A..= f, "resource" A..= r]
         lbl :: T.Text -> (Double, Double, Double) -> A.Value
         lbl s c = A.object ["subject" A..= s, "anchor" A..= vec c]
+        -- The same label, plus the placement label-placement.feature
+        -- says belongs in the answer: (left, top, right, bottom) on the
+        -- page of the view it was asked for.
+        placed :: T.Text -> (Double, Double, Double, Double) -> A.Value
+        placed s (l, t, r, b) = A.object
+          [ "subject" A..= s, "anchor" A..= vec (east 0)
+          , "placement" A..= A.object
+              [ "left" A..= l, "top" A..= t, "right" A..= r, "bottom" A..= b ] ]
         mrk :: T.Text -> (Double, Double, Double) -> A.Value
         mrk p c = A.object ["place" A..= p, "at" A..= vec c]
         manifest :: [A.Value] -> [A.Value] -> [A.Value] -> [A.Value] -> A.Value
@@ -4453,6 +4523,158 @@ main = hspec $ do
       o2 <- runThen "every label of viewed anchors in view"
               [("viewed", manifest [] [] [lbl "region:here" (east 0)] [])] [("viewed", camAt0)]
       shouldPass o2
+
+    -- ---------- label-placement.feature ----------
+    -- Every one of these drives the REAL definition through `allSteps`
+    -- on the corpus's own sentence. The three placement laws are @target
+    -- and red against today's server; that is not a licence to leave
+    -- them unexercised, so each is shown BOTH failing for the stated
+    -- reason and PASSING against a body that settles what it asks for --
+    -- otherwise the red says nothing about the server and everything
+    -- about the step.
+    it "the placement law fails on today's answer for the RIGHT reason -- \
+       \no placement -- and names how many of how many" $ do
+      let none = manifest [] [] [lbl "region:a" (east 0), lbl "region:b" (east 1)] []
+      o <- runThen "every label of viewed carries a placement" [("viewed", none)] []
+      shouldFailWith "2 of 2 labels" o
+      shouldFailWith "carries no placement" o
+      shouldFailWith "not where its words are drawn" o
+    it "... and it PASSES against an answer that does settle one, so the \
+       \red above is about the server rather than the step" $
+      shouldPass =<< runThen "every label of viewed carries a placement"
+        [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.2, 0.2)
+                                   , placed "region:b" (0.5, 0.5, 0.6, 0.6) ] [])] []
+    it "... and it counts PARTIAL settlement honestly: one of two, not \
+       \\"some label\"" $ do
+      o <- runThen "every label of viewed carries a placement"
+             [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.2, 0.2)
+                                        , lbl "region:b" (east 1) ] [])] []
+      shouldFailWith "1 of 2 labels" o
+      shouldFailWith "region:b" o
+    it "... and an EMPTY draw SKIPS with its reason rather than passing: \
+       \a law about every label with no labels is not a green" $
+      shouldSkipWith "carries no labels" =<<
+        runThen "every label of viewed carries a placement"
+          [("viewed", manifest [] [] [] [])] []
+    it "... and a placement that encloses no area is REFUSED, not \
+       \accepted: an empty box draws no words" $ do
+      o <- runThen "every label of viewed carries a placement"
+             [("viewed", manifest [] [] [placed "region:a" (0.1, 0.1, 0.1, 0.4)] [])] []
+      shouldFailWith "encloses no area" o
+    it "... and an edge that overflows to Infinity through the real JSON \
+       \path is refused too -- a non-finite edge disables every \
+       \comparison the two laws below make" $ do
+      let body = "{\"features\":[],\"resources\":[],\"markers\":[],\"labels\":[{\
+                 \\"subject\":\"region:a\",\"anchor\":[1,0,0],\"placement\":{\
+                 \\"left\":0.1,\"top\":0.1,\"right\":1e400,\"bottom\":0.4}}]}"
+      case A.eitherDecodeStrict body of
+        Left e -> expectationFailure ("test body is not JSON: " <> e)
+        Right v -> do
+          o <- runThen "every label of viewed carries a placement" [("viewed", v)] []
+          shouldFailWith "not a finite number" o
+
+    it "the overlap law is a FAILURE and not a skip while the answer \
+       \settles no placement: \"I cannot tell\" is the defect this law \
+       \exists to state, not an unexercised draw" $ do
+      let none = manifest [] [] [lbl "region:a" (east 0), lbl "region:b" (east 1)] []
+      o <- runThen "no two labels of viewed overlap" [("viewed", none)] []
+      shouldFailWith "2 of 2 labels" o
+      shouldFailWith "whether they overlap is not a question this answer can be asked" o
+    it "... and it really compares BOXES: two that share area collide, \
+       \and it names both names" $ do
+      o <- runThen "no two labels of viewed overlap"
+             [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.3, 0.3)
+                                        , placed "region:b" (0.2, 0.2, 0.4, 0.4) ] [])] []
+      shouldFailWith "1 of 1 label pairs" o
+      shouldFailWith "region:a over region:b" o
+    it "... and two boxes that merely TOUCH do not overlap: a shared edge \
+       \has no area and no pixel belongs to both" $
+      shouldPass =<< runThen "no two labels of viewed overlap"
+        [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.3, 0.3)
+                                   , placed "region:b" (0.3, 0.1, 0.5, 0.3) ] [])] []
+    it "... and it counts PAIRS, not labels: three mutually overlapping \
+       \boxes are three collisions of three pairs" $ do
+      o <- runThen "no two labels of viewed overlap"
+             [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.4, 0.4)
+                                        , placed "region:b" (0.2, 0.2, 0.5, 0.5)
+                                        , placed "region:c" (0.3, 0.3, 0.6, 0.6) ] [])] []
+      shouldFailWith "3 of 3 label pairs" o
+    it "... and a scene that publishes EMPTY boxes cannot buy a green \
+       \with them -- the box's own law refuses the value, so the law \
+       \reports no settled placement instead of \"nothing collided\"" $ do
+      o <- runThen "no two labels of viewed overlap"
+             [("viewed", manifest [] [] [ placed "region:a" (0.2, 0.2, 0.2, 0.2)
+                                        , placed "region:b" (0.2, 0.2, 0.2, 0.2) ] [])] []
+      shouldFailWith "carry no settled placement" o
+      shouldFailWith "encloses no area" o
+    it "... and an empty draw SKIPS: two of nothing cannot overlap" $
+      shouldSkipWith "two of nothing cannot overlap" =<<
+        runThen "no two labels of viewed overlap" [("viewed", manifest [] [] [] [])] []
+
+    it "the legibility law needs the view it names: a scene rendered with \
+       \NO camera is an error, not a pass" $
+      shouldFailWith "was not rendered with a camera" =<<
+        runThen "every label of viewed is legible at the view it was asked for"
+          [("viewed", manifest [] [] [placed "region:a" (0.1, 0.1, 0.2, 0.2)] [])] []
+    it "... and it fails on today's answer for the placement reason, not \
+       \a page reason" $ do
+      o <- runThen "every label of viewed is legible at the view it was asked for"
+             [("viewed", manifest [] [] [lbl "region:a" (east 0)] [])] [("viewed", camAt0)]
+      shouldFailWith "whether they are drawn at all is not a question" o
+    it "... and it PASSES for a label whose words fit the page" $
+      shouldPass =<< runThen "every label of viewed is legible at the view it was asked for"
+        [("viewed", manifest [] [] [placed "region:a" (0.1, 0.1, 0.2, 0.2)] [])]
+        [("viewed", camAt0)]
+    it "... and it takes the WHOLE box, not its centre: a label that \
+       \straddles the page edge is one the viewer would have to discard" $ do
+      o <- runThen "every label of viewed is legible at the view it was asked for"
+             [("viewed", manifest [] [] [ placed "region:a" (0.1, 0.1, 0.2, 0.2)
+                                        , placed "region:b" (0.9, 0.1, 1.4, 0.2) ] [])]
+             [("viewed", camAt0)]
+      shouldFailWith "1 of 2 labels" o
+      shouldFailWith "region:b" o
+      shouldFailWith "off the page" o
+    it "... and an empty draw SKIPS rather than passing" $
+      shouldSkipWith "carries no labels" =<<
+        runThen "every label of viewed is legible at the view it was asked for"
+          [("viewed", manifest [] [] [] [])] [("viewed", camAt0)]
+
+    it "the naming law passes when every subject is a feature the same \
+       \answer publishes" $
+      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+        [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
+                             [lbl "region:a" (east 0)] [])] []
+    it "... and a MARKER counts as something that is there, under the \
+       \`place:` namespace the wire's own label subjects put in front \
+       \of it" $
+      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+        [("viewed", manifest [] [] [lbl "place:place:gaza" (east 0)]
+                             [mrk "place:gaza" (east 0)])] []
+    it "... and that namespace is a real TRANSLATION, not a union that \
+       \takes either spelling: a subject spelled like the bare marker \
+       \place names nothing" $ do
+      o <- runThen "every label of viewed names a feature of viewed"
+             [("viewed", manifest [] [] [lbl "place:gaza" (east 0)]
+                                  [mrk "place:gaza" (east 0)])] []
+      shouldFailWith "1 of 1 labels" o
+      shouldFailWith "place:gaza" o
+    it "... and it names how many of how many name nothing at all" $ do
+      o <- runThen "every label of viewed names a feature of viewed"
+             [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
+                                  [lbl "region:a" (east 0), lbl "region:ghost" (east 1)] [])] []
+      shouldFailWith "1 of 2 labels" o
+      shouldFailWith "region:ghost" o
+    it "... and it refuses a line that names TWO answers: with two names \
+       \the sentence no longer states the law" $
+      shouldFailWith "but names two" =<<
+        runThen "every label of viewed names a feature of other"
+          [ ("viewed", manifest [] [] [lbl "region:a" (east 0)] [])
+          , ("other",  manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1] [] []) ] []
+    it "... and an empty draw SKIPS rather than passing" $
+      shouldSkipWith "carries no labels" =<<
+        runThen "every label of viewed names a feature of viewed"
+          [("viewed", manifest [] [] [] [])] []
+
     it "the horizon law really computes the horizon from the center the \
        \scenario names" $ do
       o <- runThen "no feature of viewed is beyond the horizon of 0,0" [("viewed", nearFar)] []

@@ -8,7 +8,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (isSpace)
 import Data.Foldable (asum)
-import Data.List (sort)
+import Data.List (sort, tails)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set, member)
 import qualified Data.Set as Set
@@ -480,6 +480,127 @@ allSteps =
           else StepFailed (tshow (length outside) <> " of " <> tshow (length ls)
                            <> " labels of " <> n <> " anchor outside its own view: "
                            <> listSome outside)
+    -- ---------- label-placement.feature ----------
+    -- Four laws over one type: `LabelBox`, the place the words go. All
+    -- four are listed HERE -- before the four `lit ""`-prefixed generic
+    -- steps further down -- because specific comes before generic, and
+    -- because of one concrete misdiagnosis this ordering fixes. Until
+    -- these definitions existed, `every label of view is legible at the
+    -- view it was asked for` fell through to the plan-mirror step's
+    -- `capUntil @BindName " is "` (its terminator really does occur in
+    -- that sentence), whose capture then failed on the four words before
+    -- it; `check` reported BAD-VALUE "a bind name is a single word"
+    -- instead of ORPHAN. That is the same class of confusion this
+    -- module's ordering comment above already records, and it is why an
+    -- undefined step must be able to look undefined.
+    --
+    -- Three of the four are @target and are expected to be RED: the
+    -- server sends `anchor` and no placement, so the answer does not yet
+    -- settle where any words go. They fail by saying exactly that, which
+    -- is the honest red -- see `noPlacementYet`.
+    --
+    -- "EVERY LABEL CARRIES A PLACEMENT" -- the one the other two rest
+    -- on. Quantified over every label and reported as how many of how
+    -- many, never as "some label has none".
+  , mkSkippableStep Then (lit "every label of " *> capUntil @BindName " carries a placement") $
+      \(BindName n) w -> pure $ either StepFailed id $ do
+        ps <- labelPlacements =<< boundScene n w
+        let unsettled = [ (s, why) | (s, Left why) <- ps ]
+        pure $ if null ps
+          then StepSkipped (n <> " carries no labels at this draw; a law about what every \
+                            \label arrives with has nothing to examine")
+          else if null unsettled then StepOk w
+          else StepFailed (noPlacementYet n "the answer does not say where their words go"
+                             (length ps) unsettled)
+    -- "NO TWO LABELS OVERLAP". Every unordered PAIR, and the count is of
+    -- pairs, because that is the population the law quantifies over.
+    --
+    -- An unsettled placement is a failure of this law and not a skip:
+    -- whether two labels collide is precisely the question the viewer is
+    -- answering today and the answer is not, so "I cannot tell" here is
+    -- the defect, not an unexercised draw. `LabelBox`'s own law is what
+    -- keeps the green honest from the other side -- a box may not
+    -- enclose zero area, so a scene cannot pass this law by publishing
+    -- placements that draw nothing.
+  , mkSkippableStep Then (lit "no two labels of " *> capUntil @BindName " overlap") $
+      \(BindName n) w -> pure $ either StepFailed id $ do
+        ps <- labelPlacements =<< boundScene n w
+        let unsettled = [ (s, why) | (s, Left why) <- ps ]
+            boxes     = [ (s, b)   | (s, Right b) <- ps ]
+            pairs     = distinctPairs boxes
+            collided  = [ a <> " over " <> c | ((a, ba), (c, bc)) <- pairs, overlaps ba bc ]
+        pure $ if null ps
+          then StepSkipped (n <> " carries no labels at this draw; two of nothing cannot \
+                            \overlap and demonstrating that they do not demonstrates nothing")
+          else if not (null unsettled)
+          then StepFailed (noPlacementYet n "whether they overlap is not a question this \
+                                            \answer can be asked" (length ps) unsettled)
+          else if null collided then StepOk w
+          else StepFailed (tshow (length collided) <> " of " <> tshow (length pairs)
+                           <> " label pairs of " <> n <> " are printed on top of each other: "
+                           <> listSome collided)
+    -- "EVERY NAME THAT IS SENT IS A NAME THAT IS DRAWN" -- nothing
+    -- arrives that the viewer would have to discard.
+    --
+    -- With placement in the answer there are exactly two ways a sent
+    -- label goes undrawn: it collides with another (the law above), or
+    -- its words fall off the page (this one). So the two laws partition
+    -- the discards between them and neither restates the other, and
+    -- neither restates camera.feature's anchor-culling law, which is
+    -- about what the server may SEND rather than about what the page can
+    -- hold.
+    --
+    -- The camera is required even though `unitPage` is the same square
+    -- in every view. This law is stated about "the view it was asked
+    -- for", and a scene that was asked for at no view has none to be
+    -- asked about; answering "it holds" there is the shape of check this
+    -- project refuses (see `cameraOf`'s own comment).
+  , mkSkippableStep Then (lit "every label of "
+                          *> capUntil @BindName " is legible at the view it was asked for") $
+      \(BindName n) w -> pure $ either StepFailed id $ do
+        _ <- cameraOf n w
+        ps <- labelPlacements =<< boundScene n w
+        let unsettled = [ (s, why) | (s, Left why) <- ps ]
+            drawn     = [ (s, b)   | (s, Right b) <- ps ]
+            offPage   = [ s | (s, b) <- drawn, not (b `fitsInside` unitPage) ]
+        pure $ if null ps
+          then StepSkipped (n <> " carries no labels at this draw; a law about what every \
+                            \label sent is has nothing to examine")
+          else if not (null unsettled)
+          then StepFailed (noPlacementYet n "whether they are drawn at all is not a \
+                                            \question this answer can be asked"
+                             (length ps) unsettled)
+          else if null offPage then StepOk w
+          else StepFailed (tshow (length offPage) <> " of " <> tshow (length drawn)
+                           <> " labels of " <> n <> " are placed off the page of the view "
+                           <> n <> " was asked for, so the viewer would have to discard them: "
+                           <> listSome offPage)
+    -- "EVERY NAME NAMES SOMETHING THAT IS THERE". NOT @target: this one
+    -- is the door closing behind the three above, and it is expected to
+    -- hold today.
+    --
+    -- One answer, named twice in the sentence, so the two names must be
+    -- the same name -- the same refusal the two-sided culling law makes,
+    -- and for the same reason: with two different names this line no
+    -- longer states the law it reads as.
+  , mkSkippableStep Then (lit "every label of " *> ((,) <$> capUntil @BindName " names a feature of "
+                                                        <*> capRest @BindName)) $
+      \(BindName n, BindName n2) w -> pure $ either StepFailed id $ do
+        () <- if n == n2 then Right ()
+              else Left ("this law is about ONE answer -- every label of it naming \
+                         \something in it -- but names two: " <> n <> " and " <> n2)
+        v <- boundScene n w
+        named <- namedThings v
+        subs <- map fst <$> labelAnchors v
+        let unnamed = [ s | s <- subs, not (s `Set.member` named) ]
+        pure $ if null subs
+          then StepSkipped (n <> " carries no labels at this draw; a law about what every \
+                            \name names has nothing to examine")
+          else if null unnamed then StepOk w
+          else StepFailed (tshow (length unnamed) <> " of " <> tshow (length subs)
+                           <> " labels of " <> n <> " name nothing " <> n
+                           <> " publishes, among its " <> tshow (Set.size named)
+                           <> " features and markers: " <> listSome unnamed)
     -- ---------- detail.feature ----------
     -- "detail changes how much is drawn, never what exists" --
     -- characterization D1, which HOLDS exactly (917 ids at all 13 lod
@@ -1182,6 +1303,92 @@ beyondHorizon eye f = angleBetween eye (capCenter f) - capRadius f > pi / 2
 pointInView :: Cap -> Vec3 -> Bool
 pointInView view p = inView view (Cap p 0)
 
+-- ---------- where the words go ----------
+
+-- THE PLACE THE WORDS GO. A label's `anchor` says where the named THING
+-- is; its placement says where its WORDS are drawn. label-placement.
+-- feature is the law that the second of those belongs in the answer, and
+-- this is the type that law is stated over.
+--
+-- A BOX, not a point, because neither law stated over it is answerable
+-- from a bare position: "no two labels overlap" is about the area the
+-- ink covers, and so is "every label sent is one that is drawn".
+--
+-- The coordinates are the PAGE the view was asked for, normalized:
+-- (0,0) is its top-left corner and (1,1) its bottom-right, which is what
+-- `unitPage` below says once. That is the identity of the space, not a
+-- tuned constant, and it is the only space in which the feature's own
+-- prose can be true -- "two viewers given the same answer draw the same
+-- names in the same places" cannot hold in pixels, because two viewers
+-- do not agree on a pixel. The wire carries no page size (a label's
+-- `size` is already stated against a design page, not a device), and it
+-- must not grow one to satisfy this law.
+data LabelBox = LabelBox
+  { boxLeft :: !Double, boxTop :: !Double
+  , boxRight :: !Double, boxBottom :: !Double }
+  deriving (Eq, Show)
+
+-- THE BOX'S LAW, and the only way to make one: its edges are finite and
+-- it encloses real area.
+--
+-- Both halves are there to stop a check being satisfiable by its own
+-- failure mode (MEMORY: verify-distinct-not-nonnull), and neither is
+-- hypothetical:
+--
+--   * an EMPTY box (left = right, or top = bottom) covers no pixel, so
+--     it overlaps nothing and fits inside anything. A server that
+--     published a zero-area placement for every label would make "no two
+--     labels overlap" and "every label is legible" both report green
+--     while drawing no words at all. Words cover area; a placement that
+--     covers none is not a placement, and it is refused HERE, where the
+--     value is made, rather than special-cased in each law downstream.
+--   * a NaN edge makes every comparison below False, which silently
+--     satisfies the overlap law and, through `not . fitsInside`, the
+--     legibility one too. `angleBetween` records this project already
+--     being bitten by a NaN quietly disabling a law; this refuses the
+--     value instead.
+labelBox :: Double -> Double -> Double -> Double -> Either Text LabelBox
+labelBox l t r b
+  | any (\x -> isNaN x || isInfinite x) [l, t, r, b] =
+      Left ("a placement edge is not a finite number: " <> edges)
+  | l >= r || t >= b =
+      Left ("a placement encloses no area, so it draws no words: " <> edges)
+  | otherwise = Right (LabelBox l t r b)
+  where
+    edges = "left " <> tshow l <> ", top " <> tshow t
+            <> ", right " <> tshow r <> ", bottom " <> tshow b
+
+-- THE PAGE the view was asked for, written down. Every view is drawn on
+-- the whole of its own page, so the page is the unit square in all of
+-- them -- which is exactly why the answer needs no page size on the wire.
+unitPage :: LabelBox
+unitPage = LabelBox 0 0 1 1
+
+-- Two boxes OVERLAP when they overlap on both axes: their ink shares
+-- area. Half-open on every edge, so boxes that merely TOUCH do not
+-- overlap -- a shared edge has no area, and no pixel belongs to both.
+-- This is the viewer's own collision test (crates/map-viewer/src/
+-- page.html's `collides`), stated once here rather than trusted there.
+overlaps :: LabelBox -> LabelBox -> Bool
+overlaps a b = boxLeft a < boxRight b && boxLeft b < boxRight a
+            && boxTop a < boxBottom b && boxTop b < boxBottom a
+
+-- FITS INSIDE: every edge of the inner box lies inside the outer one --
+-- whole box, not its centre. A label half off the page is a label the
+-- viewer clips, which is a label it does not draw whole.
+fitsInside :: LabelBox -> LabelBox -> Bool
+fitsInside inner outer =
+  boxLeft inner >= boxLeft outer && boxRight inner <= boxRight outer
+  && boxTop inner >= boxTop outer && boxBottom inner <= boxBottom outer
+
+-- Every unordered pair of distinct elements, each exactly once. The
+-- population "no two labels overlap" is quantified over, so the law can
+-- report how many of how many PAIRS collide rather than how many labels
+-- were involved in some collision -- two different numbers, and only the
+-- first is the one the law is about.
+distinctPairs :: [a] -> [(a, a)]
+distinctPairs xs = [ (a, b) | (a : rest) <- tails xs, b <- rest ]
+
 -- ---------- reading the manifest ----------
 
 vec3Of :: Value -> Either Text Vec3
@@ -1218,6 +1425,14 @@ textField k v = case field k v of
 intField :: Text -> Value -> Either Text Int
 intField k v = case field k v of
   Right (Number n) -> Right (round n)
+  Right other      -> Left ("field " <> k <> " is not a number: " <> bounded other)
+  Left e           -> Left e
+
+-- `intField`'s sibling for a field that is genuinely fractional -- a
+-- placement edge is a position on the page, not a count.
+numField :: Text -> Value -> Either Text Double
+numField k v = case field k v of
+  Right (Number n) -> Right (realToFrac n)
   Right other      -> Left ("field " <> k <> " is not a number: " <> bounded other)
   Left e           -> Left e
 
@@ -1264,6 +1479,63 @@ labelAnchors v = traverse one =<< arrayOf "labels" v
 markerPoints :: Value -> Either Text [(Text, Vec3)]
 markerPoints v = traverse one =<< arrayOf "markers" v
   where one m = (,) <$> textField "place" m <*> (vec3Of =<< field "at" m)
+
+-- Every label by its SUBJECT, paired with either the placement the
+-- answer settled for it or the reason the answer settles none.
+--
+-- The per-label `Either` is the point. `every label carries a placement`
+-- has to report how many of how many do NOT, and a traversal that fails
+-- whole at the first unsettled label cannot count -- it can only say
+-- "one of them". A missing or non-text `subject`, by contrast, IS a
+-- whole-manifest failure and stays one: that is a broken body, not a
+-- label whose placement the answer declined to settle.
+labelPlacements :: Value -> Either Text [(Text, Either Text LabelBox)]
+labelPlacements v = traverse one =<< arrayOf "labels" v
+  where one l = (,) <$> textField "subject" l <*> pure (placementOf l)
+
+-- The placement of ONE label. Today every label answers the first case:
+-- the wire carries `anchor`, `color`, `face`, `halo`, `haloWidthEm`,
+-- `piece`, `priority`, `size`, `subject`, `text` and `voice`, and no
+-- placement at all -- which is the whole reason three of
+-- label-placement.feature's scenarios are @target.
+placementOf :: Value -> Either Text LabelBox
+placementOf l = case field "placement" l of
+  Left _  -> Left "carries no placement -- only an anchor, which says where the named \
+                  \thing is, not where its words are drawn"
+  Right p -> do
+    lft <- numField "left" p
+    top <- numField "top" p
+    rgt <- numField "right" p
+    bot <- numField "bottom" p
+    labelBox lft top rgt bot
+
+-- Everything the answer publishes that a name can be ABOUT: the feature
+-- ids, and the markers.
+--
+-- A marker is published by its `place`, and a label names that same
+-- marker with the subject `place:<place>` -- the namespace the wire
+-- itself puts in front of it. Verified against the live server at year
+-- -1405: all 31 markers are named by exactly that subject, including the
+-- ones whose place id already begins with `place:` (`place:place:gaza`
+-- is the label for the marker at `place:gaza`, double prefix and all).
+-- The translation lives HERE, once, for the same reason
+-- `changeSubjects` translates a fade's bare region id into the scene's
+-- `region:HEX`: one of the two spellings has to move for the comparison
+-- to mean anything, and doing it at the call site would be doing it
+-- twice.
+--
+-- Markers are included because the law's own scenario name says what it
+-- is about -- "every name names something that is there" -- and a
+-- marker is something that is there. Read as the `features` array alone,
+-- the law would fail for all 32 place labels merely because a place is
+-- published under `markers` rather than `features`, which is a fact
+-- about where the wire files a thing, not about whether the name has
+-- anything behind it.
+namedThings :: Value -> Either Text (Set Text)
+namedThings v = do
+  fs <- featureIdSet v
+  ms <- markerPoints v
+  pure (Set.union fs (Set.fromList [ "place:" <> p | (p, _) <- ms ]))
 
 -- The two kinds together, which is how camera.feature states both
 -- nesting laws ("markers and labels"). Ids are namespaced by kind so a
@@ -1385,6 +1657,29 @@ renderInto mname ps y mst mcam mdet w = do
                  (Just n, Just (CamSpec c z)) -> Map.insert n (c, z) (cameras w1)
                  (Just n, Nothing)            -> Map.delete n (cameras w1)
                  (Nothing, _)                 -> cameras w1 }
+
+-- WHAT A PLACEMENT LAW SAYS when the answer settles no placement.
+--
+-- A FAILURE, and never a skip. A skip means "this draw cannot exercise
+-- the law"; an answer that settles no placement is not an unexercised
+-- draw, it is the answer breaking the very law label-placement.feature
+-- exists to state. Reporting it as a skip would print "unexercised" for
+-- the exact defect the three @target scenarios are the specification
+-- for -- and, worse, `Run.lawTally` turns an all-skipped law into a
+-- Failed with the message "law never ran", which would bury the real
+-- reason under a bookkeeping one.
+--
+-- One function for all three laws, with the consequence supplied,
+-- because the fact is one fact: how many of how many labels arrive with
+-- nowhere to be, which ones, and the reason for the first of them.
+noPlacementYet :: Text -> Text -> Int -> [(Text, Text)] -> Text
+noPlacementYet n consequence total us =
+  tshow (length us) <> " of " <> tshow total <> " labels of " <> n
+    <> " carry no settled placement, so " <> consequence <> ": "
+    <> listSome (map fst us) <> " -- " <> firstReason us
+  where
+    firstReason ((_, why) : _) = why
+    firstReason []             = "(no reason recorded)"
 
 -- A handful of ids in a failure message, the same way `describeSetDiff`
 -- bounds its own: five is enough to recognize a pattern, and a scene
