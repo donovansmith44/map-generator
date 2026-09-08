@@ -187,6 +187,39 @@ ambiguous defs f = [ (sc, b, ss) | (sc, b, VAmbiguous ss) <- violations defs f ]
 valueErrors :: [StepDef] -> Feature -> [(StepSite, Text, [(Text, Text)])]
 valueErrors defs f = [ (sc, b, es) | (sc, b, VValueError es) <- violations defs f ]
 
+-- | The degenerate-hole law over one feature: every (scenario name,
+-- defect) it finds.
+--
+-- Fix round 2, blocker 3's residual: ONE traversal, in ONE place.
+-- `checkDir` runs this, and so does the corpus-wide pin in the test
+-- suite whose whole job is to guard it. Those two used to state the
+-- traversal separately, and the moment R97 changed it here the pin kept
+-- the old word — going blind to exactly the scenarios that had just
+-- gained a background, which is the defect this law exists to catch. A
+-- rule written twice is a rule that can drift, and this one drifted the
+-- first time it moved. Now a change to the traversal moves both, and the
+-- pin cannot silently disagree with the instrument.
+--
+-- The scenario is read WITH its background: a hole that appears only in
+-- the background is still a hole that scenario quantifies over, and one
+-- that never varies is the same defect wherever it was written.
+holeDefectsIn :: Int -> Feature -> [(Text, Prop.HoleDefect)]
+holeDefectsIn = holeDefectsInWith Prop.holeRegistry
+
+-- | The same law over an INJECTED registry — the split
+-- `Prop.holeDefectsWith`/`shrinkToMinimalWith`/`bindingsForWith` all
+-- make, and for the same reason: every group in the real registry
+-- behaves, so nothing in the real corpus can produce a defect, and the
+-- only way to exercise this traversal against one is for a test to build
+-- a deliberately degenerate group and drive the real function with it.
+holeDefectsInWith
+  :: Map.Map Text Prop.HoleGroup -> Int -> Feature -> [(Text, Prop.HoleDefect)]
+holeDefectsInWith reg n f =
+  [ (scName sc, d)
+  | sc <- runnableScenarios f
+  , Prop.isProperty (scTags sc)
+  , d <- Prop.holeDefectsWith reg n sc ]
+
 -- Duplicated from app/Main.hs's `featureFiles`: importing Main from the
 -- library would create an import cycle (Main imports Check), and this
 -- walker is 8 lines — duplication beats a dependency cycle.
@@ -220,14 +253,8 @@ checkDir defs dir = do
         -- says where each row lives; this only turns a site into a name.
         [ (T.pack p <> " / " <> siteName s, label v, describe b v)
         | (s, b, v) <- violations defs f ]
-        -- The degenerate-hole law reads the scenario WITH its
-        -- background: a hole that appears only in the background is
-        -- still a hole this scenario quantifies over, and one that never
-        -- varies is the same defect wherever it was written.
-        ++ [ (T.pack p <> " / " <> scName sc, "DEGENERATE-HOLE", describeDefect d)
-           | sc <- runnableScenarios f
-           , Prop.isProperty (scTags sc)
-           , d <- Prop.holeDefects 30 sc ]) $ files
+        ++ [ (T.pack p <> " / " <> sc, "DEGENERATE-HOLE", describeDefect d)
+           | (sc, d) <- holeDefectsIn 30 f ]) $ files
   if null bad then TIO.putStrLn
     "totality: every step has exactly one definition; every property hole varies"
   else do

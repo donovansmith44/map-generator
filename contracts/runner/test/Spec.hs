@@ -1653,9 +1653,6 @@ main = hspec $ do
           -- (the "topografy" line), which asserts exactly two claimants
           -- for the same reason. Both entries carry the identical error
           -- text, differing only by sketch.
-          piecesErr = "'qqqqqqqqqq' is not a piece.\n"
-                   <> "  Pieces are: borders, chrome, claims, fills, ground, journeys, "
-                   <> "labels, markers, veil, water"
           -- The step phase took this from two claimants to EIGHT. Every
           -- render overload -- the six camera/detail/no-style shapes and
           -- the two plain ones -- opens with the same
@@ -1674,25 +1671,12 @@ main = hspec $ do
           -- rather than smuggled in here. This test asserts what the
           -- runner ACTUALLY prints today; it does not claim that is what
           -- it should print.
-          claimant sk = "; " <> sk <> ": " <> piecesErr
-          firstSketch =
-            "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail} as {name}"
-          laterSketches =
-            [ "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} {scale} detail {detail} as {name}"
-            , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} as {name}"
-            , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail}"
-            , "I render pieces {pieces} at year {year} in style {style} detail {detail} as {name}"
-            , "I render pieces {pieces} at year {year} in no style"
-            , "I render pieces {pieces} at year {year} in style {style} as {name}"
-            , "I render pieces {pieces} at year {year} in style {style}"
-            ]
           expected = T.concat
             [ "AMBIGUOUS ", T.pack featPath, " / ambiguous case: I do the thing matches 2 "
             , "definitions: I do {text} | I do the thing\n"
             , "BAD-VALUE ", T.pack featPath, " / bad value case: I render pieces qqqqqqqqqq "
             , "at year -1405 in style canaan -- "
-            , firstSketch, ": ", piecesErr
-            , T.concat (map claimant laterSketches)
+            , badPieceClaimants "qqqqqqqqqq"
             , "\n"
             ]
       createDirectoryIfMissing True dir
@@ -3071,25 +3055,23 @@ main = hspec $ do
         src <- readFeatureFile p
         pure $ case parseFeature p src of
           Left _  -> []
-          -- R97 / fix round 1, finding 3: `runnableScenarios`, exactly
-          -- as `Check.checkDir` does. This pin's whole claim is that it
-          -- runs the rule the instrument runs, and after R97 it stopped:
-          -- label-placement's three background-only @property scenarios
-          -- have ZERO holes when read as `ftScenarios`, so the
-          -- hole-distinctness law -- built precisely to catch a property
-          -- whose inputs cannot vary -- passed vacuously for exactly the
-          -- scenarios that had just gained a background.
-          Right f -> [ (p, scName sc, d)
-                     | sc <- runnableScenarios f
-                     , Prop.isProperty (scTags sc)
-                     , d <- Prop.holeDefects 30 sc ]) $ files
+          -- Fix round 2: this calls `Check.holeDefectsIn` -- literally
+          -- the function `checkDir` runs -- rather than restating its
+          -- traversal. Round 1 fixed the word here and the word there;
+          -- the two could still drift, and nothing would have noticed,
+          -- because reverting this one back to `ftScenarios` left all
+          -- 292 examples green. There is now one traversal, in `Check`,
+          -- and the test below is what makes changing it cost something.
+          Right f -> [ (p, sc, d) | (sc, d) <- Check.holeDefectsIn 30 f ]) $ files
       defects `shouldBe` []
-    it "... and that pin is not vacuous for a background-only scenario: \
-       \the same traversal DOES see a degenerate hole written in a \
-       \background, which reading ftScenarios could not" $ do
-      -- The guard for the guard. Without this, `runnableScenarios` above
-      -- could be reverted to `ftScenarios` and nothing would notice --
-      -- which is the state fix round 1 found it in.
+    it "... and the two traversals genuinely differ for a \
+       \background-only scenario: ftScenarios sees no holes at all where \
+       \runnableScenarios sees the background's" $ do
+      -- Half the loop: it proves the distinction is real. It does NOT
+      -- prove the pin above picks the right side of it -- for that, see
+      -- the degenerate-hole case below, which fails outright when the
+      -- shared traversal in `Check.holeDefectsInWith` reads
+      -- `ftScenarios`.
       let src = T.unlines
             [ "Feature: t"
             , "  Background:"
@@ -3109,6 +3091,46 @@ main = hspec $ do
           -- someYear genuinely varies, so no defect is reported -- the
           -- law is applied, and it holds
           concatMap (Prop.holeDefects 30) (runnableScenarios f) `shouldBe` []
+    -- THE TEETH (fix round 2, blocker 2). The guard above shows the two
+    -- traversals differ; this one dies if the shared traversal picks the
+    -- wrong one. A hole that never varies, written ONLY in a background:
+    -- `ftScenarios` cannot see it and reports nothing, so the law would
+    -- pass over a property whose inputs are frozen -- exactly what Task
+    -- 5 built the hole-distinctness law to catch.
+    --
+    -- Driven through `Check.holeDefectsInWith`, the very function
+    -- `checkDir` and the corpus-wide pin both run, over an injected
+    -- registry -- because every group in the real registry varies, so
+    -- nothing in the real corpus can produce a defect to test this with.
+    it "a degenerate hole written ONLY in a background is caught by the \
+       \traversal check and the corpus-wide pin share -- reading \
+       \ftScenarios there reports nothing and the law passes over a \
+       \frozen property" $ do
+      let frozen = Map.fromList [("frozenHole", frozenGroup)]
+          frozenGroup = Prop.HoleGroup
+            { Prop.groupName    = "frozenHole"
+            , Prop.groupMembers = ["frozenHole"]
+            , Prop.groupDraw    = pure (Map.singleton "frozenHole" "canaan")
+            , Prop.groupShrink  = const []
+            , Prop.groupRank    = const 0
+            , Prop.groupLaw     = const True
+            }
+          src = T.unlines
+            [ "Feature: t"
+            , "  Background:"
+            , "    When I render pieces fills at year -1405 in style <frozenHole> as base"
+            , ""
+            , "  @property"
+            , "  Scenario: quantified only through its background"
+            , "    Then base's labels are empty" ]
+      case parseFeature "frozen.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          Check.holeDefectsInWith frozen 30 f `shouldBe`
+            [("quantified only through its background", Prop.Constant "frozenHole")]
+          -- and the scenario really does carry no hole of its own, so
+          -- the row above can only have come from merging the background
+          concatMap Prop.holesOf (ftScenarios f) `shouldBe` []
     -- Adaptation note (brief's Step 1): `SomeHole`/`renderHole` no longer
     -- exist post-sweep; draws go through `HoleGroup`/`bindingsFor` now, so
     -- the defective registries below are local `HoleGroup`s rather than
@@ -3467,6 +3489,36 @@ main = hspec $ do
         Left e -> do
           e `shouldSatisfy` T.isInfixOf "late.feature:4"
           e `shouldSatisfy` T.isInfixOf "must come before the first Scenario"
+    -- Fix round 2, N1. Round 1 added this parse error as a minor's fix
+    -- and gave it no test: deleting the guard left all 292 examples
+    -- green. A new way for a corpus file to be REJECTED, whose check was
+    -- satisfiable by its own removal -- the very defect the round was
+    -- convened to eliminate, reintroduced by the fix for it.
+    it "an EMPTY Background: is a parse error naming the file and line -- \
+       \a header with nothing under it parses to the same AST as no \
+       \background at all, and renderFeature then drops the line the \
+       \author wrote" $
+      case parseFeature "empty.feature" (T.unlines
+             [ "Feature: t"
+             , "  Background:"
+             , ""
+             , "  Scenario: s"
+             , "    When I GET /a" ]) of
+        Right f -> expectationFailure ("expected a parse error, got " <> show f)
+        Left e -> do
+          e `shouldSatisfy` T.isInfixOf "empty.feature:2"
+          e `shouldSatisfy` T.isInfixOf "carries no steps"
+    it "... and a Background with steps is still accepted, so the rule \
+       \above rejects emptiness rather than backgrounds" $
+      case parseFeature "ok.feature" (T.unlines
+             [ "Feature: t"
+             , "  Background:"
+             , "    When I GET /a"
+             , ""
+             , "  Scenario: s"
+             , "    When I GET /b" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> ftBackground f `shouldBe` [Step When "I GET /a" Nothing]
     it "a Background speaks the SAME step grammar as a scenario body: \
        \And resolves against the previous keyword, so a background is \
        \not a second dialect" $
@@ -3550,8 +3602,8 @@ main = hspec $ do
             pure (map srVerdict rs)
     it "one binding per iteration: <someYear> in the background and \
        \<someYear> in the scenario render the SAME year, so the two \
-       \responses are equal over 100 iterations -- a separately-drawn \
-       \background reddens this at the first iteration" $ do
+       \responses are equal over 100 iterations -- a background that \
+       \never runs reddens this at the first iteration" $ do
       -- What this pin does and does not discriminate, stated so it is not
       -- over-read: it catches the background NOT RUNNING (the name goes
       -- unbound). It does NOT catch a background whose bindings were
@@ -3741,11 +3793,16 @@ main = hspec $ do
       (out, result) <- captureStdout (Check.checkDir allSteps dir)
       removeDirectoryRecursive dir
       result `shouldSatisfy` isLeft
-      -- a BAD-VALUE on the BACKGROUND naming the unsubstituted hole --
-      -- which also closes finding 12's gap (only the ORPHAN shape of a
-      -- background row had a test)
-      out `shouldSatisfy` T.isInfixOf ("BAD-VALUE " <> T.pack featPath <> " / Background:")
-      out `shouldSatisfy` T.isInfixOf "'<somePieces>' is not a piece"
+      -- WHOLE OUTPUT (fix round 2, N2), the form both sibling tests in
+      -- this describe use. The two `isInfixOf` pokes this replaces could
+      -- not see a DUPLICATED background row -- the "same defect under N
+      -- labels" property the ORPHAN pin exists to prove -- because a
+      -- second identical row satisfies a substring check exactly as one
+      -- does. It is one logical row spanning nine physical lines, since
+      -- the piece capture's error carries newlines of its own.
+      out `shouldBe` T.concat
+        [ "BAD-VALUE ", T.pack featPath, " / Background: ", T.drop 9 bgStep
+        , " -- ", badPieceClaimants "<somePieces>", "\n" ]
       -- and the SAME background under only the @property scenario is
       -- clean, so the row above is the SECOND scenario's treatment
       -- talking, not the background being rejected outright
@@ -4887,6 +4944,38 @@ main = hspec $ do
 -- still propagates out of captureStdout (so the test correctly reports it
 -- as a failure, rather than being silently swallowed), but every layer of
 -- cleanup below it has already run by the time it does.
+-- The exact tail `Check.describe` prints for a step whose PIECE list is
+-- bad: every one of the eight render definitions claims such a line,
+-- because all eight open with the same `capUntil @PieceSet " at year "`
+-- and fail identically before any of their differing tails is reached.
+--
+-- Written once, and used by both whole-output `checkDir` tests that pin
+-- a bad piece name (fix round 2): the eight sketches are the kind of
+-- literal that rots quietly when it lives in two places, and one of the
+-- two would then be asserting a shape the runner no longer prints.
+--
+-- Both callers pass a token that is Levenshtein-far from every real
+-- piece name, so `didYouMean`'s <=3 gate never fires and there is no
+-- suggestion clause to predict.
+badPieceClaimants :: T.Text -> T.Text
+badPieceClaimants bad = T.intercalate "; " [ sk <> ": " <> err | sk <- renderSketches ]
+  where
+    err = "'" <> bad <> "' is not a piece.\n"
+       <> "  Pieces are: borders, chrome, claims, fills, ground, journeys, "
+       <> "labels, markers, veil, water"
+
+renderSketches :: [T.Text]
+renderSketches =
+  [ "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail} as {name}"
+  , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} {scale} detail {detail} as {name}"
+  , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} as {name}"
+  , "I render pieces {pieces} at year {year} in style {style} looking at {center} zoom {zoom} detail {detail}"
+  , "I render pieces {pieces} at year {year} in style {style} detail {detail} as {name}"
+  , "I render pieces {pieces} at year {year} in no style"
+  , "I render pieces {pieces} at year {year} in style {style} as {name}"
+  , "I render pieces {pieces} at year {year} in style {style}"
+  ]
+
 captureStdout :: IO a -> IO (T.Text, Either ExitCode a)
 captureStdout act = do
   tmpDir <- getTemporaryDirectory

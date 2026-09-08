@@ -39,7 +39,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
     mutation committed by accident.
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
-                 BATCH C caught (8/8), BATCH D caught (10/10),
+                 BATCH C caught (8/8), BATCH D caught (12/12),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -83,6 +83,7 @@ REPO = os.path.abspath(os.path.join(RUNNER, "..", ".."))
 SRC = {name: os.path.join(RUNNER, "src", name)
        for name in ("Prop.hs", "Run.hs", "Steps.hs", "Vocab.hs", "Check.hs")}
 SRC["Ast.hs"] = os.path.join(RUNNER, "src", "Gherkin", "Ast.hs")
+SRC["Parse.hs"] = os.path.join(RUNNER, "src", "Gherkin", "Parse.hs")
 
 # ---------------------------------------------------------------------------
 # BATCH A -- the CORRELATIONS.  Both mutations replace a correlation-by-
@@ -329,6 +330,22 @@ BATCH_D = [
         "      | null (ftScenarios f) = []",
     ),
     (
+        "D9: the empty-Background: guard is removed, so a header with no "
+        "steps under it parses as no background at all and the line the "
+        "author wrote silently means nothing",
+        "Parse.hs",
+        "            Right ([], _) -> err n emptyBackground\n",
+        "",
+    ),
+    (
+        "D10: the traversal check and the corpus-wide pin SHARE reads "
+        "ftScenarios, so a degenerate hole written only in a background is "
+        "invisible to the hole-distinctness law",
+        "Check.hs",
+        "  | sc <- runnableScenarios f",
+        "  | sc <- ftScenarios f",
+    ),
+    (
         "D6: the background is APPENDED after each scenario's own steps "
         "instead of prepended, so setup runs after the law that needs it",
         "Ast.hs",
@@ -348,7 +365,30 @@ EXPECT_D = [
     "a background hole is a BAD-VALUE when ANY scenario would run it",
     "a Background in a feature with NO scenarios is still checked",
     "the treatment it gets there is the UNTAGGED one",
+    "an EMPTY Background: is a parse error naming the file and line",
+    "a degenerate hole written ONLY in a background is caught by the",
 ]
+
+# ---------------------------------------------------------------------------
+# WHAT A BATCH TOTAL DOES AND DOES NOT PROVE.
+#
+# `run_batch` applies a whole batch at once and then requires the failing
+# set to equal EXPECT exactly.  That establishes the UNION of the batch's
+# mutations reddens exactly those laws -- it does NOT establish that each
+# mutation is individually caught, and in BATCH D that gap is concrete
+# rather than theoretical:
+#
+#   D5 (check stops reporting background steps at all) makes
+#   `backgroundViolation` unreachable, so D7's and D8's mutated lines
+#   become dead code.  Applied ALONE, D5 reddens four laws -- the ORPHAN
+#   pin and all three of the tests D7 and D8 exist to prove.  If D7 and
+#   D8 were both no-ops, this batch would still print PASS.
+#
+# So the per-mutation evidence for the Check.hs subset is recorded from
+# INDIVIDUAL runs (see `run_one` below and the task report), not from the
+# batch total.  The same subsumption question is worth asking of batches
+# A-C; that is not this task's scope.
+# ---------------------------------------------------------------------------
 
 
 def read(path):
@@ -436,6 +476,17 @@ def run_batch(name, mutations, expected, originals):
           % ("PASS" if ok else "FAIL", len(caught), len(expected),
              "" if ok else "  (see MISSED/EXTRA above)"))
     return ok
+
+
+def run_one(label_fragment, expected, originals):
+    """Apply ONE mutation, by a fragment of its label, and report which laws
+    went red.  For the mutations another in the same batch subsumes, this is
+    the only run that says anything about them."""
+    picked = [ m for m in BATCH_D if label_fragment in m[0] ]
+    if len(picked) != 1:
+        raise SystemExit("run_one: %r matched %d mutations, expected 1"
+                         % (label_fragment, len(picked)))
+    return run_batch("SOLO %s" % picked[0][0][:40], picked, expected, originals)
 
 
 def main():
