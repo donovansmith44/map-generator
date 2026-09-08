@@ -3474,9 +3474,7 @@ main = hspec $ do
              , "  Scenario: s"
              , "    When I GET /c" ]) of
         Right f -> expectationFailure ("expected a parse error, got " <> show f)
-        Left e -> do
-          e `shouldSatisfy` T.isInfixOf "two.feature:4"
-          e `shouldSatisfy` T.isInfixOf "only one Background"
+        Left e -> e `shouldBe` "two.feature:4 a feature may have only one Background:"
     it "a Background AFTER a scenario is a parse error naming the line -- \
        \a background that does not precede what it sets up is not one" $
       case parseFeature "late.feature" (T.unlines
@@ -3486,9 +3484,9 @@ main = hspec $ do
              , "  Background:"
              , "    When I GET /a" ]) of
         Right f -> expectationFailure ("expected a parse error, got " <> show f)
-        Left e -> do
-          e `shouldSatisfy` T.isInfixOf "late.feature:4"
-          e `shouldSatisfy` T.isInfixOf "must come before the first Scenario"
+        Left e -> e `shouldBe`
+          "late.feature:4 Background: must come before the first Scenario: it \
+          \sets up the scenarios that follow it"
     -- Fix round 2, N1. Round 1 added this parse error as a minor's fix
     -- and gave it no test: deleting the guard left all 292 examples
     -- green. A new way for a corpus file to be REJECTED, whose check was
@@ -3505,9 +3503,13 @@ main = hspec $ do
              , "  Scenario: s"
              , "    When I GET /a" ]) of
         Right f -> expectationFailure ("expected a parse error, got " <> show f)
-        Left e -> do
-          e `shouldSatisfy` T.isInfixOf "empty.feature:2"
-          e `shouldSatisfy` T.isInfixOf "carries no steps"
+        -- WHOLE message (fix round 3): file, line and text in one
+        -- equality. Two `isInfixOf` pokes cannot see a message that also
+        -- says something else, and cannot see the line number drifting
+        -- to a different-but-still-containing value.
+        Left e -> e `shouldBe`
+          "empty.feature:2 Background: carries no steps -- a background with \
+          \nothing in it is not a background"
     it "... and a Background with steps is still accepted, so the rule \
        \above rejects emptiness rather than backgrounds" $
       case parseFeature "ok.feature" (T.unlines

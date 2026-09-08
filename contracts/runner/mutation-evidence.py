@@ -54,22 +54,34 @@ the suite completes all 273 examples and then sits in the report for
 
 This is NOT caused by fix round 1: it reproduces identically at c86fd0a
 (the step-phase commit), where the run likewise finishes every test and
-then hangs printing a `LawRun` diff.  BATCH C, whose failing assertions
-are all short, runs to completion in the ordinary time -- so a single
-batch can be verified on its own today:
+then hangs printing a `LawRun` diff.  Batches B-D, whose failing
+assertions are all short, run to completion in the ordinary time, so any
+phase can be run on its own:
 
-    python -c "import os; src=open('mutation-evidence.py').read().replace(
-      'if __name__ == \"__main__\":
-    main()',''); ns={'__name__':'me',
-      '__file__':os.path.abspath('mutation-evidence.py')};
-      exec(compile(src,'m','exec'),ns); ns['require_clean']();
-      o={p:ns['read'](p) for p in ns['SRC'].values()}
-      ..."
+    python mutation-evidence.py D          # one batch
+    python mutation-evidence.py solo       # the per-mutation runs
+    python mutation-evidence.py D solo     # both, in that order
+    python mutation-evidence.py            # every phase, A through solo
 
-The real fix is to make the reddened assertions report SMALL values (a
-count and the first few offenders rather than a 200-element list), which
-is a change to Spec.hs's assertions and belongs with whoever owns them.
-Recorded rather than worked around.
+The real fix for BATCH A is to make the reddened assertions report SMALL
+values (a count and the first few offenders rather than a 200-element
+list), which is a change to Spec.hs's assertions and belongs with whoever
+owns them.  Recorded rather than worked around.
+
+WHY THERE IS A `solo` PHASE AT ALL
+----------------------------------
+`run_batch` applies a whole batch and then requires the failing set to
+equal EXPECT exactly.  That establishes what the UNION of the batch's
+mutations reddens -- not that each one is individually caught.  In BATCH D
+the gap is concrete: D5 stops `check` reporting background steps at all,
+which makes `backgroundViolation` unreachable and D7's and D8's mutated
+lines dead code.  D5 alone reddens four laws, including all three of
+D7/D8's tests, so if D7 and D8 were both no-ops the batch would still
+print PASS.
+
+`SOLO` runs those mutations one at a time with their own expectations, so
+the claim "D7 is caught" is produced by this file rather than asserted
+about it.
 """
 
 import os
@@ -384,10 +396,11 @@ EXPECT_D = [
 #   pin and all three of the tests D7 and D8 exist to prove.  If D7 and
 #   D8 were both no-ops, this batch would still print PASS.
 #
-# So the per-mutation evidence for the Check.hs subset is recorded from
-# INDIVIDUAL runs (see `run_one` below and the task report), not from the
-# batch total.  The same subsumption question is worth asking of batches
-# A-C; that is not this task's scope.
+# So the per-mutation evidence for the Check.hs subset comes from the
+# SOLO phase below (`SOLO_RUNS` / `run_solo`), which this file runs and
+# prints -- not from the batch total, and not from a table typed into a
+# report.  The same subsumption question is worth asking of batches A-C;
+# reviewed and deferred with reasons, see the task report.
 # ---------------------------------------------------------------------------
 
 
@@ -478,27 +491,88 @@ def run_batch(name, mutations, expected, originals):
     return ok
 
 
+# ---------------------------------------------------------------------------
+# THE SOLO RUNS -- one mutation at a time, with its OWN expectations.
+#
+# D5, D7 and D8 are here because D5 subsumes the other two (see the module
+# docstring).  D9 and D10 are here because they were added in the round
+# whose whole subject was per-mutation evidence, and a mutation whose only
+# evidence is a batch total is exactly what that round existed to stop.
+# ---------------------------------------------------------------------------
+SOLO_RUNS = [
+    ("D5:", ["an undefined step in a Background is reported ONCE",
+             # the subsumption itself, asserted rather than remembered:
+             # these three are D7's and D8's laws, and D5 alone reddens
+             # them, which is why those two need runs of their own.
+             "a background hole is a BAD-VALUE when ANY scenario would run it",
+             "a Background in a feature with NO scenarios is still checked",
+             "the treatment it gets there is the UNTAGGED one"]),
+    ("D7:", ["a background hole is a BAD-VALUE when ANY scenario would run it"]),
+    ("D8:", ["a Background in a feature with NO scenarios is still checked",
+             "the treatment it gets there is the UNTAGGED one"]),
+    ("D9:", ["an EMPTY Background: is a parse error naming the file and line"]),
+    ("D10:", ["a degenerate hole written ONLY in a background is caught by the"]),
+]
+
+ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D
+
+
 def run_one(label_fragment, expected, originals):
     """Apply ONE mutation, by a fragment of its label, and report which laws
-    went red.  For the mutations another in the same batch subsumes, this is
-    the only run that says anything about them."""
-    picked = [ m for m in BATCH_D if label_fragment in m[0] ]
+    went red.  For a mutation another in its batch subsumes, this is the only
+    run that says anything about it."""
+    picked = [ m for m in ALL_MUTATIONS if m[0].startswith(label_fragment) ]
     if len(picked) != 1:
-        raise SystemExit("run_one: %r matched %d mutations, expected 1"
-                         % (label_fragment, len(picked)))
-    return run_batch("SOLO %s" % picked[0][0][:40], picked, expected, originals)
+        raise SystemExit(
+            "run_one: %r matched %d mutations, expected exactly 1. The labels "
+            "moved; update SOLO_RUNS before trusting any result from it."
+            % (label_fragment, len(picked)))
+    return run_batch("SOLO %s" % picked[0][0].split(":")[0], picked, expected,
+                     originals)
 
 
-def main():
+def run_solo(originals):
+    print("\n=== SOLO: each mutation alone, with its own expectations ===")
+    results = [ (frag.rstrip(":"), run_one(frag, expected, originals))
+                for frag, expected in SOLO_RUNS ]
+    print("\n    --- solo summary ---")
+    for name, ok in results:
+        print("    %-5s %s" % (name, "caught" if ok else "NOT CAUGHT"))
+    every = all(ok for _, ok in results)
+    print("    SOLO: %d/%d mutations individually caught"
+          % (sum(1 for _, ok in results if ok), len(results)))
+    return every
+
+
+PHASES = [
+    ("A", "BATCH A (correlations)", BATCH_A, EXPECT_A),
+    ("B", "BATCH B (skip discipline + the three new steps)", BATCH_B, EXPECT_B),
+    ("C", "BATCH C (fix round 1: the discriminating cases)", BATCH_C, EXPECT_C),
+    ("D", "BATCH D (R97: Background)", BATCH_D, EXPECT_D),
+]
+
+PHASE_NAMES = [ p[0] for p in PHASES ] + ["SOLO"]
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    wanted = [ a.upper() for a in argv ] or PHASE_NAMES
+    unknown = [ w for w in wanted if w not in PHASE_NAMES ]
+    if unknown:
+        raise SystemExit("unknown phase(s): %s. Known: %s"
+                         % (", ".join(unknown), ", ".join(PHASE_NAMES)))
+
     require_clean()
     originals = {path: read(path) for path in SRC.values()}
+    results = []
     try:
-        a = run_batch("BATCH A (correlations)", BATCH_A, EXPECT_A, originals)
-        b = run_batch("BATCH B (skip discipline + the three new steps)",
-                      BATCH_B, EXPECT_B, originals)
-        c = run_batch("BATCH C (fix round 1: the discriminating cases)",
-                      BATCH_C, EXPECT_C, originals)
-        d = run_batch("BATCH D (R97: Background)", BATCH_D, EXPECT_D, originals)
+        for w in wanted:
+            if w == "SOLO":
+                results.append(("SOLO", run_solo(originals)))
+            else:
+                for name, label, muts, expected in PHASES:
+                    if name == w:
+                        results.append((w, run_batch(label, muts, expected, originals)))
     finally:
         for path, text in originals.items():
             write(path, text)
@@ -510,8 +584,9 @@ def main():
     if not baseline_ok:
         print("    FAIL: the tree did not restore cleanly -- %s" % fails)
 
-    ok = a and b and c and d and baseline_ok
-    print("\n%s" % ("ALL MUTATIONS CAUGHT, TREE CLEAN" if ok else "MUTATION EVIDENCE FAILED"))
+    ok = all(r for _, r in results) and baseline_ok
+    print("\n    phases run: %s" % ", ".join(w for w, _ in results))
+    print("%s" % ("ALL MUTATIONS CAUGHT, TREE CLEAN" if ok else "MUTATION EVIDENCE FAILED"))
     sys.exit(0 if ok else 1)
 
 
