@@ -39,7 +39,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
     mutation committed by accident.
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
-                 BATCH C caught (8/8), BATCH D caught (7/7),
+                 BATCH C caught (8/8), BATCH D caught (10/10),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -274,8 +274,14 @@ EXPECT_C = [
 # ---------------------------------------------------------------------------
 BATCH_D = [
     (
-        "D1: the property runner reads ftScenarios, so a background never runs "
-        "and its holes are never part of the scenario's draw",
+        # NOT "a separately-drawn background": `holeSeed` is a pure
+        # function of (group name, iteration index), so a hypothetical
+        # implementation that drew the background's bindings separately
+        # AT THE SAME INDEX would produce identical values and neither
+        # the one-binding pin nor the correlated-pair pin would notice.
+        # The pin that rules a separate draw out is the shrinking one,
+        # where the hole exists ONLY in the background -- see the report.
+        "D1: the property runner reads ftScenarios, so the background never runs at all",
         "Prop.hs",
         "        Right f -> mapM (run1 (ftTitle f)) (runnableScenarios f)",
         "        Right f -> mapM (run1 (ftTitle f)) (ftScenarios f)",
@@ -308,6 +314,21 @@ BATCH_D = [
         "  | st <- ([] :: [Step])",
     ),
     (
+        "D7: a background step is classified under only the FIRST scenario's "
+        "tags, so a hole that a later non-@property scenario would run "
+        "unsubstituted is called clean",
+        "Check.hs",
+        "      | otherwise            = map scTags (ftScenarios f)",
+        "      | otherwise            = take 1 (map scTags (ftScenarios f))",
+    ),
+    (
+        "D8: a background in a feature with NO scenarios gets no treatment at "
+        "all, so every step in it is silently clean",
+        "Check.hs",
+        "      | null (ftScenarios f) = [[]]",
+        "      | null (ftScenarios f) = []",
+    ),
+    (
         "D6: the background is APPENDED after each scenario's own steps "
         "instead of prepended, so setup runs after the law that needs it",
         "Ast.hs",
@@ -324,6 +345,9 @@ EXPECT_D = [
     "a fresh Vocabulary block goes ABOVE a Background",
     "an undefined step in a Background is reported ONCE",
     "runnableScenarios prepends the background to EVERY scenario",
+    "a background hole is a BAD-VALUE when ANY scenario would run it",
+    "a Background in a feature with NO scenarios is still checked",
+    "the treatment it gets there is the UNTAGGED one",
 ]
 
 

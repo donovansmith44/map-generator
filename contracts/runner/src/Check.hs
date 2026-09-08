@@ -94,60 +94,97 @@ classify tags defs (Step k body _)
     matched = [ sk | (sk, Matched _) <- results ]
     errored = [ (sk, e) | (sk, ClaimError e) <- results ]
 
--- | Every violation across a feature: (scenario name, step body, kind).
-violations :: [StepDef] -> Feature -> [(Text, Text, Violation)]
+-- | Where in a feature a step lives. A background belongs to the FEATURE
+-- rather than to any scenario, so it has no scenario name to give — and
+-- that is a fact about the corpus, not a formatting detail, so it is a
+-- type rather than a sentinel string.
+data StepSite = InBackground | InScenario Text deriving (Eq, Show)
+
+-- | How a site is named in a report line.
+siteName :: StepSite -> Text
+siteName InBackground     = "Background"
+siteName (InScenario n)   = n
+
+-- | Every violation across a feature: (where the step lives, step body,
+-- kind). Background rows come first — a step that fails there fails for
+-- every scenario in the file, so it is the first thing a reader should
+-- see.
+--
+-- ONE traversal and ONE rule (fix round 1, finding 4). The background
+-- rows used to be produced only inside `checkDir`, which left
+-- `orphans`/`ambiguous`/`valueErrors` — and the dozen tests that use
+-- them as the totality law's proxy — unable to see a background at all.
+-- That is the totality law stated twice in two places, which is the
+-- shape this module's own comment refuses elsewhere. `checkDir` now
+-- decides only how to NAME a row, never which rows exist.
+violations :: [StepDef] -> Feature -> [(StepSite, Text, Violation)]
 violations defs f =
-  [ (scName sc, stepBody st, v)
-  | sc <- ftScenarios f
-  , st <- scSteps sc
-  , Just v <- [classify (scTags sc) defs st] ]
+     [ (InBackground, stepBody st, v)
+     | st <- ftBackground f
+     , Just v <- [backgroundViolation defs f st] ]
+  ++ [ (InScenario (scName sc), stepBody st, v)
+     | sc <- ftScenarios f
+     , st <- scSteps sc
+     , Just v <- [classify (scTags sc) defs st] ]
 
 -- | R97 requirement 2: the totality law counts BACKGROUND steps too, and
 -- a background step that no definition matches is reported rather than
 -- silently skipped.
 --
--- Reported ONCE, named by the feature, because that is what it is: the
--- background belongs to the feature, not to any scenario, and there is
--- no scenario name to give it. (This is also why `Check` does not use
--- `runnableScenarios` for the totality law, unlike `Run`, `Prop` and
--- `Vocab` -- under that expansion one undefined background step would be
--- reported once per scenario, N copies of a single defect under N
--- names.)
+-- Reported ONCE, named by the feature, because that is what it is. (This
+-- is also why `Check` does not use `runnableScenarios` for the totality
+-- law, unlike `Run`, `Prop` and `Vocab` — under that expansion one
+-- undefined background step would be reported once per scenario, N
+-- copies of a single defect under N names.)
 --
 -- The TAGS a background step is classified under are the honest
 -- difficulty here. A background runs before every scenario, and
--- `deholeFor` substitutes a hole only for a @property scenario -- so the
+-- `deholeFor` substitutes a hole only for a @property scenario — so the
 -- same background step can be a clean match in one scenario and a bad
 -- value in the next, and there is no single answer. So it is checked
 -- under EVERY scenario's tags and reports the FIRST treatment that
 -- fails: a background is only sound if it is sound for every scenario it
--- runs in. A feature with a background and no scenarios has nothing to
--- run it, so there is nothing to check.
-backgroundViolations :: [StepDef] -> Feature -> [(Text, Violation)]
-backgroundViolations defs f =
-  [ (stepBody st, v)
-  | st <- ftBackground f
-  , Just v <- [firstViolation st] ]
+-- runs in. That rule is what turns a background hole in a feature with a
+-- non-@property scenario into a check-time BAD-VALUE instead of a
+-- run-time capture error.
+backgroundViolation :: [StepDef] -> Feature -> Step -> Maybe Violation
+backgroundViolation defs f st =
+  case [ v | tags <- treatments, Just v <- [classify tags defs st] ] of
+    (v : _) -> Just v
+    []      -> Nothing
   where
-    firstViolation st = case [ v | sc <- ftScenarios f
-                                 , Just v <- [classify (scTags sc) defs st] ] of
-      (v : _) -> Just v
-      []      -> Nothing
+    -- Fix round 1, finding 1: a feature with a background and NO
+    -- scenarios used to yield an empty comprehension here, so every one
+    -- of its background steps came back clean and `check` printed
+    -- "every step has exactly one definition" over a file containing an
+    -- undefined one. Before R97 a scenario-less feature had no steps at
+    -- all, so that claim was vacuously honest; a background makes it a
+    -- lie, and requirement 2 carries no "unless nothing runs it"
+    -- qualifier.
+    --
+    -- The honest treatment for a step that nothing will ever substitute
+    -- for is the UNTAGGED one: that is exactly what a non-@property
+    -- scenario would give it, and it is the strictest of the two, so a
+    -- hole-bearing background in a scenario-less feature is reported
+    -- rather than excused.
+    treatments
+      | null (ftScenarios f) = [[]]
+      | otherwise            = map scTags (ftScenarios f)
 
 -- | Steps matching zero definitions (and claimed by none either):
--- (scenario, step body).
-orphans :: [StepDef] -> Feature -> [(Text, Text)]
+-- (site, step body).
+orphans :: [StepDef] -> Feature -> [(StepSite, Text)]
 orphans defs f = [ (sc, b) | (sc, b, VOrphan) <- violations defs f ]
 
--- | Steps that truly MATCH two or more definitions: (scenario, step body,
+-- | Steps that truly MATCH two or more definitions: (site, step body,
 -- the competing definitions' human-readable sketches).
-ambiguous :: [StepDef] -> Feature -> [(Text, Text, [Text])]
+ambiguous :: [StepDef] -> Feature -> [(StepSite, Text, [Text])]
 ambiguous defs f = [ (sc, b, ss) | (sc, b, VAmbiguous ss) <- violations defs f ]
 
 -- | Steps whose shape is recognized but whose value fails to parse, with
--- no other definition matching to fall back on: (scenario, step body,
+-- no other definition matching to fall back on: (site, step body,
 -- [(competing definition's sketch, its parse error)]).
-valueErrors :: [StepDef] -> Feature -> [(Text, Text, [(Text, Text)])]
+valueErrors :: [StepDef] -> Feature -> [(StepSite, Text, [(Text, Text)])]
 valueErrors defs f = [ (sc, b, es) | (sc, b, VValueError es) <- violations defs f ]
 
 -- Duplicated from app/Main.hs's `featureFiles`: importing Main from the
@@ -179,13 +216,10 @@ checkDir defs dir = do
     pure $ case parseFeature p src of
       Left e  -> [(T.pack p, "PARSE", e)]
       Right f ->
-        -- R97: the background's own rows come FIRST and are named by the
-        -- feature alone -- there is no scenario to name, and a step that
-        -- fails here fails for every scenario in the file, so it is the
-        -- first thing a reader should see.
-        [ (T.pack p <> " / Background", label v, describe b v)
-        | (b, v) <- backgroundViolations defs f ]
-        ++ [ (T.pack p <> " / " <> s, label v, describe b v) | (s, b, v) <- violations defs f ]
+        -- R97: `violations` already orders background rows first and
+        -- says where each row lives; this only turns a site into a name.
+        [ (T.pack p <> " / " <> siteName s, label v, describe b v)
+        | (s, b, v) <- violations defs f ]
         -- The degenerate-hole law reads the scenario WITH its
         -- background: a hole that appears only in the background is
         -- still a hole this scenario quantifies over, and one that never

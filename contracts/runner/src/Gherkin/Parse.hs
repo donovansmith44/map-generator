@@ -34,21 +34,20 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
             Left e -> Left e
             Right (vs, rest') -> goBody rest' f { ftVocab = ftVocab f ++ vs }
       -- R97: the background sits after the description (and its
-      -- Vocabulary table) and before the first scenario. Reached only
-      -- from `goBody`, which is left for good the moment a tag or
-      -- Scenario line appears -- so a Background AFTER a scenario can
-      -- never be parsed as one, and is caught by `goScenarios`'s own
-      -- "expected Scenario or tags" arm with the line named.
+      -- Vocabulary table) and before the first scenario.
+      --
+      -- No duplicate guard here, deliberately (fix round 1, finding 5):
+      -- `goBackground` returns only at a tag line, a `Scenario:` line or
+      -- end of input, so the only way back into `goBody` after a
+      -- background is on a line that leaves it immediately. A second
+      -- `Background:` is therefore always consumed by `goBackground`
+      -- itself, which rejects it there. A guard here would be a second
+      -- copy of that message that no input can reach.
       | strip l == "Background:" =
-          if not (null (ftBackground f))
-            -- Requirement 4: a second background is an ERROR, not a
-            -- silent last-wins. Last-wins is the shape where a file
-            -- says one thing and the runner does another, which is
-            -- precisely what a corpus may not do.
-            then err n "a feature may have only one Background:"
-            else case goBackground rest [] Nothing of
-              Left e -> Left e
-              Right (sts, rest') -> goBody rest' f { ftBackground = sts }
+          case goBackground rest [] Nothing of
+            Left e -> Left e
+            Right ([], _) -> err n emptyBackground
+            Right (sts, rest') -> goBody rest' f { ftBackground = sts }
       | "@" `T.isPrefixOf` strip l || "Scenario: " `T.isPrefixOf` strip l =
           goScenarios ls f []
       | otherwise = goBody rest f { ftPreamble = ftPreamble f ++ [strip l] }
@@ -88,14 +87,11 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
       | Just row <- tableRow l
       , (s0 : older) <- reverse acc =
           goBackground rest
-            (reverse (s0 { stepArg = Just (addRowB (stepArg s0) row) } : older)) prevKw
+            (reverse (s0 { stepArg = Just (addRow (stepArg s0) row) } : older)) prevKw
       | otherwise =
           case kwOf (strip l) prevKw of
             Just (k, b) -> goBackground rest (acc ++ [Step k b Nothing]) (Just k)
             Nothing -> err n ("not a step: " <> strip l)
-      where
-        addRowB (Just (Table rs)) r = Table (rs ++ [r])
-        addRowB _ r = Table [r]
 
     goScenarios [] f acc = Right (doneFeature f { ftScenarios = ftScenarios f ++ reverse acc })
     goScenarios ((n, l) : rest) f acc
@@ -134,9 +130,12 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
             Just (k, b) ->
               goSteps rest f acc sc { scSteps = scSteps sc ++ [Step k b Nothing] } (Just k)
             Nothing -> err n ("not a step: " <> strip l)
-      where
-        addRow (Just (Table rs)) r = Table (rs ++ [r])
-        addRow _ r = Table [r]
+
+    -- Shared by the two step readers (a scenario body and a background),
+    -- which is the point: they are one grammar, so a table row attaches
+    -- the same way in both.
+    addRow (Just (Table rs)) r = Table (rs ++ [r])
+    addRow _ r = Table [r]
 
     kwOf s prev =
           (,) Given <$> T.stripPrefix "Given " s
@@ -145,6 +144,14 @@ parseFeature path src = go0 (zip [1 :: Int ..] (map T.stripEnd (T.lines src))) [
       <|> (do b <- T.stripPrefix "And " s <|> T.stripPrefix "But " s
               k <- prev
               pure (k, b))
+
+    -- Finding 10: `Background:` with no steps under it parses to the
+    -- same AST as no background at all, and `renderFeature` then drops
+    -- the header -- a line the author wrote that silently means nothing.
+    -- Refused rather than swallowed.
+    emptyBackground =
+      "Background: carries no steps -- a background with nothing in it is "
+      <> "not a background"
 
     backgroundTooLate =
       "Background: must come before the first Scenario: it sets up the "

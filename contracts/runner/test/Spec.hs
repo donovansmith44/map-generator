@@ -1470,7 +1470,7 @@ main = hspec $ do
              , "    When I do the thing" ] of
         Left e -> expectationFailure (T.unpack e)
         Right f -> Check.ambiguous dupDefs f `shouldBe`
-          [("s", "I do the thing", ["I do {text}", "I do the thing"])]
+          [(Check.InScenario "s", "I do the thing", ["I do {text}", "I do the thing"])]
     it "a step whose shape matches but whose value doesn't parse is its own \
        \value-error class, reported by check and NOT silently skipped by \
        \runScenario when nothing else matches" $ do
@@ -3071,11 +3071,44 @@ main = hspec $ do
         src <- readFeatureFile p
         pure $ case parseFeature p src of
           Left _  -> []
+          -- R97 / fix round 1, finding 3: `runnableScenarios`, exactly
+          -- as `Check.checkDir` does. This pin's whole claim is that it
+          -- runs the rule the instrument runs, and after R97 it stopped:
+          -- label-placement's three background-only @property scenarios
+          -- have ZERO holes when read as `ftScenarios`, so the
+          -- hole-distinctness law -- built precisely to catch a property
+          -- whose inputs cannot vary -- passed vacuously for exactly the
+          -- scenarios that had just gained a background.
           Right f -> [ (p, scName sc, d)
-                     | sc <- ftScenarios f
+                     | sc <- runnableScenarios f
                      , Prop.isProperty (scTags sc)
                      , d <- Prop.holeDefects 30 sc ]) $ files
       defects `shouldBe` []
+    it "... and that pin is not vacuous for a background-only scenario: \
+       \the same traversal DOES see a degenerate hole written in a \
+       \background, which reading ftScenarios could not" $ do
+      -- The guard for the guard. Without this, `runnableScenarios` above
+      -- could be reverted to `ftScenarios` and nothing would notice --
+      -- which is the state fix round 1 found it in.
+      let src = T.unlines
+            [ "Feature: t"
+            , "  Background:"
+            , "    When I render pieces fills at year <someYear> in style canaan as a"
+            , ""
+            , "  @property"
+            , "  Scenario: holes live only in the background"
+            , "    Then a's labels are empty" ]
+      case parseFeature "t.feature" src of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> do
+          -- read as scenarios alone, the scenario quantifies over nothing
+          concatMap (Prop.holesOf) (ftScenarios f) `shouldBe` []
+          -- read the way checkDir reads it, the background's hole is
+          -- the scenario's hole and the detector has something to judge
+          concatMap (Prop.holesOf) (runnableScenarios f) `shouldBe` ["someYear"]
+          -- someYear genuinely varies, so no defect is reported -- the
+          -- law is applied, and it holds
+          concatMap (Prop.holeDefects 30) (runnableScenarios f) `shouldBe` []
     -- Adaptation note (brief's Step 1): `SomeHole`/`renderHole` no longer
     -- exist post-sweep; draws go through `HoleGroup`/`bindingsFor` now, so
     -- the defective registries below are local `HoleGroup`s rather than
@@ -3519,6 +3552,14 @@ main = hspec $ do
        \<someYear> in the scenario render the SAME year, so the two \
        \responses are equal over 100 iterations -- a separately-drawn \
        \background reddens this at the first iteration" $ do
+      -- What this pin does and does not discriminate, stated so it is not
+      -- over-read: it catches the background NOT RUNNING (the name goes
+      -- unbound). It does NOT catch a background whose bindings were
+      -- drawn separately at the same iteration index, because `holeSeed`
+      -- is a pure function of (group name, index) and would hand both
+      -- draws the identical year. The pin that rules THAT out is the
+      -- shrinking one below, where the hole exists only in the
+      -- background.
       let fake u = pure (Right (TE.encodeUtf8 u, A.toJSON u))
       vs <- runFeat (T.unlines
               [ "Feature: t"
@@ -3619,6 +3660,105 @@ main = hspec $ do
       result `shouldSatisfy` isLeft
       -- the WHOLE output: exactly one row, and it is the background's
       out `shouldBe` expected
+    -- Fix round 1, finding 1 (blocking). `backgroundViolation` used to
+    -- classify under `ftScenarios`, so a feature with NO scenarios gave
+    -- it an empty list of treatments: every background step came back
+    -- clean, and `check` printed "every step has exactly one definition"
+    -- over a file that plainly did not. Before R97 a scenario-less
+    -- feature had no steps, so the claim was vacuously honest; a
+    -- background makes it a lie.
+    it "a Background in a feature with NO scenarios is still checked -- nothing runs it, but it is still a step in the corpus, and the line check prints is unconditional" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-noscen"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          featPath = dir </> "lonely.feature"
+          feat = T.unlines
+            [ "Feature: lonely"
+            , "  Background:"
+            , "    When nobody wrote this background step either" ]
+          expected = T.concat
+            [ "ORPHAN ", T.pack featPath
+            , " / Background: nobody wrote this background step either\n" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile featPath (TE.encodeUtf8 feat)
+      (out, result) <- captureStdout (Check.checkDir allSteps dir)
+      removeDirectoryRecursive dir
+      result `shouldSatisfy` isLeft
+      out `shouldBe` expected
+    it "... and the treatment it gets there is the UNTAGGED one, so a hole nothing will ever substitute is a bad value rather than an excused one" $
+      -- The strictest of the two treatments, and the honest one: with no
+      -- scenario there is no @property tag, so `deholeFor` would not
+      -- substitute. A rule that skipped the file, or that assumed
+      -- @property, would call this clean.
+      case parseFeature "lonely.feature" (T.unlines
+             [ "Feature: lonely"
+             , "  Background:"
+             , "    When I render pieces <somePieces> at year -1405 in style canaan as a" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case Check.valueErrors allSteps f of
+          [(site, _, errs)] -> do
+            site `shouldBe` Check.InBackground
+            mapM_ (\(_, e) -> e `shouldSatisfy` T.isInfixOf "not a piece") errs
+          other -> expectationFailure
+                     ("expected one background value-error, got " <> show other)
+    -- Fix round 1, finding 2 (blocking). The tag-treatment rule -- check
+    -- a background step under EVERY scenario's tags, report the first
+    -- failing treatment -- had no test: mutating it to `take 1` left all
+    -- 288 examples green and both corpora's `check` output unchanged.
+    -- It is the single most load-bearing new judgement in Check, and it
+    -- is what turns a hole-bearing background in a mixed-tag feature
+    -- into a check-time BAD-VALUE instead of a run-time capture error.
+    --
+    -- This is the resources.feature shape, minimised: the @property
+    -- scenario comes FIRST and classifies the background clean, so any
+    -- rule that stops at the first treatment passes this file. The
+    -- violation comes from the second scenario, @target and NOT
+    -- @property.
+    it "a background hole is a BAD-VALUE when ANY scenario would run it without substitution -- checking only the first scenario tags passes this file, and it must not" $ do
+      tmpBase <- getTemporaryDirectory
+      (uniqueFile, uh) <- openTempFile tmpBase "contract-runner-bg-mixedtag"
+      hClose uh
+      removeFile uniqueFile
+      let dir = uniqueFile <> "-dir"
+          featPath = dir </> "mixed.feature"
+          bgStep = "    When I render pieces <somePieces> at year -1405 in style canaan as scene"
+          feat = T.unlines
+            [ "Feature: mixed"
+            , "  Background:"
+            , bgStep
+            , ""
+            , "  @property"
+            , "  Scenario: quantified"
+            , "    Then scene's labels are empty"
+            , ""
+            , "  @target"
+            , "  Scenario: pinned"
+            , "    Then scene's labels are empty" ]
+      createDirectoryIfMissing True dir
+      BS.writeFile featPath (TE.encodeUtf8 feat)
+      (out, result) <- captureStdout (Check.checkDir allSteps dir)
+      removeDirectoryRecursive dir
+      result `shouldSatisfy` isLeft
+      -- a BAD-VALUE on the BACKGROUND naming the unsubstituted hole --
+      -- which also closes finding 12's gap (only the ORPHAN shape of a
+      -- background row had a test)
+      out `shouldSatisfy` T.isInfixOf ("BAD-VALUE " <> T.pack featPath <> " / Background:")
+      out `shouldSatisfy` T.isInfixOf "'<somePieces>' is not a piece"
+      -- and the SAME background under only the @property scenario is
+      -- clean, so the row above is the SECOND scenario's treatment
+      -- talking, not the background being rejected outright
+      case parseFeature "p.feature" (T.unlines
+             [ "Feature: mixed"
+             , "  Background:"
+             , bgStep
+             , ""
+             , "  @property"
+             , "  Scenario: quantified"
+             , "    Then scene's labels are empty" ]) of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> Check.violations allSteps f `shouldBe` []
     it "a background step that DOES match is not reported and the \
        \feature is clean -- so the row above is about that step, not \
        \about backgrounds being reported unconditionally" $ do
