@@ -2762,6 +2762,39 @@ main = hspec $ do
                     allSteps (mkWorld "http://x" fake "") sc Map.empty
       msg `shouldSatisfy` T.isInfixOf "did not reproduce"
       msg `shouldSatisfy` T.isInfixOf "DRIFT year -1405 levant[7] want 1,2,3 got 4,5,6"
+    it "and the RUNNER hands it the REAL one -- a law whose first draw \
+       \fails and whose re-run passes reports what the first run said. \
+       \The callee's promise is worth exactly what the call site supplies, \
+       \and pinning only the callee left \"What the failing run said:\" \
+       \followed by nothing, with the suite green" $ do
+      -- an intermittent server: the first response is not a list, every
+      -- response after it is. So iteration 0 FAILS, and the re-run
+      -- `shrinkToMinimal` performs to re-derive that failure PASSES --
+      -- which is exactly the shape that loses the evidence.
+      calls <- newIORef (0 :: Int)
+      let fake _ = do
+            n <- readIORef calls
+            writeIORef calls (n + 1)
+            let body = if n == 0 then "{\"not\":\"a list\"}" else "[]"
+            pure (Right (body, fromJust (A.decodeStrict body)))
+          feat = T.unlines
+            [ "Feature: t"
+            , "  @property"
+            , "  Scenario: intermittent"
+            , "    When I GET /api/thing?year=<someYear>"
+            , "    Then the response is the empty list" ]
+      case parseFeature "t.feature" feat of
+        Left e -> expectationFailure (T.unpack e)
+        Right f -> case ftScenarios f of
+          (sc : _) -> do
+            r <- Prop.runScenarioProperty allSteps (mkWorld "http://x" fake "") 1 sc
+            case lawVerdict r of
+              Failed e -> do
+                e `shouldSatisfy` T.isInfixOf "did not reproduce"
+                -- the FIRST run's own words, not a placeholder for them
+                e `shouldSatisfy` T.isInfixOf "the whole response body is not []"
+              other -> expectationFailure ("expected a red, got " <> show other)
+          [] -> expectationFailure "expected at least one scenario"
     it "a ping-ponging shrinker -- the brief's own bug class, rebuilt -- \
        \cannot make the greedy loop spin: the candidate that climbs back \
        \is REFUSED, so the loop stops at a genuine local minimum after \

@@ -40,7 +40,7 @@ satisfiable by its own failure mode, which is the thing this project forbids
 
 Expected result: BATCH A caught (4/4), BATCH B caught (7/7),
                  BATCH C caught (8/8), BATCH D caught (12/12),
-                 BATCH E caught (23/23 laws, 20 mutations),
+                 BATCH E caught (24/24 laws, 21 mutations),
                  tree restored.
 
 KNOWN ISSUE, and why `main()` may appear to hang on BATCH A
@@ -592,6 +592,18 @@ SOLO_RUNS = [
              "the budget only ever lowers a count",
              "a law that judges the map once gets SIX iterations"]),
     ("E6:", ["the budget only ever lowers a count"]),
+    # E15 is the harness's evidence for Critical R3, and it was the one
+    # guard here without a guard: its single expected law is ALSO reddened
+    # by E5 (see E5's declaration above), so the batch total said nothing
+    # about it -- demonstrated by the re-reviewer, who made E15 a complete
+    # no-op and still got `PASS: 23/23` and `ALL MUTATIONS CAUGHT`. That
+    # is finding I-1 recurring in the round whose subject was I-1, on the
+    # mutation guarding a Critical. A no-op E15 is now a FAIL.
+    ("E15:", ["a law that judges the map once gets SIX iterations"]),
+    # E21 guards the repair for concern 4, whose whole subject is evidence
+    # that survives an intermittent failure. A guard for that, evidenced
+    # only by a batch total, would be the same joke twice.
+    ("E21:", ["and the RUNNER hands it the REAL one"]),
     ("E12:", ["wants the verdict X AND a reason"]),
     ("E13:", ["pins the NAMED set whole"]),
     ("E16:", ["catches a gate that says NOT-STILL and writes the baseline anyway"]),
@@ -774,6 +786,19 @@ BATCH_E = [
         "        else if Set.fromList [gvTag va, gvTag vb] /= blankAndAbsentVerdicts",
         "        else if False",
     ),
+    (
+        # Round 3 (re-review NEW-1): the callee was pinned to quote what it
+        # is handed, and nothing pinned that the CALLER hands it the real
+        # failure.  Under this mutation the report reads "What the failing
+        # run said:" and then nothing -- the concern-4 defect restored,
+        # wearing a longer sentence.
+        "E21: the runner hands the shrinker an EMPTY first message, so an "
+        "intermittent law reports that it did not reproduce and says nothing "
+        "about what it was that failed",
+        "Prop.hs",
+        "              (minEnv, minMsg) <- shrinkToMinimal firstMsg defs w sc env",
+        '              (minEnv, minMsg) <- shrinkToMinimal "" defs w sc env',
+    ),
 ]
 
 # R99's expectations. E8 reddens the whole argv block, because every one of
@@ -816,6 +841,8 @@ EXPECT_E = [
     "catches a gate that says NOT-STILL and writes the baseline anyway",
     "every judging step builds the invocation its own law names",
     "every step that drives the gate declares what it costs",
+    # round 3
+    "and the RUNNER hands it the REAL one",
 ]
 
 ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D + BATCH_E

@@ -1061,6 +1061,15 @@ runScenarioProperty defs w n sc =
             -- minimum before saying anything, so the diagnosis names the
             -- smallest binding that still breaks the law rather than the
             -- first one that happened to.
+            -- `firstMsg` is the failure THIS RUN saw, and handing it down
+            -- is the whole point: `shrinkToMinimal` re-derives the
+            -- failure before narrowing it, and when the re-derivation
+            -- comes back clean this is the only account of what went
+            -- wrong that will ever exist. Pinned at BOTH ends -- the
+            -- callee is pinned to quote what it is handed, and the test
+            -- below it drives a law whose first draw fails and whose
+            -- re-run passes, so handing down an empty message here is a
+            -- red rather than a longer sentence saying nothing.
             Failed firstMsg -> do
               (minEnv, minMsg) <- shrinkToMinimal firstMsg defs w sc env
               pure . (\v -> LawRun v skips n) . Failed $
