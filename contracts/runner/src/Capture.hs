@@ -12,6 +12,8 @@ module Capture
   , Piece (..)
   , pieceText
   , PieceSet (..)
+  , WirePieces (..)
+  , wireUniverse
   , allPieces
   , Year (..)
   , StyleName (..)
@@ -187,6 +189,33 @@ instance FromCapture PieceSet where
     | T.strip t == "none" || T.null (T.strip t) = Right (PieceSet Set.empty)
     | T.strip t == "all" = Right allPieces
     | otherwise = PieceSet . Set.fromList <$> traverse parseCap (T.splitOn "," t)
+
+-- ---------- WirePieces ----------
+-- A subset of the four pieces the wire actually lets a caller toggle
+-- today -- unlike Piece/PieceSet's ten, the other six render
+-- unconditionally regardless of what is requested. Renders through the
+-- same comma-list syntax PieceSet does, so it substitutes straight into
+-- "I render pieces {pieces} ..." with no change to that step.
+newtype WirePieces = WirePieces (Set Piece) deriving (Eq, Show)
+
+wireUniverse :: [Piece]
+wireUniverse = [Ground, Journeys, Labels, Water]
+
+instance FromCapture WirePieces where
+  capName _ = "wirePieces"
+  universe _ = Enumerated (sort (map pieceText wireUniverse))
+  renderCap (WirePieces s)
+    | Set.null s = "none"
+    | otherwise  = T.intercalate ", " (sort (map pieceText (Set.toList s)))
+  parseCap t
+    | T.strip t == "none" || T.null (T.strip t) = Right (WirePieces Set.empty)
+    | otherwise = do
+        ps <- traverse parseCap (T.splitOn "," t)
+        case filter (`notElem` wireUniverse) ps of
+          [] -> Right (WirePieces (Set.fromList ps))
+          bad -> Left (T.intercalate ", " (map pieceText bad) <> " the wire cannot toggle. \
+                       \Wire-togglable pieces are: "
+                       <> T.intercalate ", " (sort (map pieceText wireUniverse)))
 
 -- ---------- Year ----------
 newtype Year = Year Int deriving (Eq, Ord, Show)

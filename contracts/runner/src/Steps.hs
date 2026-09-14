@@ -1106,6 +1106,40 @@ allSteps =
                   else Left ("stacking the " <> tshow (Set.size ps)
                              <> " single-piece renders does not rebuild " <> whole
                              <> ": " <> describeSetDiff stacked expected)
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s borders, claims and fills features equal "
+                                <*> capUntil @BindName "'s features")) $
+      \(BindName a, BindName b) w -> pure $ do
+        va <- boundScene a w
+        vb <- boundScene b w
+        aa <- alwaysOnFeatureIds va
+        ab <- alwaysOnFeatureIds vb
+        if aa == ab then Right w
+        else Left (a <> "'s borders/claims/fills features do not equal " <> b
+                   <> "'s: " <> describeSetDiff aa ab)
+  , mkSkippableStep Then (lit "every label " *> ((,) <$> capUntil @BindName " has that "
+                                <*> capUntil @BindName " lacks is a label whose own piece \
+                                                        \says labels, not journeys")) $
+      \(BindName a, BindName b) w -> pure $ either StepFailed id $ do
+        va <- boundScene a w
+        vb <- boundScene b w
+        subsA <- labelSubjectSet va
+        subsB <- labelSubjectSet vb
+        pieces <- labelPieces va
+        let removed = Set.difference subsA subsB
+        if Set.null removed
+          then Right (StepSkipped (a <> " and " <> b <> " have the same labels at this draw; \
+                                    \nothing was removed to characterize"))
+          else
+            let wrongPiece = [ (s, pc) | s <- Set.toList removed
+                                        , let pc = Map.findWithDefault "?" s pieces
+                                        , pc /= "labels" ]
+            in if null wrongPiece
+               then Right (StepOk w)
+               else Right (StepFailed (tshow (length wrongPiece) <> " of "
+                           <> tshow (Set.size removed)
+                           <> " removed label(s) do not say piece \"labels\": "
+                           <> T.intercalate ", "
+                              [ s <> " (piece=" <> pc <> ")" | (s, pc) <- take 5 wrongPiece ]))
     -- Task 11 (@target): geometry is content-addressed (an id IS its
     -- bytes -- see resources.feature's own title); dress rides styles,
     -- not payload ids, so restyling one piece must leave every id set
@@ -1707,6 +1741,15 @@ resourceRecords v = do
 featureIdSet :: Value -> Either Text (Set Text)
 featureIdSet v = Set.fromList <$> (traverse (textField "feature") =<< arrayOf "features" v)
 
+featureIdsWithPiece :: Piece -> Value -> Either Text (Set Text)
+featureIdsWithPiece p v = do
+  fs <- arrayOf "features" v
+  pairs <- traverse (\f -> (,) <$> textField "feature" f <*> textField "piece" f) fs
+  pure (Set.fromList [ i | (i, pc) <- pairs, pc == pieceText p ])
+
+alwaysOnFeatureIds :: Value -> Either Text (Set Text)
+alwaysOnFeatureIds v = Set.unions <$> traverse (`featureIdsWithPiece` v) [Borders, Claims, Fills]
+
 -- Each feature id paired with the bounding cap of the geometry it
 -- references. A feature names a `resource`; the resource carries the
 -- `bounds`. A feature whose resource is not in the manifest is a broken
@@ -1797,6 +1840,14 @@ placementOf l = case field "placement" l of
 -- reason and one that can fail for someone else's.
 labelSubjects :: Value -> Either Text [Text]
 labelSubjects v = traverse (textField "subject") =<< arrayOf "labels" v
+
+labelSubjectSet :: Value -> Either Text (Set Text)
+labelSubjectSet v = Set.fromList <$> labelSubjects v
+
+labelPieces :: Value -> Either Text (Map.Map Text Text)
+labelPieces v = do
+  ls <- arrayOf "labels" v
+  Map.fromList <$> traverse (\l -> (,) <$> textField "subject" l <*> textField "piece" l) ls
 
 -- Everything the answer publishes that a name can be ABOUT: the feature
 -- ids, and the markers.

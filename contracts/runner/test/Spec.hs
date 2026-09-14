@@ -1617,6 +1617,8 @@ main = hspec $ do
             , (Then, "the gate stops and says the renderer is down")
             , (Then, "nothing is written and the gate says the view would not hold still")
             , (Then, "the gate stops and says which stops it never saw")
+            , (Then, "sceneA's borders, claims and fills features equal sceneB's features")
+            , (Then, "every label withJourneys has that withoutJourneys lacks is a label whose own piece says labels, not journeys")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [] [Scenario "s" [] steps]
@@ -2561,9 +2563,9 @@ main = hspec $ do
       Map.keys Prop.holeRegistry `shouldBe`
         [ "someA", "someB", "someCamera", "someCenter", "someDetail"
         , "someOtherCenter", "someOtherDetail", "someOtherStyle"
-        , "someOtherYear", "somePiece", "somePieces", "someProbe"
-        , "someStyle", "someSubset", "someSuperset", "someYear"
-        , "someZoom" ]
+        , "someOtherWirePieces", "someOtherYear", "somePiece", "somePieces"
+        , "someProbe", "someStyle", "someSubset", "someSuperset"
+        , "someWirePieces", "someYear", "someZoom" ]
     it "somePiece is registered as its own solo group and shrinks toward \
        \the earliest piece" $ do
       -- Registered here for Task 12's strengthened omission law; pinned

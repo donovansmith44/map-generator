@@ -260,6 +260,13 @@ renderLawful a = [ r | Right (_ :: a) <- [parseCap r] ]
 genPieces :: Gen PieceSet
 genPieces = PieceSet . Set.fromList <$> sublistOf [minBound .. maxBound]
 
+genWirePieces :: Gen WirePieces
+genWirePieces = WirePieces . Set.fromList <$> sublistOf wireUniverse
+
+wirePiecesOrder :: Order WirePieces
+wirePiecesOrder = Order (\(WirePieces s) -> Set.size s) shr
+  where shr (WirePieces s) = [ WirePieces (Set.delete p s) | p <- Set.toList s ]
+
 -- Final-review Fix 3: year 0 does not exist in this calendar (see
 -- Capture.hs's Year instance) -- excluded from the generator's codomain
 -- by the same law, not merely by the server happening to reject it after
@@ -787,6 +794,8 @@ holeGroups =
   , solo "somePiece"  (elements [minBound .. maxBound] :: Gen Piece) pieceOrder
   , solo "someA"      genPieces pieceSetOrder
   , solo "someB"      genPieces pieceSetOrder
+  , solo "someWirePieces"      genWirePieces wirePiecesOrder
+  , solo "someOtherWirePieces" genWirePieces wirePiecesOrder
   , pair "stylePair"    "someStyle"  "someOtherStyle"
       genStylePair    stylePairOrder distinctStyleLaw
   , pair "nestedPieces" "someSubset" "someSuperset"
