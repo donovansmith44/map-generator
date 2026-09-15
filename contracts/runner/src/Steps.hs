@@ -1126,36 +1126,51 @@ allSteps =
   , mkStep Then (lit "no two touching fills of " *> capUntil @BindName " share a style") $
       \(BindName n) w -> case boundScene n w of
         Left e -> pure (Left e)
-        Right v -> case (,) <$> fillFeatureTriples v <*> resourceCapsOf v of
+        Right v -> case fillFeatureTriples v of
           Left e -> pure (Left e)
-          Right (triples, caps) -> do
+          Right triples -> do
             let yearStyle = case lastRender w of
                   Just (Year y, StyleName st) -> " at year " <> tshow y <> " style " <> st
                   Nothing -> ""
-                byResource = Map.fromListWith (++) [ (r, [(fid, st)]) | (fid, r, st) <- triples ]
-                distinct = Map.keys byResource
-                pairs = [ (ra, rb) | (ra : rest) <- tails distinct, rb <- rest ]
-                candidates = [ (ra, rb) | (ra, rb) <- pairs
-                             , Just ca <- [Map.lookup ra caps]
-                             , Just cb <- [Map.lookup rb caps]
-                             , inView ca cb ]
-                needed = nub (concatMap (\(ra, rb) -> [ra, rb]) candidates)
-            fetched <- mapM (\rid -> (,) rid <$> transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)) needed
-            let geoms = Map.fromList [ (rid, r >>= decodeRingVertices) | (rid, r) <- fetched ]
-                touching = [ (ra, rb) | (ra, rb) <- candidates
-                           , Just (Right va') <- [Map.lookup ra geoms]
-                           , Just (Right vb') <- [Map.lookup rb geoms]
-                           , ringsTouch va' vb' ]
+                styleOf = Map.fromList [ (fid, st) | (fid, _, st) <- triples ]
+            result <- touchingFillPairs w v
             pure $ do
-              let collisions = [ (fa, fb, sa) | (ra, rb) <- touching
-                                , (fa, sa) <- Map.findWithDefault [] ra byResource
-                                , (fb, sb) <- Map.findWithDefault [] rb byResource
+              touching <- result
+              let collisions = [ (fa, fb, sa) | (fa, fb) <- touching
+                                , Just sa <- [Map.lookup fa styleOf]
+                                , Just sb <- [Map.lookup fb styleOf]
                                 , sa == sb ]
               if null collisions then Right w
               else Left (tshow (length collisions) <> " touching fill(s) of " <> n
                          <> yearStyle <> " share a style: "
                          <> listSome [ fa <> " and " <> fb <> " (style " <> sa <> ")"
                                      | (fa, fb, sa) <- take 5 collisions ])
+  , mkSkippableStep Then (lit "every fill whose touching neighbors are the same in "
+                          *> ((,) <$> capUntil @BindName " and "
+                                  <*> capUntil @BindName " wears the same style in both")) $
+      \(BindName a, BindName b) w -> case (,) <$> boundScene a w <*> boundScene b w of
+        Left e -> pure (StepFailed e)
+        Right (va, vb) -> do
+          ra <- touchingNeighborsOf w va
+          rb <- touchingNeighborsOf w vb
+          pure $ case (,) <$> ra <*> rb of
+            Left e -> StepFailed e
+            Right (ma, mb) ->
+              let shared = Map.keys (Map.intersection ma mb)
+                  paired = [ (fid, na, nb, sa, sb) | fid <- shared
+                           , Just (na, sa) <- [Map.lookup fid ma]
+                           , Just (nb, sb) <- [Map.lookup fid mb] ]
+                  sameNeighbors = [ (fid, sa, sb) | (fid, na, nb, sa, sb) <- paired, na == nb ]
+                  violations = [ (fid, sa, sb) | (fid, sa, sb) <- sameNeighbors, sa /= sb ]
+              in if null shared
+                 then StepSkipped (a <> " and " <> b <> " share no fill entities at this pair \
+                                    \of draws; a law about kept colors has nothing to examine")
+                 else if null violations then StepOk w
+                 else StepFailed (tshow (length violations) <> " of " <> tshow (length sameNeighbors)
+                                  <> " unchanged-neighborhood fill(s) changed style between "
+                                  <> a <> " and " <> b <> ": "
+                                  <> listSome [ fid <> " (" <> sa <> " -> " <> sb <> ")"
+                                              | (fid, sa, sb) <- take 5 violations ])
   , mkStep Then (lit "combining " *> capUntil @BindName "'s first and second regions equals asking for both together") $
       \(BindName n) w -> case lastRender w of
         Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
@@ -1831,6 +1846,42 @@ resourceCapsOf :: Value -> Either Text (Map.Map Text Cap)
 resourceCapsOf v = do
   rs <- arrayOf "resources" v
   Map.fromList <$> traverse (\r -> (,) <$> textField "id" r <*> capOf r) rs
+
+touchingFillPairs :: World -> Value -> IO (Either Text [(Text, Text)])
+touchingFillPairs w v = case (,) <$> fillFeatureTriples v <*> resourceCapsOf v of
+  Left e -> pure (Left e)
+  Right (triples, caps) -> do
+    let byResource = Map.fromListWith (++) [ (r, [fid]) | (fid, r, _) <- triples ]
+        distinct = Map.keys byResource
+        pairs = [ (ra, rb) | (ra : rest) <- tails distinct, rb <- rest ]
+        candidates = [ (ra, rb) | (ra, rb) <- pairs
+                     , Just ca <- [Map.lookup ra caps]
+                     , Just cb <- [Map.lookup rb caps]
+                     , inView ca cb ]
+        needed = nub (concatMap (\(ra, rb) -> [ra, rb]) candidates)
+    fetched <- mapM (\rid -> (,) rid <$> transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)) needed
+    let geoms = Map.fromList [ (rid, r >>= decodeRingVertices) | (rid, r) <- fetched ]
+        touchingResources = [ (ra, rb) | (ra, rb) <- candidates
+                             , Just (Right va') <- [Map.lookup ra geoms]
+                             , Just (Right vb') <- [Map.lookup rb geoms]
+                             , ringsTouch va' vb' ]
+    pure $ Right [ (fa, fb) | (ra, rb) <- touchingResources
+                            , fa <- Map.findWithDefault [] ra byResource
+                            , fb <- Map.findWithDefault [] rb byResource ]
+
+touchingNeighborsOf :: World -> Value -> IO (Either Text (Map.Map Text (Set Text, Text)))
+touchingNeighborsOf w v = case fillFeatureTriples v of
+  Left e -> pure (Left e)
+  Right triples -> do
+    let styleOf = Map.fromList [ (fid, st) | (fid, _, st) <- triples ]
+        allIds = Map.keys styleOf
+    result <- touchingFillPairs w v
+    pure $ do
+      touching <- result
+      let neighborMap = Map.fromListWith Set.union $ concat
+            [ [(fa, Set.singleton fb), (fb, Set.singleton fa)] | (fa, fb) <- touching ]
+          withDefaults = Map.union neighborMap (Map.fromList [ (fid, Set.empty) | fid <- allIds ])
+      Right (Map.intersectionWith (,) withDefaults styleOf)
 
 arrayOf :: Text -> Value -> Either Text [Value]
 arrayOf k v = case field k v of

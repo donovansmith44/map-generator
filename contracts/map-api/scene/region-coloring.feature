@@ -14,3 +14,9 @@ Feature: region coloring — two territories that touch never wear the same pain
   Scenario: no two touching fills share a style
     When I render pieces all at year <someYear> in style <someStyle> as world
     Then no two touching fills of world share a style
+
+  @property
+  Scenario: a territory whose touching neighbors have not changed keeps its color
+    When I render pieces all at year <someYear> in style <someStyle> as first
+    And I render pieces all at year <someOtherYear> in style <someStyle> as second
+    Then every fill whose touching neighbors are the same in first and second wears the same style in both
