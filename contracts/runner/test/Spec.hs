@@ -1622,6 +1622,7 @@ main = hspec $ do
             , (Then, "combining world's first and second regions equals asking for both together")
             , (Then, "world's first region draws the whole map's borders, claims and fills")
             , (Then, "world's first region draws no water, ground or journeys features")
+            , (Then, "no two touching fills of world share a style")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [] [Scenario "s" [] steps]

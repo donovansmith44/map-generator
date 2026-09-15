@@ -7,9 +7,12 @@ import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Control.Monad (when)
+import Data.Bits ((.|.), shiftL)
 import Data.Char (isSpace)
 import Data.Foldable (asum)
 import Data.List (nub, sort, tails)
+import Data.Word (Word32)
+import GHC.Float (castWord32ToFloat)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set, member)
 import qualified Data.Set as Set
@@ -1120,6 +1123,39 @@ allSteps =
         if aa == ab then Right w
         else Left (a <> "'s borders/claims/fills features do not equal " <> b
                    <> "'s: " <> describeSetDiff aa ab)
+  , mkStep Then (lit "no two touching fills of " *> capUntil @BindName " share a style") $
+      \(BindName n) w -> case boundScene n w of
+        Left e -> pure (Left e)
+        Right v -> case (,) <$> fillFeatureTriples v <*> resourceCapsOf v of
+          Left e -> pure (Left e)
+          Right (triples, caps) -> do
+            let yearStyle = case lastRender w of
+                  Just (Year y, StyleName st) -> " at year " <> tshow y <> " style " <> st
+                  Nothing -> ""
+                byResource = Map.fromListWith (++) [ (r, [(fid, st)]) | (fid, r, st) <- triples ]
+                distinct = Map.keys byResource
+                pairs = [ (ra, rb) | (ra : rest) <- tails distinct, rb <- rest ]
+                candidates = [ (ra, rb) | (ra, rb) <- pairs
+                             , Just ca <- [Map.lookup ra caps]
+                             , Just cb <- [Map.lookup rb caps]
+                             , inView ca cb ]
+                needed = nub (concatMap (\(ra, rb) -> [ra, rb]) candidates)
+            fetched <- mapM (\rid -> (,) rid <$> transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)) needed
+            let geoms = Map.fromList [ (rid, r >>= decodeRingVertices) | (rid, r) <- fetched ]
+                touching = [ (ra, rb) | (ra, rb) <- candidates
+                           , Just (Right va') <- [Map.lookup ra geoms]
+                           , Just (Right vb') <- [Map.lookup rb geoms]
+                           , ringsTouch va' vb' ]
+            pure $ do
+              let collisions = [ (fa, fb, sa) | (ra, rb) <- touching
+                                , (fa, sa) <- Map.findWithDefault [] ra byResource
+                                , (fb, sb) <- Map.findWithDefault [] rb byResource
+                                , sa == sb ]
+              if null collisions then Right w
+              else Left (tshow (length collisions) <> " touching fill(s) of " <> n
+                         <> yearStyle <> " share a style: "
+                         <> listSome [ fa <> " and " <> fb <> " (style " <> sa <> ")"
+                                     | (fa, fb, sa) <- take 5 collisions ])
   , mkStep Then (lit "combining " *> capUntil @BindName "'s first and second regions equals asking for both together") $
       \(BindName n) w -> case lastRender w of
         Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
@@ -1754,6 +1790,47 @@ capOf v = do
   case r of
     Number n -> Right (Cap c (realToFrac n))
     other    -> Left ("bounds radius is not a number: " <> bounded other)
+
+le32 :: BS.ByteString -> Int -> Word32
+le32 b off = fromIntegral (BS.index b off)
+         .|. (fromIntegral (BS.index b (off + 1)) `shiftL` 8)
+         .|. (fromIntegral (BS.index b (off + 2)) `shiftL` 16)
+         .|. (fromIntegral (BS.index b (off + 3)) `shiftL` 24)
+
+f32At :: BS.ByteString -> Int -> Double
+f32At b off = realToFrac (castWord32ToFloat (le32 b off))
+
+decodeRingVertices :: BS.ByteString -> Either Text [Vec3]
+decodeRingVertices bs
+  | BS.length bs < 48 = Left "geometry payload shorter than the wire's own header"
+  | BS.take 4 bs /= BS.pack [0x4D, 0x47, 0x52, 0x31] = Left "geometry payload missing its magic bytes"
+  | BS.length body < need = Left "geometry payload shorter than its own declared vertex count"
+  | otherwise = Right [ Vec3 (f32At body (i * 12)) (f32At body (i * 12 + 4)) (f32At body (i * 12 + 8))
+                       | i <- [0 .. count - 1] ]
+  where
+    count = fromIntegral (le32 bs 40)
+    body = BS.drop 48 bs
+    need = count * 12
+
+quantizeVec3 :: Vec3 -> (Int, Int, Int)
+quantizeVec3 (Vec3 x y z) = (round (x * 1e7), round (y * 1e7), round (z * 1e7))
+
+ringsTouch :: [Vec3] -> [Vec3] -> Bool
+ringsTouch a b = Set.size (Set.intersection ka kb) >= 2
+  where
+    ka = Set.fromList (map quantizeVec3 a)
+    kb = Set.fromList (map quantizeVec3 b)
+
+fillFeatureTriples :: Value -> Either Text [(Text, Text, Text)]
+fillFeatureTriples v = do
+  fs <- arrayOf "features" v
+  let ours = [ f | f <- fs, Right "fills" == textField "piece" f ]
+  traverse (\f -> (,,) <$> textField "feature" f <*> textField "resource" f <*> textField "style" f) ours
+
+resourceCapsOf :: Value -> Either Text (Map.Map Text Cap)
+resourceCapsOf v = do
+  rs <- arrayOf "resources" v
+  Map.fromList <$> traverse (\r -> (,) <$> textField "id" r <*> capOf r) rs
 
 arrayOf :: Text -> Value -> Either Text [Value]
 arrayOf k v = case field k v of
