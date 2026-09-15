@@ -1580,7 +1580,7 @@ main = hspec $ do
             , (Then, "every label of viewed carries a placement")
             , (Then, "no two labels of viewed overlap")
             , (Then, "every label of viewed is legible at the view it was asked for")
-            , (Then, "every label of viewed names a feature of viewed")
+            , (Then, "every label of viewed names something viewed publishes")
             , (Then, "one and other draw the same features")
             , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
             , (Then, "no shared resource of glance carries more vertices than it does in corner")
@@ -4510,10 +4510,16 @@ main = hspec $ do
               [ "left" A..= l, "top" A..= t, "right" A..= r, "bottom" A..= b ] ]
         mrk :: T.Text -> (Double, Double, Double) -> A.Value
         mrk p c = A.object ["place" A..= p, "at" A..= vec c]
+        ins :: T.Text -> (Double, Double, Double) -> A.Value
+        ins p c = A.object ["place" A..= p, "at" A..= vec c]
         manifest :: [A.Value] -> [A.Value] -> [A.Value] -> [A.Value] -> A.Value
         manifest fs rs ls ms = A.object
           [ "features" A..= fs, "resources" A..= rs
-          , "labels" A..= ls, "markers" A..= ms ]
+          , "labels" A..= ls, "markers" A..= ms, "inscriptions" A..= ([] :: [A.Value]) ]
+        manifestI :: [A.Value] -> [A.Value] -> [A.Value] -> [A.Value] -> [A.Value] -> A.Value
+        manifestI fs rs ls ms is = A.object
+          [ "features" A..= fs, "resources" A..= rs
+          , "labels" A..= ls, "markers" A..= ms, "inscriptions" A..= is ]
         plan :: [A.Value] -> A.Value
         plan sts = A.object ["steps" A..= sts]
         fadeIn, fadeOut :: T.Text -> A.Value
@@ -4768,25 +4774,39 @@ main = hspec $ do
 
     it "the naming law passes when every subject is a feature the same \
        \answer publishes" $
-      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+      shouldPass =<< runThen "every label of viewed names something viewed publishes"
         [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
                              [lbl "region:a" (east 0)] [])] []
     it "... and a MARKER counts as something that is there, under the \
        \`place:` namespace the wire's own label subjects put in front \
        \of it" $
-      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+      shouldPass =<< runThen "every label of viewed names something viewed publishes"
         [("viewed", manifest [] [] [lbl "place:place:gaza" (east 0)]
                              [mrk "place:gaza" (east 0)])] []
+    it "... and an INSCRIPTION counts as something that is there, under \
+       \the `memory:` namespace -- a memory, kept distinct from a \
+       \marker, never mistaken for one" $
+      shouldPass =<< runThen "every label of viewed names something viewed publishes"
+        [("viewed", manifestI [] [] [lbl "memory:place:sodom" (east 0)] []
+                              [ins "place:sodom" (east 0)])] []
+    it "... and the memory namespace is ALSO a real translation, not a \
+       \union: a subject spelled like the bare inscription place names \
+       \nothing" $ do
+      o <- runThen "every label of viewed names something viewed publishes"
+             [("viewed", manifestI [] [] [lbl "place:sodom" (east 0)] []
+                                   [ins "place:sodom" (east 0)])] []
+      shouldFailWith "1 of 1 labels" o
+      shouldFailWith "place:sodom" o
     it "... and that namespace is a real TRANSLATION, not a union that \
        \takes either spelling: a subject spelled like the bare marker \
        \place names nothing" $ do
-      o <- runThen "every label of viewed names a feature of viewed"
+      o <- runThen "every label of viewed names something viewed publishes"
              [("viewed", manifest [] [] [lbl "place:gaza" (east 0)]
                                   [mrk "place:gaza" (east 0)])] []
       shouldFailWith "1 of 1 labels" o
       shouldFailWith "place:gaza" o
     it "... and it names how many of how many name nothing at all" $ do
-      o <- runThen "every label of viewed names a feature of viewed"
+      o <- runThen "every label of viewed names something viewed publishes"
              [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
                                   [lbl "region:a" (east 0), lbl "region:ghost" (east 1)] [])] []
       shouldFailWith "1 of 2 labels" o
@@ -4801,22 +4821,22 @@ main = hspec $ do
        \is not this law's business, and must not turn its verdict into \
        \someone else's error (review M-1)" $ do
       let noAnchor s = A.object ["subject" A..= (s :: T.Text), "anchor" A..= ("bent" :: T.Text)]
-      shouldPass =<< runThen "every label of viewed names a feature of viewed"
+      shouldPass =<< runThen "every label of viewed names something viewed publishes"
         [("viewed", manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1]
                              [noAnchor "region:a"] [])] []
-      o <- runThen "every label of viewed names a feature of viewed"
+      o <- runThen "every label of viewed names something viewed publishes"
              [("viewed", manifest [] [] [noAnchor "region:ghost"] [])] []
       shouldFailWith "1 of 1 labels" o
       shouldFailWithout "unit vector" o
     it "... and it refuses a line that names TWO answers: with two names \
        \the sentence no longer states the law" $
       shouldFailWith "but names two" =<<
-        runThen "every label of viewed names a feature of other"
+        runThen "every label of viewed names something other publishes"
           [ ("viewed", manifest [] [] [lbl "region:a" (east 0)] [])
           , ("other",  manifest [feat "region:a" "ra"] [res "ra" 3 (east 0) 0.1] [] []) ] []
     it "... and an empty draw SKIPS rather than passing" $
       shouldSkipWith "carries no labels" =<<
-        runThen "every label of viewed names a feature of viewed"
+        runThen "every label of viewed names something viewed publishes"
           [("viewed", manifest [] [] [] [])] []
 
     it "the horizon law really computes the horizon from the center the \

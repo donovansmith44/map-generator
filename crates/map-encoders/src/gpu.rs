@@ -171,6 +171,13 @@ pub struct MarkerResource {
     pub piece: Piece,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct InscriptionResource {
+    pub at: (f64, f64, f64),
+    pub place: String,
+    pub piece: Piece,
+}
+
 /// The page dress the retained renderer composes against — resolved
 /// style data riding the manifest, never invented by the renderer.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -194,6 +201,7 @@ pub struct SceneManifest {
     pub styles: BTreeMap<StyleKey, GpuStyle>,
     pub labels: Vec<LabelResource>,
     pub markers: Vec<MarkerResource>,
+    pub inscriptions: Vec<InscriptionResource>,
     pub dress: ManifestDress,
 }
 
@@ -612,6 +620,7 @@ impl GpuSceneEncoder {
                     LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
                     LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
                     LabelSubject::Place(p) => format!("place:{}", p.0 .0),
+                    LabelSubject::Memory(p) => format!("memory:{}", p.0 .0),
                     LabelSubject::Free => "free".to_string(),
                 };
                 use map_types::scene::LabelFace;
@@ -652,6 +661,16 @@ impl GpuSceneEncoder {
             })
             .collect();
 
+        let inscriptions: Vec<InscriptionResource> = scene
+            .inscriptions
+            .iter()
+            .map(|m| InscriptionResource {
+                at: (m.at.x(), m.at.y(), m.at.z()),
+                place: m.place.0 .0.clone(),
+                piece: m.piece,
+            })
+            .collect();
+
         EncodedScene {
             manifest: SceneManifest {
                 scene_revision: scene.map_pid().hash,
@@ -659,6 +678,7 @@ impl GpuSceneEncoder {
                 styles,
                 labels,
                 markers,
+                inscriptions,
                 dress: ManifestDress {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
@@ -780,6 +800,18 @@ impl EncodedScene {
                 "place": m2.place,
                 "size": m2.size,
                 "piece": m2.piece.name(),
+            });
+            s.push_str(&row.to_string());
+        }
+        s.push_str("],\"inscriptions\":[");
+        for (i, ins) in m.inscriptions.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            let row = serde_json::json!({
+                "at": [ins.at.0, ins.at.1, ins.at.2],
+                "place": ins.place,
+                "piece": ins.piece.name(),
             });
             s.push_str(&row.to_string());
         }

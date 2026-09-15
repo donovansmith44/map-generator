@@ -245,6 +245,7 @@ fn flat_zooms_to_a_window() {
         regions: vec![region(1, 31.0, 35.0), region(2, 31.0, 155.0)],
         boundaries: vec![],
         markers: vec![],
+        inscriptions: vec![],
         labels: vec![],
         attribution: [SourceId::new("test")].into(),
     };
@@ -444,6 +445,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         ],
         boundaries: vec![],
         markers: vec![],
+        inscriptions: vec![],
         labels: vec![],
         attribution: [SourceId::new("test")].into(),
     };
@@ -510,6 +512,7 @@ fn swallowing_geometry_ships_thin() {
             piece: map_types::Piece::Borders,
         }],
         markers: vec![],
+        inscriptions: vec![],
         labels: vec![],
         attribution: [SourceId::new("test")].into(),
     };

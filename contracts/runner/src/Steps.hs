@@ -609,8 +609,8 @@ allSteps =
     -- the same name -- the same refusal the two-sided culling law makes,
     -- and for the same reason: with two different names this line no
     -- longer states the law it reads as.
-  , mkSkippableStep Then (lit "every label of " *> ((,) <$> capUntil @BindName " names a feature of "
-                                                        <*> capRest @BindName)) $
+  , mkSkippableStep Then (lit "every label of " *> ((,) <$> capUntil @BindName " names something "
+                                                        <*> capUntil @BindName " publishes")) $
       \(BindName n, BindName n2) w -> pure $ either StepFailed id $ do
         () <- if n == n2 then Right ()
               else Left ("this law is about ONE answer -- every label of it naming \
@@ -626,7 +626,7 @@ allSteps =
           else StepFailed (tshow (length unnamed) <> " of " <> tshow (length subs)
                            <> " labels of " <> n <> " name nothing " <> n
                            <> " publishes, among its " <> tshow (Set.size named)
-                           <> " features and markers: " <> listSome unnamed)
+                           <> " features, markers and inscriptions: " <> listSome unnamed)
     -- ---------- detail.feature ----------
     -- "detail changes how much is drawn, never what exists" --
     -- characterization D1, which HOLDS exactly (917 ids at all 13 lod
@@ -1969,6 +1969,9 @@ markerPoints :: Value -> Either Text [(Text, Vec3)]
 markerPoints v = traverse one =<< arrayOf "markers" v
   where one m = (,) <$> textField "place" m <*> (vec3Of =<< field "at" m)
 
+inscriptionPlaces :: Value -> Either Text [Text]
+inscriptionPlaces v = traverse (textField "place") =<< arrayOf "inscriptions" v
+
 -- WHAT THE ANSWER SAYS about where one label's words go. THREE answers,
 -- not two, and the third is not a nicety:
 --
@@ -2064,7 +2067,12 @@ namedThings :: Value -> Either Text (Set Text)
 namedThings v = do
   fs <- featureIdSet v
   ms <- markerPoints v
-  pure (Set.union fs (Set.fromList [ "place:" <> p | (p, _) <- ms ]))
+  is <- inscriptionPlaces v
+  pure (Set.unions
+    [ fs
+    , Set.fromList [ "place:" <> p | (p, _) <- ms ]
+    , Set.fromList [ "memory:" <> p | p <- is ]
+    ])
 
 -- The two kinds together, which is how camera.feature states both
 -- nesting laws ("markers and labels"). Ids are namespaced by kind so a

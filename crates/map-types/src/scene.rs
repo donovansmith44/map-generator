@@ -86,6 +86,14 @@ pub struct StyledMarker {
     pub piece: crate::piece::Piece,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct StyledInscription {
+    pub at: UnitVec,
+    pub place: crate::boundary::AtlasPlaceRef,
+    pub sources: BTreeSet<SourceId>,
+    pub piece: crate::piece::Piece,
+}
+
 /// What a label is attached to — selection (law 10) follows labels by
 /// their subject, not by guessing from text.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,6 +102,7 @@ pub enum LabelSubject {
     Boundary(BoundaryId),
     /// A gazetteer place — a journey station, a landmark by name.
     Place(crate::boundary::AtlasPlaceRef),
+    Memory(crate::boundary::AtlasPlaceRef),
     Free,
 }
 
@@ -126,6 +135,7 @@ pub struct Snapshot {
     pub regions: Vec<StyledRegion>,
     pub boundaries: Vec<StyledBoundary>,
     pub markers: Vec<StyledMarker>,
+    pub inscriptions: Vec<StyledInscription>,
     pub labels: Vec<PlacedLabel>,
     pub attribution: BTreeSet<SourceId>,
 }
@@ -141,6 +151,7 @@ impl Monoid for Snapshot {
         self.regions.append(&mut other.regions);
         self.boundaries.append(&mut other.boundaries);
         self.markers.append(&mut other.markers);
+        self.inscriptions.append(&mut other.inscriptions);
         self.labels.append(&mut other.labels);
         self.attribution.extend(other.attribution);
         self
@@ -189,6 +200,15 @@ impl MapAddressed for Snapshot {
             };
             c.str_(m.piece.name());
         });
+        c.seq(&self.inscriptions, |c, m| {
+            m.at.canon(c);
+            c.str_(&m.place.0 .0);
+            let srcs: Vec<_> = m.sources.iter().collect();
+            c.seq(&srcs, |c, s| {
+                c.str_(&s.0);
+            });
+            c.str_(m.piece.name());
+        });
         c.seq(&self.labels, |c, l| {
             c.str_(&l.text);
             l.at.canon(c);
@@ -197,6 +217,7 @@ impl MapAddressed for Snapshot {
                 LabelSubject::Boundary(b) => c.u8_(1).u64_(b.0 .0),
                 LabelSubject::Free => c.u8_(2),
                 LabelSubject::Place(p) => c.u8_(3).str_(&p.0 .0),
+                LabelSubject::Memory(p) => c.u8_(4).str_(&p.0 .0),
             };
             let crate::style::Rgba(r, g, bl, a) = l.style.color;
             c.u8_(r).u8_(g).u8_(bl).u8_(a);
@@ -224,6 +245,7 @@ impl Snapshot {
             regions: self.regions.iter().filter(|r| keep.contains(r.piece)).cloned().collect(),
             boundaries: self.boundaries.iter().filter(|b| keep.contains(b.piece)).cloned().collect(),
             markers: self.markers.iter().filter(|m| keep.contains(m.piece)).cloned().collect(),
+            inscriptions: self.inscriptions.iter().filter(|m| keep.contains(m.piece)).cloned().collect(),
             labels: self.labels.iter().filter(|l| keep.contains(l.piece)).cloned().collect(),
             attribution: self.attribution.clone(),
         }
@@ -241,6 +263,7 @@ impl Snapshot {
             regions,
             boundaries: Vec::new(),
             markers: Vec::new(),
+            inscriptions: Vec::new(),
             labels: self
                 .labels
                 .iter()
@@ -259,6 +282,7 @@ impl Snapshot {
             regions: Vec::new(),
             boundaries,
             markers: Vec::new(),
+            inscriptions: Vec::new(),
             labels: self
                 .labels
                 .iter()

@@ -44,4 +44,4 @@ Feature: label placement — the map says where every name sits, not the viewer
 
   @property
   Scenario: every name names something that is there
-    Then every label of view names a feature of view
+    Then every label of view names something view publishes

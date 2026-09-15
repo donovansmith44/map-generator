@@ -1244,6 +1244,7 @@ impl SceneEncoder for GeoJsonEncoder {
                 LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
                 LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
                 LabelSubject::Place(p) => format!("place:{}", p.0 .0),
+                LabelSubject::Memory(p) => format!("memory:{}", p.0 .0),
                 LabelSubject::Free => "free".to_string(),
             };
             features.push(serde_json::json!({

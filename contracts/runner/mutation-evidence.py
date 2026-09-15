@@ -610,6 +610,12 @@ SOLO_RUNS = [
     ("E17:", ["every judging step builds the invocation its own law names"]),
     ("E19:", ["refuses a gate that found drift somewhere else"]),
     ("E20:", ["refuses two answers that agree"]),
+    # F1 and F2 both redden the same single test -- the only law this
+    # batch adds -- so the batch total cannot tell them apart. Named
+    # separately here for the same reason E5/E15 are: a mutation with no
+    # SOLO run of its own is a guard that hasn't been checked.
+    ("F1:", ["an INSCRIPTION counts as something that is there"]),
+    ("F2:", ["an INSCRIPTION counts as something that is there"]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -845,6 +851,31 @@ EXPECT_E = [
     "and the RUNNER hands it the REAL one",
 ]
 
+BATCH_F = [
+    (
+        "F1: memory is its own thing (R118) -- an inscription's identity "
+        "collapses into the marker namespace instead of keeping its own, "
+        "so a memory could be mistaken for a marker that happens to share "
+        "its place id",
+        "Steps.hs",
+        '    , Set.fromList [ "memory:" <> p | p <- is ]',
+        '    , Set.fromList [ "place:" <> p | p <- is ]',
+    ),
+    (
+        "F2: an inscription never reaches the naming law's population at "
+        "all -- the wire's own inscriptions array is read and then thrown "
+        "away",
+        "Steps.hs",
+        "  is <- inscriptionPlaces v",
+        "  let is = ([] :: [Text])",
+    ),
+]
+
+EXPECT_F = [
+    "an INSCRIPTION counts as something that is there",
+    "an INSCRIPTION counts as something that is there",
+]
+
 ALL_MUTATIONS = BATCH_A + BATCH_B + BATCH_C + BATCH_D + BATCH_E
 
 
@@ -881,6 +912,7 @@ PHASES = [
     ("C", "BATCH C (fix round 1: the discriminating cases)", BATCH_C, EXPECT_C),
     ("D", "BATCH D (R97: Background)", BATCH_D, EXPECT_D),
     ("E", "BATCH E (R99: the golden gate's own laws)", BATCH_E, EXPECT_E),
+    ("F", "BATCH F (R118: memory is its own thing)", BATCH_F, EXPECT_F),
 ]
 
 PHASE_NAMES = [ p[0] for p in PHASES ] + ["SOLO"]

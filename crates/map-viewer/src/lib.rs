@@ -387,6 +387,10 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
         scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
     let kept_places: std::collections::BTreeSet<_> =
         markers.iter().filter_map(|m| m.place.clone()).collect();
+    let inscriptions: Vec<_> =
+        scene.inscriptions.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+    let kept_memories: std::collections::BTreeSet<_> =
+        inscriptions.iter().map(|m| m.place.clone()).collect();
     let labels = scene
         .labels
         .iter()
@@ -394,6 +398,7 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
             map_types::scene::LabelSubject::Region(r) => kept_regions.contains(r),
             map_types::scene::LabelSubject::Boundary(b) => kept_bounds.contains(b),
             map_types::scene::LabelSubject::Place(p) => kept_places.contains(p),
+            map_types::scene::LabelSubject::Memory(p) => kept_memories.contains(p),
             map_types::scene::LabelSubject::Free => false,
         })
         .cloned()
@@ -403,7 +408,7 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
         .flat_map(|r| r.sources.iter().cloned())
         .chain(boundaries.iter().flat_map(|b| b.sources.iter().cloned()))
         .collect();
-    Snapshot { regions, boundaries, markers, labels, attribution }
+    Snapshot { regions, boundaries, markers, inscriptions, labels, attribution }
 }
 
 /// Drop from the backdrop whatever the realized scene already carries:
@@ -419,6 +424,7 @@ fn without_realized(mut backdrop: Snapshot, realized: &Snapshot) -> Snapshot {
         map_types::scene::LabelSubject::Region(r) => !regions.contains(r),
         map_types::scene::LabelSubject::Boundary(b) => !bounds.contains(b),
         map_types::scene::LabelSubject::Place(_) => true,
+        map_types::scene::LabelSubject::Memory(_) => true,
         map_types::scene::LabelSubject::Free => true,
     });
     backdrop
@@ -1101,6 +1107,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     .collect(),
                 boundaries: Vec::new(),
                 markers: Vec::new(),
+                inscriptions: Vec::new(),
                 labels: Vec::new(),
                 attribution: scene.attribution,
             };
