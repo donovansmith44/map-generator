@@ -378,7 +378,36 @@ impl CanonProvider {
             .collect()
     }
 
-    fn area_paint(&self, layer: LayerKind, entity: &EntityId, style: &Style) -> Paint {
+    fn repaired_slots_at(&self, t: &Timestamp) -> BTreeMap<EntityId, usize> {
+        let mut wearers: BTreeSet<FeatureId> = BTreeSet::new();
+        for (layer, _world) in self.store.layers() {
+            if matches!(layer, LayerKind::Water | LayerKind::Relief) {
+                continue;
+            }
+            for (fid, _f) in self.active(*layer, t) {
+                wearers.insert(fid);
+            }
+        }
+        let keys_of = entity_vertex_keys(&self.store, &wearers);
+        let adj = adjacency_from_keys(&keys_of);
+        let mut ids: Vec<EntityId> = keys_of.keys().cloned().collect();
+        ids.sort_by_key(|id| (std::cmp::Reverse(adj.get(id).map_or(0, BTreeSet::len)), id.clone()));
+        let mut slot: BTreeMap<EntityId, usize> = BTreeMap::new();
+        for id in &ids {
+            let worn: BTreeSet<usize> =
+                adj.get(id).into_iter().flatten().filter_map(|n| slot.get(n).copied()).collect();
+            let home = self.palette_slot.get(id).copied().unwrap_or_else(|| (hash64(&id.0) % 8) as usize);
+            let pick = if !worn.contains(&home) {
+                home
+            } else {
+                (0..8usize).find(|s| !worn.contains(s)).unwrap_or(home)
+            };
+            slot.insert(id.clone(), pick);
+        }
+        slot
+    }
+
+    fn area_paint(&self, layer: LayerKind, entity: &EntityId, style: &Style, entity_slots: &BTreeMap<EntityId, usize>) -> Paint {
         match layer {
             LayerKind::Water => style.water_paint(),
             LayerKind::Relief => {
@@ -392,8 +421,7 @@ impl CanonProvider {
             }
             _ => match style.palette() {
                 Some(slots) => {
-                    let i = self
-                        .palette_slot
+                    let i = entity_slots
                         .get(entity)
                         .copied()
                         .unwrap_or_else(|| (hash64(&entity.0) % 8) as usize);
@@ -413,6 +441,7 @@ impl CanonProvider {
         t: &Timestamp,
         q: &RenderQuery,
         style: &Style,
+        entity_slots: &BTreeMap<EntityId, usize>,
     ) {
         let _ = t;
         // Nothing this area could contribute is wanted: leave before
@@ -511,7 +540,7 @@ impl CanonProvider {
                 if face == map_types::scene::LabelFace::Water {
                     // water speaks in its own deep color
                     let map_types::style::Rgba(r, g, b, _) =
-                        self.area_paint(layer, &a.entity, style).fill;
+                        self.area_paint(layer, &a.entity, style, entity_slots).fill;
                     let dim = |v: u8| (f64::from(v) * scale.water_ink) as u8;
                     label.color = map_types::style::Rgba(dim(r), dim(g), dim(b), 255);
                     label.size *= scale.water_shrink;
@@ -534,7 +563,7 @@ impl CanonProvider {
         // vision, or a city-derived hull renders as boundary and
         // name, never as ground; the promise's unpossessed remainder
         // once painted itself as a phantom state.
-        let mut paint = self.area_paint(layer, &a.entity, style);
+        let mut paint = self.area_paint(layer, &a.entity, style, entity_slots);
         if a.tenure == map_canon::Tenure::Claimed {
             let map_types::style::Rgba(r, g, b, _) = paint.fill;
             paint = map_types::style::Paint { fill: map_types::style::Rgba(r, g, b, 0) };
@@ -664,6 +693,7 @@ impl CanonProvider {
     ) -> Result<Snapshot, MapError> {
         let style = self.style(q.style)?;
         let mut scene = Snapshot::empty();
+        let entity_slots = self.repaired_slots_at(t);
         let subject_only: Option<BTreeSet<EntityId>> = match &q.subject {
             RenderSubject::Region(rid) => Some(BTreeSet::from([self
                 .entity_by_rid
@@ -705,7 +735,7 @@ impl CanonProvider {
                 match f {
                     Feature::Area(a) => {
                         paint_rank.insert(rid_of(&a.entity), rank);
-                        self.push_area(&mut scene, layer, fid, a, t, q, style)
+                        self.push_area(&mut scene, layer, fid, a, t, q, style, &entity_slots)
                     }
                     Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style),
                     // A Line (a river): the border geometry stroked in
@@ -755,19 +785,23 @@ impl CanonProvider {
                                 continue;
                             }
                         }
-                        // an inscription at the traditional site: the
-                        // memory voice, no marker — nothing "stands"
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
+                        let place =
+                            map_types::AtlasPlaceRef(PlaceId::new(m.entity.0.clone()));
                         if q.pieces.contains(Piece::Labels) {
+                            scene.inscriptions.push(map_types::scene::StyledInscription {
+                                at: m.at,
+                                place: place.clone(),
+                                sources: sources.iter().cloned().collect(),
+                                piece: Piece::Labels,
+                            });
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.memory_scale;
                             scene.labels.push(PlacedLabel {
                                 text: m.name.clone(),
                                 at: m.at,
-                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(
-                                    PlaceId::new(m.entity.0.clone()),
-                                )),
+                                subject: LabelSubject::Memory(place),
                                 style: label,
                                 face: map_types::scene::LabelFace::Memory,
                                 voice: style.labeling().memory,
@@ -1179,40 +1213,33 @@ fn invert(script: TransitionScript) -> TransitionScript {
 /// honest; if all eight slots are worn nearby, the least-worn wins
 /// deterministically. Water and relief never enter — they wear their
 /// own paint.
-pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
-    use map_canon::{Feature, LayerKind};
-    let mut wearers: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
-    for (layer, world) in store.layers() {
-        if matches!(layer, LayerKind::Water | LayerKind::Relief) {
-            continue;
-        }
-        for sid in world.moments().values() {
-            if let Some(snap) = store.snapshots().get(sid) {
-                wearers.extend(snap.features.iter().copied());
-            }
-        }
-    }
-    // entity -> quantized ring-vertex keys (quantization only guards
-    // serialization round-trips; shared borders are identical points)
-    let key = |p: &UnitVec| -> (i64, i64, i64) {
-        (
-            (p.x() * 1e7).round() as i64,
-            (p.y() * 1e7).round() as i64,
-            (p.z() * 1e7).round() as i64,
-        )
-    };
+fn vertex_key(p: &UnitVec) -> (i64, i64, i64) {
+    ((p.x() * 1e7).round() as i64, (p.y() * 1e7).round() as i64, (p.z() * 1e7).round() as i64)
+}
+
+fn entity_vertex_keys(
+    store: &CanonStore,
+    fids: &BTreeSet<map_canon::FeatureId>,
+) -> BTreeMap<EntityId, BTreeSet<(i64, i64, i64)>> {
+    use map_canon::Feature;
     let mut keys_of: BTreeMap<EntityId, BTreeSet<(i64, i64, i64)>> = BTreeMap::new();
-    for fid in &wearers {
+    for fid in fids {
         let Some(Feature::Area(a)) = store.features().get(fid) else { continue };
         let e = keys_of.entry(a.entity.clone()).or_default();
         for bid in a.rings.iter().chain(a.holes.iter()) {
             if let Some(b) = store.borders().get(bid) {
                 for p in &b.0 {
-                    e.insert(key(p));
+                    e.insert(vertex_key(p));
                 }
             }
         }
     }
+    keys_of
+}
+
+fn adjacency_from_keys(
+    keys_of: &BTreeMap<EntityId, BTreeSet<(i64, i64, i64)>>,
+) -> BTreeMap<EntityId, BTreeSet<EntityId>> {
     let ids: Vec<EntityId> = keys_of.keys().cloned().collect();
     let mut at_vertex: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
     for (i, id) in ids.iter().enumerate() {
@@ -1235,6 +1262,25 @@ pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
             adj.entry(ids[y].clone()).or_default().insert(ids[x].clone());
         }
     }
+    adj
+}
+
+pub(crate) fn palette_slots(store: &CanonStore) -> BTreeMap<EntityId, usize> {
+    use map_canon::LayerKind;
+    let mut wearers: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
+    for (layer, world) in store.layers() {
+        if matches!(layer, LayerKind::Water | LayerKind::Relief) {
+            continue;
+        }
+        for sid in world.moments().values() {
+            if let Some(snap) = store.snapshots().get(sid) {
+                wearers.extend(snap.features.iter().copied());
+            }
+        }
+    }
+    let keys_of = entity_vertex_keys(store, &wearers);
+    let ids: Vec<EntityId> = keys_of.keys().cloned().collect();
+    let adj = adjacency_from_keys(&keys_of);
     color_shared_border_graph(&ids, &adj)
 }
 
