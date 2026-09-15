@@ -71,6 +71,10 @@ sceneUrlFull base (PieceSet ps) (Year y) mst mcam mdetail =
   where
     flag p name = if p `member` ps then "" else "&" <> name <> "=0"
 
+subjectSceneUrl :: Text -> Text -> Year -> StyleName -> Text
+subjectSceneUrl base subj (Year y) (StyleName st) =
+  base <> "/api/scene?year=" <> tshow y <> "&zoom=90.0000&style=" <> st <> "&subject=" <> subj
+
 sceneUrl :: Text -> PieceSet -> Year -> StyleName -> Text
 sceneUrl base ps y st = sceneUrlFull base ps y (Just st) Nothing Nothing
 
@@ -1116,6 +1120,56 @@ allSteps =
         if aa == ab then Right w
         else Left (a <> "'s borders/claims/fills features do not equal " <> b
                    <> "'s: " <> describeSetDiff aa ab)
+  , mkStep Then (lit "combining " *> capUntil @BindName "'s first and second regions equals asking for both together") $
+      \(BindName n) w -> case lastRender w of
+        Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
+        Just (y, st) -> case boundScene n w >>= firstRegionIds 2 of
+          Left e -> pure (Left e)
+          Right [r1, r2] -> do
+            e1 <- getUrl (subjectSceneUrl (baseUrl w) r1 y st) w
+            e2 <- getUrl (subjectSceneUrl (baseUrl w) r2 y st) w
+            e3 <- getUrl (subjectSceneUrl (baseUrl w) (r1 <> "," <> r2) y st) w
+            pure $ do
+              w1 <- e1; l1 <- labelSubjectSet =<< boundScene "_last" w1
+              w2 <- e2; l2 <- labelSubjectSet =<< boundScene "_last" w2
+              w3 <- e3; lu <- labelSubjectSet =<< boundScene "_last" w3
+              let expected = Set.union l1 l2
+              if expected == lu then Right w
+              else Left ("combining " <> n <> "'s first and second regions' labels is not what "
+                         <> "asking for both together answers: " <> describeSetDiff expected lu)
+          Right _ -> pure (Left "expected exactly two distinct regions")
+  , mkStep Then (lit "" *> capUntil @BindName "'s first region draws the whole map's borders, claims and fills") $
+      \(BindName n) w -> case lastRender w of
+        Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
+        Just (y, st) -> case boundScene n w >>= firstRegionIds 1 of
+          Left e -> pure (Left e)
+          Right [r1] -> do
+            e1 <- getUrl (subjectSceneUrl (baseUrl w) r1 y st) w
+            pure $ do
+              vw <- boundScene n w
+              worldACF <- alwaysOnFeatureIds vw
+              w1 <- e1
+              regionACF <- alwaysOnFeatureIds =<< boundScene "_last" w1
+              if worldACF == regionACF then Right w
+              else Left (n <> "'s first region does not draw the whole map's borders/claims/fills: "
+                         <> describeSetDiff regionACF worldACF)
+          Right _ -> pure (Left "expected exactly one region")
+  , mkStep Then (lit "" *> capUntil @BindName "'s first region draws no water, ground or journeys features") $
+      \(BindName n) w -> case lastRender w of
+        Nothing -> pure (Left "no year/style recorded for this scene (render a piece set first)")
+        Just (y, st) -> case boundScene n w >>= firstRegionIds 1 of
+          Left e -> pure (Left e)
+          Right [r1] -> do
+            e1 <- getUrl (subjectSceneUrl (baseUrl w) r1 y st) w
+            pure $ do
+              w1 <- e1
+              v1 <- boundScene "_last" w1
+              leaked <- Set.unions <$> traverse (`featureIdsWithPiece` v1) [Water, Ground, Journeys]
+              if Set.null leaked then Right w
+              else Left (n <> "'s first region draws " <> tshow (Set.size leaked)
+                         <> " water/ground/journeys feature(s) it should not: "
+                         <> listSome (Set.toList leaked))
+          Right _ -> pure (Left "expected exactly one region")
   , mkSkippableStep Then (lit "every label " *> ((,) <$> capUntil @BindName " has that "
                                 <*> capUntil @BindName " lacks is a label whose own piece \
                                                         \says labels, not journeys")) $
@@ -1749,6 +1803,13 @@ featureIdsWithPiece p v = do
 
 alwaysOnFeatureIds :: Value -> Either Text (Set Text)
 alwaysOnFeatureIds v = Set.unions <$> traverse (`featureIdsWithPiece` v) [Borders, Claims, Fills]
+
+firstRegionIds :: Int -> Value -> Either Text [Text]
+firstRegionIds n v = do
+  ids <- Set.toList <$> featureIdsWithPiece Fills v
+  if length ids < n
+    then Left (tshow n <> " distinct region(s) needed but only " <> tshow (length ids) <> " are drawn")
+    else Right (take n ids)
 
 -- Each feature id paired with the bounding cap of the geometry it
 -- references. A feature names a `resource`; the resource carries the

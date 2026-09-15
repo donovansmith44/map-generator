@@ -1619,6 +1619,9 @@ main = hspec $ do
             , (Then, "the gate stops and says which stops it never saw")
             , (Then, "sceneA's borders, claims and fills features equal sceneB's features")
             , (Then, "every label withJourneys has that withoutJourneys lacks is a label whose own piece says labels, not journeys")
+            , (Then, "combining world's first and second regions equals asking for both together")
+            , (Then, "world's first region draws the whole map's borders, claims and fills")
+            , (Then, "world's first region draws no water, ground or journeys features")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
           f = Feature "exemplars" [] [] [] [] [Scenario "s" [] steps]
