@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use map_types::camera::{Camera, ChartKind, DESIGN_WIDTH, ZOOM_MAX, ZOOM_MIN};
 use map_types::scene::{LabelFace, LabelSubject};
-use map_types::{covers_sphere, inside_ring, Piece, RegionId, Snapshot, UnitVec};
+use map_types::{inside_ring, RegionId, Snapshot, UnitVec};
 
 /// The page's inner margin, in px: the frame every chart draws inside.
 pub const PAGE_PADDING: f64 = 16.0;
@@ -355,45 +355,4 @@ pub fn verdicts(scene: &Snapshot, proj: &Projector, overflow_em: f64) -> Vec<Ver
         out.push(Verdict::Settled(Laid { index, text, x, y: baseline, size: s, bounds: b }));
     }
     out
-}
-
-/// What a city stands on: the topmost land or claim drawn under its
-/// point, or ground nothing claims. A property of the scene, never of
-/// the camera.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Ground {
-    Region(RegionId),
-    Unclaimed,
-}
-
-impl Ground {
-    pub fn wire(&self) -> String {
-        match self {
-            Ground::Region(r) => format!("region:{:016x}", r.0 .0),
-            Ground::Unclaimed => "unclaimed".to_string(),
-        }
-    }
-}
-
-pub fn ground_of(scene: &Snapshot, at: &UnitVec) -> Ground {
-    for r in scene.regions.iter().rev() {
-        if !matches!(r.piece, Piece::Fills | Piece::Claims) {
-            continue;
-        }
-        if r.outer.iter().any(|ring| covers_sphere(ring.points())) {
-            continue;
-        }
-        let odd = r.outer.iter().chain(&r.holes).filter(|ring| inside_ring(at, ring.points())).count() % 2 == 1;
-        if odd {
-            return Ground::Region(r.region);
-        }
-    }
-    Ground::Unclaimed
-}
-
-pub fn stands_on(l: &map_types::PlacedLabel, scene: &Snapshot) -> Option<Ground> {
-    match &l.subject {
-        LabelSubject::Place(_) => Some(ground_of(scene, &l.at)),
-        _ => None,
-    }
 }

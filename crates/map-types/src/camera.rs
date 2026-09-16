@@ -60,6 +60,14 @@ impl Camera {
         UnitVec::from_lat_lon_deg(self.lat, self.lon)
     }
 
+    pub fn canon(&self, c: &mut crate::ident::Canon) {
+        c.u8_(match self.chart {
+            ChartKind::Globe => 0,
+            ChartKind::Flat => 1,
+        });
+        c.f64_(self.lat).f64_(self.lon).f64_(self.zoom).f64_(self.width);
+    }
+
     pub fn cap(&self) -> Bbox {
         Bbox {
             center: self.center(),

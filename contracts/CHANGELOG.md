@@ -141,6 +141,18 @@ rule even though the change is a correction.
   against the census at the scene's year, and gains a marker
   scenario. Scene fixtures re-blessed.
 
+- Internal, no wire change: the day's additions folded into the
+  structures they belong to. `RenderQuery` carries the `Camera` (the
+  view cap is derived from it where it is needed, and the camera is in
+  the query's content address); what a point stands on is
+  `Snapshot::ground_at`; one thing, one name is a law in `laws.rs`
+  (`validate_scene_names`, `Violation::NamedTwice`); every bridge
+  observes its witness into the registry and the compile validates the
+  whole book before writing the canon (a dangling canonical, a chain
+  or a kind conflict refuses it by name); the transition's delta needs
+  no style, since an area's rings are assembled by one function the
+  scene and the delta share.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

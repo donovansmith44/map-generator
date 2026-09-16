@@ -16,7 +16,7 @@ use atlas_graph_types::covenant::TimePoint;
 use atlas_graph_types::covenant::SourceId;
 
 use crate::algebra::{mconcat, Monoid};
-use crate::geom::{Ring, UnitVec};
+use crate::geom::{covers_sphere, inside_ring, Ring, UnitVec};
 use crate::ident::{BoundaryId, Canon, MapAddressed, MapKind, RegionId};
 use crate::style::{LabelStyle, MarkerStyle, Paint, Stroke};
 use crate::timeline::{ChangeEvent, Interval};
@@ -266,7 +266,50 @@ impl MapAddressed for Snapshot {
     }
 }
 
+/// What a point stands on: the topmost land or claim drawn under it,
+/// or ground nothing claims. A property of the scene, never of the
+/// camera.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Ground {
+    Region(RegionId),
+    Unclaimed,
+}
+
+impl Ground {
+    pub fn wire(&self) -> String {
+        match self {
+            Ground::Region(r) => format!("region:{:016x}", r.0 .0),
+            Ground::Unclaimed => "unclaimed".to_string(),
+        }
+    }
+}
+
 impl Snapshot {
+    pub fn ground_at(&self, at: &UnitVec) -> Ground {
+        for r in self.regions.iter().rev() {
+            if !matches!(r.piece, crate::piece::Piece::Fills | crate::piece::Piece::Claims) {
+                continue;
+            }
+            if r.outer.iter().any(|ring| covers_sphere(ring.points())) {
+                continue;
+            }
+            let odd = r.outer.iter().chain(&r.holes).filter(|ring| inside_ring(at, ring.points())).count() % 2 == 1;
+            if odd {
+                return Ground::Region(r.region);
+            }
+        }
+        Ground::Unclaimed
+    }
+
+    /// The ground a place's name stands on; a name that is not a
+    /// place's stands on no ground this law asks about.
+    pub fn stands_on(&self, l: &PlacedLabel) -> Option<Ground> {
+        match &l.subject {
+            LabelSubject::Place(_) => Some(self.ground_at(&l.at)),
+            _ => None,
+        }
+    }
+
     /// Spec §3 law 1: `scene(q \ P)` equals `scene(q)` minus exactly P's
     /// contribution. With every element attributed, that is a filter —
     /// the law becomes a definition rather than a hope.

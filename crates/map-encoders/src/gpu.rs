@@ -738,7 +738,7 @@ impl GpuSceneEncoder {
                         right: laid.bounds.2 / p.width,
                         bottom: laid.bounds.3 / p.height,
                     }),
-                    ground: layout::stands_on(l, scene).map(|g| g.wire()),
+                    ground: scene.stands_on(l).map(|g| g.wire()),
                 }
             })
             .collect();

@@ -76,6 +76,24 @@ struct Named {
     places: BTreeSet<PlaceId>,
 }
 
+/// An area's rings as assembled for a scene, each with its border.
+struct AreaRings {
+    outer: Vec<Ring>,
+    outer_ids: Vec<map_canon::BorderId>,
+    holes: Vec<Ring>,
+    hole_ids: Vec<map_canon::BorderId>,
+}
+
+/// The pieces whose regions a transition's delta is a difference of.
+fn delta_pieces() -> PieceSet {
+    PieceSet::empty()
+        .with(Piece::Fills)
+        .with(Piece::Borders)
+        .with(Piece::Claims)
+        .with(Piece::Water)
+        .with(Piece::Ground)
+}
+
 /// The verdict of fidelity on one ring — the two outcomes an LOD
 /// tolerance can hand it, as a type, so no call site can confuse
 /// "thinned" with "unresolvable". A below-limit ring carries its
@@ -354,8 +372,7 @@ impl CanonProvider {
     /// three-point stand-in — whether it ships is the FEATURE's
     /// question (identity is kept, detail is not), answered where the
     /// feature is assembled, never here per-ring.
-    fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<RingFidelity> {
-        let lod = q.lod;
+    fn ring_points(&self, id: map_canon::BorderId, lod: Lod) -> Option<RingFidelity> {
         let b = self.store.borders().get(&id)?;
         match Ring::new(map_types::simplify_polyline(&b.0, lod)) {
             Ok(r) => Some(RingFidelity::Survives(r)),
@@ -373,8 +390,8 @@ impl CanonProvider {
     /// of the border's own, so a border refused here is refused by any
     /// bound the wire could publish, and the exact cut is the
     /// encoder's, on the bounds it sends.
-    fn reaches_view(&self, id: map_canon::BorderId, q: &RenderQuery) -> bool {
-        let Some(view) = &q.viewport else { return true };
+    fn reaches_view(&self, id: map_canon::BorderId, view: Option<&Bbox>) -> bool {
+        let Some(view) = view else { return true };
         let Some((center, radius)) = self.border_cap.get(&id) else { return true };
         let reach = 3.0 * radius;
         if reach >= std::f64::consts::PI {
@@ -384,9 +401,65 @@ impl CanonProvider {
         angle <= view.radius + reach && angle - reach <= std::f64::consts::FRAC_PI_2
     }
 
-    fn line_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Vec<UnitVec>> {
+    fn line_points(&self, id: map_canon::BorderId, lod: Lod) -> Option<Vec<UnitVec>> {
         let b = self.store.borders().get(&id)?;
-        Some(map_types::simplify_polyline(&b.0, q.lod))
+        Some(map_types::simplify_polyline(&b.0, lod))
+    }
+
+    /// An area's rings at a detail, cut to a view: the outer rings that
+    /// survive or stand in (the identity law) and the holes that
+    /// survive, each with the border it came from.
+    fn assemble_rings(&self, a: &Area, lod: Lod, view: Option<&Bbox>) -> Option<AreaRings> {
+        let mut outer = Vec::new();
+        let mut outer_ids: Vec<map_canon::BorderId> = Vec::new();
+        let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
+        for r in a.rings.iter().filter(|r| self.reaches_view(**r, view)) {
+            match self.ring_points(*r, lod) {
+                Some(RingFidelity::Survives(ring)) => {
+                    outer.push(ring);
+                    outer_ids.push(*r);
+                }
+                Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
+                None => {}
+            }
+        }
+        if outer.is_empty() {
+            let widest = below.into_iter().max_by(|(a_id, _), (b_id, _)| {
+                let ra = self.border_cap.get(a_id).map(|c| c.1).unwrap_or(0.0);
+                let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
+                ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Some((id, ring)) = widest {
+                outer.push(ring);
+                outer_ids.push(id);
+            }
+        }
+        let mut holes = Vec::new();
+        let mut hole_ids: Vec<map_canon::BorderId> = Vec::new();
+        for h in a.holes.iter().filter(|h| self.reaches_view(**h, view)) {
+            if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, lod) {
+                holes.push(ring);
+                hole_ids.push(*h);
+            }
+        }
+        if outer.is_empty() {
+            return None;
+        }
+        Some(AreaRings { outer, outer_ids, holes, hole_ids })
+    }
+
+    /// The outer rings the world draws at a moment, by region, with no
+    /// dress: what the transition's delta is a difference of.
+    fn drawn_at(&self, t: &Timestamp, lod: Lod) -> BTreeMap<RegionId, Vec<Vec<UnitVec>>> {
+        let mut out: BTreeMap<RegionId, Vec<Vec<UnitVec>>> = BTreeMap::new();
+        for layer in layers_wanted(delta_pieces()) {
+            for (_, f) in self.active(layer, t) {
+                let Feature::Area(a) = f else { continue };
+                let Some(rings) = self.assemble_rings(a, lod, None) else { continue };
+                out.entry(rid_of(&a.entity)).or_default().extend(rings.outer.iter().map(|r| r.points().to_vec()));
+            }
+        }
+        out
     }
 
     /// The features active at `t` in one layer, in deterministic order.
@@ -479,52 +552,10 @@ impl CanonProvider {
             return;
         }
         let sources = self.sources_of(fid);
-        // THE IDENTITY LAW, sharpened: fidelity may thin a feature,
-        // never erase it — but only the feature's IDENTITY holds that
-        // protection. If every outer ring falls below the resolvable
-        // limit, the widest one (by its measured cap) ships as its
-        // stand-in: a small territory is present at every level of
-        // detail, and never heavier there than when leaned into. When any outer ring survives, the collapsed rest
-        // are sub-resolution DETAIL — an ocean's thousands of speck
-        // islands once shipped unsimplified at the coarsest zoom this
-        // way — and the half-pixel law governs them: they do not ship.
-        let mut outer = Vec::new();
-        let mut outer_ids: Vec<map_canon::BorderId> = Vec::new();
-        let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
-        for r in a.rings.iter().filter(|r| self.reaches_view(**r, q)) {
-            match self.ring_points(*r, q) {
-                Some(RingFidelity::Survives(ring)) => {
-                    outer.push(ring);
-                    outer_ids.push(*r);
-                }
-                Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
-                None => {}
-            }
-        }
-        if outer.is_empty() {
-            let widest = below.into_iter().max_by(|(a_id, _), (b_id, _)| {
-                let ra = self.border_cap.get(a_id).map(|c| c.1).unwrap_or(0.0);
-                let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
-                ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            if let Some((id, ring)) = widest {
-                outer.push(ring);
-                outer_ids.push(id);
-            }
-        }
-        // A hole can never carry identity — its parent ring is the
-        // feature's presence — so a below-limit hole is always detail.
-        let mut holes = Vec::new();
-        let mut hole_ids: Vec<map_canon::BorderId> = Vec::new();
-        for h in a.holes.iter().filter(|h| self.reaches_view(**h, q)) {
-            if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, q) {
-                holes.push(ring);
-                hole_ids.push(*h);
-            }
-        }
-        if outer.is_empty() {
+        let view = q.camera.as_ref().map(|c| c.cap());
+        let Some(AreaRings { outer, outer_ids, holes, hole_ids }) = self.assemble_rings(a, q.lod, view.as_ref()) else {
             return;
-        }
+        };
         // The area's outline rides as a stroke too — atlas/authored
         // territory in the Line dress, background scholarship dashed,
         // and a CLAIM always in the Unknown dress: its hull is a
@@ -791,10 +822,11 @@ impl CanonProvider {
                         else {
                             continue;
                         };
-                        if !self.reaches_view(l.border, q) {
+                        let view = q.camera.as_ref().map(|c| c.cap());
+                        if !self.reaches_view(l.border, view.as_ref()) {
                             continue;
                         }
-                        if let Some(pts) = self.line_points(l.border, q) {
+                        if let Some(pts) = self.line_points(l.border, q.lod) {
                             let sources = self.sources_of(fid);
                             scene.attribution.extend(sources.iter().cloned());
                             scene.boundaries.push(map_types::StyledBoundary {
@@ -1081,7 +1113,7 @@ impl MapProvider for CanonProvider {
                                     // below the resolvable limit says
                                     // nothing: detail, not identity
                                     if let Some(RingFidelity::Survives(ring)) =
-                                        self.ring_points(*r, q)
+                                        self.ring_points(*r, q.lod)
                                     {
                                         scene.boundaries.push(StyledBoundary {
                                             boundary: bid_of(&a.entity),
@@ -1126,24 +1158,8 @@ impl MapProvider for CanonProvider {
         if from > to {
             return Ok(invert(self.transition(to, from, viewport, lod)?));
         }
-        let Some(style) = self.styles.keys().next().copied() else {
-            return Ok(TransitionScript::empty());
-        };
-        let query = |t: TimePoint| RenderQuery {
-            subject: RenderSubject::World,
-            time: TimeSelector::At(t),
-            viewport: None,
-            lod,
-            pieces: PieceSet::empty()
-                .with(Piece::Fills)
-                .with(Piece::Borders)
-                .with(Piece::Claims)
-                .with(Piece::Water)
-                .with(Piece::Ground),
-            style,
-        };
-        let before = drawn_rings(&self.scene_at(&from, &query(from), None)?);
-        let after = drawn_rings(&self.scene_at(&to, &query(to), None)?);
+        let before = self.drawn_at(&from, lod);
+        let after = self.drawn_at(&to, lod);
         let mut script = TransitionScript::empty();
         for (rid, _) in before.iter().filter(|(rid, _)| !after.contains_key(rid)) {
             script.steps.push(TransitionStep::FadeOut { region: *rid });
@@ -1203,16 +1219,6 @@ fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
         let t = if span > 0.0 { (target - cumulative[seg]) / span } else { 0.0 };
         let p = map_types::slerp(&pts[seg], &pts[seg + 1], t.clamp(0.0, 1.0)).unwrap_or(pts[seg]);
         out.push(p);
-    }
-    out
-}
-
-/// The outer rings a scene draws, by region: every layer's
-/// contribution to one entity, in scene order.
-fn drawn_rings(scene: &Snapshot) -> BTreeMap<RegionId, Vec<Vec<UnitVec>>> {
-    let mut out: BTreeMap<RegionId, Vec<Vec<UnitVec>>> = BTreeMap::new();
-    for r in &scene.regions {
-        out.entry(r.region).or_default().extend(r.outer.iter().map(|ring| ring.points().to_vec()));
     }
     out
 }

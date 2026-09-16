@@ -273,7 +273,7 @@ fn law01_query_determinism() {
     let q = RenderQuery {
         subject: RenderSubject::Region(A),
         time: TimeSelector::At(tp(-586)),
-        viewport: None,
+        camera: None,
         lod: Lod(0.001),
         pieces: crate::piece::PieceSet::empty()
             .with(crate::piece::Piece::Fills)
@@ -1200,6 +1200,86 @@ fn piece_set_is_a_monoid_over_pieces_and_round_trips() {
     // a wrong name is refused BY NAME -- not silently dropped
     assert!(PieceSet::parse("ground, topografy").is_err());
     assert!(PieceSet::parse("ground, topografy").unwrap_err().contains("topografy"));
+}
+
+mod consolidation_laws {
+    use crate::camera::{Camera, ChartKind};
+    use crate::scene::{Ground, LabelSubject, PlacedLabel, Snapshot, StyledRegion};
+    use crate::{MapAddressed, Monoid, Piece, Ring, UnitVec};
+
+    fn uv(lat: f64, lon: f64) -> UnitVec {
+        UnitVec::from_lat_lon_deg(lat, lon)
+    }
+
+    /// The camera is part of the query's identity: two queries that
+    /// differ only in where they look are two answers.
+    #[test]
+    fn a_query_is_addressed_by_its_camera() {
+        let mut q = crate::RenderQuery {
+            subject: crate::RenderSubject::World,
+            time: crate::TimeSelector::At(atlas_graph_types::covenant::TimePoint::year_only(atlas_graph_types::covenant::Year::new(-1405).unwrap())),
+            camera: None,
+            lod: crate::Lod(0.001),
+            pieces: crate::PieceSet::empty().with(Piece::Fills),
+            style: crate::StyleId(atlas_graph_types::covenant::ContentHash(7)),
+        };
+        let a = q.map_pid();
+        q.camera = Some(Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0));
+        let b = q.map_pid();
+        q.camera = Some(Camera::new(ChartKind::Globe, 31.5, 35.0, 8.0, 1200.0));
+        let c = q.map_pid();
+        assert_ne!(a, b);
+        assert_ne!(b, c);
+    }
+
+    fn land(n: u64, lat: f64, lon: f64, d: f64, piece: Piece) -> StyledRegion {
+        StyledRegion {
+            region: crate::RegionId(atlas_graph_types::covenant::ContentHash(n)),
+            entity: Some(format!("e{n}")),
+            outer: vec![Ring::new(vec![uv(lat, lon), uv(lat, lon + d), uv(lat + d, lon + d), uv(lat + d, lon)]).unwrap()],
+            holes: vec![],
+            paint: crate::style::Paint { fill: crate::style::Rgba(1, 1, 1, 255) },
+            sources: Default::default(),
+            piece,
+            trace: None,
+        }
+    }
+
+    /// What a point stands on is the scene's own question: the topmost
+    /// land or claim drawn under it, or ground nothing claims.
+    #[test]
+    fn a_snapshot_says_what_ground_a_point_stands_on() {
+        let mut s = Snapshot::empty();
+        s.regions.push(land(1, 0.0, 0.0, 10.0, Piece::Fills));
+        s.regions.push(land(2, 2.0, 2.0, 2.0, Piece::Claims));
+        s.regions.push(land(3, 20.0, 20.0, 2.0, Piece::Water));
+        assert_eq!(s.ground_at(&uv(3.0, 3.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(2))), "the claim painted on top");
+        assert_eq!(s.ground_at(&uv(8.0, 8.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(1))));
+        assert_eq!(s.ground_at(&uv(21.0, 21.0)), Ground::Unclaimed, "water is not ground");
+        assert_eq!(s.ground_at(&uv(-5.0, -5.0)), Ground::Unclaimed);
+    }
+
+    /// One thing, one name: a scene that names a subject twice breaks a
+    /// law the validator names, never a habit the provider keeps.
+    #[test]
+    fn naming_a_thing_twice_is_a_violation() {
+        let name = |subject| PlacedLabel {
+            text: "X".into(),
+            at: uv(0.0, 0.0),
+            subject,
+            style: crate::style::LabelStyle { color: crate::style::Rgba(0, 0, 0, 255), halo: crate::style::Rgba(255, 255, 255, 255), size: 12.0, halo_width_em: 0.24 },
+            face: crate::style::LabelFace::Place,
+            voice: crate::style::TypeVoice { family: "serif", weight: 400, italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.6 },
+            piece: Piece::Labels,
+        };
+        let place = |id: &str| LabelSubject::Place(crate::AtlasPlaceRef(atlas_graph_types::covenant::PlaceId::new(id.to_string())));
+        let mut s = Snapshot::empty();
+        s.labels.push(name(place("gaza")));
+        s.labels.push(name(place("sidon")));
+        assert!(crate::laws::validate_scene_names(&s).is_empty());
+        s.labels.push(name(place("gaza")));
+        assert_eq!(crate::laws::validate_scene_names(&s), vec![crate::laws::Violation::NamedTwice { subject: "place:gaza".into() }]);
+    }
 }
 
 mod camera_laws {

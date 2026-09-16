@@ -267,7 +267,7 @@ mod canon_provider_laws {
         RenderQuery {
             subject: RenderSubject::World,
             time: TimeSelector::At(ts(y)),
-            viewport: None,
+            camera: None,
             lod: Lod::exact(),
             pieces,
             style: sid,
@@ -443,6 +443,25 @@ mod canon_provider_laws {
     }
 
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// The delta between two moments is a fact about the world, not a
+    /// dress: a provider that knows no style still animates it.
+    #[test]
+    fn the_delta_needs_no_style() {
+        let p = CanonProvider::new(fixture(), BTreeMap::new(), Some(gazetteer()));
+        let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
+        let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+    }
+
+    /// The scene the provider renders keeps the one-name law the
+    /// validator states.
+    #[test]
+    fn a_rendered_scene_names_each_thing_once() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, 49)).unwrap();
+        assert!(map_types::laws::validate_scene_names(&scene).is_empty());
+    }
+
     /// The scene tier is a composition of the fact tier: every region,
     /// border and marker the provider draws says which layer and
     /// entity of the canon drew it and which borders it is made of.
@@ -1159,7 +1178,7 @@ mod memory_laws {
             .render(&RenderQuery {
                 subject: RenderSubject::World,
                 time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
-                viewport: None,
+                camera: None,
                 lod: Lod(0.0),
                 pieces: PieceSet::empty()
                     .with(Piece::Fills)
@@ -1225,11 +1244,11 @@ mod scaling_laws {
         store
     }
 
-    fn q(lod: f64, viewport: Option<Bbox>) -> RenderQuery {
+    fn q(lod: f64, camera: Option<map_types::camera::Camera>) -> RenderQuery {
         RenderQuery {
             subject: RenderSubject::World,
             time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
-            viewport,
+            camera,
             lod: Lod(lod),
             pieces: PieceSet::empty()
                 .with(Piece::Fills)
@@ -1276,10 +1295,7 @@ mod scaling_laws {
             ("edge", dense_ring(20.0, 50.0, 10.0, 64)),
             ("far", dense_ring(-45.0, -120.0, 10.0, 64)),
         ]));
-        let view = Bbox {
-            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
-            radius: 10f64.to_radians(),
-        };
+        let view = map_types::camera::Camera::new(map_types::camera::ChartKind::Globe, 32.0, 35.0, 10.0 / 1.8, 1200.0);
         let fine = 1e-4;
         let pts_of = |scene: &map_types::Snapshot, name: &str| -> Option<usize> {
             scene
@@ -1306,10 +1322,7 @@ mod scaling_laws {
             UnitVec::from_lat_lon_deg(1.0, -90.0),
         ];
         let p = provider(store_with(&[("world", sentinel)]));
-        let view = Bbox {
-            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
-            radius: 5f64.to_radians(),
-        };
+        let view = map_types::camera::Camera::new(map_types::camera::ChartKind::Globe, 32.0, 35.0, 5.0 / 1.8, 1200.0);
         let scene = p.render(&q(0.0, Some(view))).unwrap();
         assert!(
             scene.regions.iter().any(|r| r.entity.as_deref() == Some("world")),

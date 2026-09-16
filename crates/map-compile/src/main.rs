@@ -175,7 +175,7 @@ fn build(args: &[String]) {
             .unwrap_or_else(|e| die(&format!("reconcile.json: {e}"))),
     )
     .unwrap_or_else(|e| die(&e));
-    let identity = map_compile::identity::load_registry(
+    let mut identity = map_compile::identity::load_registry(
         &std::fs::read_to_string("data/authored/registry.json")
             .unwrap_or_else(|e| die(&format!("registry.json: {e}"))),
         "data/authored/registry.json",
@@ -251,7 +251,7 @@ fn build(args: &[String]) {
         None,
         &drops,
         &BTreeMap::new(),
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     report_md.push_str(&format!(
@@ -300,7 +300,7 @@ fn build(args: &[String]) {
         Some(map_types::RegionClass::Water),
         &BTreeSet::new(),
         &BTreeMap::new(),
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     // The dry land rides the same natural-earth timeline as the sea —
@@ -315,7 +315,7 @@ fn build(args: &[String]) {
         Some(map_types::RegionClass::Terrain(0)),
         &BTreeSet::new(),
         &BTreeMap::new(),
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     // The traced plate's own water is gone from the canon: the sphere
@@ -348,7 +348,7 @@ fn build(args: &[String]) {
         tp0,
         &resolve_era,
         &polities,
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&format!("partition: {e}")));
     eprintln!("{summary}");
@@ -369,7 +369,7 @@ fn build(args: &[String]) {
         Some(map_types::RegionClass::Terrain(0)),
         &BTreeSet::new(),
         &BTreeMap::new(),
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("relief: bridged");
@@ -436,7 +436,7 @@ fn build(args: &[String]) {
         Some(map_types::RegionClass::Land),
         &BTreeSet::new(),
         &bg_shadows,
-        &identity,
+        &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("background: {} epochs bridged", epochs.len());
@@ -498,6 +498,7 @@ fn build(args: &[String]) {
         }
         std::process::exit(1);
     }
+    identity.check().unwrap_or_else(|e| die(&e));
     let bytes = map_canon::persist::to_bytes(&store).unwrap_or_else(|e| die(&e));
     std::fs::write(std::path::Path::new(&out_dir).join("canon.json"), &bytes)
         .unwrap_or_else(|e| die(&format!("{e}")));

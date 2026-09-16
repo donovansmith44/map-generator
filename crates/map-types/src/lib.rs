@@ -64,7 +64,7 @@ pub use laws::{validate_all, Violation};
 pub use piece::{Piece, PieceSet};
 pub use provider::{MapError, MapProvider, SubjectListing};
 pub use query::{RenderQuery, RenderSubject, TimeSelector};
-pub use scene::{accumulate, sample_times, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
+pub use scene::{accumulate, sample_times, Ground, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
 pub use style::{Style, StyleError};
 pub use timeline::{
     Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,

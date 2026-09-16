@@ -37,7 +37,7 @@ pub fn bridge_timeline_regions(
     witness: Witness,
     prefix: &str,
 ) -> Result<(), String> {
-    bridge_filtered(store, tl, layer, witness, prefix, None, &BTreeSet::new(), &BTreeMap::new(), &map_canon::Registry::default())
+    bridge_filtered(store, tl, layer, witness, prefix, None, &BTreeSet::new(), &BTreeMap::new(), &mut crate::identity::load_registry("{}", "none").expect("an empty registry"))
 }
 
 /// The full-control bridge: an optional class filter and a drop-list
@@ -54,7 +54,7 @@ pub fn bridge_filtered(
     // witness owns this entity (atlas Territory eras). The region
     // still exists outside those spans — a shadow is never a hole.
     shadow_spans: &BTreeMap<String, Vec<(i32, i32)>>,
-    identity: &map_canon::Registry,
+    identity: &mut crate::identity::Identity,
 ) -> Result<(), String> {
     let mut rows: Vec<(map_types::Interval, String, map_canon::FeatureId)> = Vec::new();
 
@@ -107,8 +107,10 @@ pub fn bridge_filtered(
                 .and_then(|bh| bh.versions.first())
                 .map(|(_, b)| b.provenance.clone())
                 .unwrap_or_default();
+            let minted = EntityId(format!("{prefix}:{entity_slug}"));
+            identity.witness(&minted, &label, layer, witness, "area");
             let fid = store.insert_feature(Feature::Area(Area {
-                entity: identity.resolve(&EntityId(format!("{prefix}:{entity_slug}"))).clone(),
+                entity: identity.resolve(&minted).clone(),
                 name: label,
                 rings,
                 holes,

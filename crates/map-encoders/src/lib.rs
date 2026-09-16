@@ -22,7 +22,7 @@ pub use gpu::{
     ResourceDescriptor, ResourceId, ResourceKind, SceneManifest, SphericalBounds, StyleKey,
     RESOURCE_MAGIC,
 };
-pub use layout::{ground_of, layout, stands_on, verdicts, Ground, Laid, Projector, Verdict, Yield, PAGE_PADDING};
+pub use layout::{layout, verdicts, Laid, Projector, Verdict, Yield, PAGE_PADDING};
 
 use map_types::scene::LabelSubject;
 use map_types::style::{Rgba, StrokePattern};

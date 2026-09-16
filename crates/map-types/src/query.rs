@@ -10,7 +10,8 @@
 use atlas_graph_types::covenant::TimePoint;
 
 use crate::boundary::AtlasPlaceRef;
-use crate::geom::{Bbox, Lod, UnitVec};
+use crate::camera::Camera;
+use crate::geom::{Lod, UnitVec};
 use crate::ident::{BoundaryId, Canon, ChangeEventId, MapAddressed, MapKind, RegionId, StyleId};
 use crate::piece::PieceSet;
 use crate::timeline::{canon_time_point, Interval};
@@ -47,8 +48,9 @@ pub enum TimeSelector {
 pub struct RenderQuery {
     pub subject: RenderSubject,
     pub time: TimeSelector,
-    /// None = auto-frame to the subject's own extent.
-    pub viewport: Option<Bbox>,
+    /// The camera the answer is for: what it is cut to and the page its
+    /// names are placed on. None = the whole world, unplaced.
+    pub camera: Option<Camera>,
     pub lod: Lod,
     /// WHICH PIECES the caller wants. A subset of the scene's own
     /// vocabulary (spec §3), not a render flag bitset: `LayerSet`,
@@ -98,7 +100,7 @@ impl MapAddressed for RenderQuery {
                 c.opt(&i.to, |c, t| canon_time_point(c, t));
             }
         }
-        c.opt(&self.viewport, |c, v| v.canon(c));
+        c.opt(&self.camera, |c, cam| cam.canon(c));
         self.lod.canon(&mut c);
         // Canon has no u16_ and this task invents no new Canon method:
         // the ten-bit set widens into the u64 lane, losslessly.

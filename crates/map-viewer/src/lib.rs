@@ -693,8 +693,8 @@ fn build_query(
     if p.get("journeys") != Some("0") {
         pieces = pieces.with(Piece::Journeys); // itineraries, on by default
     }
-    let viewport = parse_camera(p).map(|c| c.cap());
-    Some(RenderQuery { subject, time, viewport, lod, pieces, style: parse_style(app, p.get("style"))? })
+    let camera = parse_camera(p);
+    Some(RenderQuery { subject, time, camera, lod, pieces, style: parse_style(app, p.get("style"))? })
 }
 
 fn encode(
@@ -852,7 +852,7 @@ fn composed_scene(
                 let ghost_q = RenderQuery {
                     subject: RenderSubject::World,
                     time: TimeSelector::At(backdrop_at),
-                    viewport: q.viewport.clone(),
+                    camera: q.camera,
                     lod: q.lod,
                     pieces: geometry_pieces(),
                     style,
@@ -1187,7 +1187,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             let q = RenderQuery {
                 subject: RenderSubject::World,
                 time: TimeSelector::At(at),
-                viewport: None,
+                camera: None,
                 lod: Lod(0.0),
                 pieces: geometry_pieces()
                     .with(Piece::Labels)

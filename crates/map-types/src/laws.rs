@@ -55,6 +55,31 @@ pub enum Violation {
     // ---- referential integrity of the narrative ----
     UnknownRegionInEvent { region: RegionId },
     UnknownBoundaryInEvent { boundary: BoundaryId },
+
+    // ---- one thing, one name ----
+    /// A scene names one subject twice.
+    NamedTwice { subject: String },
+}
+
+/// ONE THING, ONE NAME: a scene names each subject at most once,
+/// however many layers draw a region or roads pass through a place.
+pub fn validate_scene_names(scene: &crate::scene::Snapshot) -> Vec<Violation> {
+    use crate::scene::LabelSubject;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut v = Vec::new();
+    for l in &scene.labels {
+        let key = match &l.subject {
+            LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
+            LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
+            LabelSubject::Place(p) => format!("place:{}", p.0 .0),
+            LabelSubject::Memory(p) => format!("memory:{}", p.0 .0),
+            LabelSubject::Free => continue,
+        };
+        if !seen.insert(key.clone()) {
+            v.push(Violation::NamedTwice { subject: key });
+        }
+    }
+    v
 }
 
 fn intervals_coherent(intervals: &[&Interval]) -> bool {

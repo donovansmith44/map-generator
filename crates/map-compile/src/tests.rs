@@ -643,10 +643,26 @@ fn the_registry_file_declares_every_unification_and_nothing_else() {
     assert_eq!(reg.resolve(&e("partition:phoenicia")), &e("phoenicia"));
     assert_eq!(reg.resolve(&e("phoenicia")), &e("phoenicia"));
     assert_eq!(reg.resolve(&e("judea")), &e("judea"));
-    assert!(matches!(reg.why(&e("partition:phoenicia")), Some(Unification::Declared { .. })));
+    assert!(matches!(reg.registry().why(&e("partition:phoenicia")), Some(Unification::Declared { .. })));
     assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"a","minted":"a","kind":"Polity","reason":"x"}]}"#, "t").is_err(), "self-unification is refused");
     assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"a","minted":"b","kind":"Nonsense","reason":"x"}]}"#, "t").is_err(), "an unknown kind is refused");
     assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"b","minted":"c","kind":"Polity","reason":"x"},{"canonical":"a","minted":"b","kind":"Polity","reason":"x"}]}"#, "t").is_err(), "a chain is refused");
+}
+
+/// The compile validates the registry it observed every witness into:
+/// a canonical id no witness ever minted is a typo the compile refuses
+/// by name, and a witness that has been observed clears it.
+#[test]
+fn the_compile_refuses_a_registry_no_witness_backs() {
+    use map_canon::{EntityId, LayerKind, Witness};
+    let text = r#"{"unifications":[{"canonical":"x","minted":"y","kind":"Polity","reason":"one"}]}"#;
+    let mut id = crate::identity::load_registry(text, "t").unwrap();
+    id.witness(&EntityId("y".into()), "Y", LayerKind::Territory, Witness::Atlas, "area");
+    let err = id.check().unwrap_err();
+    assert!(err.contains("x"), "{err}");
+    id.witness(&EntityId("x".into()), "X", LayerKind::Territory, Witness::Atlas, "area");
+    assert!(id.check().is_ok());
+    assert_eq!(id.resolve(&EntityId("y".into())), &EntityId("x".into()));
 }
 
 /// Within one era, every bundle that resolves to one entity is one
@@ -658,6 +674,7 @@ fn one_entity_per_era_however_many_witnesses_claimed_it() {
     use map_canon::{BorderId, EntityId, LayerKind, Witness};
     let bid = |n: u64| BorderId(atlas_graph_types::covenant::ContentHash(n));
     let row = |entity: &str, layer, witness, rings: &[u64]| EraArea {
+        witnessed: vec![EntityId(entity.into())],
         entity: EntityId(entity.into()),
         name: "Phoenicia".into(),
         layer,
