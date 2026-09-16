@@ -32,6 +32,28 @@ rule even though the change is a correction.
   (`31f46e8`, fix rounds `c737e6f`/`ad9b112`/`544bf47`), so shared setup is
   stated once while each law keeps its own scenario and its own verdict.
 
+- Breaking, wire: `Snapshot` gains an `inscriptions` collection, and
+  `LabelSubject` gains a `Memory` variant wire-prefixed `memory:`
+  (`6d706df`). A remembered place — Sodom beneath the south basin — is
+  its own kind all the way to the wire, never a marker (a living city's
+  dot on a destroyed site) and never mistaken for one. The `/api/scene`
+  body carries a new top-level `inscriptions` array. The four
+  `scene-1405-*` fixtures are re-blessed for it.
+
+- Behavioral, colors: two territories that touch never wear the same
+  paint (`7d96be7`). The palette was assigned once against every
+  neighbor an entity ever had across the whole timeline, exhausting
+  eight slots and silently reusing a neighbor's; a single moment's map
+  never needs more than four. Each entity keeps its home color, repaired
+  per moment only where a neighbor present at that moment already wears
+  it. Pinned by `scene/region-coloring.feature` — correctness and
+  stability both, against the live wire. The same four fixtures move
+  with it (4–5 features restyled at 1405 BC).
+
+- Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
+  characterize what the wire actually does today — four working piece
+  switches out of ten named, and `subject=` narrowing only labels.
+
 Bookkeeping note, and a question for Task 17: 0.2.0's entry said the version
 was "bumped mid-stage so pushes clear the semver gate". The same pressure
 produced this bump, because the gate has no way to express "this version is
