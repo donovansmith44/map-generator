@@ -1,6 +1,7 @@
 //! The compiler half of the canon design. Tests first: see tests.rs.
 
 pub mod compile;
+pub mod identity;
 pub mod reconcile;
 pub mod partition_bridge;
 pub mod timeline_bridge;

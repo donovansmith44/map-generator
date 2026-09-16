@@ -94,6 +94,21 @@ rule even though the change is a correction.
   Levant camera for the same reason. `scene-1405-levant-cam` is
   re-blessed.
 
+- Breaking, wire and canon: one thing, one name. Every bridge now
+  resolves the id it mints through the entity registry
+  (`data/authored/registry.json`, the written unifications the
+  registry module was built for; the compile refuses a chain, a
+  self-unification or an unknown kind by name), and within one era
+  every bundle that resolves to one entity is one area, the held
+  witness's layer kept. Phoenicia, Judea and Canaan each become one
+  entity where two witnesses drew them. The provider names each region
+  entity once per scene however many layers draw it, and each place
+  once however many roads pass through it; a settlement's place id is
+  spoken without the canon's `place:` namespace (`place:gaza`, marker
+  `gaza`, never `place:place:gaza`). `naming.feature`'s two laws go
+  green and lose `@target`. Every fixture that carries a region id or
+  a place id is re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

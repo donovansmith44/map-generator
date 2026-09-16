@@ -12,12 +12,12 @@ Feature: naming — one thing, one name, one label
     | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
     | style | any of: canaan, parchment, slate |
 
-  @target @property
+  @property
   Scenario: no two regions in a view share a name
     When I render pieces all at year <someYear> in style <someStyle> as view
     Then no two region labels of view carry the same name
 
-  @target @property
+  @property
   Scenario: a place is named once, however many roads pass through it
     When I render pieces all at year <someYear> in style <someStyle> as view
     Then no place of view is labeled more than once

@@ -212,10 +212,18 @@ mod canon_provider_laws {
         store
     }
 
+    fn square(lat0: f64, lon0: f64, d: f64) -> map_canon::Border {
+        map_canon::Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+    }
+
     fn provider() -> (CanonProvider, StyleId) {
         let s = style();
         let sid = s.id();
-        let gaz = GazetteerExport {
+        (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gazetteer())), sid)
+    }
+
+    fn gazetteer() -> GazetteerExport {
+        GazetteerExport {
             atlas_root: atlas_graph_types::covenant::ContentHash(0),
             places: [
                 ("antioch", 36.2, 36.16, "Antioch"),
@@ -233,8 +241,7 @@ mod canon_provider_laws {
                 })
             })
             .collect(),
-        };
-        (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gaz)), sid)
+        }
     }
 
     /// The piece-set spelling of the legacy default flags
@@ -436,6 +443,76 @@ mod canon_provider_laws {
     }
 
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// A place is named once per scene however many roads pass through
+    /// it and whether or not it also stands as a city: the road's
+    /// station and the gazetteer's dot are one place, and the wire
+    /// speaks its id once, without a doubled prefix.
+    #[test]
+    fn a_place_is_named_once_however_many_roads_pass_through_it() {
+        let (p, sid) = provider();
+        let mut store = fixture();
+        let ephesus = store.insert_feature(Feature::Point(map_canon::Landmark {
+            entity: EntityId("place:ephesus".into()),
+            name: "Ephesus".into(),
+            at: uv(37.9, 27.3),
+        }));
+        let sc = store.insert_snapshot(Snapshot { features: BTreeSet::from([ephesus]) });
+        let mut claims = World::default();
+        claims.insert(ts(-4004), sc).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, claims);
+        let road = store.insert_border(map_canon::Border(vec![uv(41.89, 12.49), uv(37.9, 27.3)]));
+        let back = store.insert_feature(Feature::Way(Route {
+            entity: EntityId("atlas:back".into()),
+            name: "back".into(),
+            legs: vec![Leg { from: PlaceId::new("rome".to_string()), to: PlaceId::new("ephesus".to_string()),
+                             border: road, span: (ts(48), ts(49)) }],
+        }));
+        let sj = store.insert_snapshot(Snapshot { features: BTreeSet::from([back]) });
+        let mut journeys = World::default();
+        journeys.insert(ts(45), sj).unwrap();
+        store.set_layer(LayerKind::Journeys, journeys);
+        let _ = p;
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let scene = p.render(&world_q(sid, 49)).unwrap();
+        let ephesus_names: Vec<&map_types::PlacedLabel> = scene
+            .labels
+            .iter()
+            .filter(|l| matches!(&l.subject, map_types::scene::LabelSubject::Place(pl) if pl.0 .0 == "ephesus"))
+            .collect();
+        assert_eq!(ephesus_names.len(), 1, "one name for Ephesus: {:?}", scene.labels.iter().map(|l| format!("{:?}", l.subject)).collect::<Vec<_>>());
+        assert!(!scene.labels.iter().any(|l| matches!(&l.subject, map_types::scene::LabelSubject::Place(pl) if pl.0 .0.starts_with("place:"))), "no doubled prefix");
+        assert!(scene.markers.iter().any(|m| m.place.as_ref().is_some_and(|pl| pl.0 .0 == "ephesus")), "the marker speaks the same id");
+    }
+
+    /// One entity, one name per scene: an entity two witnesses drew
+    /// into two layers is labeled once.
+    #[test]
+    fn a_region_is_named_once_however_many_layers_draw_it() {
+        let (_, sid) = provider();
+        let mut store = fixture();
+        let mut area = |store: &mut CanonStore, layer, lat: f64| {
+            let b = store.insert_border(square(lat, 34.0, 1.0));
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId("judea".into()),
+                name: "Judea".into(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }));
+            let s = store.insert_snapshot(Snapshot { features: BTreeSet::from([fid]) });
+            let mut w = World::default();
+            w.insert(ts(-4004), s).unwrap();
+            store.set_layer(layer, w);
+        };
+        area(&mut store, LayerKind::Background, 31.0);
+        area(&mut store, LayerKind::ScriptureClaims, 31.5);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let scene = p.render(&world_q(sid, 30)).unwrap();
+        let judea = scene.labels.iter().filter(|l| l.text == "Judea").count();
+        assert_eq!(judea, 1, "one entity, one name");
+        assert_eq!(scene.regions.iter().filter(|r| r.entity.as_deref() == Some("judea")).count(), 2, "both witnesses' ground is drawn");
+    }
+
     /// stations appear as reached, named from the gazetteer; outside
     /// the span, no way at all.
     #[test]

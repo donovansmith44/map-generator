@@ -67,6 +67,15 @@ pub fn rid_of(entity: &EntityId) -> RegionId {
     RegionId(ContentHash(hash64(&format!("entity:{}", entity.0))))
 }
 
+/// WHAT A SCENE HAS ALREADY NAMED: one name per region entity and one
+/// per place, however many layers draw the entity or roads pass
+/// through the place.
+#[derive(Default)]
+struct Named {
+    regions: BTreeSet<RegionId>,
+    places: BTreeSet<PlaceId>,
+}
+
 /// The verdict of fidelity on one ring — the two outcomes an LOD
 /// tolerance can hand it, as a type, so no call site can confuse
 /// "thinned" with "unresolvable". A below-limit ring carries its
@@ -74,6 +83,13 @@ pub fn rid_of(entity: &EntityId) -> RegionId {
 enum RingFidelity {
     Survives(Ring),
     BelowLimit(Ring),
+}
+
+/// A settlement's place id as the wire speaks it: the minted `place:`
+/// namespace is the canon's, not the place's, so a road's station
+/// and the gazetteer's dot name one place by one id.
+fn place_of(entity: &EntityId) -> PlaceId {
+    PlaceId::new(entity.0.strip_prefix("place:").unwrap_or(&entity.0).to_string())
 }
 
 fn bid_of(entity: &EntityId) -> BoundaryId {
@@ -436,6 +452,7 @@ impl CanonProvider {
         q: &RenderQuery,
         style: &Style,
         entity_slots: &BTreeMap<EntityId, usize>,
+        named: &mut Named,
     ) {
         let _ = t;
         // Nothing this area could contribute is wanted: leave before
@@ -516,7 +533,7 @@ impl CanonProvider {
                 }
             }
         }
-        if wants_name {
+        if wants_name && named.regions.insert(rid_of(&a.entity)) {
             if let Some(at) =
                 self.label_anchor.get(&fid).copied().or_else(|| centroid(&outer)) {
                 let labeling = style.labeling();
@@ -624,6 +641,7 @@ impl CanonProvider {
         t: &Timestamp,
         q: &RenderQuery,
         style: &Style,
+        named: &mut Named,
     ) {
         let (pts, reached) = self.walked(route, t);
         if pts.len() < 2 {
@@ -663,7 +681,7 @@ impl CanonProvider {
                 place: Some(map_types::AtlasPlaceRef(pid.clone())),
                 piece: Piece::Journeys,
             });
-            if q.pieces.contains(Piece::Labels) {
+            if q.pieces.contains(Piece::Labels) && named.places.insert(pid.clone()) {
                 let mut label = style.label_style();
                 label.size *= style.labeling().scale.station_scale;
                 scene.labels.push(PlacedLabel {
@@ -687,6 +705,7 @@ impl CanonProvider {
     ) -> Result<Snapshot, MapError> {
         let style = self.style(q.style)?;
         let mut scene = Snapshot::empty();
+        let mut named = Named::default();
         let entity_slots = self.repaired_slots_at(t);
         let subject_only: Option<BTreeSet<EntityId>> = match &q.subject {
             RenderSubject::Region(rid) => Some(BTreeSet::from([self
@@ -729,9 +748,9 @@ impl CanonProvider {
                 match f {
                     Feature::Area(a) => {
                         paint_rank.insert(rid_of(&a.entity), rank);
-                        self.push_area(&mut scene, layer, fid, a, t, q, style, &entity_slots)
+                        self.push_area(&mut scene, layer, fid, a, t, q, style, &entity_slots, &mut named)
                     }
-                    Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style),
+                    Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style, &mut named),
                     // A Line (a river): the border geometry stroked in
                     // the water color — never a filled area, so it can
                     // neither gap nor balloon.
@@ -776,8 +795,7 @@ impl CanonProvider {
                     Feature::Memory(m) => {
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
-                        let place =
-                            map_types::AtlasPlaceRef(PlaceId::new(m.entity.0.clone()));
+                        let place = map_types::AtlasPlaceRef(place_of(&m.entity));
                         if q.pieces.contains(Piece::Labels) {
                             scene.inscriptions.push(map_types::scene::StyledInscription {
                                 at: m.at,
@@ -787,6 +805,9 @@ impl CanonProvider {
                             });
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.memory_scale;
+                            if !named.places.insert(place.0.clone()) {
+                                continue;
+                            }
                             scene.labels.push(PlacedLabel {
                                 text: m.name.clone(),
                                 at: m.at,
@@ -803,26 +824,23 @@ impl CanonProvider {
                         scene.attribution.extend(sources.iter().cloned());
                         // A standing place is the Markers piece,
                         // whatever layer carries it.
+                        let place = place_of(&p.entity);
                         if q.pieces.contains(Piece::Markers) {
                             scene.markers.push(StyledMarker {
                                 at: p.at,
                                 style: style.marker_style(),
                                 sources,
-                                place: Some(map_types::AtlasPlaceRef(PlaceId::new(
-                                    p.entity.0.clone(),
-                                ))),
+                                place: Some(map_types::AtlasPlaceRef(place.clone())),
                                 piece: Piece::Markers,
                             });
                         }
-                        if q.pieces.contains(Piece::Labels) {
+                        if q.pieces.contains(Piece::Labels) && named.places.insert(place.clone()) {
                             let mut label = style.label_style();
-                            label.size *= style.labeling().scale.city_scale; // a note, not a shout
+                            label.size *= style.labeling().scale.city_scale;
                             scene.labels.push(PlacedLabel {
                                 text: p.name.clone(),
                                 at: p.at,
-                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(
-                                    PlaceId::new(p.entity.0.clone()),
-                                )),
+                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(place)),
                                 style: label,
                                 face: map_types::scene::LabelFace::Place,
                                 voice: style.labeling().place,
@@ -863,7 +881,7 @@ impl CanonProvider {
                     piece: Piece::Markers,
                 });
             }
-            if q.pieces.contains(Piece::Labels) {
+            if q.pieces.contains(Piece::Labels) && named.places.insert(place.0.clone()) {
                 scene.labels.push(PlacedLabel {
                     text: entry.canonical_name.clone(),
                     at: entry.position,

@@ -476,11 +476,49 @@ fn load_tribal_rings() -> Result<Vec<CohortRing>, String> {
 /// human-readable summary line. `resolve_era` turns an era id from
 /// the vendored data into its opening Timestamp (the compiler's era
 /// table) — WHO STANDS WHEN arrives entirely as data.
+/// One entity's ground in one era, as the bridge is about to store it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EraArea {
+    pub entity: EntityId,
+    pub name: String,
+    pub layer: LayerKind,
+    pub witness: Witness,
+    pub verses: Vec<String>,
+    pub note: String,
+    pub rings: BTreeSet<map_canon::BorderId>,
+    pub holes: BTreeSet<map_canon::BorderId>,
+}
+
+/// ONE ENTITY PER ERA. Every bundle that resolves to the same entity
+/// is one area: rings and holes unioned, the held witness's layer and
+/// witness kept (a polity's Territory over a cohort's claim), every
+/// witness's note carried. Order is the entities' first appearance.
+pub fn unify_era_areas(rows: Vec<EraArea>) -> Vec<EraArea> {
+    let mut out: Vec<EraArea> = Vec::new();
+    for row in rows {
+        match out.iter_mut().find(|a| a.entity == row.entity) {
+            None => out.push(row),
+            Some(a) => {
+                if row.layer == LayerKind::Territory && a.layer != LayerKind::Territory {
+                    a.layer = row.layer;
+                    a.witness = row.witness;
+                    a.verses = row.verses.clone();
+                }
+                a.rings.extend(row.rings);
+                a.holes.extend(row.holes);
+                a.note = format!("{}; {}", a.note, row.note);
+            }
+        }
+    }
+    out
+}
+
 pub fn bridge_partition(
     store: &mut CanonStore,
     t0: Timestamp,
     resolve_era: &dyn Fn(&str) -> Result<Timestamp, String>,
     polities: &[PolityRow],
+    identity: &map_canon::Registry,
 ) -> Result<String, String> {
     let (regions, polylines) = gather_witnesses(polities)?;
     let part = build(&regions, &polylines, &PartitionConfig::default())
@@ -567,7 +605,7 @@ pub fn bridge_partition(
         specs.insert(
             wid,
             CohortSpec {
-                entity: EntityId(row.id.clone()),
+                entity: identity.resolve(&EntityId(row.id.clone())).clone(),
                 name: row.name.clone(),
                 layer: LayerKind::Territory,
                 witness: Witness::Atlas,
@@ -585,37 +623,47 @@ pub fn bridge_partition(
     for era in presence.eras(t0) {
         let mut per_layer: std::collections::BTreeMap<LayerKind, BTreeSet<map_canon::FeatureId>> =
             std::collections::BTreeMap::new();
+        let mut rows: Vec<EraArea> = Vec::new();
         for (who, bundle) in bundle_faces(store, &part, &era.absent) {
             if bundle.rings.is_empty() {
                 continue;
             }
             let spec = specs.get(&who).cloned().unwrap_or_else(|| CohortSpec {
-                entity: EntityId(format!("partition:{who}")),
+                entity: identity.resolve(&EntityId(format!("partition:{who}"))).clone(),
                 name: names.name_of(&who),
                 layer: LayerKind::ScriptureClaims,
                 witness: Witness::Authored,
                 verses: Vec::new(),
                 note_prefix: "sphere-partition entity".to_string(),
             });
-            let fid = store.insert_feature(Feature::Area(Area {
-                entity: spec.entity,
-                name: spec.name,
-                rings: bundle.rings,
-                holes: bundle.holes,
-            tenure: map_canon::Tenure::Held,}));
-            store.set_provenance(
-                fid,
-                Provenance {
-                    witness: spec.witness,
-                    verses: spec.verses,
-                    note: format!("{} ({})", spec.note_prefix, bundle.note),
-                },
-            );
             let layer = match bundle.kind {
                 FaceKind::LandClaim => spec.layer,
                 _ => LayerKind::Water,
             };
-            per_layer.entry(layer).or_default().insert(fid);
+            rows.push(EraArea {
+                entity: spec.entity,
+                name: spec.name,
+                layer,
+                witness: spec.witness,
+                verses: spec.verses,
+                note: format!("{} ({})", spec.note_prefix, bundle.note),
+                rings: bundle.rings,
+                holes: bundle.holes,
+            });
+        }
+        for area in unify_era_areas(rows) {
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: area.entity,
+                name: area.name,
+                rings: area.rings,
+                holes: area.holes,
+                tenure: map_canon::Tenure::Held,
+            }));
+            store.set_provenance(
+                fid,
+                Provenance { witness: area.witness, verses: area.verses, note: area.note },
+            );
+            per_layer.entry(area.layer).or_default().insert(fid);
         }
         for (layer, fids) in per_layer {
             if layer == LayerKind::Water {
@@ -632,11 +680,13 @@ pub fn bridge_partition(
             continue;
         }
         let bid = store.insert_border(Border(r.pts.clone()));
-        let entity = if r.id.starts_with("jordan") {
-            EntityId("partition:jordan".into())
-        } else {
-            EntityId("partition:rivers".into())
-        };
+        let entity = identity
+            .resolve(&EntityId(if r.id.starts_with("jordan") {
+                "partition:jordan".into()
+            } else {
+                "partition:rivers".into()
+            }))
+            .clone();
         let fid = store.insert_feature(Feature::Line(PathLine {
             entity,
             name: format!("{} (river)", r.id),
@@ -670,7 +720,7 @@ pub fn bridge_partition(
             // beneath the waters: the site becomes a MEMORY — its own
             // canon kind, rendered as an inscription, never a dot
             let fid = store.insert_feature(Feature::Memory(map_canon::Memory {
-                entity: EntityId(format!("place:{place}")),
+                entity: identity.resolve(&EntityId(format!("place:{place}"))).clone(),
                 name: name.clone(),
                 at,
             }));
@@ -688,7 +738,7 @@ pub fn bridge_partition(
             continue;
         }
         let fid = store.insert_feature(Feature::Point(map_canon::Landmark {
-            entity: EntityId(format!("place:{place}")),
+            entity: identity.resolve(&EntityId(format!("place:{place}"))).clone(),
             name,
             at,
         }));
