@@ -1622,3 +1622,4 @@ pub fn serve() {
         std::thread::spawn(move || handle(&app, stream));
     }
 }
+    let host = std::env::var("MAP_VIEWER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
