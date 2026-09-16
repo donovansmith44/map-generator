@@ -71,6 +71,12 @@ rule even though the change is a correction.
   only sent when the thing it names is in view" is met by the same
   change and loses its `@target`.
 
+- Behavioral, wire: `/api/resource` and `/api/resources` refuse an id
+  the store does not hold BY NAME (404, the body naming the hex id),
+  and a batch with one unknown id is refused whole rather than
+  shortened in silence. `resources.feature`'s refusal law goes green
+  and loses its `@target`.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

@@ -141,6 +141,37 @@ impl ResourceStore {
     fn get(&self, id: u64) -> Option<&Vec<u8>> {
         self.entries.get(&id).map(|(p, _)| p)
     }
+    /// The payloads for a batch of ids, in order, or the first id the
+    /// store does not hold: a batch is served whole or refused by name,
+    /// never shortened in silence.
+    fn serve(&self, ids: &[u64]) -> Result<Vec<u8>, Refused> {
+        let mut body = Vec::new();
+        for id in ids {
+            match self.get(*id) {
+                Some(bytes) => body.extend_from_slice(bytes),
+                None => return Err(Refused::NotResident(*id)),
+            }
+        }
+        Ok(body)
+    }
+}
+
+/// Why a geometry request is refused. Not resident is not an error
+/// state to hide: the client's acquisition loop re-requests the scene
+/// manifest, which re-publishes what this world can produce.
+#[derive(Debug, PartialEq, Eq)]
+enum Refused {
+    NotResident(u64),
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Refused::NotResident(id) => {
+                write!(f, "no resource {id:016x} is resident - re-request /api/scene")
+            }
+        }
+    }
 }
 
 mod templates;
@@ -845,21 +876,14 @@ pub fn route(
     // Batched geometry payloads: one response, many self-framing MGR1
     // packets in the requested order (each packet's header carries its
     // own vertex/index counts, so the stream needs no envelope). An id
-    // not resident is simply absent — the client notices the gap and
-    // re-requests the scene manifest, same contract as the single route.
+    // not resident refuses the whole batch by name.
     if path == "/api/resources" {
         let p = Params::parse(query);
         let Some(ids) = p.get("ids") else {
             return (400, "text/plain", b"ids required (comma-separated hex)".to_vec(), Vec::new());
         };
-        let store = app.resources.lock().expect("resource store");
-        let mut body = Vec::new();
-        for id in ids.split(',').filter_map(|h| u64::from_str_radix(h, 16).ok()) {
-            if let Some(bytes) = store.get(id) {
-                body.extend_from_slice(bytes);
-            }
-        }
-        return (200, "application/octet-stream", body, Vec::new());
+        let ids: Vec<u64> = ids.split(',').filter_map(|h| u64::from_str_radix(h, 16).ok()).collect();
+        return serve_geometry(app, &ids);
     }
     // Content-addressed geometry payloads: the one binary route.
     if path == "/api/resource" {
@@ -867,21 +891,17 @@ pub fn route(
         let Some(id) = p.get("id").and_then(|h| u64::from_str_radix(h, 16).ok()) else {
             return (400, "text/plain", b"id required (hex)".to_vec(), Vec::new());
         };
-        return match app.resources.lock().expect("resource store").get(id) {
-            Some(bytes) => (200, "application/octet-stream", bytes.clone(), Vec::new()),
-            // Not resident is not an error state to hide: the client's
-            // acquisition loop re-requests the scene manifest, which
-            // re-publishes what this world can produce.
-            None => (
-                404,
-                "text/plain",
-                b"resource not resident - re-request /api/scene".to_vec(),
-                Vec::new(),
-            ),
-        };
+        return serve_geometry(app, &[id]);
     }
     let (status, ctype, body, headers) = route_text(app, path, query);
     (status, ctype, body.into_bytes(), headers)
+}
+
+fn serve_geometry(app: &App, ids: &[u64]) -> (u16, &'static str, Vec<u8>, Vec<(String, String)>) {
+    match app.resources.lock().expect("resource store").serve(ids) {
+        Ok(body) => (200, "application/octet-stream", body, Vec::new()),
+        Err(why) => (404, "text/plain", why.to_string().into_bytes(), Vec::new()),
+    }
 }
 
 /// The house pattern, mirrored from `parse_style` (absent -> silent
@@ -1458,6 +1478,20 @@ mod tests {
                 "to": census_row_json(&row("claimed")),
             })
         );
+    }
+
+    /// Asking for geometry the store does not hold is refused BY NAME:
+    /// a batch with one unknown id names that id and serves nothing,
+    /// so a caller can never mistake a missing payload for a short one.
+    #[test]
+    fn unknown_geometry_is_refused_by_name() {
+        let mut store = ResourceStore::new();
+        let payload = vec![1u8, 2, 3];
+        store.publish([(0x00ffu64, &payload)].into_iter());
+        assert_eq!(store.serve(&[0x00ff]), Ok(payload.clone()));
+        assert_eq!(store.serve(&[0x00ff, 0x0bad]), Err(Refused::NotResident(0x0bad)));
+        assert_eq!(store.serve(&[0x0bad]), Err(Refused::NotResident(0x0bad)));
+        assert!(Refused::NotResident(0x0bad).to_string().contains("0000000000000bad"));
     }
 
     /// The regression that shipped: URLSearchParams encodes ':' as
