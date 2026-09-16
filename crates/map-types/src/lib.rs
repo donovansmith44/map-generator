@@ -58,7 +58,7 @@ pub use boundary::{
 };
 pub use contracts::{ChronoSpan, ChronologyExport, GazetteerEntry, GazetteerExport};
 pub use encode::{EncodeError, SceneEncoder, TransitionEncoder};
-pub use geom::{covers_sphere, inside_ring, morph_rings, simplify_polyline, slerp, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
+pub use geom::{covers_sphere, inside_ring, morph_rings, simplify_polyline, slerp, stand_in, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
 pub use ident::{BoundaryId, ChangeEventId, MapAddressed, MapKind, MapPid, RegionId, StyleId};
 pub use laws::{validate_all, Violation};
 pub use piece::{Piece, PieceSet};

@@ -4,7 +4,8 @@ Feature: detail — how much geometry, never which geometry
   numbers in the vocabulary are the values the server's own rule
   produces (lod = clamp(radians(zoom/width), 1e-6, 0.01)) at its
   canonical zooms — read from the code and the characterization,
-  never tuned.
+  never tuned. Fine is the rule at zoom 8 on the default page, so the
+  implicit-detail law looks through that zoom.
 
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
@@ -18,20 +19,18 @@ Feature: detail — how much geometry, never which geometry
     And I render pieces <somePieces> at year <someYear> in style <someStyle> detail <someOtherDetail> as other
     Then one and other draw the same features
 
-  @target
   Scenario: leaning in never loses geometry
     When I render pieces all at year -1405 in style canaan detail coarse as coarse
     And I render pieces all at year -1405 in style canaan detail fine as fine
     And I render pieces all at year -1405 in style canaan detail ultra as ultra
     Then every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine
 
-  @target
   Scenario: the world at a glance is never heavier than the street corner
     When I render pieces all at year -1405 in style canaan detail coarse as glance
     And I render pieces all at year -1405 in style canaan detail ultra as corner
     Then no shared resource of glance carries more vertices than it does in corner
 
   Scenario: an unspecified detail is exactly the detail the zoom implies
-    When I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 4 as implicit
-    And I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine as explicit
+    When I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 8 as implicit
+    And I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 8 detail fine as explicit
     Then implicit equals explicit

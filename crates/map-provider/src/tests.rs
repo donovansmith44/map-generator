@@ -1237,6 +1237,24 @@ mod scaling_laws {
         );
     }
 
+    /// Detail is monotone: a territory below the resolvable limit still
+    /// ships for its identity, but as the coarsest shape simplification
+    /// itself would draw, three points, never its unsimplified ring,
+    /// so leaning out never carries more vertices than leaning in.
+    #[test]
+    fn a_below_limit_ring_ships_as_a_three_point_stand_in() {
+        let p = provider(store_with(&[("speck", dense_ring(31.0, 31.0, 0.05, 16))]));
+        let pts = |lod: f64| -> usize {
+            p.render(&q(lod, None)).unwrap().regions[0].outer.iter().map(|r| r.points().len()).sum()
+        };
+        let coarse = pts(0.05);
+        let fine = pts(1e-6);
+        assert_eq!(coarse, 3, "below the limit the speck is its stand-in");
+        assert!(fine > coarse, "fine ({fine}) carries the ring, coarse ({coarse}) its stand-in");
+        let mid = pts(2e-4);
+        assert!(coarse <= mid && mid <= fine, "monotone across the rungs: {coarse} <= {mid} <= {fine}");
+    }
+
     /// The counterpart law: only a feature's IDENTITY holds the
     /// never-erased protection. A feature with a resolvable ring
     /// sheds its sub-resolution DETAIL rings and holes at a coarse

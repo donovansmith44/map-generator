@@ -340,16 +340,18 @@ impl CanonProvider {
     /// dropped: geometry leaves here at the query's level of detail,
     /// and a border whose cap misses the viewport never leaves at all.
     /// The verdict is TYPED: a ring either SURVIVES the tolerance or
-    /// falls BELOW the resolvable limit. A below-limit ring still
-    /// carries its unsimplified geometry — whether it ships is the
-    /// FEATURE's question (identity is kept, detail is not), answered
-    /// where the feature is assembled, never here per-ring.
+    /// falls BELOW the resolvable limit. A below-limit ring carries its
+    /// three-point stand-in — whether it ships is the FEATURE's
+    /// question (identity is kept, detail is not), answered where the
+    /// feature is assembled, never here per-ring.
     fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<RingFidelity> {
         let lod = q.lod;
         let b = self.store.borders().get(&id)?;
         match Ring::new(map_types::simplify_polyline(&b.0, lod)) {
             Ok(r) => Some(RingFidelity::Survives(r)),
-            Err(_) => Ring::new(b.0.clone()).ok().map(RingFidelity::BelowLimit),
+            Err(_) => map_types::stand_in(&b.0)
+                .and_then(|t| Ring::new(t.to_vec()).ok())
+                .map(RingFidelity::BelowLimit),
         }
     }
 
@@ -470,9 +472,9 @@ impl CanonProvider {
         // THE IDENTITY LAW, sharpened: fidelity may thin a feature,
         // never erase it — but only the feature's IDENTITY holds that
         // protection. If every outer ring falls below the resolvable
-        // limit, the widest one (by its measured cap) ships
-        // unsimplified: a small territory is present at every level
-        // of detail. When any outer ring survives, the collapsed rest
+        // limit, the widest one (by its measured cap) ships as its
+        // stand-in: a small territory is present at every level of
+        // detail, and never heavier there than when leaned into. When any outer ring survives, the collapsed rest
         // are sub-resolution DETAIL — an ocean's thousands of speck
         // islands once shipped unsimplified at the coarsest zoom this
         // way — and the half-pixel law governs them: they do not ship.

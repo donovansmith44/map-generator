@@ -109,6 +109,15 @@ rule even though the change is a correction.
   green and lose `@target`. Every fixture that carries a region id or
   a place id is re-blessed.
 
+- Behavioral, wire: detail is monotone. A ring below the resolvable
+  limit that must still ship for its feature's identity ships as its
+  three-point stand-in (the chord's ends and the point farthest from
+  it, the first shape simplification itself would draw), never its
+  unsimplified ring, so leaning out never carries more vertices than
+  leaning in. `detail.feature`'s two monotonicity laws go green and
+  lose `@target`; its implicit-detail law now looks through zoom 8,
+  the fine tier's own zoom, and goes green. Scene fixtures re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

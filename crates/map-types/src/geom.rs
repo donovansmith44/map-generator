@@ -253,6 +253,22 @@ pub fn simplify_polyline(pts: &[UnitVec], lod: Lod) -> Vec<UnitVec> {
         .collect()
 }
 
+/// THE STAND-IN of a ring below the resolvable limit: the first shape
+/// Douglas-Peucker itself would draw, the chord's two ends and the
+/// point farthest from it. Three points, so no finer representation
+/// ever carries fewer, and a ring that survives any tolerance keeps
+/// these three among its own, which is what makes detail monotone.
+pub fn stand_in(pts: &[UnitVec]) -> Option<[UnitVec; 3]> {
+    if pts.len() < 3 {
+        return None;
+    }
+    let (a, b) = (pts[0], pts[pts.len() - 1]);
+    let worst = (1..pts.len() - 1)
+        .map(|k| (k, arc_distance(&pts[k], &a, &b)))
+        .max_by(|x, y| x.1.partial_cmp(&y.1).unwrap_or(std::cmp::Ordering::Equal))?;
+    Some([a, pts[worst.0], b])
+}
+
 fn dp_mark(pts: &[UnitVec], i: usize, j: usize, tol: f64, keep: &mut [bool]) {
     if j <= i + 1 {
         return;
