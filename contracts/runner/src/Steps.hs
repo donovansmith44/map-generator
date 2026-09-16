@@ -746,32 +746,6 @@ allSteps =
         if null sts then Right w
         else Left (n <> "'s plan carries " <> tshow (length sts)
                    <> " step(s), not none: " <> bounded (Array (V.fromList (take 3 sts))))
-    -- "the plan and the timeline tell one story, wherever you scrub" --
-    -- characterization T6, a BIJECTION ON IDS, both directions, both
-    -- kinds. T6's own trap is comparing counts: the timeline also
-    -- carries `journey` rows that deliberately produce no step, so
-    -- len(steps) /= len(changes) and a count law would be WRONG as well
-    -- as weak.
-  , mkSkippableStep Then (lit "every fade in " *> ((,,,) <$> capUntil @BindName " is a rise or fall in "
-                                                          <*> capUntil @BindName ", and every rise and fall in "
-                                                          <*> capUntil @BindName " has a fade in "
-                                                          <*> capRest @BindName)) $
-      \(BindName plan, BindName story, BindName story2, BindName plan2) w ->
-        pure $ either StepFailed id $ do
-          () <- sameTwice "plan" plan plan2
-          () <- sameTwice "timeline" story story2
-          sts <- planSteps =<< boundScene plan w
-          ch <- boundScene story w
-          ins <- fadeRegions "fade_in" sts
-          outs <- fadeRegions "fade_out" sts
-          rises <- changeSubjects "rise" "region:" ch
-          falls <- changeSubjects "fall" "region:" ch
-          pure $ if Set.null ins && Set.null outs && Set.null rises && Set.null falls
-            then StepSkipped ("this span carries no fades and no rises or falls; \
-                              \a bijection between empty sets demonstrates nothing")
-            else if ins == rises && outs == falls then StepOk w
-            else StepFailed ("fade_in vs rise: " <> describeSetDiff ins rises
-                             <> " -- fade_out vs fall: " <> describeSetDiff outs falls)
     -- "what fades in arrives, what fades out departs" (@target) --
     -- characterization T8, which is PARTIAL today: 56 region ids named
     -- by fades are never a region feature at any stop. T8's trap is
@@ -2181,36 +2155,10 @@ stepsOfKind k = filter (\s -> textField "kind" s == Right k)
 
 -- The region ids a plan's fades name, by kind. `fade_in`/`fade_out`
 -- publish a bare 16-hex `region`; scene manifests publish the same thing
--- as the feature id `region:HEX`, and `/api/changes` as the subject
--- `region:HEX` -- so one of the three has to be translated to compare
--- them, and it is done here, once, rather than at each of the three call
--- sites.
+-- as the feature id `region:HEX`, so one of the two is translated to
+-- compare them, here, once.
 fadeRegions :: Text -> [Value] -> Either Text (Set Text)
 fadeRegions kind sts = Set.fromList <$> traverse (textField "region") (stepsOfKind kind sts)
-
--- `/api/changes` is a flat array of change rows, each with a `kind` and
--- a namespaced `subject`. The subjects of one kind, with the namespace
--- stripped, are directly comparable with `fadeRegions` above.
---
--- Fix round 1, finding 9: a row of the right KIND but the wrong
--- NAMESPACE (a `rise` on a `boundary:`) is dropped, DELIBERATELY and not
--- by oversight -- a fade names a region, so a change about a boundary is
--- not a change this law is quantified over. Saying so here because the
--- drop is silent and this is exactly where the data model is known to be
--- muddy: report section 8 finding 1 and characterization 4.7 both record
--- journey (`Way`) entities whose end is logged as a region Fall. If that
--- muddiness ever moves the other way -- a genuine region change filed
--- under another namespace -- this filter would hide it, and the fix
--- would belong here.
-changeSubjects :: Text -> Text -> Value -> Either Text (Set Text)
-changeSubjects kind ns v = case v of
-  Array rows -> Set.fromList . concat <$> traverse one (V.toList rows)
-  other      -> Left ("the changes timeline is not an array: " <> bounded other)
-  where
-    one r = do
-      k <- textField "kind" r
-      s <- textField "subject" r
-      pure [ T.drop (T.length ns) s | k == kind, ns `T.isPrefixOf` s ]
 
 -- THE STRUCTURAL MIRROR of a plan (characterization T5): reverse the
 -- step order, swap fade_in with fade_out, and swap each morph's `from`

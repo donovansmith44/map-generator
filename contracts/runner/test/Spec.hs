@@ -1590,7 +1590,6 @@ main = hspec $ do
             , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
             , (Then, "no shared resource of glance carries more vertices than it does in corner")
             , (Then, "still's steps are the empty list")
-            , (Then, "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan")
             , (Then, "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after")
             , (Then, "back is there with every morph reversed and every fade inverted")
             , (Then, "every morph of plan carries at least as many points as its border carries vertices in after")
@@ -4964,22 +4963,6 @@ main = hspec $ do
       shouldPass =<< runThen "still's steps are the empty list" [("still", plan [])] []
       shouldFailWith "carries 1 step(s), not none" =<<
         runThen "still's steps are the empty list" [("still", plan [fadeIn "a"])] []
-    it "the plan-vs-timeline law is a BIJECTION ON IDS, both kinds, both \
-       \directions -- not a count (the timeline also carries journey \
-       \rows that deliberately produce no step)" $ do
-      let p = plan [fadeIn "aa", fadeOut "bb"]
-          story = A.toJSON [change "rise" "region:aa", change "fall" "region:bb",
-                            change "journey" "boundary:cc"]
-          storyShort = A.toJSON [change "rise" "region:aa"]
-      shouldPass =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", p), ("story", story)] []
-      shouldFailWith "fade_out vs fall" =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", p), ("story", storyShort)] []
-      shouldSkipWith "bijection between empty sets" =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", plan []), ("story", A.toJSON ([] :: [A.Value]))] []
     it "the endpoint-fade law checks BOTH directions: a region that \
        \exists in NEITHER scene is absent from the other endpoint too, \
        \and would pass a one-sided check" $ do
@@ -5113,25 +5096,6 @@ main = hspec $ do
     -- implementation considers correct for this input. Only the two
     -- assertions above it encode today's forward convention, and those
     -- are the ones R83 may legitimately flip.
-    it "the plan-vs-timeline law DISTINGUISHES the fade kinds: two \
-       \stories with the identical union of ids, differing only in which \
-       \id rose and which fell, cannot both be accepted (the union \
-       \reading accepts both)" $ do
-      let p = plan [fadeIn "aa", fadeOut "bb"]
-          matched = A.toJSON [change "rise" "region:aa", change "fall" "region:bb"]
-          swapped = A.toJSON [change "fall" "region:aa", change "rise" "region:bb"]
-          law = "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-      -- today's forward convention: fade_in <-> rise, fade_out <-> fall
-      shouldPass =<< runThen law [("plan", p), ("story", matched)] []
-      swappedOutcome <- runThen law [("plan", p), ("story", swapped)] []
-      shouldFailWith "fade_in vs rise" swappedOutcome
-      shouldFailWith "fade_out vs fall" swappedOutcome
-      -- THE INVARIANT, independent of which pairing is the right one:
-      -- an implementation blind to the kinds answers these two
-      -- identically, because their unions are equal.
-      matchedOutcome <- runThen law [("plan", p), ("story", matched)] []
-      outcomeTag matchedOutcome `shouldNotBe` outcomeTag swappedOutcome
-
     -- Finding 5 (Minor). The ladder's SECOND rung was clean in both the
     -- failing and the passing fixtures, so deleting it left the suite
     -- green -- while the step's comment calls the repeated names "what

@@ -1079,6 +1079,11 @@ impl MapProvider for CanonProvider {
         }
     }
 
+    /// THE ANIMATION IS THE SCENE DELTA. Regions the destination has
+    /// and the origin lacks fade in; regions the origin has and the
+    /// destination lacks fade out; a region both moments draw with
+    /// different rings morphs along its real path. Swapping the moments
+    /// swaps the difference, so direction needs no special case.
     fn transition(
         &self,
         from: TimePoint,
@@ -1087,64 +1092,53 @@ impl MapProvider for CanonProvider {
         lod: Lod,
     ) -> Result<TransitionScript, MapError> {
         if from == to {
-            return Ok(TransitionScript::empty()); // the identity (law 8)
+            return Ok(TransitionScript::empty());
         }
         if from > to {
             return Ok(invert(self.transition(to, from, viewport, lod)?));
         }
-        let mut events: Vec<&ChangeEvent> = self.changes_between(from, to);
-        events.sort_by_key(|e| e.at);
+        let Some(style) = self.styles.keys().next().copied() else {
+            return Ok(TransitionScript::empty());
+        };
+        let query = |t: TimePoint| RenderQuery {
+            subject: RenderSubject::World,
+            time: TimeSelector::At(t),
+            viewport: None,
+            lod,
+            pieces: PieceSet::empty()
+                .with(Piece::Fills)
+                .with(Piece::Borders)
+                .with(Piece::Claims)
+                .with(Piece::Water)
+                .with(Piece::Ground),
+            style,
+        };
+        let before = drawn_rings(&self.scene_at(&from, &query(from), None)?);
+        let after = drawn_rings(&self.scene_at(&to, &query(to), None)?);
         let mut script = TransitionScript::empty();
-        for e in events {
-            match &e.kind {
-                ChangeKind::Rise { region } => {
-                    script.steps.push(TransitionStep::FadeIn { region: *region })
-                }
-                ChangeKind::Fall { region } => {
-                    script.steps.push(TransitionStep::FadeOut { region: *region })
-                }
-                ChangeKind::Shift { boundary } => {
-                    // a same-entity reshape MORPHS: slerp pairs with
-                    // equal counts by resampling; if either side's
-                    // geometry cannot be found, crossfade honestly
-                    match self.shift_geometries(boundary, &e.at) {
-                        Some((before, after)) => {
-                            let a = map_types::simplify_polyline(&before, lod);
-                            let b = map_types::simplify_polyline(&after, lod);
-                            let n = a.len().max(b.len()).max(2);
-                            script.steps.push(TransitionStep::Morph {
-                                boundary: *boundary,
-                                from_pts: resample(&a, n),
-                                to_pts: resample(&b, n),
-                            });
-                        }
-                        None => {
-                            if let Some(ent) = self.entity_by_bid.get(boundary) {
-                                let rid = rid_of(ent);
-                                script.steps.push(TransitionStep::FadeOut { region: rid });
-                                script.steps.push(TransitionStep::FadeIn { region: rid });
-                            }
-                        }
-                    }
-                }
-                // a journey's progress is time-parameterized rendering,
-                // not a topology change
-                ChangeKind::Journey { .. } => {}
-                ChangeKind::Rename { .. } => {}
-                ChangeKind::Split { parent, children, seam } => {
-                    script.steps.push(TransitionStep::SplitAlong {
-                        parent: *parent,
-                        seam: seam.clone(),
-                        children: children.clone(),
-                    })
-                }
-                ChangeKind::Merge { parents, child } => {
-                    script.steps.push(TransitionStep::MergeAcross {
-                        parents: parents.clone(),
-                        child: *child,
-                    })
-                }
+        for (rid, _) in before.iter().filter(|(rid, _)| !after.contains_key(rid)) {
+            script.steps.push(TransitionStep::FadeOut { region: *rid });
+        }
+        for (rid, was) in &before {
+            let Some(now) = after.get(rid) else { continue };
+            if was == now {
+                continue;
             }
+            let (Some(a), Some(b)) = (longest(was), longest(now)) else { continue };
+            let a = map_types::densify_edges(a, true);
+            let b = map_types::densify_edges(b, true);
+            let drawn = |rings: &[Vec<UnitVec>]| {
+                rings.iter().map(|r| map_types::densify_edges(r, true).len()).sum::<usize>()
+            };
+            let n = a.len().max(b.len()).max(drawn(was)).max(drawn(now)).max(2);
+            script.steps.push(TransitionStep::Morph {
+                boundary: BoundaryId(rid.0),
+                from_pts: resample(&a, n),
+                to_pts: resample(&b, n),
+            });
+        }
+        for (rid, _) in after.iter().filter(|(rid, _)| !before.contains_key(rid)) {
+            script.steps.push(TransitionStep::FadeIn { region: *rid });
         }
         Ok(script)
     }
@@ -1182,6 +1176,20 @@ fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
         out.push(p);
     }
     out
+}
+
+/// The outer rings a scene draws, by region: every layer's
+/// contribution to one entity, in scene order.
+fn drawn_rings(scene: &Snapshot) -> BTreeMap<RegionId, Vec<Vec<UnitVec>>> {
+    let mut out: BTreeMap<RegionId, Vec<Vec<UnitVec>>> = BTreeMap::new();
+    for r in &scene.regions {
+        out.entry(r.region).or_default().extend(r.outer.iter().map(|ring| ring.points().to_vec()));
+    }
+    out
+}
+
+fn longest(rings: &[Vec<UnitVec>]) -> Option<&Vec<UnitVec>> {
+    rings.iter().max_by_key(|r| r.len())
 }
 
 fn invert(script: TransitionScript) -> TransitionScript {

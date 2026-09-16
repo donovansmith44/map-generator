@@ -443,6 +443,79 @@ mod canon_provider_laws {
     }
 
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// The animation is the scene delta: what the destination has and
+    /// the origin lacks fades in, the converse fades out, and the road
+    /// back is the road there reversed.
+    #[test]
+    fn the_plan_is_the_scene_delta() {
+        let (_, sid) = provider();
+        let mut store = fixture();
+        let brief = {
+            let b = store.insert_border(square(20.0, 50.0, 2.0));
+            store.insert_feature(Feature::Area(Area {
+                entity: EntityId("brief".into()),
+                name: "Brief".into(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }))
+        };
+        let with = store.insert_snapshot(Snapshot { features: BTreeSet::from([brief]) });
+        let without = store.insert_snapshot(Snapshot { features: BTreeSet::new() });
+        let mut world = World::default();
+        world.insert(ts(-1450), with).unwrap();
+        world.insert(ts(-1420), without).unwrap();
+        store.set_layer(LayerKind::Background, world);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
+        let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        let fall = p.transition(ts(-1500), ts(-800), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(fall.steps, vec![map_types::TransitionStep::FadeOut { region: assyria }]);
+        let back = p.transition(ts(-800), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(back.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        let still = p.transition(ts(-1500), ts(-1200), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert!(still.steps.is_empty(), "a region that rose and fell within the span is no difference between its ends: {:?}", still.steps);
+    }
+
+    /// A border that moves morphs along its real path: at least as many
+    /// points as the border is drawn with at the destination.
+    #[test]
+    fn a_morph_carries_the_drawn_border() {
+        let (_, sid) = provider();
+        let mut store = CanonStore::default();
+        let mut moment = |store: &mut CanonStore, world: &mut World, y: i32, lat: f64| {
+            let b = store.insert_border(square(lat, 40.0, 6.0));
+            let isle = store.insert_border(square(lat + 8.0, 40.0, 2.0));
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId("moab".into()),
+                name: "Moab".into(),
+                rings: BTreeSet::from([b, isle]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }));
+            let s = store.insert_snapshot(Snapshot { features: BTreeSet::from([fid]) });
+            world.insert(ts(y), s).unwrap();
+        };
+        let mut world = World::default();
+        moment(&mut store, &mut world, -100, 30.0);
+        moment(&mut store, &mut world, -50, 33.0);
+        store.set_layer(LayerKind::Territory, world);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let plan = p.transition(ts(-100), ts(-50), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        let after = p.render(&world_q_pieces(sid, -50, PieceSet::empty().with(Piece::Fills).with(Piece::Borders))).unwrap();
+        let drawn: usize = after.boundaries.iter().map(|b| map_types::densify_edges(&b.pts, true).len()).sum();
+        assert_eq!(plan.steps.len(), 1, "one morph, no fades: {:?}", plan.steps.len());
+        match &plan.steps[0] {
+            map_types::TransitionStep::Morph { from_pts, to_pts, .. } => {
+                assert_eq!(from_pts.len(), to_pts.len());
+                assert!(to_pts.len() >= drawn, "morph {} >= drawn {drawn}", to_pts.len());
+                assert!(to_pts.len() > 2, "not a stick figure");
+            }
+            other => panic!("expected a morph, got {other:?}"),
+        }
+    }
+
     /// A place is named once per scene however many roads pass through
     /// it and whether or not it also stands as a city: the road's
     /// station and the gazetteer's dot are one place, and the wire

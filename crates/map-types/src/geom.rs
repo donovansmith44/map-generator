@@ -228,6 +228,42 @@ fn arc_distance(p: &UnitVec, a: &UnitVec, b: &UnitVec) -> f64 {
     }
 }
 
+/// Maximum edge length (radians) any drawn or morphed run may carry.
+/// A consumer clipping at the globe's limb folds hidden vertices onto
+/// the limb circle and joins them with chords; the chord's deviation
+/// from the true limb arc is about step squared over eight times half
+/// the page, under the half-pixel law at 0.05 rad on the design page.
+pub const MAX_EDGE_STEP: f64 = 0.05;
+
+/// Subdivide long edges along their great circles so no edge exceeds
+/// `MAX_EDGE_STEP`. Pure refinement: every original vertex survives,
+/// inserted points lie on the original arcs.
+pub fn densify_edges(pts: &[UnitVec], closed: bool) -> Vec<UnitVec> {
+    let n = pts.len();
+    if n < 2 {
+        return pts.to_vec();
+    }
+    let edges = if closed { n } else { n - 1 };
+    let mut out = Vec::with_capacity(n * 2);
+    for i in 0..edges {
+        let (p, q) = (&pts[i], &pts[(i + 1) % n]);
+        out.push(*p);
+        let angle = p.angle_to(q);
+        if angle > MAX_EDGE_STEP {
+            let steps = (angle / MAX_EDGE_STEP).ceil() as usize;
+            for k in 1..steps {
+                if let Ok(mid) = slerp(p, q, k as f64 / steps as f64) {
+                    out.push(mid);
+                }
+            }
+        }
+    }
+    if !closed {
+        out.push(pts[n - 1]);
+    }
+    out
+}
+
 /// Douglas–Peucker on the sphere for an open polyline. Endpoints are
 /// always kept. The kept set at a larger tolerance is a subset of the
 /// kept set at a smaller one — which is exactly law 7.

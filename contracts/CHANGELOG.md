@@ -118,6 +118,19 @@ rule even though the change is a correction.
   lose `@target`; its implicit-detail law now looks through zoom 8,
   the fine tier's own zoom, and goes green. Scene fixtures re-blessed.
 
+- Breaking, wire and corpus: the animation is the scene delta (R84).
+  `/api/transition` fades in the regions the destination draws and the
+  origin does not, fades out the converse, and morphs a border both
+  moments draw differently along its real path: the ring simplified at
+  the request's own detail (the zoom's half-pixel rule, the same law
+  scenes use, replacing the route's `Lod(6.0)` default) and densified
+  by the wire's edge-step law, resampled to no fewer points than the
+  border is drawn with. `transition.feature`'s delta law and its
+  real-shape law go green and lose `@target`; the plan-versus-timeline
+  scenario is removed, as R84 said the delta law replaces it, and the
+  runner's step for it goes with it. The conquest and exile plans are
+  re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

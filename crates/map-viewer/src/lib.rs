@@ -638,6 +638,23 @@ fn parse_camera(p: &Params) -> Option<Camera> {
     Some(Camera::new(chart, lat, lon, zoom, width))
 }
 
+/// The detail a request asks for: explicit `lod=`, else the zoom's own
+/// half-pixel rule on the page it names. One law for every route.
+fn lod_of(p: &Params) -> Lod {
+    match p.get("lod").filter(|v| *v != "auto").and_then(|v| v.parse().ok()) {
+        Some(explicit) => Lod(explicit),
+        None => {
+            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+            let width = p
+                .get("width")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(1200.0)
+                .clamp(320.0, 8000.0);
+            Lod(auto_lod(zoom, width))
+        }
+    }
+}
+
 fn build_query(
     app: &App,
     p: &Params,
@@ -655,18 +672,7 @@ fn build_query(
         }
         _ => TimeSelector::At(at),
     };
-    let lod = match p.get("lod").filter(|v| *v != "auto").and_then(|v| v.parse().ok()) {
-        Some(explicit) => Lod(explicit),
-        None => {
-            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
-            let width = p
-                .get("width")
-                .and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(1200.0)
-                .clamp(320.0, 8000.0);
-            Lod(auto_lod(zoom, width))
-        }
-    };
+    let lod = lod_of(p);
     // TODAY'S LEGACY FLAGS, spoken in pieces. Byte-identical behavior:
     // the old GEOMETRY bit meant the three land layers, whose elements
     // are fills, borders, claims and the point markers standing in
@@ -1090,7 +1096,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             let (Some(from), Some(to)) = (p.year("from"), p.year("to")) else {
                 return bad("from and to required");
             };
-            let lod = p.get("lod").and_then(|l| l.parse().ok()).map(Lod).unwrap_or(Lod(6.0));
+            let lod = lod_of(&p);
             match app.provider.transition(from, to, map_types::Bbox::whole_world(), lod) {
                 Ok(script) => match JsonTransitionEncoder.encode_transition(&script) {
                     Ok(body) => (200, "application/json", body, Vec::new()),

@@ -1,9 +1,11 @@
 Feature: the transition — how the map moves between two moments
   The scrubber's animation plan, pinned whole and quantified over the
-  moments it claims to connect: borders that move morph, regions that
-  rise fade in, regions that fall fade out — for ANY two years, not
-  two the author liked. The plan must tell the same story as the
-  changes timeline and the two scenes it joins.
+  moments it claims to connect. The animation is the scene delta:
+  regions the destination has and the origin lacks fade in, regions
+  the origin has and the destination lacks fade out, and a border both
+  moments draw differently morphs along its real path — for ANY two
+  years, not two the author liked. Swapping the moments swaps the
+  difference, so the road back is the road there reversed.
 
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
@@ -30,12 +32,6 @@ Feature: the transition — how the map moves between two moments
     Then first equals second
 
   @property
-  Scenario: the plan and the timeline tell one story, wherever you scrub
-    When I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=<someStyle> as plan
-    And I GET /api/changes?from=<someYear>&to=<someOtherYear> as story
-    Then every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan
-
-  @target @property
   Scenario: what fades in arrives, what fades out departs — between any two moments
     When I GET /api/transition?from=<someYear>&to=<someOtherYear>&zoom=90.0000&style=canaan as plan
     And I render pieces all at year <someYear> in style canaan as before
@@ -48,7 +44,6 @@ Feature: the transition — how the map moves between two moments
     And I GET /api/transition?from=<someOtherYear>&to=<someYear>&zoom=90.0000&style=<someStyle> as back
     Then back is there with every morph reversed and every fade inverted
 
-  @target
   Scenario: a border morphs with its real shape, not a stick figure
     When I GET /api/transition?from=-1407&to=-1405&zoom=90.0000&style=canaan as plan
     And I render pieces all at year -1405 in style canaan as after
