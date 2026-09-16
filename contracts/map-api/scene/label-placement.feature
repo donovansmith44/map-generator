@@ -35,6 +35,14 @@ Feature: label placement — the map says where every name sits, not the viewer
   Scenario: every name that is sent is a name that is drawn
     Then every label of view is legible at the view it was asked for
 
+  @target @property
+  Scenario: a land's name sits on the land it names
+    Then every land name of view sits within its own region, give or take the overflow its style declares
+
+  @target @property
+  Scenario: a city stands on ground the map names
+    Then every city of view stands in a region it names, or on ground declared unclaimed
+
   @property
   Scenario: asking for other maps in between changes nothing
     When I render pieces all at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> as first

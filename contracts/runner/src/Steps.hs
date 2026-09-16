@@ -25,6 +25,7 @@ import System.FilePath ((</>))
 import Capture
 import Gherkin.Ast (Keyword (..))
 import Pattern
+import Sphere
 import World
 
 -- WHAT A CAMERA IS, on the wire: a center AND a zoom, together. Not two
@@ -627,6 +628,42 @@ allSteps =
                            <> " labels of " <> n <> " name nothing " <> n
                            <> " publishes, among its " <> tshow (Set.size named)
                            <> " features, markers and inscriptions: " <> listSome unnamed)
+  , mkSkippableStep Then (lit "every land name of "
+                          *> capUntil @BindName " sits within its own region, give or take the overflow its style declares") $
+      \(BindName n) w -> case landNameSetting n w of
+        Left e -> pure (StepFailed e)
+        Right (g, ov, rings, names)
+          | null names -> pure (StepSkipped (n <> " carries no land names at this draw; a law about \
+                                                  \where every land name sits has nothing to examine"))
+          | otherwise -> do
+              verdicts <- traverse (landNameVerdict w g ov rings) names
+              pure $ case sequence verdicts of
+                Left e -> StepFailed e
+                Right vs ->
+                  let spilled = [ (s, why) | (s, Spills why) <- zip (map lnSubject names) vs ]
+                  in if null spilled then StepOk w
+                     else StepFailed (tshow (length spilled) <> " of " <> tshow (length names)
+                                      <> " land names of " <> n <> " sit outside the land they name by \
+                                         \more than the style's overflow: "
+                                      <> listSome [ s <> " (" <> r <> ")" | (s, r) <- spilled ])
+  , mkSkippableStep Then (lit "every city of "
+                          *> capUntil @BindName " stands in a region it names, or on ground declared unclaimed") $
+      \(BindName n) w -> case citySetting n w of
+        Left e -> pure (StepFailed e)
+        Right (g, ov, land, cities)
+          | null cities -> pure (StepSkipped (n <> " carries no city names at this draw; a law about \
+                                                   \the ground every city stands on has nothing to examine"))
+          | otherwise -> do
+              verdicts <- traverse (cityVerdict w g ov land) cities
+              pure $ case sequence verdicts of
+                Left e -> StepFailed e
+                Right vs ->
+                  let bad = [ (ctSubject c, why) | (c, Just why) <- zip cities vs ]
+                  in if null bad then StepOk w
+                     else StepFailed (tshow (length bad) <> " of " <> tshow (length cities)
+                                      <> " cities of " <> n <> " stand on ground the answer does not \
+                                         \name honestly: "
+                                      <> listSome [ s <> " (" <> r <> ")" | (s, r) <- bad ])
     -- ---------- detail.feature ----------
     -- "detail changes how much is drawn, never what exists" --
     -- characterization D1, which HOLDS exactly (917 ids at all 13 lod
@@ -1634,11 +1671,6 @@ allSteps =
 -- Every constant below is the SERVER'S, transcribed with its source, not
 -- a number chosen to make anything pass.
 
--- A point on the unit sphere. The manifest publishes bounds centers,
--- label anchors and marker positions as 3-element unit vectors, so this
--- is the wire's own representation, not a re-encoding of it.
-data Vec3 = Vec3 !Double !Double !Double deriving (Eq, Show)
-
 -- A spherical cap: everything within `capRadius` radians of
 -- `capCenter`. Both the view and every resource's `bounds` are one of
 -- these, which is exactly why the visibility predicates are so short --
@@ -1652,23 +1684,10 @@ data Cap = Cap { capCenter :: Vec3, capRadius :: Double } deriving (Eq, Show)
 -- unclamped latitude would disagree with the server about where the
 -- camera IS.
 unitOf :: Center -> Vec3
-unitOf c = Vec3 (cos la * cos lo) (cos la * sin lo) (sin la)
-  where
-    la = radiansOf (latClamp (centerLat c))
-    lo = radiansOf (centerLon c)
+unitOf c = unitOfLatLon (latClamp (centerLat c)) (centerLon c)
 
 radiansOf :: Double -> Double
 radiansOf d = d * pi / 180
-
--- The angle between two unit vectors, in radians. `acos` of a dot
--- product that rounding has pushed a hair outside [-1, 1] is NaN, and a
--- NaN silently makes every comparison below False -- i.e. it would make
--- "is this feature out of view?" answer no for a feature exactly on the
--- boundary. Clamped, so the degenerate case is a real angle (0 or pi)
--- rather than a value that quietly disables the law.
-angleBetween :: Vec3 -> Vec3 -> Double
-angleBetween (Vec3 ax ay az) (Vec3 bx by bz) =
-  acos (max (-1) (min 1 (ax * bx + ay * by + az * bz)))
 
 -- THE MARGIN. `build_query` (lib.rs:646-650):
 --
@@ -2261,6 +2280,180 @@ noPlacementYet n consequence total unplaced misplaced =
     firstReason = case misplaced of
       ((_, why) : _) -> why
       []             -> "(no reason recorded)"
+
+-- ---------- where a name stands ----------
+
+-- The page a bound answer placed its names on, read from the answer's
+-- own `view` and held against the camera the scenario asked for: an
+-- answer placed for some other view is a broken answer, not a view.
+pageOf :: Text -> World -> Either Text Page
+pageOf n w = do
+  v <- boundScene n w
+  vw <- field "view" v
+  (Center la lo, Zoom z) <- maybe (Left (n <> " was not rendered with a camera (no center and zoom \
+                                          \recorded for it), so it has no page for this law to be about"))
+                                  Right (Map.lookup n (cameras w))
+  case vw of
+    Null -> Left (n <> " was answered at no view: its names are placed on no page")
+    _ -> do
+      pg <- Page <$> textField "chart" vw <*> numField "lat" vw <*> numField "lon" vw
+                 <*> numField "zoom" vw <*> numField "width" vw <*> numField "height" vw
+      let apart a b = abs (a - b) > 1e-9
+      if apart (pageLat pg) (latClamp la) || apart (pageLon pg) lo || apart (pageZoom pg) z
+        then Left (n <> " placed its names for the view " <> tshow (pageLat pg, pageLon pg, pageZoom pg)
+                   <> ", not the view it was asked for, " <> tshow (latClamp la, lo, z))
+        else Right pg
+
+-- The overflow budget the answer's own dress declares, in em of each
+-- name's size: how far a land name may spill past its shore, and how
+-- far off a region's edge a city may stand and still be counted in it.
+overflowOf :: Value -> Either Text Double
+overflowOf v = numField "labelOverflowEm" =<< field "dress" v
+
+-- Ring resources per feature id, holes and outers alike: a region's
+-- rings share one feature id on the wire, and its interior is their
+-- even-odd composition, so containment is stated over the whole set.
+ringResourcesOf :: Value -> Either Text (Map.Map Text [(Text, Cap)])
+ringResourcesOf v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,,) <$> textField "feature" f <*> textField "resource" f <*> textField "piece" f) fs
+  let land = [ (fid, rid, r) | (fid, rid, piece) <- rows, piece == "fills" || piece == "claims"
+                             , Just r <- [Map.lookup rid byId]
+                             , textField "kind" r == Right "ring"
+                             , field "whole" r /= Right (Bool True) ]
+  pairs <- traverse (\(fid, rid, r) -> (\c -> (fid, [(rid, c)])) <$> capOf r) land
+  pure (Map.fromListWith (flip (++)) pairs)
+
+fetchRings :: World -> [Text] -> IO (Either Text [[Vec3]])
+fetchRings w rids = do
+  got <- mapM (\rid -> transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)) rids
+  pure (traverse (>>= decodeRingVertices) got)
+
+data LandName = LandName { lnSubject :: Text, lnBox :: LabelBox, lnSize :: Double }
+
+data Standing = Within | Spills Text
+
+landNameSetting :: Text -> World -> Either Text (Globe, Double, Map.Map Text [(Text, Cap)], [LandName])
+landNameSetting n w = do
+  v <- boundScene n w
+  g <- globeOf =<< pageOf n w
+  ov <- overflowOf v
+  rings <- ringResourcesOf v
+  ls <- arrayOf "labels" v
+  names <- fmap concat $ traverse (\l -> do
+    s <- textField "subject" l
+    face <- textField "face" l
+    if "region:" `T.isPrefixOf` s && face == "territory"
+      then case placementOf l of
+        Placed b -> (\sz -> [LandName s b sz]) <$> numField "size" l
+        Unplaced -> Left (s <> " carries no placement, so where its words sit is not a question \
+                             \this answer can be asked")
+        Misplaced why -> Left (s <> " publishes a placement that is not one: " <> why)
+      else Right []) ls
+  pure (g, ov, rings, names)
+
+-- The four corners of the box, as page pixels.
+boxCornersPx :: Globe -> LabelBox -> [(Double, Double)]
+boxCornersPx g b =
+  [ (x * globeWidth g, y * globeHeight g)
+  | x <- [boxLeft b, boxRight b], y <- [boxTop b, boxBottom b] ]
+
+-- Where a page point stands relative to a region: inside it or not,
+-- and how far from its projected shore either way, in em of the name's
+-- own size.
+data Footing = Footing { ftInside :: Bool, ftShoreEm :: Double }
+
+standingOf :: Globe -> Double -> [[Vec3]] -> (Double, Double) -> Either Text Footing
+standingOf g sizePx rings q = case unprojectPx g q of
+  Nothing -> Left "off the globe"
+  Just p -> Right (Footing (insideRings p rings) (pageDistanceToRings g q rings / sizePx))
+
+spillOf :: Double -> Footing -> Maybe Double
+spillOf ov f
+  | ftInside f = Nothing
+  | ftShoreEm f <= ov = Nothing
+  | otherwise = Just (ftShoreEm f)
+
+landNameVerdict :: World -> Globe -> Double -> Map.Map Text [(Text, Cap)] -> LandName
+                -> IO (Either Text Standing)
+landNameVerdict w g ov byFeature (LandName s b size) =
+  case Map.lookup s byFeature of
+    Nothing -> pure (Left (s <> " is named but the answer publishes no ring of it"))
+    Just rcs -> do
+      rings <- fetchRings w (map fst rcs)
+      pure $ do
+        rs <- rings
+        let sizePx = size * globeWidth g / designWidth
+            corners = boxCornersPx g b
+            spills = [ why | c <- corners
+                     , why <- case standingOf g sizePx rs c of
+                         Left e -> ["a corner is " <> e]
+                         Right f -> [ tshow (roundEm d) <> " em past its shore" | Just d <- [spillOf ov f] ] ]
+        pure (case spills of
+                [] -> Within
+                (why : _) -> Spills why)
+
+roundEm :: Double -> Double
+roundEm d = fromIntegral (round (d * 100) :: Int) / 100
+
+-- The design page every label size is stated against
+-- (crates/map-viewer/src/page.html DESIGN_WIDTH).
+designWidth :: Double
+designWidth = 1200
+
+data City = City { ctSubject :: Text, ctAt :: Vec3, ctSize :: Double, ctGround :: Maybe Text }
+
+citySetting :: Text -> World -> Either Text (Globe, Double, Map.Map Text [(Text, Cap)], [City])
+citySetting n w = do
+  v <- boundScene n w
+  g <- globeOf =<< pageOf n w
+  ov <- overflowOf v
+  land <- ringResourcesOf v
+  ls <- arrayOf "labels" v
+  cities <- fmap concat $ traverse (\l -> do
+    s <- textField "subject" l
+    face <- textField "face" l
+    if face == "place"
+      then do
+        at <- vec3Of =<< field "anchor" l
+        sz <- numField "size" l
+        let ground = either (const Nothing) Just (textField "ground" l)
+        pure [City s at sz ground]
+      else Right []) ls
+  pure (g, ov, land, cities)
+
+-- A city's ground, judged with the same slack both ways: a city named
+-- as standing in a region may stand up to the overflow outside its
+-- shore, and a city declared unclaimed is only a lie when it stands
+-- deeper than the overflow inside some region the answer draws.
+cityVerdict :: World -> Globe -> Double -> Map.Map Text [(Text, Cap)] -> City -> IO (Either Text (Maybe Text))
+cityVerdict w g ov land (City _ at size ground) = case (ground, placePx g at) of
+  (_, Nothing) -> pure (Right (Just "stands behind the globe of the view it was sent for"))
+  (Nothing, _) -> pure (Right (Just "says nothing about the ground it stands on: silently nowhere"))
+  (Just "unclaimed", Just q) -> do
+    let candidates = [ (fid, rcs) | (fid, rcs) <- Map.toList land
+                                  , any (\(_, c) -> pointInView c at) rcs ]
+    found <- mapM (\(fid, rcs) -> fmap (fmap ((,) fid)) (fetchRings w (map fst rcs))) candidates
+    pure $ do
+      fs <- sequence found
+      let deepInside f = ftInside f && ftShoreEm f > ov
+          standingIn = [ fid | (fid, rs) <- fs, either (const False) deepInside (standingOf g sizePx rs q) ]
+      pure (case standingIn of
+              [] -> Nothing
+              (fid : _) -> Just ("declared unclaimed, but stands inside " <> fid))
+  (Just fid, Just q) -> case Map.lookup fid land of
+    Nothing -> pure (Right (Just ("names " <> fid <> " as its ground, which the answer draws no land ring of")))
+    Just rcs -> do
+      rings <- fetchRings w (map fst rcs)
+      pure $ do
+        rs <- rings
+        pure (case standingOf g sizePx rs q of
+                Left why -> Just ("names " <> fid <> " as its ground but is " <> why)
+                Right f -> (\d -> "names " <> fid <> " as its ground but stands "
+                                  <> tshow (roundEm d) <> " em outside it") <$> spillOf ov f)
+  where
+    sizePx = size * globeWidth g / designWidth
 
 -- A handful of ids in a failure message, the same way `describeSetDiff`
 -- bounds its own: five is enough to recognize a pattern, and a scene

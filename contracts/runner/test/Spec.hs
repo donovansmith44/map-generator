@@ -10,6 +10,7 @@ import Gherkin.Render
 import Capture
 import Pattern
 import World
+import Sphere
 import Steps
 import Run
 import qualified Check
@@ -29,6 +30,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import GHC.Float (castFloatToWord32)
 import Control.Monad (when)
 import System.Directory
   (doesFileExist, getTemporaryDirectory, createDirectoryIfMissing,
@@ -1580,6 +1582,8 @@ main = hspec $ do
             , (Then, "every label of viewed carries a placement")
             , (Then, "no two labels of viewed overlap")
             , (Then, "every label of viewed is legible at the view it was asked for")
+            , (Then, "every land name of viewed sits within its own region, give or take the overflow its style declares")
+            , (Then, "every city of viewed stands in a region it names, or on ground declared unclaimed")
             , (Then, "every label of viewed names something viewed publishes")
             , (Then, "one and other draw the same features")
             , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
@@ -5183,6 +5187,119 @@ main = hspec $ do
   -- computed "by name" at all, and was the only new definition with no
   -- behavioural test. `refusalVerdict` is now a pure exported core, and
   -- these are its four answers.
+  describe "where a name stands: the sphere and the page, mirrored from the server" $ do
+    let sq :: Double -> [Vec3]
+        sq d = [ unitOfLatLon (-d) (-d), unitOfLatLon (-d) d, unitOfLatLon d d, unitOfLatLon d (-d) ]
+        pg = Page "globe" 0 0 10 1200 1200
+        Right g = globeOf pg
+    it "a point in the middle of a small square ring is inside it, a far point is not, \
+       \and the ring read backwards says the same" $ do
+      insideRing (unitOfLatLon 0 0) (sq 3) `shouldBe` True
+      insideRing (unitOfLatLon 0 20) (sq 3) `shouldBe` False
+      insideRing (unitOfLatLon 0 0) (reverse (sq 3)) `shouldBe` True
+      insideRing (unitOfLatLon 0 20) (reverse (sq 3)) `shouldBe` False
+    it "even-odd over a ring and a hole inside it: the hole is outside" $ do
+      insideRings (unitOfLatLon 0 0) [sq 3, sq 1] `shouldBe` False
+      insideRings (unitOfLatLon 2 2) [sq 3, sq 1] `shouldBe` True
+    it "the page projects and unprojects the same point, and hides the far side" $ do
+      let p = unitOfLatLon 2 3
+      case placePx g p >>= unprojectPx g of
+        Nothing -> expectationFailure "a front point vanished"
+        Just (Vec3 x y z) -> do
+          let Vec3 px py pz = p
+          abs (x - px) + abs (y - py) + abs (z - pz) < 1e-9 `shouldBe` True
+      placePx g (unitOfLatLon 0 170) `shouldBe` Nothing
+      placePx g (unitOfLatLon 0 0) `shouldBe` Just (600, 600)
+    it "refuses a chart it does not mirror" $
+      either (const True) (const False) (globeOf pg { pageChart = "flat" }) `shouldBe` True
+
+  describe "the step phase: where a name stands, judged against the rings the answer draws" $ do
+    let le32b :: Int -> BS.ByteString
+        le32b n = BS.pack [ fromIntegral (n `div` (256 ^ k) `mod` 256) | k <- [0 .. 3 :: Int] ]
+        f32b :: Double -> BS.ByteString
+        f32b d = le32b (fromIntegral (castFloatToWord32 (realToFrac d)))
+        mgr1 :: [Vec3] -> BS.ByteString
+        mgr1 pts = BS.concat
+          [ BS.pack [0x4D, 0x47, 0x52, 0x31], le32b 1, BS.replicate 32 0
+          , le32b (length pts), le32b 0
+          , BS.concat [ BS.concat [f32b x, f32b y, f32b z] | Vec3 x y z <- pts ] ]
+        sq :: Double -> [Vec3]
+        sq d = [ unitOfLatLon (-d) (-d), unitOfLatLon (-d) d, unitOfLatLon d d, unitOfLatLon d (-d) ]
+        square = mgr1 (sq 3)
+        rawGet url | "id=r1" `T.isSuffixOf` url = pure (Right square)
+                   | otherwise = pure (Left ("no such resource: " <> url))
+        vec :: Vec3 -> A.Value
+        vec (Vec3 x y z) = A.toJSON [x, y, z]
+        body :: [A.Value] -> A.Value -> A.Value
+        body labels view = A.object
+          [ "features" A..= [A.object [ "feature" A..= ("region:sq" :: T.Text), "resource" A..= ("r1" :: T.Text)
+                                      , "piece" A..= ("fills" :: T.Text) ]]
+          , "resources" A..= [A.object [ "id" A..= ("r1" :: T.Text), "kind" A..= ("ring" :: T.Text)
+                                       , "bytes" A..= (0 :: Int), "vertices" A..= (4 :: Int)
+                                       , "bounds" A..= A.object [ "center" A..= vec (unitOfLatLon 0 0), "radius" A..= (0.1 :: Double) ] ]]
+          , "labels" A..= labels, "markers" A..= ([] :: [A.Value]), "inscriptions" A..= ([] :: [A.Value])
+          , "view" A..= view
+          , "dress" A..= A.object [ "labelOverflowEm" A..= (0.5 :: Double) ] ]
+        theView = A.object [ "chart" A..= ("globe" :: T.Text), "lat" A..= (0 :: Double), "lon" A..= (0 :: Double)
+                           , "zoom" A..= (10 :: Double), "width" A..= (1200 :: Double), "height" A..= (1200 :: Double) ]
+        landName :: (Double, Double, Double, Double) -> A.Value
+        landName (l, t, r, b) = A.object
+          [ "subject" A..= ("region:sq" :: T.Text), "text" A..= ("SQUARE" :: T.Text), "face" A..= ("territory" :: T.Text)
+          , "size" A..= (14 :: Double), "anchor" A..= vec (unitOfLatLon 0 0)
+          , "placement" A..= A.object [ "left" A..= l, "top" A..= t, "right" A..= r, "bottom" A..= b ] ]
+        city :: Vec3 -> Maybe T.Text -> A.Value
+        city at ground = A.object $
+          [ "subject" A..= ("place:x" :: T.Text), "text" A..= ("X" :: T.Text), "face" A..= ("place" :: T.Text)
+          , "size" A..= (12 :: Double), "anchor" A..= vec at ]
+          ++ [ "ground" A..= gr | Just gr <- [ground] ]
+        run :: T.Text -> A.Value -> IO StepOutcome
+        run sentence v = case firstOutcome Then sentence of
+          Nothing -> pure (StepFailed "NO DEFINITION MATCHED THIS BODY")
+          Just f -> f (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                        { bound = Map.fromList [("view", ("", v))]
+                        , cameras = Map.fromList [("view", (Center 0 0, Zoom 10))]
+                        , transportRaw = rawGet }
+        landLaw = "every land name of view sits within its own region, give or take the overflow its style declares"
+        cityLaw = "every city of view stands in a region it names, or on ground declared unclaimed"
+        pass o = case o of
+          StepOk _ -> pure ()
+          StepFailed e -> expectationFailure ("expected a pass, got failure: " <> T.unpack e)
+          StepSkipped e -> expectationFailure ("expected a pass, got skip: " <> T.unpack e)
+        failsWith needle o = case o of
+          StepFailed e -> e `shouldSatisfy` T.isInfixOf needle
+          StepOk _ -> expectationFailure "expected a failure, got a pass"
+          StepSkipped e -> expectationFailure ("expected a failure, got skip: " <> T.unpack e)
+    it "an answer at no view has no page for a name to sit on, and says so" $ do
+      o <- run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] A.Null)
+      failsWith "answered at no view" o
+    it "an answer placed for some other view than the one asked is a broken answer" $ do
+      let elsewhere = A.object [ "chart" A..= ("globe" :: T.Text), "lat" A..= (5 :: Double), "lon" A..= (0 :: Double)
+                               , "zoom" A..= (10 :: Double), "width" A..= (1200 :: Double), "height" A..= (1200 :: Double) ]
+      o <- run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] elsewhere)
+      failsWith "not the view it was asked for" o
+    it "a land name whose box sits inside its own ring passes" $
+      pass =<< run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] theView)
+    it "a land name whose box spills far past its shore fails, naming it and how far" $ do
+      o <- run landLaw (body [landName (0.2, 0.48, 0.8, 0.52)] theView)
+      failsWith "1 of 1 land names" o
+      failsWith "region:sq" o
+      failsWith "em past its shore" o
+    it "a spill within the declared overflow is forgiven: the shore is at 424 px and a \
+       \corner 4 px outside it is 0.29 em at size 14" $
+      pass =<< run landLaw (body [landName (0.35, 0.48, 0.55, 0.52)] theView)
+    it "a city that names the region it stands in passes; one that names it from \
+       \outside fails" $ do
+      pass =<< run cityLaw (body [city (unitOfLatLon 0 0) (Just "region:sq")] theView)
+      o <- run cityLaw (body [city (unitOfLatLon 0 20) (Just "region:sq")] theView)
+      failsWith "em outside it" o
+    it "a city declared unclaimed passes on open ground and fails deep inside a region" $ do
+      pass =<< run cityLaw (body [city (unitOfLatLon 0 20) (Just "unclaimed")] theView)
+      o <- run cityLaw (body [city (unitOfLatLon 0 0) (Just "unclaimed")] theView)
+      failsWith "declared unclaimed, but stands inside region:sq" o
+    it "a city that says nothing about its ground is silently nowhere, which is the failure" $ do
+      o <- run cityLaw (body [city (unitOfLatLon 0 0) Nothing] theView)
+      failsWith "silently nowhere" o
+
   describe "the step phase: \"refused by name\" is computed, and a \
            \crashed server is not a refusal" $ do
     let w0 = mkWorld "http://x" (\_ -> pure (Left "no")) ""
