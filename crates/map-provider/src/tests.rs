@@ -1092,14 +1092,14 @@ mod scaling_laws {
         );
     }
 
-    /// THE WORLD BEYOND THE CAMERA STAYS WHOLE — AND COARSE. A far
-    /// area is never culled (the retained world has no holes to punch)
-    /// but ships at the hemisphere's derived detail, while the ground
-    /// under the camera refines at the query's own tolerance.
+    /// THE WORLD BEYOND THE VIEW IS NOT SENT. An area whose cap cannot
+    /// reach the view never leaves the provider; the ground the view
+    /// can reach ships at the query's own detail, whatever the camera.
     #[test]
-    fn the_world_beyond_the_camera_arrives_coarse() {
+    fn the_world_beyond_the_view_is_not_sent() {
         let p = provider(store_with(&[
             ("near", dense_ring(28.0, 30.0, 10.0, 64)),
+            ("edge", dense_ring(20.0, 50.0, 10.0, 64)),
             ("far", dense_ring(-45.0, -120.0, 10.0, 64)),
         ]));
         let view = Bbox {
@@ -1107,37 +1107,19 @@ mod scaling_laws {
             radius: 10f64.to_radians(),
         };
         let fine = 1e-4;
-        // mirror of the provider's derivation: the same page at the
-        // hemisphere's 90° half-extent
-        let floor = (fine * (std::f64::consts::FRAC_PI_2 / (view.radius / 1.8))).min(0.01);
-        let pts_of = |scene: &map_types::Snapshot, name: &str| -> usize {
+        let pts_of = |scene: &map_types::Snapshot, name: &str| -> Option<usize> {
             scene
                 .regions
                 .iter()
                 .find(|r| r.entity.as_deref() == Some(name))
-                .unwrap_or_else(|| panic!("{name} present — the world stays whole"))
-                .outer
-                .iter()
-                .map(|ring| ring.points().len())
-                .sum()
+                .map(|r| r.outer.iter().map(|ring| ring.points().len()).sum())
         };
         let with_view = p.render(&q(fine, Some(view))).unwrap();
         let fine_all = p.render(&q(fine, None)).unwrap();
-        let coarse_all = p.render(&q(floor, None)).unwrap();
-        assert_eq!(
-            pts_of(&with_view, "near"),
-            pts_of(&fine_all, "near"),
-            "inside the cap: the query's own detail"
-        );
-        assert_eq!(
-            pts_of(&with_view, "far"),
-            pts_of(&coarse_all, "far"),
-            "beyond the cap: exactly the derived hemisphere floor"
-        );
-        assert!(
-            pts_of(&coarse_all, "far") < pts_of(&fine_all, "far"),
-            "the floor genuinely coarsens this geometry"
-        );
+        assert_eq!(pts_of(&with_view, "near"), pts_of(&fine_all, "near"), "in view: the query's own detail");
+        assert_eq!(pts_of(&with_view, "edge"), pts_of(&fine_all, "edge"), "within the margin: kept whole for the encoder's exact cut");
+        assert_eq!(pts_of(&with_view, "far"), None, "beyond the view's reach: not sent");
+        assert!(pts_of(&fine_all, "far").is_some(), "with no view the whole world is sent");
     }
 
     /// The whole-sphere sentinel is never culled: its cap covers the

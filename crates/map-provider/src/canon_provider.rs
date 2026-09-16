@@ -329,7 +329,7 @@ impl CanonProvider {
     /// FEATURE's question (identity is kept, detail is not), answered
     /// where the feature is assembled, never here per-ring.
     fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<RingFidelity> {
-        let lod = self.lod_at(id, q);
+        let lod = q.lod;
         let b = self.store.borders().get(&id)?;
         match Ring::new(map_types::simplify_polyline(&b.0, lod)) {
             Ok(r) => Some(RingFidelity::Survives(r)),
@@ -337,34 +337,28 @@ impl CanonProvider {
         }
     }
 
-    /// THE CAMERA'S DETAIL BELONGS TO THE CAMERA'S GROUND. Inside the
-    /// view cap a border refines at the query's own tolerance; beyond
-    /// the cap's reach it ships at the HEMISPHERE'S detail — whole,
-    /// never culled, never sliced. The floor is DERIVED, not tuned:
-    /// the query's lod is (half-extent / page width), the viewport's
-    /// half-extent is radius/1.8 (the provider margin the query
-    /// declared), so the same page at the hemisphere's 90° would ask
-    /// lod × (π/2)/(radius/1.8) — clamped by the same 0.01 ceiling
-    /// the auto law keeps. Content addressing makes the far world's
-    /// coarse rings IDENTICAL to the hemisphere scene's, so a zoom
-    /// refines only the ground it actually looks at. (The old cull
-    /// punched holes in the retained world; the old uniform fine lod
-    /// refined every antipodal island for zero pixels.)
-    fn lod_at(&self, id: map_canon::BorderId, q: &RenderQuery) -> Lod {
-        let Some(view) = &q.viewport else { return q.lod };
-        let Some((center, radius)) = self.border_cap.get(&id) else { return q.lod };
-        if center.angle_to(&view.center) <= view.radius + radius {
-            return q.lod;
+    /// WHAT THE VIEW CAN REACH. A border whose cap lies beyond the
+    /// view cap, or entirely beyond the horizon, never leaves the
+    /// provider. The margin is the encoder's: it measures the bounds it
+    /// publishes on the simplified, densified, antimeridian-split
+    /// pieces of the ring, and every such cap lies within three radii
+    /// of the border's own, so a border refused here is refused by any
+    /// bound the wire could publish, and the exact cut is the
+    /// encoder's, on the bounds it sends.
+    fn reaches_view(&self, id: map_canon::BorderId, q: &RenderQuery) -> bool {
+        let Some(view) = &q.viewport else { return true };
+        let Some((center, radius)) = self.border_cap.get(&id) else { return true };
+        let reach = 3.0 * radius;
+        if reach >= std::f64::consts::PI {
+            return true;
         }
-        let half_extent = (view.radius / 1.8).max(1e-9);
-        let floor = q.lod.0 * (std::f64::consts::FRAC_PI_2 / half_extent);
-        Lod(q.lod.0.max(floor.min(0.01)))
+        let angle = center.angle_to(&view.center);
+        angle <= view.radius + reach && angle - reach <= std::f64::consts::FRAC_PI_2
     }
 
     fn line_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Vec<UnitVec>> {
-        let lod = self.lod_at(id, q);
         let b = self.store.borders().get(&id)?;
-        Some(map_types::simplify_polyline(&b.0, lod))
+        Some(map_types::simplify_polyline(&b.0, q.lod))
     }
 
     /// The features active at `t` in one layer, in deterministic order.
@@ -467,7 +461,7 @@ impl CanonProvider {
         // way — and the half-pixel law governs them: they do not ship.
         let mut outer = Vec::new();
         let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
-        for r in &a.rings {
+        for r in a.rings.iter().filter(|r| self.reaches_view(**r, q)) {
             match self.ring_points(*r, q) {
                 Some(RingFidelity::Survives(ring)) => outer.push(ring),
                 Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
@@ -487,7 +481,7 @@ impl CanonProvider {
         // A hole can never carry identity — its parent ring is the
         // feature's presence — so a below-limit hole is always detail.
         let mut holes = Vec::new();
-        for h in &a.holes {
+        for h in a.holes.iter().filter(|h| self.reaches_view(**h, q)) {
             if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, q) {
                 holes.push(ring);
             }
@@ -752,9 +746,9 @@ impl CanonProvider {
                         else {
                             continue;
                         };
-                        // read the border directly: a line is an OPEN
-                        // path and may be as short as two points —
-                        // simplified and viewport-culled like any ring.
+                        if !self.reaches_view(l.border, q) {
+                            continue;
+                        }
                         if let Some(pts) = self.line_points(l.border, q) {
                             let sources = self.sources_of(fid);
                             scene.attribution.extend(sources.iter().cloned());
@@ -780,11 +774,6 @@ impl CanonProvider {
                         }
                     }
                     Feature::Memory(m) => {
-                        if let Some(view) = &q.viewport {
-                            if m.at.angle_to(&view.center) > view.radius {
-                                continue;
-                            }
-                        }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
                         let place =
@@ -810,11 +799,6 @@ impl CanonProvider {
                         }
                     }
                     Feature::Point(p) => {
-                        if let Some(view) = &q.viewport {
-                            if p.at.angle_to(&view.center) > view.radius {
-                                continue;
-                            }
-                        }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
                         // A standing place is the Markers piece,

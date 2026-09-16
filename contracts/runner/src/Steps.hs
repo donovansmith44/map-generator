@@ -367,12 +367,12 @@ allSteps =
                 else Left ("this law compares one reference scene against " <> viewed
                            <> ", but names two: " <> ref <> " and " <> ref2)
           vw <- cameraOf viewed w
-          caps <- featureCaps =<< boundScene ref w
-          seen <- featureIdSet =<< boundScene viewed w
-          let ins  = [ f | (f, c) <- caps, inView vw c ]
-              outs = [ f | (f, c) <- caps, outOfView vw c ]
-              missing = [ f | f <- ins, not (f `Set.member` seen) ]
-              leaked  = [ f | f <- outs, f `Set.member` seen ]
+          caps <- geometryEntryCaps =<< boundScene ref w
+          seen <- geometryEntries =<< boundScene viewed w
+          let ins  = [ e | (e, c) <- caps, inView vw c ]
+              outs = [ e | (e, c) <- caps, outOfView vw c ]
+              missing = [ describeEntry e | e <- ins, not (e `Set.member` seen) ]
+              leaked  = [ describeEntry e | e <- outs, e `Set.member` seen ]
           pure $ case (null ins, null outs) of
             (True, _) -> StepSkipped
               ("no feature of " <> ref <> " is in " <> viewed
@@ -383,10 +383,32 @@ allSteps =
             _ | null missing && null leaked -> StepOk w
               | otherwise -> StepFailed
                   (viewed <> " does not partition " <> ref <> "'s "
-                   <> tshow (length caps) <> " features by the view: "
+                   <> tshow (length caps) <> " geometry entries by the view: "
                    <> tshow (length missing) <> " in view but absent ("
                    <> listSome missing <> "); " <> tshow (length leaked)
                    <> " out of view but sent (" <> listSome leaked <> ")")
+  , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every marker of "
+                                          <*> capUntil @BindName " in view and omits every marker of "
+                                          <*> capUntil @BindName " out of view")) $
+      \(BindName viewed, BindName ref, BindName ref2) w -> pure $
+        either StepFailed id $ do
+          () <- sameTwice "reference scene" ref ref2
+          vw <- cameraOf viewed w
+          ms <- markerPoints =<< boundScene ref w
+          seen <- Set.fromList . map fst <$> (markerPoints =<< boundScene viewed w)
+          let ins  = [ i | (i, p) <- ms, pointInView vw p ]
+              outs = [ i | (i, p) <- ms, not (pointInView vw p) ]
+              missing = [ i | i <- ins, not (i `Set.member` seen) ]
+              leaked  = [ i | i <- outs, i `Set.member` seen ]
+          pure $ if null ms
+            then StepSkipped (ref <> " carries no markers at this draw; a law about which markers a view keeps has nothing to examine")
+            else if null missing && null leaked then StepOk w
+            else StepFailed
+                  (viewed <> " does not partition " <> ref <> "'s " <> tshow (length ms)
+                   <> " markers by the view: " <> tshow (length missing)
+                   <> " in view but absent (" <> listSome missing <> "); "
+                   <> tshow (length leaked) <> " out of view but sent ("
+                   <> listSome leaked <> ")")
     -- "moving the camera never redraws what stays visible" -- content
     -- addressing, stated the way it can actually fail: for every id the
     -- two manifests SHARE, the whole published record must agree.
@@ -1994,6 +2016,37 @@ featureCaps v = do
         Nothing -> Left ("feature " <> fid <> " references resource " <> rid
                          <> ", which the manifest does not publish")
         Just r  -> (,) fid <$> capOf r
+
+-- A GEOMETRY ENTRY: one (feature, resource) pair of a region or a
+-- boundary. The culling law is stated over these, not over feature
+-- ids, because a region's rings share one id and the view may hold
+-- some of them and not others; and not over the markers' buffers,
+-- whose bounds are the buffer's and whose law is their own.
+type GeometryEntry = (Text, Text)
+
+describeEntry :: GeometryEntry -> Text
+describeEntry (fid, rid) = fid <> "/" <> rid
+
+geometryEntryCaps :: Value -> Either Text [(GeometryEntry, Cap)]
+geometryEntryCaps v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,) <$> textField "feature" f <*> textField "resource" f) fs
+  traverse (one byId) [ e | e@(fid, _) <- rows, isGeometry fid ]
+  where
+    one byId e@(fid, rid) = case Map.lookup rid byId of
+      Nothing -> Left ("feature " <> fid <> " references resource " <> rid
+                       <> ", which the manifest does not publish")
+      Just r  -> (,) e <$> capOf r
+
+geometryEntries :: Value -> Either Text (Set GeometryEntry)
+geometryEntries v = do
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,) <$> textField "feature" f <*> textField "resource" f) fs
+  pure (Set.fromList [ e | e@(fid, _) <- rows, isGeometry fid ])
+
+isGeometry :: Text -> Bool
+isGeometry fid = "region:" `T.isPrefixOf` fid || "boundary:" `T.isPrefixOf` fid
 
 -- Labels by their SUBJECT (the feature they name) and markers by their
 -- PLACE, each with the point it is drawn at. Subject and place are the

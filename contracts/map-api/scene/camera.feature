@@ -14,7 +14,10 @@ Feature: the camera — what you look at is what you get, and nothing else chang
 
   Names are not nested this way: which names a view draws is the
   label-placement feature's business, and a name drawn at one zoom may
-  yield at another to a neighbour that grew.
+  yield at another to a neighbour that grew. The laws about markers
+  look where this canon's markers stand, at the Levant camera every
+  fixture is anchored to, because a camera drawn anywhere on the globe
+  almost never sees one.
 
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
@@ -27,11 +30,23 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     When I render pieces all at year -1405 in style canaan looking at 31.5,35.0 zoom 4 detail fine
     Then the response equals fixture "scene-1405-levant-cam"
 
-  @target @property
+  @property
   Scenario: everything in view is sent, and nothing far beyond the view is
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     And I render pieces <somePieces> at year <someYear> in style <someStyle> detail fine as world
     Then viewed keeps every feature of world in view and omits every feature of world out of view
+
+  @property
+  Scenario: every marker in view is sent
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at 31.5,35.0 zoom <someZoom> detail fine as viewed
+    And I render pieces <somePieces> at year <someYear> in style <someStyle> detail fine as world
+    Then viewed keeps every marker of world in view and omits every marker of world out of view
+
+  @property
+  Scenario: no marker beyond the view is sent
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
+    And I render pieces <somePieces> at year <someYear> in style <someStyle> detail fine as world
+    Then viewed keeps every marker of world in view and omits every marker of world out of view
 
   @property
   Scenario: moving the camera never redraws what stays visible
@@ -41,17 +56,17 @@ Feature: the camera — what you look at is what you get, and nothing else chang
 
   @property
   Scenario: zooming out only reveals markers — it never removes them
-    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as narrow
-    And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> doubled detail fine as wide
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at 31.5,35.0 zoom <someZoom> detail fine as narrow
+    And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at 31.5,35.0 zoom <someZoom> doubled detail fine as wide
     Then narrow's markers are a subset of wide's
 
   @property
   Scenario: zooming in never loses a marker you are looking at
-    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as wide
-    And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> halved detail fine as narrow
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at 31.5,35.0 zoom <someZoom> detail fine as wide
+    And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at 31.5,35.0 zoom <someZoom> halved detail fine as narrow
     Then every marker of wide still in narrow's view is kept by narrow
 
-  @target @property
+  @property
   Scenario: the far side of the globe is never sent
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     Then no feature of viewed is beyond the horizon of <someCenter>

@@ -77,6 +77,23 @@ rule even though the change is a correction.
   shortened in silence. `resources.feature`'s refusal law goes green
   and loses its `@target`.
 
+- Breaking, wire: a scene asked at a camera is cut to the view. A
+  geometry entry whose published bounds miss the view cap, or lie
+  wholly beyond the horizon, is not sent, nor is a resource nothing
+  references; markers and inscriptions are cut per point at the view
+  cap clipped to the horizon. The provider drops borders whose own cap
+  cannot reach the view under a margin derived from the encoder's
+  bounds and ships the rest at the query's detail (the hemisphere
+  detail floor is retired: the far world no longer travels at all).
+  `camera.feature`'s two-sided culling law and its far-side law go
+  green and lose `@target`; the two-sided law is stated over geometry
+  entries (feature, resource) since a region's rings may straddle the
+  view. Two marker laws are added, one at the Levant camera where this
+  canon's markers stand and one anywhere on the globe, so both halves
+  of the partition are exercised; the marker nesting laws move to the
+  Levant camera for the same reason. `scene-1405-levant-cam` is
+  re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

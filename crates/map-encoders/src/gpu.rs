@@ -3,8 +3,9 @@
 //! of a picture. The SVG encoder answers "what does this camera see";
 //! this one answers "what does a retained renderer need resident" —
 //! a manifest of semantic references plus content-addressed binary
-//! geometry payloads, so a camera change downstream is a uniform
-//! update, never a re-encode (§R1/§R2).
+//! geometry payloads. Asked at a view, the manifest carries what that
+//! view can reach and where its names sit; asked at none, the whole
+//! world, unplaced.
 //!
 //! Laws carried here:
 //! - the manifest holds NO projected vertices, no rasterized frame,
@@ -73,6 +74,18 @@ pub struct SphericalBounds {
     pub center: (f64, f64, f64),
     /// Angular radius in radians.
     pub radius: f64,
+}
+
+impl SphericalBounds {
+    /// In view when this cap meets the view cap; hidden when even its
+    /// nearest point lies more than a quarter turn from the eye. The
+    /// whole-sphere sentinel meets every view and hides from none.
+    pub fn reaches(&self, view: &map_types::Bbox) -> bool {
+        let (x, y, z) = self.center;
+        let dot = (x * view.center.x() + y * view.center.y() + z * view.center.z()).clamp(-1.0, 1.0);
+        let angle = dot.acos();
+        angle <= view.radius + self.radius && angle - self.radius <= std::f64::consts::FRAC_PI_2
+    }
 }
 
 /// Immutable metadata sufficient for caching and residency (§19).
@@ -614,6 +627,17 @@ impl GpuSceneEncoder {
                 });
             }
         }
+        let cap = self.camera.as_ref().map(|c| c.cap());
+        // A standing point is in view when the view cap holds it and the
+        // horizon does not hide it.
+        let point_in_view = |at: &UnitVec| match &cap {
+            None => true,
+            Some(v) => v.center.angle_to(at) <= v.radius.min(std::f64::consts::FRAC_PI_2),
+        };
+        let markers_in_view: Vec<&map_types::scene::StyledMarker> =
+            scene.markers.iter().filter(|m| point_in_view(&m.at)).collect();
+        let inscriptions_in_view: Vec<&map_types::scene::StyledInscription> =
+            scene.inscriptions.iter().filter(|m| point_in_view(&m.at)).collect();
         // MARKERS, BY PAINT AND PIECE. The previous key was paint alone,
         // so every piece's markers landed in one buffer whose CONTENTS
         // depended on which pieces were enabled — turning journeys off
@@ -631,7 +655,7 @@ impl GpuSceneEncoder {
         // re-sort every marker entry against every other one, changing
         // pixels wherever markers of unrelated paints overlap.
         let mut by_style_piece: BTreeMap<(StyleKey, Piece), Vec<UnitVec>> = BTreeMap::new();
-        for m in &scene.markers {
+        for m in &markers_in_view {
             let sk = style_of(
                 &mut styles,
                 GpuStyle::Marker { color: m.style.color, size: m.style.size },
@@ -716,8 +740,7 @@ impl GpuSceneEncoder {
             })
             .collect();
 
-        let markers: Vec<MarkerResource> = scene
-            .markers
+        let markers: Vec<MarkerResource> = markers_in_view
             .iter()
             .map(|m| MarkerResource {
                 at: (m.at.x(), m.at.y(), m.at.z()),
@@ -727,8 +750,7 @@ impl GpuSceneEncoder {
             })
             .collect();
 
-        let inscriptions: Vec<InscriptionResource> = scene
-            .inscriptions
+        let inscriptions: Vec<InscriptionResource> = inscriptions_in_view
             .iter()
             .map(|m| InscriptionResource {
                 at: (m.at.x(), m.at.y(), m.at.z()),
@@ -737,6 +759,26 @@ impl GpuSceneEncoder {
             })
             .collect();
 
+        // THE VIEW'S CUT, on the bounds the wire publishes: an entry
+        // whose cap misses the view cap, or lies wholly beyond the
+        // horizon, is not sent, and a resource nothing references any
+        // more goes with it.
+        let (features, resources) = match &cap {
+            None => (features, resources),
+            Some(v) => {
+                let bounds_of: BTreeMap<ResourceId, SphericalBounds> =
+                    resources.iter().map(|r| (r.descriptor.id, r.descriptor.bounds)).collect();
+                let features: Vec<FeatureInstance> = features
+                    .into_iter()
+                    .filter(|f| bounds_of.get(&f.resource).is_some_and(|b| b.reaches(v)))
+                    .collect();
+                let referenced: std::collections::BTreeSet<ResourceId> =
+                    features.iter().map(|f| f.resource).collect();
+                let resources =
+                    resources.into_iter().filter(|r| referenced.contains(&r.descriptor.id)).collect();
+                (features, resources)
+            }
+        };
         EncodedScene {
             manifest: SceneManifest {
                 scene_revision: scene.map_pid().hash,

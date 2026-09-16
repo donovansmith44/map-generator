@@ -1570,6 +1570,7 @@ main = hspec $ do
             , (When, "I render pieces fills at year -1405 in no style")
             , (Then, "viewed keeps every feature of world in view and omits every feature of world out of view")
             , (Then, "every resource here and there share is byte-identical in both")
+            , (Then, "viewed keeps every marker of world in view and omits every marker of world out of view")
             , (Then, "narrow's markers are a subset of wide's")
             , (Then, "every marker of wide still in narrow's view is kept by narrow")
             , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
@@ -4592,6 +4593,34 @@ main = hspec $ do
                            [] []
         camAt0 = (Center 0 0, Zoom 2)
 
+    it "the two-sided marker law partitions markers by the view cap, both halves" $ do
+      let world = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+          honest = manifest [] [] [] [mrk "place:near" (east 0)]
+          leaky = world
+          hollow = manifest [] [] [] []
+      shouldPass =<< runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+                       [("viewed", honest), ("world", world)] [("viewed", camAt0)]
+      shouldFailWith "out of view but sent" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", leaky), ("world", world)] [("viewed", camAt0)]
+      shouldFailWith "in view but absent" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", hollow), ("world", world)] [("viewed", camAt0)]
+      shouldPass =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", honest), ("world", honest)] [("viewed", camAt0)]
+      shouldSkipWith "carries no markers" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", hollow), ("world", hollow)] [("viewed", camAt0)]
+    it "the two-sided culling law is stated over geometry ENTRIES: a region whose \
+       \rings straddle the view keeps the ring in view and drops the one beyond" $ do
+      let world = manifest [feat "region:r" "rn", feat "region:r" "rf", feat "markers:markers" "pm"]
+                           [res "rn" 10 (east 0) 0.001, res "rf" 10 (east 100) 0.001, res "pm" 1 (east 50) 1.0]
+                           [] []
+          honest = manifest [feat "region:r" "rn", feat "markers:markers" "pm2"]
+                            [res "rn" 10 (east 0) 0.001, res "pm2" 1 (east 0) 0.0] [] []
+      shouldPass =<< runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+                       [("viewed", honest), ("world", world)] [("viewed", camAt0)]
     it "the two-sided culling law computes BOTH halves and reports the \
        \real violation -- an honest @target, never a stub" $ do
       -- `viewed` sent both features; the far one is out of view, so the

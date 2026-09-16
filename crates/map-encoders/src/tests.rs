@@ -1835,6 +1835,46 @@ fn a_land_name_keeps_within_its_land_by_the_declared_overflow() {
 }
 
 #[test]
+fn a_viewed_answer_sends_what_the_view_reaches_and_nothing_beyond() {
+    let region = |n: u64, lat: f64, lon: f64, r: f64| StyledRegion {
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(n)),
+        entity: None,
+        outer: vec![Ring::new(vec![uv(lat - r, lon - r), uv(lat - r, lon + r), uv(lat + r, lon + r), uv(lat + r, lon - r)]).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: Default::default(),
+        piece: map_types::Piece::Fills,
+    };
+    let marker = |lat: f64, lon: f64| StyledMarker {
+        at: uv(lat, lon),
+        style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
+        sources: Default::default(),
+        place: Some(map_types::AtlasPlaceRef(atlas_graph_types::covenant::PlaceId::new(format!("p{lat}_{lon}")))),
+        piece: map_types::Piece::Markers,
+    };
+    let mut scene = Snapshot::empty();
+    scene.regions.push(region(1, 0.0, 0.0, 1.0));
+    scene.regions.push(region(2, 0.0, 20.0, 18.0));
+    scene.regions.push(region(3, 0.0, 120.0, 5.0));
+    scene.markers.push(marker(0.5, 0.5));
+    scene.markers.push(marker(0.0, 30.0));
+    let world = gpu_encode(&scene);
+    assert_eq!(world.manifest.features.iter().filter(|f| f.feature.starts_with("region:")).count(), 3);
+    assert_eq!(world.manifest.markers.len(), 2);
+    let enc = viewed(&scene, 0.0, 0.0, 2.0);
+    let ids: Vec<&str> = enc.manifest.features.iter().map(|f| f.feature.as_str()).collect();
+    assert!(ids.contains(&"region:0000000000000001"), "the near region is sent: {ids:?}");
+    assert!(ids.contains(&"region:0000000000000002"), "a region whose cap reaches the view is sent: {ids:?}");
+    assert!(!ids.contains(&"region:0000000000000003"), "a region beyond the view's reach is not sent: {ids:?}");
+    let shipped: std::collections::BTreeSet<_> = enc.resources.iter().map(|r| r.descriptor.id).collect();
+    let referenced: std::collections::BTreeSet<_> = enc.manifest.features.iter().map(|f| f.resource).collect();
+    assert_eq!(shipped, referenced, "no resource ships that nothing references");
+    assert_eq!(enc.manifest.markers.len(), 1, "the far marker is not sent");
+    let points = enc.resources.iter().find(|r| r.descriptor.kind == ResourceKind::Points).expect("a points buffer");
+    assert_eq!(points.descriptor.vertex_count, 1, "the points buffer holds only the marker in view");
+}
+
+#[test]
 fn a_city_says_which_ground_it_stands_on_whatever_the_camera() {
     let mut scene = sample_scene();
     scene.labels.push(city_name("Inside", uv(3.0, 5.0)));
