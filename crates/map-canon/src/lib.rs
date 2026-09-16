@@ -789,7 +789,7 @@ pub struct CensusRow {
     pub tenure: &'static str,
 }
 
-fn layer_name(l: &LayerKind) -> &'static str {
+pub fn layer_name(l: &LayerKind) -> &'static str {
     match l {
         LayerKind::Territory => "territory",
         LayerKind::ScriptureClaims => "scripture-claims",

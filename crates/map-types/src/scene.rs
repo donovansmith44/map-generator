@@ -47,6 +47,9 @@ pub struct StyledRegion {
     /// border could not be asked for apart, and a claim could not be
     /// told from a territory at all (diagnosis §3.2).
     pub piece: crate::piece::Piece,
+    /// The disposition that drew it and its rings' borders, outer
+    /// rings first then holes, in the rings' own order.
+    pub trace: Option<Trace>,
 }
 
 /// One border arc, styled — JOS 15 as a drawn line, alone if asked.
@@ -62,6 +65,7 @@ pub struct StyledBoundary {
     /// an outline was inseparable from the face it enclosed: turning
     /// fills off took every border with it (diagnosis §3.2).
     pub piece: crate::piece::Piece,
+    pub trace: Option<Trace>,
 }
 
 /// A styled point — a place in period dress, or a raw point. Carries
@@ -84,6 +88,7 @@ pub struct StyledMarker {
     /// buffer other pieces were using — geometry appeared when a piece
     /// was turned OFF (diagnosis §3.2).
     pub piece: crate::piece::Piece,
+    pub trace: Option<Trace>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,6 +97,7 @@ pub struct StyledInscription {
     pub place: crate::boundary::AtlasPlaceRef,
     pub sources: BTreeSet<SourceId>,
     pub piece: crate::piece::Piece,
+    pub trace: Option<Trace>,
 }
 
 /// What a label is attached to — selection (law 10) follows labels by
@@ -104,6 +110,26 @@ pub enum LabelSubject {
     Place(crate::boundary::AtlasPlaceRef),
     Memory(crate::boundary::AtlasPlaceRef),
     Free,
+}
+
+/// WHERE A DRAWN THING COMES FROM in the fact tier: the canon layer
+/// and entity whose disposition drew it, and the borders it is made
+/// of, so the scene tier is a composition of the fact tier and every
+/// manifest entry can be traced back.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Trace {
+    pub layer: String,
+    pub entity: String,
+    pub borders: Vec<atlas_graph_types::covenant::ContentHash>,
+}
+
+fn canon_trace(c: &mut Canon, t: &Option<Trace>) {
+    c.opt(t, |c, t| {
+        c.str_(&t.layer).str_(&t.entity);
+        c.seq(&t.borders, |c, b| {
+            c.u64_(b.0);
+        });
+    });
 }
 
 pub use crate::style::LabelFace;
@@ -175,6 +201,7 @@ impl MapAddressed for Snapshot {
             // Two scenes differing only in attribution are genuinely
             // different answers, so the pid must see the piece.
             c.str_(r.piece.name());
+            canon_trace(c, &r.trace);
         });
         c.seq(&self.boundaries, |c, b| {
             c.u64_(b.boundary.0 .0);
@@ -185,6 +212,7 @@ impl MapAddressed for Snapshot {
                 c.str_(&s.0);
             });
             c.str_(b.piece.name());
+            canon_trace(c, &b.trace);
         });
         c.seq(&self.markers, |c, m| {
             m.at.canon(c);
@@ -199,6 +227,7 @@ impl MapAddressed for Snapshot {
                 Some(p) => c.str_(&p.0 .0),
             };
             c.str_(m.piece.name());
+            canon_trace(c, &m.trace);
         });
         c.seq(&self.inscriptions, |c, m| {
             m.at.canon(c);
@@ -208,6 +237,7 @@ impl MapAddressed for Snapshot {
                 c.str_(&s.0);
             });
             c.str_(m.piece.name());
+            canon_trace(c, &m.trace);
         });
         c.seq(&self.labels, |c, l| {
             c.str_(&l.text);

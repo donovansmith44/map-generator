@@ -17,7 +17,7 @@ use std::fmt::Write as _;
 mod gpu;
 mod layout;
 pub use gpu::{
-    LabelResource, MarkerResource, Placement, View,
+    EntryTrace, LabelResource, MarkerResource, Placement, View,
     EncodedScene, FeatureInstance, GeometryId, GeometryResource, GpuSceneEncoder, GpuStyle,
     ResourceDescriptor, ResourceId, ResourceKind, SceneManifest, SphericalBounds, StyleKey,
     RESOURCE_MAGIC,

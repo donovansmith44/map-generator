@@ -131,6 +131,16 @@ rule even though the change is a correction.
   runner's step for it goes with it. The conquest and exile plans are
   re-blessed.
 
+- Breaking, wire: the scene tier is a composition of the fact tier.
+  Every styled element the provider draws carries its trace (the canon
+  layer and entity whose disposition drew it, and the borders it is
+  made of); every drawn manifest entry publishes `disposition`
+  (`layer:entity`, a live census row) and `borders` (the canon border
+  ids), and every standing marker buffer publishes `dispositions`.
+  `derivability.feature` loses its `@target`s, checks each disposition
+  against the census at the scene's year, and gains a marker
+  scenario. Scene fixtures re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

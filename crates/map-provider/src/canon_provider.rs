@@ -92,6 +92,16 @@ fn place_of(entity: &EntityId) -> PlaceId {
     PlaceId::new(entity.0.strip_prefix("place:").unwrap_or(&entity.0).to_string())
 }
 
+/// The fact-tier trace of a drawn thing: the layer and entity whose
+/// disposition drew it, and the borders it is made of.
+fn trace_of(layer: LayerKind, entity: &EntityId, borders: &[map_canon::BorderId]) -> Option<map_types::scene::Trace> {
+    Some(map_types::scene::Trace {
+        layer: map_canon::layer_name(&layer).to_string(),
+        entity: entity.0.clone(),
+        borders: borders.iter().map(|b| b.0).collect(),
+    })
+}
+
 fn bid_of(entity: &EntityId) -> BoundaryId {
     BoundaryId(ContentHash(hash64(&format!("entity:{}", entity.0))))
 }
@@ -479,10 +489,14 @@ impl CanonProvider {
         // islands once shipped unsimplified at the coarsest zoom this
         // way — and the half-pixel law governs them: they do not ship.
         let mut outer = Vec::new();
+        let mut outer_ids: Vec<map_canon::BorderId> = Vec::new();
         let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
         for r in a.rings.iter().filter(|r| self.reaches_view(**r, q)) {
             match self.ring_points(*r, q) {
-                Some(RingFidelity::Survives(ring)) => outer.push(ring),
+                Some(RingFidelity::Survives(ring)) => {
+                    outer.push(ring);
+                    outer_ids.push(*r);
+                }
                 Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
                 None => {}
             }
@@ -493,16 +507,19 @@ impl CanonProvider {
                 let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
                 ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
             });
-            if let Some((_, ring)) = widest {
+            if let Some((id, ring)) = widest {
                 outer.push(ring);
+                outer_ids.push(id);
             }
         }
         // A hole can never carry identity — its parent ring is the
         // feature's presence — so a below-limit hole is always detail.
         let mut holes = Vec::new();
+        let mut hole_ids: Vec<map_canon::BorderId> = Vec::new();
         for h in a.holes.iter().filter(|h| self.reaches_view(**h, q)) {
             if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, q) {
                 holes.push(ring);
+                hole_ids.push(*h);
             }
         }
         if outer.is_empty() {
@@ -524,13 +541,14 @@ impl CanonProvider {
         // fill and its border are separable for the first time.
         if let Some(piece) = piece_of_boundary(layer).filter(|p| q.pieces.contains(*p)) {
             if area_draws_outline(layer) {
-                for ring in &outer {
+                for (ring, id) in outer.iter().zip(&outer_ids) {
                     scene.boundaries.push(StyledBoundary {
                         boundary: bid_of(&a.entity),
                         pts: ring.points().to_vec(),
                         stroke: *style.stroke_for(&character),
                         sources: sources.clone(),
                         piece,
+                        trace: trace_of(layer, &a.entity, std::slice::from_ref(id)),
                     });
                 }
             }
@@ -584,6 +602,7 @@ impl CanonProvider {
         // Likewise the face: `piece_of_region` says None only for
         // Journeys, which never reaches here (a way is a line).
         let Some(piece) = piece_of_region(layer).filter(|p| q.pieces.contains(*p)) else { return };
+        let ring_ids: Vec<map_canon::BorderId> = outer_ids.into_iter().chain(hole_ids).collect();
         scene.regions.push(StyledRegion {
             region: rid_of(&a.entity),
             entity: Some(a.entity.0.clone()),
@@ -592,6 +611,7 @@ impl CanonProvider {
             paint,
             sources,
             piece,
+            trace: trace_of(layer, &a.entity, &ring_ids),
         });
     }
 
@@ -659,12 +679,15 @@ impl CanonProvider {
         if !q.pieces.contains(Piece::Journeys) {
             return;
         }
+        let walked_borders: Vec<map_canon::BorderId> =
+            route.legs.iter().filter(|leg| *t >= leg.span.0).map(|leg| leg.border).collect();
         scene.boundaries.push(StyledBoundary {
             boundary: bid_of(&route.entity),
             pts,
             stroke: *style.stroke_for(&map_types::EdgeCharacter::Way),
             sources: sources.clone(),
             piece: Piece::Journeys,
+            trace: trace_of(LayerKind::Journeys, &route.entity, &walked_borders),
         });
         let mut station_places: Vec<&atlas_graph_types::covenant::PlaceId> = Vec::new();
         if let Some(first) = route.legs.first() {
@@ -682,6 +705,7 @@ impl CanonProvider {
                 sources: sources.clone(),
                 place: Some(map_types::AtlasPlaceRef(pid.clone())),
                 piece: Piece::Journeys,
+                trace: trace_of(LayerKind::Journeys, &route.entity, &[]),
             });
             if q.pieces.contains(Piece::Labels) && named.places.insert(pid.clone()) {
                 let mut label = style.label_style();
@@ -791,6 +815,7 @@ impl CanonProvider {
                                 },
                                 sources,
                                 piece: line_piece,
+                                trace: trace_of(layer, &l.entity, std::slice::from_ref(&l.border)),
                             });
                         }
                     }
@@ -804,6 +829,7 @@ impl CanonProvider {
                                 place: place.clone(),
                                 sources: sources.iter().cloned().collect(),
                                 piece: Piece::Labels,
+                                trace: trace_of(layer, &m.entity, &[]),
                             });
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.memory_scale;
@@ -834,6 +860,7 @@ impl CanonProvider {
                                 sources,
                                 place: Some(map_types::AtlasPlaceRef(place.clone())),
                                 piece: Piece::Markers,
+                                trace: trace_of(layer, &p.entity, &[]),
                             });
                         }
                         if q.pieces.contains(Piece::Labels) && named.places.insert(place.clone()) {
@@ -881,6 +908,7 @@ impl CanonProvider {
                     sources,
                     place: Some(map_types::AtlasPlaceRef(place.0.clone())),
                     piece: Piece::Markers,
+                    trace: None,
                 });
             }
             if q.pieces.contains(Piece::Labels) && named.places.insert(place.0.clone()) {
@@ -1067,6 +1095,7 @@ impl MapProvider for CanonProvider {
                                             },
                                             sources: self.sources_of(fid),
                                             piece: age_piece,
+                                            trace: trace_of(layer, &a.entity, std::slice::from_ref(r)),
                                         });
                                     }
                                 }

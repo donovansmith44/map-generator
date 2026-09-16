@@ -882,21 +882,26 @@ allSteps =
                   (Left e, _) -> StepFailed e
                   (_, Left e) -> StepFailed e
                   (Right (code, body), Right b1) -> refusalVerdict w code body b1
-    -- derivability.feature (@target): the manifest publishes no
-    -- disposition and no border attribution per entry, so the scene tier
-    -- cannot today be traced back to the fact tier at all. Computed, not
-    -- stubbed: it really looks for the two fields, and reports which of
-    -- them is missing from how many entries.
+    -- derivability.feature: every drawn entry names the census row
+    -- (layer:entity) that drew it and the borders it is made of; a
+    -- standing buffer names every row standing in it. The rows are
+    -- checked against the live census at the scene's own year.
   , mkStep Then (lit "every entry in " *> capUntil @BindName " traces to a disposition and a border") $
-      \(BindName n) w -> pure $ do
-        fs <- arrayOf "features" =<< boundScene n w
-        let missing k = length [ () | f <- fs, either (const True) (const False) (field k f) ]
-        if null fs then Left (n <> " carries no manifest entries to trace")
-        else if missing "disposition" == 0 && missing "border" == 0 then Right w
-        else Left (tshow (missing "disposition") <> " of " <> tshow (length fs)
-                   <> " entries carry no disposition, and " <> tshow (missing "border")
-                   <> " carry no border: the scene tier cannot be traced to the fact \
-                      \tier (disposition is Stage 2, borders Stage 3)")
+      \(BindName n) w -> case (boundScene n w, lastRender w) of
+        (Left e, _) -> pure (Left e)
+        (_, Nothing) -> pure (Left "no year recorded for this scene (render a piece set first)")
+        (Right v, Just (Year y, _)) -> do
+          census <- transport w (baseUrl w <> "/api/census?year=" <> tshow y)
+          pure $ do
+            (_, rows) <- census
+            known <- censusKeys rows
+            fs <- arrayOf "features" v
+            verdicts <- traverse (\f -> (,) <$> textField "feature" f <*> pure (entryTrace known f)) fs
+            let bad = [ fid <> " (" <> why <> ")" | (fid, Left why) <- verdicts ]
+            if null fs then Left (n <> " carries no manifest entries to trace")
+            else if null bad then Right w
+            else Left (tshow (length bad) <> " of " <> tshow (length fs)
+                       <> " entries of " <> n <> " do not trace to the fact tier: " <> listSome bad)
     -- census.feature: a BOUND response against a fixture. The existing
     -- fixture step compares the LAST response; a @property scenario that
     -- binds its response under a name (so the counterexample can report
@@ -2442,6 +2447,40 @@ cityVerdict w g ov land (City _ at size ground) = case (ground, placePx g at) of
                                   <> tshow (roundEm d) <> " em outside it") <$> spillOf ov f)
   where
     sizePx = size * globeWidth g / designWidth
+
+-- The census rows a scene may trace to, as layer:entity keys.
+censusKeys :: Value -> Either Text (Set Text)
+censusKeys v = case v of
+  Array rows -> Set.fromList <$> traverse (\r -> (\l e -> l <> ":" <> e) <$> textField "layer" r <*> textField "entity" r) (V.toList rows)
+  other -> Left ("the census is not an array: " <> bounded other)
+
+-- One manifest entry's trace, judged: a drawn entry (a region or a
+-- boundary) names one known disposition and at least one border; a
+-- standing buffer names known dispositions; anything else is unknown.
+entryTrace :: Set Text -> Value -> Either Text ()
+entryTrace known f = do
+  fid <- textField "feature" f
+  if "region:" `T.isPrefixOf` fid || "boundary:" `T.isPrefixOf` fid
+    then do
+      d <- either (const (Left "carries no disposition")) Right (textField "disposition" f)
+      bs <- either (const (Left "carries no borders")) Right (arrayOf "borders" f)
+      hexes <- traverse (textField "border") [ object [("border", b)] | b <- bs ]
+      if not (d `Set.member` known) then Left ("names a disposition the census does not hold: " <> d)
+      else if null hexes then Left "names no border"
+      else if any (not . isHex16) hexes then Left "names a border that is not a sixteen-hex id"
+      else Right ()
+    else if "markers:" `T.isPrefixOf` fid
+    then do
+      ds <- either (const (Left "carries no dispositions")) Right (arrayOf "dispositions" f)
+      names <- traverse (\d -> textField "d" (object [("d", d)])) ds
+      if null names then Left "names no disposition"
+      else case filter (not . (`Set.member` known)) names of
+        [] -> Right ()
+        (bad : _) -> Left ("names a disposition the census does not hold: " <> bad)
+    else Left "is an entry kind this law does not know"
+
+isHex16 :: Text -> Bool
+isHex16 t = T.length t == 16 && T.all (`elem` ("0123456789abcdef" :: String)) t
 
 -- A handful of ids in a failure message, the same way `describeSetDiff`
 -- bounds its own: five is enough to recognize a pattern, and a scene

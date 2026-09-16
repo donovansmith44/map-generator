@@ -192,6 +192,7 @@ fn honest_style() -> Style {
 fn marker_scene(tag: u8) -> Snapshot {
     let mut sc = Snapshot::empty();
     sc.markers.push(StyledMarker {
+            trace: None,
         at: uv(f64::from(tag), f64::from(tag)),
         style: MarkerStyle { color: Rgba(tag, tag, tag, 255), size: 3.0 },
         sources: Default::default(),
@@ -635,6 +636,7 @@ fn law10_selection_coherence() {
     let region_scene = |id: RegionId, name: &str, lat: f64| -> Snapshot {
         let mut sc = Snapshot::empty();
         sc.regions.push(StyledRegion {
+            trace: None,
             region: id,
             entity: None,
             outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],

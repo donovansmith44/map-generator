@@ -5013,24 +5013,33 @@ main = hspec $ do
                        [("span", a), ("instant", b)] []
       shouldFailWith "was ignored, not refused" =<<
         runThen "span is refused or differs from instant" [("span", a), ("instant", a)] []
-    it "the derivability @target really looks for the two fields, and \
-       \counts how many entries lack each" $ do
-      let bare = manifest [feat "region:a" "r1"] [res "r1" 1 (east 0) 0.1] [] []
-          traced = A.object
-            [ "features" A..= [A.object [ "feature" A..= ("region:a" :: T.Text)
-                                        , "resource" A..= ("r1" :: T.Text)
-                                        , "disposition" A..= ("held" :: T.Text)
-                                        , "border" A..= ("b1" :: T.Text) ]]
-            , "resources" A..= ([] :: [A.Value]) ]
-      shouldFailWith "1 of 1 entries carry no disposition" =<<
-        runThen "every entry in sampled traces to a disposition and a border" [("sampled", bare)] []
-      shouldPass =<< runThen "every entry in sampled traces to a disposition and a border"
-                       [("sampled", traced)] []
-    it "an empty manifest is a FAILURE for the derivability law, not a \
-       \vacuous pass -- `all` over an empty list is trivially true" $
-      shouldFailWith "carries no manifest entries" =<<
-        runThen "every entry in sampled traces to a disposition and a border"
-          [("sampled", manifest [] [] [] [])] []
+    it "the derivability law checks every entry against the live census: a drawn \
+       \entry names a known disposition and a border, a standing buffer names known \
+       \dispositions, and an untraced entry is named" $ do
+      let censusRows = A.toJSON [ A.object [ "entity" A..= ("egypt" :: T.Text), "layer" A..= ("territory" :: T.Text) ]
+                                , A.object [ "entity" A..= ("place:gaza" :: T.Text), "layer" A..= ("scripture-claims" :: T.Text) ] ]
+          fake url | "/api/census?year=-1405" `T.isSuffixOf` url = pure (Right ("", censusRows))
+                   | otherwise = pure (Left ("no such route: " <> url))
+          run v = case firstOutcome Then "every entry in sampled traces to a disposition and a border" of
+            Nothing -> pure (StepFailed "NO DEFINITION MATCHED THIS BODY")
+            Just f -> f (mkWorld "http://x" fake "")
+                          { bound = Map.fromList [("sampled", ("", v))]
+                          , lastRender = Just (Year (-1405), StyleName "canaan") }
+          entry fid extra = A.object ([ "feature" A..= (fid :: T.Text), "resource" A..= ("r1" :: T.Text) ] ++ extra)
+          body es = A.object [ "features" A..= es, "resources" A..= ([] :: [A.Value]) ]
+          traced = entry "region:a" [ "disposition" A..= ("territory:egypt" :: T.Text)
+                                    , "borders" A..= [("0123456789abcdef" :: T.Text)] ]
+          standing = entry "markers:markers" [ "dispositions" A..= [("scripture-claims:place:gaza" :: T.Text)] ]
+      shouldPass =<< run (body [traced, standing])
+      shouldFailWith "carries no disposition" =<< run (body [entry "region:a" []])
+      shouldFailWith "the census does not hold" =<<
+        run (body [entry "region:a" [ "disposition" A..= ("territory:atlantis" :: T.Text)
+                                   , "borders" A..= [("0123456789abcdef" :: T.Text)] ]])
+      shouldFailWith "not a sixteen-hex" =<<
+        run (body [entry "boundary:b" [ "disposition" A..= ("territory:egypt" :: T.Text)
+                                     , "borders" A..= [("nope" :: T.Text)] ]])
+      shouldFailWith "carries no dispositions" =<< run (body [entry "markers:journeys" []])
+      shouldFailWith "carries no manifest entries" =<< run (body ([] :: [A.Value]))
 
     -- ---------- fix round 1: the discriminating cases ----------
 

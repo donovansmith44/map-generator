@@ -443,6 +443,30 @@ mod canon_provider_laws {
     }
 
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// The scene tier is a composition of the fact tier: every region,
+    /// border and marker the provider draws says which layer and
+    /// entity of the canon drew it and which borders it is made of.
+    #[test]
+    fn every_drawn_element_traces_to_its_disposition_and_borders() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, 47)).unwrap();
+        assert!(!scene.regions.is_empty() && !scene.boundaries.is_empty() && !scene.markers.is_empty());
+        for r in &scene.regions {
+            let t = r.trace.as_ref().expect("a region traces");
+            assert_eq!(t.entity, r.entity.clone().unwrap());
+            assert!(matches!(t.layer.as_str(), "territory" | "water"), "{}", t.layer);
+            assert_eq!(t.borders.len(), r.outer.len() + r.holes.len(), "one border per ring");
+        }
+        for b in &scene.boundaries {
+            let t = b.trace.as_ref().expect("a boundary traces");
+            assert!(!t.borders.is_empty());
+        }
+        for m in &scene.markers {
+            let t = m.trace.as_ref().expect("a marker traces");
+            assert_eq!(t.layer, "journeys");
+        }
+    }
+
     /// The animation is the scene delta: what the destination has and
     /// the origin lacks fades in, the converse fades out, and the road
     /// back is the road there reversed.

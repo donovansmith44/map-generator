@@ -113,6 +113,31 @@ pub struct GeometryResource {
     pub payload: Vec<u8>,
 }
 
+/// Where a manifest entry comes from in the fact tier: a drawn entry
+/// names the disposition (`layer:entity`) that drew it and the borders
+/// it is made of; a standing buffer names every disposition standing
+/// in it; an entry the provider did not trace says nothing.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntryTrace {
+    Drawn { disposition: String, borders: Vec<ContentHash> },
+    Standing { dispositions: Vec<String> },
+    Untraced,
+}
+
+fn disposition_of(t: &Option<map_types::scene::Trace>) -> Option<String> {
+    t.as_ref().map(|t| format!("{}:{}", t.layer, t.entity))
+}
+
+fn drawn_trace(t: &Option<map_types::scene::Trace>, ring: usize) -> EntryTrace {
+    match t {
+        Some(t) => EntryTrace::Drawn {
+            disposition: format!("{}:{}", t.layer, t.entity),
+            borders: t.borders.get(ring).map(|b| vec![*b]).unwrap_or_else(|| t.borders.clone()),
+        },
+        None => EntryTrace::Untraced,
+    }
+}
+
 /// One semantic feature's reference into the resource set (§8). Order
 /// in the manifest is paint order — overlay order is meaning.
 #[derive(Clone, Debug, PartialEq)]
@@ -127,6 +152,7 @@ pub struct FeatureInstance {
     pub geometry: GeometryId,
     pub resource: ResourceId,
     pub style: StyleKey,
+    pub trace: EntryTrace,
 }
 
 /// A compiled paint's content address: the manifest's style table key.
@@ -542,7 +568,7 @@ impl GpuSceneEncoder {
         // arrive in ring order.
         for r in &scene.regions {
             let sk = style_of(&mut styles, GpuStyle::Fill { color: r.paint.fill });
-            for ring in r.outer.iter().chain(&r.holes) {
+            for (ring_index, ring) in r.outer.iter().chain(&r.holes).enumerate() {
                 for piece in split_ring_at_antimeridian(ring.points()) {
                     // The sentinel stays its raw ≤5 points (its mark IS
                     // covers_sphere); everything else densifies so limb
@@ -560,6 +586,7 @@ impl GpuSceneEncoder {
                         geometry: geom,
                         resource: id,
                         style: sk,
+                        trace: drawn_trace(&r.trace, ring_index),
                     });
                 }
             }
@@ -584,6 +611,13 @@ impl GpuSceneEncoder {
                     geometry: geom,
                     resource: id,
                     style: sk,
+                    trace: match &b.trace {
+                        Some(t) => EntryTrace::Drawn {
+                            disposition: format!("{}:{}", t.layer, t.entity),
+                            borders: t.borders.clone(),
+                        },
+                        None => EntryTrace::Untraced,
+                    },
                 });
             }
         }
@@ -614,22 +648,31 @@ impl GpuSceneEncoder {
         // there was no answer to preserve. Piece-major would instead
         // re-sort every marker entry against every other one, changing
         // pixels wherever markers of unrelated paints overlap.
-        let mut by_style_piece: BTreeMap<(StyleKey, Piece), Vec<UnitVec>> = BTreeMap::new();
+        let mut by_style_piece: BTreeMap<(StyleKey, Piece), (Vec<UnitVec>, Vec<String>)> = BTreeMap::new();
         for m in &markers_in_view {
             let sk = style_of(
                 &mut styles,
                 GpuStyle::Marker { color: m.style.color, size: m.style.size },
             );
-            by_style_piece.entry((sk, m.piece)).or_default().push(m.at);
+            let slot = by_style_piece.entry((sk, m.piece)).or_default();
+            slot.0.push(m.at);
+            slot.1.extend(disposition_of(&m.trace));
         }
-        for ((sk, piece), pts) in by_style_piece {
+        for ((sk, piece), (pts, mut dispositions)) in by_style_piece {
             let (id, geom) = add(&mut resources, &mut seen, ResourceKind::Points, &pts);
+            dispositions.sort();
+            dispositions.dedup();
             features.push(FeatureInstance {
                 feature: format!("markers:{}", piece.name()),
                 piece,
                 geometry: geom,
                 resource: id,
                 style: sk,
+                trace: if dispositions.is_empty() {
+                    EntryTrace::Untraced
+                } else {
+                    EntryTrace::Standing { dispositions }
+                },
             });
         }
 
@@ -791,7 +834,7 @@ impl EncodedScene {
         for (i, f) in m.features.iter().enumerate() {
             let _ = write!(
                 s,
-                "{}{{\"feature\":\"{}\",\"piece\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"}}",
+                "{}{{\"feature\":\"{}\",\"piece\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"",
                 if i > 0 { "," } else { "" },
                 f.feature,
                 f.piece.name(),
@@ -799,6 +842,22 @@ impl EncodedScene {
                 f.resource.0 .0,
                 f.style.0
             );
+            match &f.trace {
+                EntryTrace::Drawn { disposition, borders } => {
+                    let hexes: Vec<String> = borders.iter().map(|b| format!("\"{:016x}\"", b.0)).collect();
+                    let _ = write!(
+                        s,
+                        ",\"disposition\":{},\"borders\":[{}]",
+                        serde_json::json!(disposition),
+                        hexes.join(",")
+                    );
+                }
+                EntryTrace::Standing { dispositions } => {
+                    let _ = write!(s, ",\"dispositions\":{}", serde_json::json!(dispositions));
+                }
+                EntryTrace::Untraced => {}
+            }
+            s.push('}');
         }
         s.push_str("],\"styles\":{");
         for (i, (k, v)) in m.styles.iter().enumerate() {

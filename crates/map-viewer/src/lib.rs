@@ -1562,6 +1562,7 @@ mod tests {
         use map_types::{RegionId, Ring, StyledRegion, UnitVec};
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64, src: &str, piece: Piece| StyledRegion {
+            trace: None,
             region: RegionId(ContentHash(n)),
             entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
@@ -1590,6 +1591,7 @@ mod tests {
         use map_types::UnitVec;
         let mut scene = Snapshot::empty();
         let mk = |src: Option<&str>| StyledMarker {
+            trace: None,
             at: UnitVec::from_lat_lon_deg(32.0, 35.0),
             style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
             sources: src.map(SourceId::new).into_iter().collect(),
@@ -1615,6 +1617,7 @@ mod tests {
 
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64| StyledRegion {
+            trace: None,
             region: RegionId(ContentHash(n)),
             entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
@@ -1624,6 +1627,7 @@ mod tests {
             piece: Piece::Fills,
         };
         let boundary = |n: u64| StyledBoundary {
+            trace: None,
             boundary: BoundaryId(ContentHash(n)),
             pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
             stroke: Stroke {
