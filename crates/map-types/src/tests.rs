@@ -53,6 +53,7 @@ fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     }
 }
@@ -843,6 +844,7 @@ fn labeling_voice_follows_face() {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     };
     assert_eq!(l.voice(LabelFace::Territory).family, "serif-t");
@@ -1196,4 +1198,31 @@ fn piece_set_is_a_monoid_over_pieces_and_round_trips() {
     // a wrong name is refused BY NAME -- not silently dropped
     assert!(PieceSet::parse("ground, topografy").is_err());
     assert!(PieceSet::parse("ground, topografy").unwrap_err().contains("topografy"));
+}
+
+mod camera_laws {
+    use crate::camera::{Camera, ChartKind};
+
+    #[test]
+    fn the_view_cap_is_the_zoom_with_the_declared_margin_and_the_server_clamps() {
+        let c = Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0);
+        assert!((c.cap().radius - (4.0_f64 * 1.8).to_radians()).abs() < 1e-12);
+        let wide = Camera::new(ChartKind::Globe, 0.0, 0.0, 90.0, 1200.0);
+        assert!((wide.cap().radius - (162.0_f64).to_radians()).abs() < 1e-12);
+        let tiny = Camera::new(ChartKind::Globe, 0.0, 0.0, 0.001, 1200.0);
+        assert!((tiny.cap().radius - (0.05_f64 * 1.8).to_radians()).abs() < 1e-12);
+        let polar = Camera::new(ChartKind::Globe, 90.0, 0.0, 4.0, 1200.0);
+        assert_eq!(polar.lat, 89.9, "latitude is clamped the way the wire clamps it");
+    }
+
+    #[test]
+    fn a_style_refuses_a_negative_or_unbounded_overflow() {
+        let mut spec = crate::tests::honest_style_parts();
+        spec.labeling.scale.overflow_em = -0.1;
+        assert!(crate::style::Style::new(spec).is_err());
+        spec.labeling.scale.overflow_em = f64::INFINITY;
+        assert!(crate::style::Style::new(spec).is_err());
+        spec.labeling.scale.overflow_em = 0.0;
+        assert!(crate::style::Style::new(spec).is_ok());
+    }
 }

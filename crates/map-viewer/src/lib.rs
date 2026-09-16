@@ -18,6 +18,7 @@ use atlas_graph_types::covenant::SourceId;
 use map_adapters::{load_exports, merged_gazetteer};
 use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, GpuSceneEncoder, JsonTransitionEncoder, SvgEncoder};
+use map_types::camera::{Camera, ChartKind};
 use map_types::style::*;
 use map_types::{
     ChangeKind, Interval, Lod, MapAddressed, MapProvider, Monoid, Piece, PieceSet, RegionId,
@@ -591,6 +592,21 @@ fn auto_lod(zoom: Option<f64>, width: f64) -> f64 {
     }
 }
 
+/// The camera the request pins, when it pins one: a center AND a
+/// zoom, on the chart it names, drawn at the width it asks for. Half a
+/// camera is no camera.
+fn parse_camera(p: &Params) -> Option<Camera> {
+    let (lat, lon) = p.get("center")?.split_once(',')?;
+    let (lat, lon) = (lat.parse::<f64>().ok()?, lon.parse::<f64>().ok()?);
+    let zoom = p.get("zoom")?.parse::<f64>().ok()?;
+    let chart = match p.get("projection") {
+        Some("flat") => ChartKind::Flat,
+        _ => ChartKind::Globe,
+    };
+    let width = p.get("width").and_then(|v| v.parse::<f64>().ok()).unwrap_or(1200.0);
+    Some(Camera::new(chart, lat, lon, zoom, width))
+}
+
 fn build_query(
     app: &App,
     p: &Params,
@@ -640,18 +656,7 @@ fn build_query(
     if p.get("journeys") != Some("0") {
         pieces = pieces.with(Piece::Journeys); // itineraries, on by default
     }
-    // THE VIEWPORT: when the caller pins a camera, the provider can
-    // cull the world to it — one spherical cap, generous margin, both
-    // charts (the camera law makes the ground span identical).
-    let viewport = p.get("center").and_then(|v| {
-        let (lat, lon) = v.split_once(',')?;
-        let (lat, lon) = (lat.parse::<f64>().ok()?, lon.parse::<f64>().ok()?);
-        let zoom = p.get("zoom").and_then(|z| z.parse::<f64>().ok())?;
-        Some(map_types::Bbox {
-            center: map_types::UnitVec::from_lat_lon_deg(lat.clamp(-89.9, 89.9), lon),
-            radius: (zoom.clamp(0.05, 90.0) * 1.8).to_radians().min(std::f64::consts::PI),
-        })
-    });
+    let viewport = parse_camera(p).map(|c| c.cap());
     Some(RenderQuery { subject, time, viewport, lod, pieces, style: parse_style(app, p.get("style"))? })
 }
 
@@ -708,6 +713,7 @@ fn encode(
                 enc.paper = st.paper();
                 enc.chrome = st.chrome();
                 enc.pattern = st.pattern_geometry();
+                enc.label_overflow_em = st.labeling().scale.overflow_em;
             }
             enc.encode(scene).map(|s| (s, "image/svg+xml")).map_err(|e| e.0)
         }
@@ -1212,8 +1218,10 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     Some(st) => GpuSceneEncoder {
                         paper: st.paper(),
                         pattern: st.pattern_geometry(),
+                        label_overflow_em: st.labeling().scale.overflow_em,
+                        camera: parse_camera(&p),
                     },
-                    None => GpuSceneEncoder::default(),
+                    None => GpuSceneEncoder { camera: parse_camera(&p), ..GpuSceneEncoder::default() },
                 };
                 match gpu_enc.encode(&scene) {
                     Err(e) => bad(&e.0),
@@ -1614,12 +1622,12 @@ pub fn serve() {
     eprintln!("loading historical-basemaps…");
     let app = Arc::new(load());
     eprintln!("{} scrub stops, {} styles", app.stops.len(), app.styles.len());
+    let host = std::env::var("MAP_VIEWER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let listener =
-        TcpListener::bind(("127.0.0.1", port)).unwrap_or_else(|e| panic!("port {port}: {e}"));
-    eprintln!("workbench on http://127.0.0.1:{port}/");
+        TcpListener::bind((host.as_str(), port)).unwrap_or_else(|e| panic!("{host}:{port}: {e}"));
+    eprintln!("workbench on http://{host}:{port}/");
     for stream in listener.incoming().flatten() {
         let app = Arc::clone(&app);
         std::thread::spawn(move || handle(&app, stream));
     }
 }
-    let host = std::env::var("MAP_VIEWER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());

@@ -68,6 +68,7 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     }
 }

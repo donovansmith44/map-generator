@@ -71,6 +71,7 @@ struct TScale {
     memory_scale: f64,
     station_scale: f64,
     city_scale: f64,
+    overflow_em: f64,
 }
 
 #[derive(serde::Deserialize)]
@@ -235,6 +236,7 @@ fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
                 memory_scale: t.labeling.scale.memory_scale,
                 station_scale: t.labeling.scale.station_scale,
                 city_scale: t.labeling.scale.city_scale,
+                overflow_em: t.labeling.scale.overflow_em,
             },
         },
         marker: MarkerStyle { color: rgba(t.marker.color), size: t.marker.size },

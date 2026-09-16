@@ -1570,8 +1570,8 @@ main = hspec $ do
             , (When, "I render pieces fills at year -1405 in no style")
             , (Then, "viewed keeps every feature of world in view and omits every feature of world out of view")
             , (Then, "every resource here and there share is byte-identical in both")
-            , (Then, "narrow's markers and labels are a subset of wide's")
-            , (Then, "every marker and label of wide still in narrow's view is kept by narrow")
+            , (Then, "narrow's markers are a subset of wide's")
+            , (Then, "every marker of wide still in narrow's view is kept by narrow")
             , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
             , (Then, "every label of viewed anchors in view")
               -- label-placement.feature's four, in the corpus's own
@@ -4852,26 +4852,26 @@ main = hspec $ do
       -- from the far side, it is the NEAR feature that is over the edge
       o2 <- runThen "no feature of viewed is beyond the horizon of 0,100" [("viewed", nearFar)] []
       shouldFailWith "region:near" o2
-    it "the marker/label subset law compares the two kinds by their \
-       \published ids, and names what is missing" $ do
-      let narrow = manifest [] [] [lbl "region:a" (east 0)] [mrk "place:x" (east 0)]
+    it "the marker subset law compares markers by their published place ids, \
+       \names what is missing, and leaves names out of it" $ do
+      let narrow = manifest [] [] [lbl "region:a" (east 0), lbl "region:b" (east 1)] [mrk "place:x" (east 0)]
           wide   = manifest [] [] [lbl "region:a" (east 0)]
                                   [mrk "place:x" (east 0), mrk "place:y" (east 1)]
-      shouldPass =<< runThen "narrow's markers and labels are a subset of wide's"
+      shouldPass =<< runThen "narrow's markers are a subset of wide's"
                        [("narrow", narrow), ("wide", wide)] []
-      shouldFailWith "marker:place:y" =<<
-        runThen "wide's markers and labels are a subset of narrow's"
+      shouldFailWith "place:y" =<<
+        runThen "wide's markers are a subset of narrow's"
           [("narrow", narrow), ("wide", wide)] []
-    it "the zoom-in law owes only what is still inside the narrower \
-       \view, and skips when nothing is" $ do
-      let wide = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+    it "the zoom-in law owes only the markers still inside the narrower \
+       \view, and skips when none is" $ do
+      let wide = manifest [] [] [lbl "region:a" (east 0)] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
           narrow = manifest [] [] [] []
-      shouldFailWith "marker:place:near" =<<
-        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+      shouldFailWith "place:near" =<<
+        runThen "every marker of wide still in narrow's view is kept by narrow"
           [("wide", wide), ("narrow", narrow)] [("narrow", camAt0)]
       -- with the camera pointed away, nothing of `wide` is owed at all
       shouldSkipWith "nothing to be owed" =<<
-        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+        runThen "every marker of wide still in narrow's view is kept by narrow"
           [("wide", manifest [] [] [] [mrk "place:far" (east 100)]), ("narrow", narrow)]
           [("narrow", camAt0)]
     it "byte-identity across two cameras compares the WHOLE shared \

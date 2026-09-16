@@ -27,6 +27,7 @@
 
 pub mod algebra;
 pub mod boundary;
+pub mod camera;
 pub mod contracts;
 pub mod encode;
 pub mod geom;

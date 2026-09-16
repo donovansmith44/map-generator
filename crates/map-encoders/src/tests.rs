@@ -1706,3 +1706,146 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
         "marker entries must stay style-major, preserving the pre-split paint order"
     );
 }
+
+// ================================================== placement in the answer
+
+use map_types::camera::{Camera, ChartKind};
+
+fn viewed(scene: &Snapshot, lat: f64, lon: f64, zoom: f64) -> EncodedScene {
+    GpuSceneEncoder {
+        camera: Some(Camera::new(ChartKind::Globe, lat, lon, zoom, 1200.0)),
+        ..GpuSceneEncoder::default()
+    }
+    .encode(scene)
+    .unwrap()
+}
+
+fn territory_name(text: &str, at: UnitVec, region: map_types::RegionId) -> PlacedLabel {
+    PlacedLabel {
+        text: text.to_string(),
+        at,
+        subject: LabelSubject::Region(region),
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 14.0, halo_width_em: 0.24 },
+        face: map_types::scene::LabelFace::Territory,
+        voice: test_voice(),
+        piece: map_types::Piece::Labels,
+    }
+}
+
+fn city_name(text: &str, at: UnitVec) -> PlacedLabel {
+    PlacedLabel {
+        text: text.to_string(),
+        at,
+        subject: LabelSubject::Place(map_types::AtlasPlaceRef(
+            atlas_graph_types::covenant::PlaceId::new(text.to_lowercase()),
+        )),
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0, halo_width_em: 0.24 },
+        face: map_types::scene::LabelFace::Place,
+        voice: test_voice(),
+        piece: map_types::Piece::Labels,
+    }
+}
+
+#[test]
+fn a_viewed_answer_places_every_name_it_sends_on_the_page_it_names() {
+    let enc = viewed(&sample_scene(), 3.0, 5.0, 10.0);
+    let view = enc.manifest.view.expect("a viewed answer says which view it placed for");
+    assert_eq!((view.lat, view.lon, view.zoom, view.width, view.height), (3.0, 5.0, 10.0, 1200.0, 1200.0));
+    assert!(!enc.manifest.labels.is_empty(), "the sample's own name is on the page");
+    for l in &enc.manifest.labels {
+        let p = l.placement.expect("a sent name is a placed name");
+        assert!(p.left >= 0.0 && p.top >= 0.0 && p.right <= 1.0 && p.bottom <= 1.0, "{p:?} fits the page");
+        assert!(p.left < p.right && p.top < p.bottom, "{p:?} encloses area");
+    }
+    let json = enc.manifest_json();
+    assert!(json.contains("\"view\":{\"chart\":\"globe\",\"height\":1200.0,\"lat\":3.0,\"lon\":5.0,\"width\":1200.0,\"zoom\":10.0}"), "{json}");
+    assert!(json.contains("\"placement\":{\"bottom\":"), "{json}");
+    assert!(json.contains("\"labelOverflowEm\":"), "{json}");
+}
+
+#[test]
+fn an_unviewed_answer_places_nothing_and_says_so() {
+    let enc = gpu_encode(&sample_scene());
+    assert!(enc.manifest.view.is_none());
+    assert!(enc.manifest.labels.iter().all(|l| l.placement.is_none()));
+    assert!(enc.manifest_json().contains("\"view\":null"));
+    assert!(!enc.manifest_json().contains("\"placement\""));
+}
+
+#[test]
+fn placed_names_never_overlap_and_a_name_with_nowhere_to_go_is_not_sent() {
+    let mut scene = sample_scene();
+    for _ in 0..12 {
+        scene.labels.push(scene.labels[0].clone());
+    }
+    let enc = viewed(&scene, 3.0, 5.0, 10.0);
+    let boxes: Vec<_> = enc.manifest.labels.iter().map(|l| l.placement.unwrap()).collect();
+    assert!(!boxes.is_empty() && boxes.len() < 13, "thirteen names at one anchor cannot all be drawn: {}", boxes.len());
+    for (i, a) in boxes.iter().enumerate() {
+        for b in &boxes[i + 1..] {
+            assert!(!(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom), "{a:?} over {b:?}");
+        }
+    }
+}
+
+#[test]
+fn a_name_behind_the_globe_or_off_the_page_is_not_sent() {
+    let mut scene = sample_scene();
+    scene.labels.push(city_name("ANTIPODEAN", uv(-3.0, -175.0)));
+    scene.labels.push(city_name("EDGEWISE", uv(3.0, 5.0 + 9.9)));
+    let enc = viewed(&scene, 3.0, 5.0, 10.0);
+    let texts: Vec<&str> = enc.manifest.labels.iter().map(|l| l.text.as_str()).collect();
+    assert!(!texts.contains(&"ANTIPODEAN"), "{texts:?}");
+    assert!(!texts.contains(&"EDGEWISE"), "{texts:?}");
+    assert!(texts.contains(&"Judah & <friends>"), "{texts:?}");
+}
+
+/// An L-shaped land: a name centred on its corner block would run
+/// out over the empty quadrant. The answer shrinks the name until its
+/// box stands within the land, give or take the declared overflow.
+#[test]
+fn a_land_name_keeps_within_its_land_by_the_declared_overflow() {
+    let ell = map_types::RegionId(atlas_graph_types::covenant::ContentHash(77));
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+        region: ell,
+        entity: None,
+        outer: vec![Ring::new(vec![
+            uv(0.0, 0.0), uv(0.0, 5.0), uv(1.0, 5.0), uv(1.0, 1.0), uv(5.0, 1.0), uv(5.0, 0.0),
+        ]).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: Default::default(),
+        piece: map_types::Piece::Fills,
+    });
+    scene.labels.push(territory_name("WIDE NAME", uv(0.5, 0.5), ell));
+    let enc = GpuSceneEncoder {
+        camera: Some(Camera::new(ChartKind::Globe, 0.5, 0.5, 10.0, 1200.0)),
+        label_overflow_em: 0.5,
+        ..GpuSceneEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    let l = enc.manifest.labels.first().expect("a shrunk name is still sent");
+    let p = l.placement.unwrap();
+    let scale = (1200.0 - 32.0) / 2.0 / (10.0_f64).to_radians().sin();
+    let shore_x = 600.0 - (0.5_f64).to_radians().sin() * scale;
+    assert!(l.size < 14.0, "the name shrank from 14 to {}", l.size);
+    assert!(p.left * 1200.0 >= shore_x - 0.5 * l.size - 1e-6, "left edge {} stays within 0.5 em of the shore at {shore_x}", p.left * 1200.0);
+}
+
+#[test]
+fn a_city_says_which_ground_it_stands_on_whatever_the_camera() {
+    let mut scene = sample_scene();
+    scene.labels.push(city_name("Inside", uv(3.0, 5.0)));
+    scene.labels.push(city_name("Outside", uv(-5.0, 5.0)));
+    for enc in [gpu_encode(&scene), viewed(&scene, 3.0, 5.0, 20.0)] {
+        let ground = |text: &str| {
+            enc.manifest.labels.iter().find(|l| l.text == text).map(|l| l.ground.clone())
+        };
+        assert_eq!(ground("Inside"), Some(Some("region:0000000000000001".to_string())));
+        assert_eq!(ground("Outside"), Some(Some("unclaimed".to_string())));
+        assert_eq!(ground("Judah & <friends>"), Some(None), "a free name stands on no ground the law asks about");
+    }
+    assert!(gpu_encode(&scene).manifest_json().contains("\"ground\":\"unclaimed\""));
+}

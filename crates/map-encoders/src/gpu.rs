@@ -22,9 +22,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt::Write as _;
 use std::hash::{Hash, Hasher};
 
+use map_types::camera::{Camera, ChartKind, DESIGN_WIDTH};
 use map_types::ident::{Canon, ContentHash};
 use map_types::style::{Rgba, StrokePattern};
 use map_types::{EncodeError, MapAddressed, Piece, SceneEncoder, Snapshot, UnitVec};
+
+use crate::layout::{self, Projector};
 
 /// A rendering representation's content address (§7): kind + payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -129,11 +132,34 @@ pub enum GpuStyle {
     Marker { color: Rgba, size: f64 },
 }
 
+/// Where a name's ink sits on the page it was placed for: the box, as
+/// fractions of the page, (0,0) its top-left and (1,1) its bottom-right.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+/// The page an answer placed its names on: the chart, the camera and
+/// the page size, so a reader knows exactly which view the placements
+/// are stated for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct View {
+    pub chart: ChartKind,
+    pub lat: f64,
+    pub lon: f64,
+    pub zoom: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
 /// A label as SEMANTIC data (§46): text, spherical anchor, subject,
-/// the resolved typographic voice, and a deterministic priority.
-/// Placement is renderer work — the manifest never carries a screen
-/// position (§8), and priority is scene order: the style system's own
-/// paint order, no invented ranking (§53).
+/// the resolved typographic voice, a deterministic priority (scene
+/// order, §53), and, when the answer was asked at a view, the
+/// placement its words were settled at, so nothing is left to decide
+/// between the answer and the ink.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LabelResource {
     pub text: String,
@@ -157,6 +183,10 @@ pub struct LabelResource {
     /// ride Journeys, water names ride Water: a label's piece is not
     /// always Labels, so it is carried, never derived downstream.
     pub piece: Piece,
+    pub placement: Option<Placement>,
+    /// What a city stands on ("region:HEX" or "unclaimed"); None for a
+    /// name that is not a place's.
+    pub ground: Option<String>,
 }
 
 /// One marker with its semantic identity — hit testing maps a click
@@ -191,12 +221,17 @@ pub struct ManifestDress {
     pub hatched: (f64, f64),
     /// the focus veil: what the world outside a selection wears
     pub veil: Rgba,
+    /// how far a land name may spill past its shore, in em
+    pub label_overflow_em: f64,
 }
 
 /// The semantic scene manifest (§8): references, not pictures.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneManifest {
     pub scene_revision: ContentHash,
+    /// The view the names were placed for; None when the scene was
+    /// asked at no view, and then no name carries a placement.
+    pub view: Option<View>,
     pub features: Vec<FeatureInstance>,
     pub styles: BTreeMap<StyleKey, GpuStyle>,
     pub labels: Vec<LabelResource>,
@@ -218,6 +253,10 @@ pub struct EncodedScene {
 pub struct GpuSceneEncoder {
     pub paper: map_types::style::Paint,
     pub pattern: map_types::style::PatternGeometry,
+    pub label_overflow_em: f64,
+    /// The view to place names for; None answers a catalogue whose
+    /// names carry no placement.
+    pub camera: Option<Camera>,
 }
 
 impl Default for GpuSceneEncoder {
@@ -225,6 +264,8 @@ impl Default for GpuSceneEncoder {
         GpuSceneEncoder {
             paper: map_types::style::Paint { fill: Rgba(246, 241, 228, 255) },
             pattern: Default::default(),
+            label_overflow_em: 0.5,
+            camera: None,
         }
     }
 }
@@ -500,7 +541,7 @@ impl GpuSceneEncoder {
         let mut features: Vec<FeatureInstance> = Vec::new();
         let mut styles: BTreeMap<StyleKey, GpuStyle> = BTreeMap::new();
 
-        let mut add = |resources: &mut Vec<GeometryResource>,
+        let add = |resources: &mut Vec<GeometryResource>,
                        seen: &mut BTreeMap<ResourceId, usize>,
                        kind: ResourceKind,
                        pts: &[UnitVec]|
@@ -515,7 +556,7 @@ impl GpuSceneEncoder {
             });
             (id, geom)
         };
-        let mut style_of = |styles: &mut BTreeMap<StyleKey, GpuStyle>, s: GpuStyle| -> StyleKey {
+        let style_of = |styles: &mut BTreeMap<StyleKey, GpuStyle>, s: GpuStyle| -> StyleKey {
             let key = style_key(&s);
             styles.entry(key).or_insert(s);
             key
@@ -608,13 +649,28 @@ impl GpuSceneEncoder {
             });
         }
 
-        // Labels ride the manifest as semantics (§46): the renderer
-        // owns placement; the scene owns text, anchor, and dress.
-        let labels: Vec<LabelResource> = scene
-            .labels
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
+        let projector = self.camera.as_ref().map(|c| Projector::of(c, layout::PAGE_PADDING));
+        let view = self.camera.as_ref().zip(projector.as_ref()).map(|(c, p)| View {
+            chart: c.chart,
+            lat: c.lat,
+            lon: c.lon,
+            zoom: c.zoom,
+            width: p.width,
+            height: p.height,
+        });
+        // Names that are placed for the view, or every name when there
+        // is no view to place them on.
+        let settled: Vec<(usize, Option<layout::Laid>)> = match &projector {
+            Some(p) => layout::layout(scene, p, self.label_overflow_em)
+                .into_iter()
+                .map(|laid| (laid.index, Some(laid)))
+                .collect(),
+            None => (0..scene.labels.len()).map(|i| (i, None)).collect(),
+        };
+        let labels: Vec<LabelResource> = settled
+            .into_iter()
+            .map(|(i, laid)| {
+                let l = &scene.labels[i];
                 use map_types::scene::LabelSubject;
                 let subject = match &l.subject {
                     LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
@@ -636,7 +692,10 @@ impl GpuSceneEncoder {
                     },
                     color: l.style.color,
                     halo: l.style.halo,
-                    size: l.style.size,
+                    size: match (&laid, &projector) {
+                        (Some(laid), Some(p)) => laid.size * DESIGN_WIDTH / p.width,
+                        _ => l.style.size,
+                    },
                     halo_width_em: l.style.halo_width_em,
                     voice_family: l.voice.family,
                     voice_weight: l.voice.weight,
@@ -646,6 +705,13 @@ impl GpuSceneEncoder {
                     voice_advance_em: l.voice.advance_em,
                     priority: i as u32,
                     piece: l.piece,
+                    placement: laid.as_ref().zip(projector.as_ref()).map(|(laid, p)| Placement {
+                        left: laid.bounds.0 / p.width,
+                        top: laid.bounds.1 / p.height,
+                        right: laid.bounds.2 / p.width,
+                        bottom: laid.bounds.3 / p.height,
+                    }),
+                    ground: layout::stands_on(l, scene).map(|g| g.wire()),
                 }
             })
             .collect();
@@ -674,6 +740,7 @@ impl GpuSceneEncoder {
         EncodedScene {
             manifest: SceneManifest {
                 scene_revision: scene.map_pid().hash,
+                view,
                 features,
                 styles,
                 labels,
@@ -688,6 +755,7 @@ impl GpuSceneEncoder {
                     // one veil for every dress and every place — the
                     // focus law, never a per-template value
                     veil: map_types::style::VEIL.fill,
+                    label_overflow_em: self.label_overflow_em,
                 },
             },
             resources,
@@ -709,7 +777,15 @@ impl EncodedScene {
     pub fn manifest_json(&self) -> String {
         let m = &self.manifest;
         let mut s = String::new();
-        let _ = write!(s, "{{\"scene\":\"{:016x}\",\"features\":[", m.scene_revision.0);
+        let view = match &m.view {
+            None => "null".to_string(),
+            Some(v) => serde_json::json!({
+                "chart": v.chart.name(), "lat": v.lat, "lon": v.lon, "zoom": v.zoom,
+                "width": v.width, "height": v.height,
+            })
+            .to_string(),
+        };
+        let _ = write!(s, "{{\"scene\":\"{:016x}\",\"view\":{view},\"features\":[", m.scene_revision.0);
         for (i, f) in m.features.iter().enumerate() {
             let _ = write!(
                 s,
@@ -768,7 +844,7 @@ impl EncodedScene {
                 s.push(',');
             }
             // serde escapes the free text; everything else is plain.
-            let row = serde_json::json!({
+            let mut row = serde_json::json!({
                 "text": l.text,
                 "anchor": [l.anchor.0, l.anchor.1, l.anchor.2],
                 "subject": l.subject,
@@ -788,6 +864,14 @@ impl EncodedScene {
                 "priority": l.priority,
                 "piece": l.piece.name(),
             });
+            if let Some(p) = &l.placement {
+                row["placement"] = serde_json::json!({
+                    "left": p.left, "top": p.top, "right": p.right, "bottom": p.bottom,
+                });
+            }
+            if let Some(g) = &l.ground {
+                row["ground"] = serde_json::json!(g);
+            }
             s.push_str(&row.to_string());
         }
         s.push_str("],\"markers\":[");
@@ -836,10 +920,10 @@ impl EncodedScene {
         let d = &m.dress;
         let _ = write!(
             s,
-            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}]}}}}",
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}],\"labelOverflowEm\":{}}}}}",
             d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha,
             d.dashed.0, d.dashed.1, d.hatched.0, d.hatched.1,
-            d.veil.0, d.veil.1, d.veil.2, d.veil.3
+            d.veil.0, d.veil.1, d.veil.2, d.veil.3, d.label_overflow_em
         );
         s
     }

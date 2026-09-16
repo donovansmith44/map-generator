@@ -12,6 +12,10 @@ Feature: the camera — what you look at is what you get, and nothing else chang
   wherever the camera is under test, because zoom otherwise changes
   detail too (detail.feature owns that coupling law).
 
+  Names are not nested this way: which names a view draws is the
+  label-placement feature's business, and a name drawn at one zoom may
+  yield at another to a neighbour that grew.
+
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
     | year | whole number from -4004 to 100 (negative means BC; -1405 is 1405 BC; year 0 does not exist) |
@@ -36,23 +40,23 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     Then every resource here and there share is byte-identical in both
 
   @property
-  Scenario: zooming out only reveals markers and labels — it never removes them
+  Scenario: zooming out only reveals markers — it never removes them
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as narrow
     And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> doubled detail fine as wide
-    Then narrow's markers and labels are a subset of wide's
+    Then narrow's markers are a subset of wide's
 
   @property
-  Scenario: zooming in never loses a marker or label you are looking at
+  Scenario: zooming in never loses a marker you are looking at
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as wide
     And I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> halved detail fine as narrow
-    Then every marker and label of wide still in narrow's view is kept by narrow
+    Then every marker of wide still in narrow's view is kept by narrow
 
   @target @property
   Scenario: the far side of the globe is never sent
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     Then no feature of viewed is beyond the horizon of <someCenter>
 
-  @target @property
+  @property
   Scenario: a label is only sent when the thing it names is in view
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     Then every label of viewed anchors in view

@@ -410,45 +410,42 @@ allSteps =
           else StepFailed (tshow (length differ) <> " of " <> tshow (length shared)
                            <> " shared resource ids serve different records in " <> a
                            <> " and " <> b <> ": " <> listSome differ)
-    -- "zooming out only reveals markers and labels -- it never removes
-    -- them". Stated over the two kinds the camera ACTUALLY culls
-    -- (characterization 1.0: Points and Memories are the only elements
-    -- the viewport removes), by their published ids -- marker place and
-    -- label subject -- which is characterization C1/C2's non-vacuous
-    -- form. Written over feature ids instead it would pass while the
-    -- camera did nothing at all (917 ids at every zoom); that version is
-    -- the @target above.
-  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName "'s markers and labels are a subset of "
+    -- "zooming out only reveals markers -- it never removes them",
+    -- stated over the markers' published place ids. Names are not
+    -- nested this way: a name drawn at one zoom may yield at another
+    -- to a neighbour that grew, and which names a view draws is
+    -- label-placement.feature's business.
+  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName "'s markers are a subset of "
                                          <*> capUntil @BindName "'s")) $
       \(BindName a, BindName b) w -> pure $ either StepFailed id $ do
-        ia <- Set.fromList . map fst <$> (cameraCulled =<< boundScene a w)
-        ib <- Set.fromList . map fst <$> (cameraCulled =<< boundScene b w)
+        ia <- Set.fromList . map fst <$> (markerPoints =<< boundScene a w)
+        ib <- Set.fromList . map fst <$> (markerPoints =<< boundScene b w)
         let extra = Set.difference ia ib
         pure $ if Set.null ia
-          then StepSkipped (a <> " carries no markers and no labels at this draw; \
+          then StepSkipped (a <> " carries no markers at this draw; \
                             \the empty set is a subset of anything")
           else if Set.null extra then StepOk w
-          else StepFailed (tshow (Set.size extra) <> " marker/label id(s) of " <> a
+          else StepFailed (tshow (Set.size extra) <> " marker(s) of " <> a
                            <> " are absent from " <> b <> ": " <> listSome (Set.toList extra))
-    -- "zooming in never loses a marker or label you are looking at" --
-    -- the converse, and the one that needs the camera: only the things
+    -- "zooming in never loses a marker you are looking at" -- the
+    -- converse, and the one that needs the camera: only the markers
     -- still inside the NARROWER view are owed.
-  , mkSkippableStep Then (lit "every marker and label of " *> ((,,) <$> capUntil @BindName " still in "
-                                                                    <*> capUntil @BindName "'s view is kept by "
-                                                                    <*> capRest @BindName)) $
+  , mkSkippableStep Then (lit "every marker of " *> ((,,) <$> capUntil @BindName " still in "
+                                                          <*> capUntil @BindName "'s view is kept by "
+                                                          <*> capRest @BindName)) $
       \(BindName wide, BindName narrowView, BindName narrow) w -> pure $
         either StepFailed id $ do
           vw <- cameraOf narrowView w
-          ws <- cameraCulled =<< boundScene wide w
-          kept <- Set.fromList . map fst <$> (cameraCulled =<< boundScene narrow w)
+          ws <- markerPoints =<< boundScene wide w
+          kept <- Set.fromList . map fst <$> (markerPoints =<< boundScene narrow w)
           let owed = [ i | (i, p) <- ws, pointInView vw p ]
               lost = [ i | i <- owed, not (i `Set.member` kept) ]
           pure $ if null owed
-            then StepSkipped ("nothing of " <> wide <> " lies inside " <> narrowView
+            then StepSkipped ("no marker of " <> wide <> " lies inside " <> narrowView
                               <> "'s view at this draw; this law has nothing to be owed")
             else if null lost then StepOk w
             else StepFailed (tshow (length lost) <> " of " <> tshow (length owed)
-                             <> " marker/label id(s) of " <> wide <> " inside " <> narrowView
+                             <> " marker(s) of " <> wide <> " inside " <> narrowView
                              <> "'s view are missing from " <> narrow <> ": " <> listSome lost)
     -- "the far side of the globe is never sent" (@target). The horizon
     -- is a property of the CENTER alone -- no zoom term -- so this step
@@ -2120,16 +2117,6 @@ namedThings v = do
     , Set.fromList [ "place:" <> p | (p, _) <- ms ]
     , Set.fromList [ "memory:" <> p | p <- is ]
     ])
-
--- The two kinds together, which is how camera.feature states both
--- nesting laws ("markers and labels"). Ids are namespaced by kind so a
--- marker place and a label subject that happen to share a hex id are two
--- different things, as they are on the wire.
-cameraCulled :: Value -> Either Text [(Text, Vec3)]
-cameraCulled v = do
-  ms <- markerPoints v
-  ls <- labelAnchors v
-  pure ([ ("marker:" <> i, p) | (i, p) <- ms ] ++ [ ("label:" <> i, p) | (i, p) <- ls ])
 
 -- ---------- reading a transition plan ----------
 

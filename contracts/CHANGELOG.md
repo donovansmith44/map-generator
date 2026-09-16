@@ -50,6 +50,27 @@ rule even though the change is a correction.
   stability both, against the live wire. The same four fixtures move
   with it (4–5 features restyled at 1405 BC).
 
+- Breaking, wire: placement moves into the answer. `/api/scene` asked
+  with a camera answers `view` (the chart, camera and page it placed
+  for) and every label it sends carries `placement` (its box as page
+  fractions) and, for a city, `ground` (`region:HEX` or `unclaimed`);
+  labels that cannot be drawn at that view are not sent. Asked with no
+  camera it answers `view: null` and places nothing. `dress` gains
+  `labelOverflowEm`, the style's declared budget for a land name to
+  spill past its shore. `label-placement.feature`'s three placement
+  laws go green and lose their `@target`; two new laws, a land's name
+  sits on its land and a city names its ground, are stated and met.
+  The layout law is written once (map-encoders `layout`) and both the
+  SVG frame and the manifest draw from it. The four `scene-1405-*`
+  fixtures and `contract.json` (stale at 0.2.0) are re-blessed.
+  Breaking, corpus: `camera.feature`'s two nesting laws are restated
+  over markers alone (zooming out only reveals markers; zooming in
+  never loses a marker you are looking at). Names are not nested this
+  way once the answer draws them: a name drawn at one zoom may yield
+  at another to a neighbour that grew. `camera.feature`'s "a label is
+  only sent when the thing it names is in view" is met by the same
+  change and loses its `@target`.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.
