@@ -1123,6 +1123,28 @@ allSteps =
         if aa == ab then Right w
         else Left (a <> "'s borders/claims/fills features do not equal " <> b
                    <> "'s: " <> describeSetDiff aa ab)
+  , mkStep Then (lit "no two region labels of " *> capUntil @BindName " carry the same name") $
+      \(BindName n) w -> pure $ do
+        v <- boundScene n w
+        ls <- arrayOf "labels" v
+        rows <- traverse (\l -> (,) <$> textField "subject" l <*> textField "text" l) ls
+        let texts = [ t | (s, t) <- rows, "region:" `T.isPrefixOf` s ]
+            dups  = [ (t, c) | (t, c) <- Map.toList (tally texts), c > 1 ]
+        if null dups then Right w
+        else Left (tshow (length dups) <> " region name(s) of " <> n
+                   <> " are drawn more than once: "
+                   <> listSome [ t <> " (x" <> tshow c <> ")" | (t, c) <- take 5 dups ])
+  , mkStep Then (lit "no place of " *> capUntil @BindName " is labeled more than once") $
+      \(BindName n) w -> pure $ do
+        v <- boundScene n w
+        ls <- arrayOf "labels" v
+        subs <- traverse (textField "subject") ls
+        let ids  = [ normPlace s | s <- subs, "place:" `T.isPrefixOf` s ]
+            dups = [ (i, c) | (i, c) <- Map.toList (tally ids), c > 1 ]
+        if null dups then Right w
+        else Left (tshow (length dups) <> " place(s) of " <> n
+                   <> " are labeled more than once: "
+                   <> listSome [ i <> " (x" <> tshow c <> ")" | (i, c) <- take 5 dups ])
   , mkStep Then (lit "no two touching fills of " *> capUntil @BindName " share a style") $
       \(BindName n) w -> case boundScene n w of
         Left e -> pure (Left e)
@@ -2032,6 +2054,12 @@ placementOf l = case field "placement" l of
 -- reason and one that can fail for someone else's.
 labelSubjects :: Value -> Either Text [Text]
 labelSubjects v = traverse (textField "subject") =<< arrayOf "labels" v
+
+tally :: Ord a => [a] -> Map.Map a Int
+tally xs = Map.fromListWith (+) [ (x, 1) | x <- xs ]
+
+normPlace :: Text -> Text
+normPlace t = maybe t ("place:" <>) (T.stripPrefix "place:place:" t)
 
 labelSubjectSet :: Value -> Either Text (Set Text)
 labelSubjectSet v = Set.fromList <$> labelSubjects v

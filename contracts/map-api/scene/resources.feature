@@ -12,7 +12,7 @@ Feature: resources — geometry by content address
     When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene
     Then fetching scene's first resource twice yields identical bytes
 
-  @target @property
+  @property
   Scenario: fetching geometry in a batch is the same as fetching it one at a time
     When I render pieces <somePieces> at year <someYear> in style <someStyle> as scene
     Then fetching scene's first two resources as a batch equals fetching them singly

@@ -1623,6 +1623,8 @@ main = hspec $ do
             , (Then, "world's first region draws the whole map's borders, claims and fills")
             , (Then, "world's first region draws no water, ground or journeys features")
             , (Then, "no two touching fills of world share a style")
+            , (Then, "no two region labels of world carry the same name")
+            , (Then, "no place of world is labeled more than once")
             , (Then, "every fill whose touching neighbors are the same in first and second wears the same style in both")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
