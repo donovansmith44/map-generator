@@ -1,0 +1,11 @@
+# TOOLCHAIN-1 (atlas spec docs/superpowers/specs/2026-09-14-relational-artifact-design.md §3.2).
+# This repo path-depends on atlas-graph-types from eight crates and pins the
+# atlas version root (contract C6). Both repos must build with the SAME
+# compiler: the atlas's content-addressed ids are (until its cutover) a
+# `DefaultHasher` output, unspecified across Rust releases. Exact version,
+# never a channel name; bump in lockstep with the atlas, deliberately.
+#
+# crates/map-types/tests/toolchain_pin.rs makes this file load-bearing.
+[toolchain]
+channel = "1.97.1"
+components = ["llvm-tools"]
