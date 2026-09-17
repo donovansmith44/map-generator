@@ -153,6 +153,22 @@ rule even though the change is a correction.
   no style, since an area's rings are assembled by one function the
   scene and the delta share.
 
+- Breaking, wire: you can pan at any zoom. The view cap a scene is
+  cut to is derived from the page's own demand envelope, as the
+  server declares it (`camera.rs`: the zoom rounded to the nearest
+  half-octave, the centre rounded onto a grid of 40% of the zoom and
+  never finer than a tenth of a degree), and reaches one grid cell
+  further in every direction, so a step to a neighbouring cell
+  re-demands a manifest but never geometry. Before this the cap was
+  the page's nominal half-diagonal, so a deep zoom drew nothing at
+  its corners and every pan step waited on geometry. `camera.feature`
+  restates the cap in its prose and gains the law, stated over the
+  eight neighbouring cells' envelopes; in view is now composed with
+  the horizon wherever the runner judges a two-sided culling law,
+  feature or marker, since the served cap may reach past a quarter
+  turn.
+  `scene-1405-levant-cam` is re-blessed.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

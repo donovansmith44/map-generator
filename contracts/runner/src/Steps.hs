@@ -369,8 +369,8 @@ allSteps =
           vw <- cameraOf viewed w
           caps <- geometryEntryCaps =<< boundScene ref w
           seen <- geometryEntries =<< boundScene viewed w
-          let ins  = [ e | (e, c) <- caps, inView vw c ]
-              outs = [ e | (e, c) <- caps, outOfView vw c ]
+          let ins  = [ e | (e, c) <- caps, visibleFrom vw c ]
+              outs = [ e | (e, c) <- caps, not (visibleFrom vw c) ]
               missing = [ describeEntry e | e <- ins, not (e `Set.member` seen) ]
               leaked  = [ describeEntry e | e <- outs, e `Set.member` seen ]
           pure $ case (null ins, null outs) of
@@ -387,6 +387,29 @@ allSteps =
                    <> tshow (length missing) <> " in view but absent ("
                    <> listSome missing <> "); " <> tshow (length leaked)
                    <> " out of view but sent (" <> listSome leaked <> ")")
+  , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every feature of "
+                                          <*> capUntil @BindName " one pan away from its view, in every direction, at "
+                                          <*> capRest @Zoom)) $
+      \(BindName asked, BindName ref, z) w -> pure $
+        either StepFailed id $ do
+          (c, zAsked) <- maybe (Left (asked <> " was not rendered with a camera")) Right
+                           (Map.lookup asked (cameras w))
+          () <- if zAsked == z then Right ()
+                else Left ("this law is stated at zoom " <> renderCap z <> " but " <> asked
+                           <> " was rendered at zoom " <> renderCap zAsked)
+          caps <- geometryEntryCaps =<< boundScene ref w
+          seen <- geometryEntries =<< boundScene asked w
+          let eye = unitOf c
+              owed = [ (e, n) | n <- neighbourCells c z, let vw = demandCap n z
+                              , (e, cap) <- caps, inView vw cap, not (beyondHorizon eye cap) ]
+              lost = [ describeEntry e <> " toward " <> renderCap n | (e, n) <- owed, not (e `Set.member` seen) ]
+          pure $ if null owed
+            then StepSkipped ("no feature of " <> ref <> " lies within one pan of " <> asked
+                              <> "'s view at this camera; this law has nothing to be owed")
+            else if null lost then StepOk w
+            else StepFailed (tshow (length lost) <> " of " <> tshow (length owed)
+                             <> " geometry entries a neighbouring cell's page can show are missing from "
+                             <> asked <> ": " <> listSome lost)
   , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every marker of "
                                           <*> capUntil @BindName " in view and omits every marker of "
                                           <*> capUntil @BindName " out of view")) $
@@ -1687,17 +1710,38 @@ unitOf c = unitOfLatLon (latClamp (centerLat c)) (centerLon c)
 radiansOf :: Double -> Double
 radiansOf d = d * pi / 180
 
--- THE MARGIN. `build_query` (lib.rs:646-650):
---
---     radius = min(pi, radians(clamp(zoom, 0.05, 90) * 1.8))
---
--- The 1.8 is the server's own declared margin, and the characterization
--- pinned it empirically to better than 1%: a point at 1.78x the nominal
--- zoom is inside, at 1.82x it is outside. Conflating this cap radius
--- with the query's nominal `zoom` -- they differ by 80% -- is
--- characterization K3's named trap.
+-- THE VIEW CAP: the page's demand envelope, as the server declares it
+-- (crates/map-types/src/camera.rs). The page asks at a zoom rounded to
+-- the nearest half-octave, so its true zoom is at most 2^(1/4) times
+-- the asked one, and at a centre rounded onto a grid of 40% of the
+-- zoom, never finer than a tenth of a degree; the cap reaches the true
+-- page's half-diagonal plus half the grid's. Conflating this cap with
+-- the query's nominal zoom is characterization K3's named trap.
+centerGridDeg :: Double -> Double
+centerGridDeg z = max 0.1 (0.4 * z)
+
+demandReach :: Double -> Double
+demandReach z = (z * 2 ** 0.25 + centerGridDeg z / 2) * sqrt 2
+
+-- YOU CAN PAN AT ANY ZOOM: the served cap reaches the demand envelope
+-- of every neighbouring grid cell too, so one pan step re-demands a
+-- manifest but never geometry.
+servedReach :: Double -> Double
+servedReach z = demandReach z + centerGridDeg z * sqrt 2
+
+-- The demand envelope of one camera: what the page can show at it.
+demandCap :: Center -> Zoom -> Cap
+demandCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (demandReach (zoomClamp z))))
+
+-- The eight grid cells around a centre, at the zoom's own grid pitch.
+neighbourCells :: Center -> Zoom -> [Center]
+neighbourCells (Center la lo) (Zoom z) =
+  [ Center (latClamp (la + dy * g)) (lo + dx * g)
+  | dy <- [-1, 0, 1], dx <- [-1, 0, 1], (dx, dy) /= (0, 0) ]
+  where g = centerGridDeg (zoomClamp z)
+
 viewCap :: Center -> Zoom -> Cap
-viewCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (zoomClamp z * 1.8)))
+viewCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (servedReach (zoomClamp z))))
 
 -- The whole-sphere sentinel: a cap that covers the globe. It intersects
 -- every view cap, is disjoint from none, and lies beyond no horizon --
@@ -1715,6 +1759,13 @@ coversSphere cap = capRadius cap >= pi
 -- predicate, and the reason the margin above has to be right.
 inView :: Cap -> Cap -> Bool
 inView view f = angleBetween (capCenter view) (capCenter f) <= capRadius view + capRadius f
+
+-- VISIBLE: in view of the cap and not beyond its centre's horizon. The
+-- served cap may reach past a quarter turn at a wide zoom, and the far
+-- side is never sent, so what an answer owes is the composition of the
+-- two laws; its negation is what an answer must omit.
+visibleFrom :: Cap -> Cap -> Bool
+visibleFrom view f = inView view f && not (beyondHorizon (capCenter view) f)
 
 -- OUT OF VIEW: the two caps are disjoint. Stated as the negation, in one
 -- place, so the two can never drift into overlapping or leaving a gap --
@@ -1736,7 +1787,7 @@ beyondHorizon eye f = angleBetween eye (capCenter f) - capRadius f > pi / 2
 -- when it lies inside the view cap. The degenerate cap of radius zero,
 -- so it is the same predicate as `inView`, not a second one.
 pointInView :: Cap -> Vec3 -> Bool
-pointInView view p = inView view (Cap p 0)
+pointInView view p = visibleFrom view (Cap p 0)
 
 -- ---------- where the words go ----------
 

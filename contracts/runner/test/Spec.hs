@@ -1571,6 +1571,7 @@ main = hspec $ do
             , (Then, "viewed keeps every feature of world in view and omits every feature of world out of view")
             , (Then, "every resource here and there share is byte-identical in both")
             , (Then, "viewed keeps every marker of world in view and omits every marker of world out of view")
+            , (Then, "asked keeps every feature of world one pan away from its view, in every direction, at 2")
             , (Then, "narrow's markers are a subset of wide's")
             , (Then, "every marker of wide still in narrow's view is kept by narrow")
             , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
@@ -4146,40 +4147,30 @@ main = hspec $ do
       -- and the clamp does not flatten everything: two legal latitudes
       -- inside the frame stay distinct
       unitOf (Center 89.9 0) `shouldNotBe` unitOf (Center 89.8 0)
-    it "the view cap's radius is 1.8x the nominal zoom -- the margin \
-       \pinned at the characterization's own 1.78-in / 1.82-out boundary" $ do
-      -- Characterization 1.3, measured live: with zoom 2, a point at
-      -- 1.78x the nominal zoom is IN the view and one at 1.82x is OUT.
+    it "the view cap is the page's demand envelope: the true page's \
+       \half-diagonal at the ladder's top plus half the centre grid's, and \
+       \both terms are load-bearing" $ do
       -- Both sides, because a law asserting only "far things are out" is
       -- satisfied by culling everything (characterization C5's trap).
       let vw = viewCap origin (Zoom 2)
-      pointInView vw (east (1.78 * 2)) `shouldBe` True
-      pointInView vw (east (1.82 * 2)) `shouldBe` False
-    it "the 1.8 margin is load-bearing: a point at 1.5x the nominal zoom \
-       \is in view ONLY because of it, and one at 2.0x is out" $ do
-      -- The discriminating pair for the CONSTANT. Drop the margin to 1.0
-      -- and the first line flips; raise it to 2.0 and the second does.
-      -- Conflating the cap radius with the query's nominal zoom is
-      -- characterization K3's named trap, and this is what catches it.
-      let vw = viewCap origin (Zoom 2)
-      pointInView vw (east 3.0) `shouldBe` True
-      pointInView vw (east 4.0) `shouldBe` False
-    it "at the widest legal zoom the cap is 162 degrees -- not the whole \
-       \sphere, and the difference is exactly what makes the antipodal \
-       \case a statement about the FEATURE's extent" $ do
+          reach = (2 * 2 ** 0.25 + 0.8 / 2) * sqrt 2 + 0.8 * sqrt 2
+      pointInView vw (east (reach - 0.01)) `shouldBe` True
+      pointInView vw (east (reach + 0.01)) `shouldBe` False
+      -- the grid's floor is what keeps a deep zoom's corners: at zoom
+      -- 0.05 the page's centre may still be a twentieth of a degree off
+      let deep = viewCap origin (Zoom 0.05)
+      pointInView deep (east (0.05 * sqrt 2 * 1.1)) `shouldBe` True
+      capRadius deep `shouldSatisfy` \r -> r > degrees (0.05 * 2)
+    it "at the widest legal zoom the cap is the whole sphere: the envelope \
+       \of a hemisphere page reaches past the antipode" $ do
       let widest = viewCap origin (Zoom 90)
-      capRadius widest `shouldSatisfy` \r -> abs (r - degrees 162) < 1e-9
-      -- Characterization 1.3's degenerate end says that at zoom 90 the
-      -- camera is a no-op FOR THIS CANON -- and this is the precise
-      -- reason, which is easy to state wrongly. A bare POINT at 179
-      -- degrees is genuinely outside a 162-degree cap:
+      capRadius widest `shouldSatisfy` \r -> abs (r - pi) < 1e-9
+      inView widest (Cap (east 179) 0) `shouldBe` True
+      inView widest (Cap (east 179) (degrees 5)) `shouldBe` True
+      -- the cap reaches the far side; the horizon still hides it, so a
+      -- point there is in the cap and yet not visible
       pointInView widest (east 179) `shouldBe` False
-      pointInView widest (east 161) `shouldBe` True
-      -- What reaches everything is a FEATURE, because its own bounding
-      -- cap is added to the view's. An almost-antipodal feature with any
-      -- appreciable extent still intersects:
-      inView widest (Cap (east 179) (degrees 20)) `shouldBe` True
-      inView widest (Cap (east 179) (degrees 5)) `shouldBe` False
+      pointInView widest (east 89) `shouldBe` True
     it "inView counts the FEATURE's own extent, not only the view's -- \
        \the discriminating case a view-radius-only mutation fails" $ do
       let vw = Cap (east 0) 0.4
@@ -4592,6 +4583,20 @@ main = hspec $ do
                            [] []
         camAt0 = (Center 0 0, Zoom 2)
 
+    it "the pan law owes a neighbouring cell's whole page: a feature just past the \
+       \asked view but inside the next cell's envelope must be sent" $ do
+      -- at zoom 2 the grid pitch is 0.8 degrees; a feature 4 degrees east
+      -- is inside the eastern neighbour's envelope (0.8 + 3.7) and owed
+      let world = manifest [feat "region:near" "rn", feat "region:next" "rx", feat "region:far" "rf"]
+                           [res "rn" 10 (east 0) 0.001, res "rx" 10 (east 4) 0.001, res "rf" 10 (east 40) 0.001] [] []
+          full = manifest [feat "region:near" "rn", feat "region:next" "rx"]
+                          [res "rn" 10 (east 0) 0.001, res "rx" 10 (east 4) 0.001] [] []
+          tight = manifest [feat "region:near" "rn"] [res "rn" 10 (east 0) 0.001] [] []
+          law = "asked keeps every feature of world one pan away from its view, in every direction, at 2"
+      shouldPass =<< runThen law [("asked", full), ("world", world)] [("asked", camAt0)]
+      o <- runThen law [("asked", tight), ("world", world)] [("asked", camAt0)]
+      shouldFailWith "region:next" o
+      shouldFailWith "neighbouring cell" o
     it "the two-sided marker law partitions markers by the view cap, both halves" $ do
       let world = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
           honest = manifest [] [] [] [mrk "place:near" (east 0)]
@@ -4611,6 +4616,16 @@ main = hspec $ do
       shouldSkipWith "carries no markers" =<<
         runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
           [("viewed", hollow), ("world", hollow)] [("viewed", camAt0)]
+    it "... and a marker beyond the horizon is OUT of view however wide the camera, \
+       \the same composition the feature law uses: the served cap may reach past a \
+       \quarter turn, and a point on the far side is never owed" $ do
+      let world = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+          honest = manifest [] [] [] [mrk "place:near" (east 0)]
+          law = "viewed keeps every marker of world in view and omits every marker of world out of view"
+      shouldPass =<< runThen law [("viewed", honest), ("world", world)] [("viewed", (Center 0 0, Zoom 90))]
+      o <- runThen law [("viewed", world), ("world", world)] [("viewed", (Center 0 0, Zoom 90))]
+      shouldFailWith "out of view but sent" o
+      shouldFailWith "place:far" o
     it "the two-sided culling law is stated over geometry ENTRIES: a region whose \
        \rings straddle the view keeps the ring in view and drops the one beyond" $ do
       let world = manifest [feat "region:r" "rn", feat "region:r" "rf", feat "markers:markers" "pm"]
@@ -4638,9 +4653,18 @@ main = hspec $ do
       shouldPass o
     it "... and it SKIPS rather than passes when the camera leaves \
        \nothing out of view: a green earned by the draw is not a green" $ do
+      let nearHemisphere = manifest [feat "region:near" "rn", feat "region:wide" "rw"]
+                                    [res "rn" 10 (east 0) 0.001, res "rw" 10 (east 60) 0.001] [] []
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", nearHemisphere), ("world", nearHemisphere)] [("viewed", (Center 0 0, Zoom 90))]
+      shouldSkipWith "cannot exercise the \"omits\" half" o
+    it "... and the far side counts as OUT of view however wide the camera: \
+       \the served cap may reach past a quarter turn, and the answer owes \
+       \nothing beyond the horizon" $ do
       o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
              [("viewed", nearFar), ("world", nearFar)] [("viewed", (Center 0 0, Zoom 90))]
-      shouldSkipWith "cannot exercise the \"omits\" half" o
+      shouldFailWith "out of view but sent" o
+      shouldFailWith "region:far" o
     it "... and a scene rendered with NO camera is an error, not a pass: \
        \a law about a view cannot be checked against a scene with none" $ do
       o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"

@@ -1287,12 +1287,13 @@ mod camera_laws {
 
     #[test]
     fn the_view_cap_is_the_zoom_with_the_declared_margin_and_the_server_clamps() {
+        let reach = crate::camera::served_reach_deg;
         let c = Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0);
-        assert!((c.cap().radius - (4.0_f64 * 1.8).to_radians()).abs() < 1e-12);
+        assert!((c.cap().radius - reach(4.0).to_radians()).abs() < 1e-12);
         let wide = Camera::new(ChartKind::Globe, 0.0, 0.0, 90.0, 1200.0);
-        assert!((wide.cap().radius - (162.0_f64).to_radians()).abs() < 1e-12);
+        assert!((wide.cap().radius - reach(90.0).to_radians().min(std::f64::consts::PI)).abs() < 1e-12);
         let tiny = Camera::new(ChartKind::Globe, 0.0, 0.0, 0.001, 1200.0);
-        assert!((tiny.cap().radius - (0.05_f64 * 1.8).to_radians()).abs() < 1e-12);
+        assert!((tiny.cap().radius - reach(0.05).to_radians()).abs() < 1e-12, "zoom is clamped before the reach is derived");
         let polar = Camera::new(ChartKind::Globe, 90.0, 0.0, 4.0, 1200.0);
         assert_eq!(polar.lat, 89.9, "latitude is clamped the way the wire clamps it");
     }
@@ -1306,5 +1307,28 @@ mod camera_laws {
         assert!(crate::style::Style::new(spec).is_err());
         spec.labeling.scale.overflow_em = 0.0;
         assert!(crate::style::Style::new(spec).is_ok());
+    }
+}
+
+mod demand_envelope_laws {
+    use crate::camera::{Camera, ChartKind};
+
+    /// The view cap covers everything the page can show at the camera
+    /// it asks with: the page rounds its zoom down to a half-octave
+    /// step and its centre onto a grid of 40% of the zoom, never finer
+    /// than a tenth of a degree, so the true view's farthest corner
+    /// lies within 2^(1/4) x sqrt(2) x zoom of the asked centre plus
+    /// that grid's own diagonal.
+    #[test]
+    fn the_view_cap_covers_the_pages_demand_envelope() {
+        for zoom in [0.05, 0.1, 0.125, 0.3, 1.0, 4.0, 22.0, 45.0, 90.0] {
+            let cap = Camera::new(ChartKind::Globe, 31.5, 35.0, zoom, 1200.0).cap().radius.to_degrees();
+            let corner = zoom * 2f64.powf(0.25) * 2f64.sqrt();
+            let grid = (0.4 * zoom).max(0.1) / 2f64.sqrt();
+            let needed = (corner + grid).min(180.0);
+            assert!(cap >= needed - 1e-9, "zoom {zoom}: cap {cap:.3} degrees covers {needed:.3}");
+            let one_pan = (corner + grid + (0.4 * zoom).max(0.1) * 2f64.sqrt()).min(180.0);
+            assert!(cap >= one_pan - 1e-9, "zoom {zoom}: cap {cap:.3} degrees reaches a neighbouring cell's envelope {one_pan:.3}");
+        }
     }
 }

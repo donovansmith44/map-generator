@@ -27,9 +27,35 @@ pub const LAT_LIMIT: f64 = 89.9;
 /// The wire's zoom frame in degrees of angular radius.
 pub const ZOOM_MIN: f64 = 0.05;
 pub const ZOOM_MAX: f64 = 90.0;
-/// The view cap's margin over the nominal zoom: a scene is culled to
-/// this cap, generous enough that a pan within it re-demands nothing.
-pub const VIEW_MARGIN: f64 = 1.8;
+/// THE PAGE'S DEMAND ENVELOPE, declared here because the cap a scene
+/// is cut to must cover everything the page can show at the camera it
+/// asks with. The page asks at a zoom rounded to the nearest
+/// half-octave, so its true zoom is at most 2^(1/4) times the asked
+/// one, and at a centre rounded onto a grid of this share of the zoom,
+/// never finer than the floor, so its true centre is at most half the
+/// grid's diagonal away.
+pub const ZOOM_LADDER_STEP: f64 = 0.5;
+pub const CENTER_GRID_SHARE: f64 = 0.4;
+pub const CENTER_GRID_FLOOR_DEG: f64 = 0.1;
+
+/// The centre grid's pitch at a zoom, in degrees.
+pub fn center_grid_deg(zoom: f64) -> f64 {
+    (CENTER_GRID_SHARE * zoom).max(CENTER_GRID_FLOOR_DEG)
+}
+
+/// The farthest a visible point can lie from the asked centre, in
+/// degrees: the true page's half-diagonal plus half the grid's.
+pub fn demand_reach_deg(zoom: f64) -> f64 {
+    let true_zoom = zoom * 2f64.powf(ZOOM_LADDER_STEP / 2.0);
+    (true_zoom + center_grid_deg(zoom) / 2.0) * 2f64.sqrt()
+}
+
+/// YOU CAN PAN AT ANY ZOOM: the cap a scene is cut to reaches the
+/// demand envelope of every neighbouring grid cell as well, so one
+/// pan step re-demands a manifest but never geometry.
+pub fn served_reach_deg(zoom: f64) -> f64 {
+    demand_reach_deg(zoom) + center_grid_deg(zoom) * 2f64.sqrt()
+}
 /// The page every label size is stated against, in px.
 pub const DESIGN_WIDTH: f64 = 1200.0;
 /// The rendered page's own width frame, in px.
@@ -68,10 +94,12 @@ impl Camera {
         c.f64_(self.lat).f64_(self.lon).f64_(self.zoom).f64_(self.width);
     }
 
+    /// The cap a scene is cut to: the page's demand envelope at this
+    /// zoom, never more than the whole sphere.
     pub fn cap(&self) -> Bbox {
         Bbox {
             center: self.center(),
-            radius: (self.zoom.clamp(ZOOM_MIN, ZOOM_MAX) * VIEW_MARGIN)
+            radius: served_reach_deg(self.zoom.clamp(ZOOM_MIN, ZOOM_MAX))
                 .to_radians()
                 .min(std::f64::consts::PI),
         }

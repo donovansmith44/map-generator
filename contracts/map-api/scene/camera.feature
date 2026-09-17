@@ -1,9 +1,15 @@
 Feature: the camera — what you look at is what you get, and nothing else changes
   Changing the view means one thing: choosing which features are sent.
   It never edits them. VISIBILITY IS DEFINED, not vibes: the view is a
-  cap on the globe at the given center whose radius the zoom declares
-  (radius = zoom x 1.8 degrees, the server's own margin, confirmed
-  empirically at 1.78 in / 1.82 out); a feature is IN VIEW when its own
+  cap on the globe at the given center whose radius is the page's own
+  demand envelope, as the server declares it: the page asks at a zoom
+  rounded to the nearest half-octave and at a centre rounded onto a
+  grid of 40% of the zoom, never finer than a tenth of a degree, so the
+  cap reaches the true page's half-diagonal plus half the grid's
+  (radius = (zoom x 2^(1/4) + max(0.1, 0.4 x zoom) / 2) x sqrt 2
+  degrees), and one grid cell further in every direction, so that you
+  can pan at any zoom: a step to a neighbouring cell re-demands a
+  manifest but never geometry; a feature is IN VIEW when its own
   bounding cap intersects the view cap, OUT OF VIEW when the two caps
   are disjoint beyond the margin, and BEYOND THE HORIZON when its
   bounds lie entirely more than a quarter turn from the center. The
@@ -35,6 +41,12 @@ Feature: the camera — what you look at is what you get, and nothing else chang
     When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as viewed
     And I render pieces <somePieces> at year <someYear> in style <someStyle> detail fine as world
     Then viewed keeps every feature of world in view and omits every feature of world out of view
+
+  @property
+  Scenario: you can pan at any zoom
+    When I render pieces <somePieces> at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> detail fine as asked
+    And I render pieces <somePieces> at year <someYear> in style <someStyle> detail fine as world
+    Then asked keeps every feature of world one pan away from its view, in every direction, at <someZoom>
 
   @property
   Scenario: every marker in view is sent
