@@ -33,6 +33,7 @@ pub mod encode;
 pub mod geom;
 pub mod ident;
 pub mod laws;
+pub mod license;
 pub mod piece;
 pub mod provider;
 pub mod query;

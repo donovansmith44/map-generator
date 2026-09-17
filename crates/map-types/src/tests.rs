@@ -28,6 +28,12 @@ use crate::transition::*;
 
 // ---------------------------------------------------------------- fixtures
 
+/// A test source under terms that ask nothing, so a law about something
+/// else is never really a law about licensing.
+fn cred(name: impl Into<String>) -> crate::license::Credit {
+    crate::license::Credit::new(SourceId::new(name), crate::license::License::Cc0)
+}
+
 
 fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
     const TV: crate::style::TypeVoice = crate::style::TypeVoice {
@@ -199,7 +205,7 @@ fn marker_scene(tag: u8) -> Snapshot {
         place: None,
         piece: crate::piece::Piece::Markers,
     });
-    sc.attribution.insert(SourceId::new(format!("src-{tag}")));
+    sc.attribution.insert(cred(format!("src-{tag}")));
     sc
 }
 
@@ -642,7 +648,7 @@ fn law10_selection_coherence() {
             outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
             holes: vec![],
             paint: style.region_paint(),
-            sources: [SourceId::new("historical-source")].into(),
+            sources: [cred("historical-source")].into(),
             piece: crate::piece::Piece::Fills,
         });
         sc.labels.push(PlacedLabel {
@@ -661,7 +667,7 @@ fn law10_selection_coherence() {
             },
             piece: crate::piece::Piece::Labels,
         });
-        sc.attribution.insert(SourceId::new("historical-source"));
+        sc.attribution.insert(cred("historical-source"));
         sc
     };
     let a = region_scene(A, "Westland", 0.0);
@@ -1331,4 +1337,145 @@ mod demand_envelope_laws {
             assert!(cap >= one_pan - 1e-9, "zoom {zoom}: cap {cap:.3} degrees reaches a neighbouring cell's envelope {one_pan:.3}");
         }
     }
+}
+
+// ------------------------------------- law 6a: provenance carries terms
+
+/// Law 6 says provenance is total: every drawn thing names where it came
+/// from. That is only half an answer. A consumer redistributing the scene
+/// must also know what each source PERMITS, and the atlas that consumes us
+/// has a hard free-and-open-source requirement it cannot check against a
+/// name alone. So a source and its terms travel together or not at all.
+mod licensing_laws {
+    use crate::license::{Credit, License};
+    use atlas_graph_types::covenant::SourceId;
+
+    /// The ladder, whole: every license this canon can carry, in order of
+    /// what it asks of a redistributor, with both obligations pinned.
+    #[test]
+    fn every_license_names_its_terms_and_what_they_require() {
+        let ids: Vec<&str> = License::ALL.iter().map(|l| l.id()).collect();
+        assert_eq!(
+            ids,
+            vec![
+                "public-domain",
+                "CC0-1.0",
+                "CC-BY-4.0",
+                "CC-BY-SA-3.0",
+                "CC-BY-SA-4.0",
+                "ODbL-1.0",
+                "GPL-3.0-only",
+            ]
+        );
+        let credit: Vec<bool> = License::ALL.iter().map(|l| l.credit_required()).collect();
+        assert_eq!(credit, vec![false, false, true, true, true, true, true]);
+        let sa: Vec<bool> = License::ALL.iter().map(|l| l.share_alike()).collect();
+        assert_eq!(sa, vec![false, false, false, true, true, true, true]);
+    }
+
+    /// The ladder is monotone: nothing that demands share-alike fails to
+    /// demand credit. A license that asked for the harder thing and not
+    /// the easier one would be a classification error, not a license.
+    #[test]
+    fn share_alike_never_comes_without_credit() {
+        for l in License::ALL {
+            assert!(
+                !l.share_alike() || l.credit_required(),
+                "{} asks for share-alike without credit",
+                l.id()
+            );
+        }
+    }
+
+    /// A scene answers the licensing question about ITSELF, derived from
+    /// what it actually draws rather than asserted beside it. This is the
+    /// question the consuming atlas has, and the only honest answer to it
+    /// is a function of the picture.
+    #[test]
+    fn a_scene_reports_the_terms_of_everything_it_draws() {
+        let sc = super::two_origin_scene();
+        assert_eq!(
+            sc.licenses(),
+            [License::PublicDomain, License::Gpl3].into_iter().collect()
+        );
+        assert!(sc.requires_share_alike());
+    }
+
+    /// The mechanism a permissive-only consumer needs: ask for the scene
+    /// you may redistribute and get exactly that. What you may not keep is
+    /// gone, its terms are gone with it, and the name it carried goes too.
+    #[test]
+    fn a_scene_under_permitted_terms_drops_what_it_may_not_redistribute() {
+        let sc = super::two_origin_scene();
+        let permissive: std::collections::BTreeSet<License> =
+            License::ALL.iter().copied().filter(|l| !l.share_alike()).collect();
+        let cut = sc.under(&permissive);
+
+        assert_eq!(cut.regions.len(), 1, "only the public-domain region survives");
+        assert_eq!(cut.regions[0].region, super::A);
+        assert_eq!(cut.licenses(), [License::PublicDomain].into_iter().collect());
+        assert!(!cut.requires_share_alike());
+        assert_eq!(
+            cut.labels.len(),
+            1,
+            "the dropped region's name goes with it; the kept region keeps its own"
+        );
+        assert_eq!(cut.labels[0].text, "Westland");
+
+        // and asking for everything is the scene unchanged
+        let all: std::collections::BTreeSet<License> = License::ALL.into_iter().collect();
+        assert_eq!(sc.under(&all), sc);
+    }
+
+    /// The point of the type: a source cannot be named without its terms.
+    /// `Credit` is the only way attribution is ever extended, so a scene
+    /// that draws a thing always knows what redistributing it requires.
+    #[test]
+    fn a_credit_binds_a_source_to_its_terms() {
+        let c = Credit::new(SourceId::new("historical-basemaps"), License::Gpl3);
+        assert_eq!(c.source, SourceId::new("historical-basemaps"));
+        assert_eq!(c.license, License::Gpl3);
+        assert!(c.license.share_alike());
+        assert!(c.license.credit_required());
+    }
+}
+
+/// Two regions from two origins with different terms: one public domain,
+/// one under the GPL basemap corpus. Each carries its own name.
+fn two_origin_scene() -> Snapshot {
+    use crate::license::{Credit, License};
+    let style = honest_style();
+    let mut sc = Snapshot::empty();
+    let mut push = |id: RegionId, name: &str, lat: f64, credit: Credit| {
+        sc.regions.push(StyledRegion {
+            trace: None,
+            region: id,
+            entity: None,
+            outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
+            holes: vec![],
+            paint: style.region_paint(),
+            sources: [credit.clone()].into(),
+            piece: crate::piece::Piece::Fills,
+        });
+        sc.labels.push(PlacedLabel {
+            text: name.to_string(),
+            at: uv(lat + 2.0, 2.5),
+            subject: LabelSubject::Region(id),
+            style: style.label_style(),
+            face: crate::scene::LabelFace::Place,
+            voice: crate::style::TypeVoice {
+                family: "sans-serif",
+                weight: 600,
+                italic: false,
+                uppercase: false,
+                tracking_em: 0.0,
+                advance_em: 0.62,
+            },
+            piece: crate::piece::Piece::Labels,
+        });
+        sc.attribution.insert(credit);
+    };
+    push(A, "Westland", 0.0, Credit::new(SourceId::new("natural-earth"), License::PublicDomain));
+    push(B, "Eastland", 20.0, Credit::new(SourceId::new("historical-basemaps"), License::Gpl3));
+    sc
 }

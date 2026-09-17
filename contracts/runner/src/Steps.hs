@@ -925,6 +925,51 @@ allSteps =
             else if null bad then Right w
             else Left (tshow (length bad) <> " of " <> tshow (length fs)
                        <> " entries of " <> n <> " do not trace to the fact tier: " <> listSome bad)
+  -- licensing.feature: THE TERMS RIDE THE ANSWER. Law 6 makes
+  -- provenance total; these make the terms total too, and state them so
+  -- a constant cannot pass: the declared set must be exactly the set
+  -- the drawn sources carry, no more and no less.
+  , mkStep Then (lit "" *> capUntil @BindName " credits every source it draws with that source's own terms") $
+      \(BindName n) w -> pure $ do
+        v <- boundScene n w
+        credits <- arrayOf "attribution" v
+        rows <- traverse creditRow credits
+        declared <- licenseTerms v
+        let unnamed = [ src | (src, lic) <- rows, T.null lic ]
+            carried = Set.fromList (map snd rows)
+            missing = Set.toList (Set.difference carried declared)
+            phantom = Set.toList (Set.difference declared carried)
+        if null credits
+          then Left (n <> " credits no source at all, so nothing it draws says what may be done with it")
+        else if not (null unnamed)
+          then Left (tshow (length unnamed) <> " of " <> tshow (length rows)
+                     <> " sources are credited with no terms: " <> listSome unnamed)
+        else if not (null missing)
+          then Left (n <> " draws sources under terms it does not declare: " <> listSome missing)
+        else if not (null phantom)
+          then Left (n <> " declares terms no source it draws carries: " <> listSome phantom)
+        else Right w
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s terms are exactly "
+                                <*> capRest @LicenseTerms)) $
+      \(BindName n, LicenseTerms want) w -> pure $ do
+        v <- boundScene n w
+        declared <- licenseTerms v
+        let wanted = Set.fromList (filter (not . T.null) (map T.strip (T.splitOn "," want)))
+        if declared == wanted
+          then Right w
+          else Left (n <> " is redistributable under " <> listSome (Set.toList declared)
+                     <> ", not " <> listSome (Set.toList wanted))
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s terms include "
+                                <*> capRest @LicenseTerms)) $
+      \(BindName n, LicenseTerms want) w -> pure $ do
+        v <- boundScene n w
+        declared <- licenseTerms v
+        let wanted = Set.fromList (filter (not . T.null) (map T.strip (T.splitOn "," want)))
+            absent = Set.toList (Set.difference wanted declared)
+        if null absent
+          then Right w
+          else Left (n <> " does not carry " <> listSome absent
+                     <> "; it declares " <> listSome (Set.toList declared))
     -- census.feature: a BOUND response against a fixture. The existing
     -- fixture step compares the LAST response; a @property scenario that
     -- binds its response under a name (so the counterexample can report
@@ -1979,6 +2024,20 @@ arrayOf k v = case field k v of
   Right other     -> Left ("field " <> k <> " is not an array: " <> bounded other)
   Left e          -> Left e
 
+-- One row of the answer's attribution: a source and the terms it is
+-- available under, which travel together or the row is not a credit.
+creditRow :: Value -> Either Text (Text, Text)
+creditRow v = (,) <$> textField "source" v <*> textField "license" v
+
+-- The distinct terms the whole picture requires.
+licenseTerms :: Value -> Either Text (Set.Set Text)
+licenseTerms v = do
+  xs <- arrayOf "licenses" v
+  Set.fromList <$> traverse one xs
+  where
+    one (String t) = Right t
+    one other = Left ("a declared license is not a string: " <> bounded other)
+
 textField :: Text -> Value -> Either Text Text
 textField k v = case field k v of
   Right (String s) -> Right s
@@ -2777,6 +2836,13 @@ tooFew n have want =
 -- there) and exactly wrong for a URL (fix 7: it silently swallowed
 -- " as first" as part of a GET path, making an undefined "as"-binding
 -- step invisible to the totality check).
+newtype LicenseTerms = LicenseTerms Text deriving (Eq, Show)
+instance FromCapture LicenseTerms where
+  capName _ = "terms"
+  universe _ = Described "one or more licence identifiers, comma-separated (e.g. public-domain, GPL-3.0-only)"
+  renderCap (LicenseTerms t) = t
+  parseCap = Right . LicenseTerms . T.strip
+
 newtype FixtureRefFreeText = FixtureRefFreeText Text deriving (Eq, Show)
 instance FromCapture FixtureRefFreeText where
   capName _ = "text"

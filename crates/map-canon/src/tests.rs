@@ -884,3 +884,74 @@ fn witnesses_sort_by_witness_then_layer_then_minted_id_and_names_sort_deduped() 
         "witnesses sorted by (witness, layer, minted_as), content pinned exactly"
     );
 }
+
+// ---------------------------------------------- a witness names its terms
+
+/// A witness is an ORIGIN: the dataset a fact actually came from. Every
+/// origin is available under terms, and the map publishes those terms with
+/// the fact, so a consumer can decide what it may redistribute. The match
+/// is total by construction: a new origin that names no license does not
+/// compile, which is the only reliable place to enforce this.
+#[test]
+fn every_witness_names_the_terms_its_data_is_available_under() {
+    use map_types::license::License;
+    let table: Vec<(Witness, Vec<&str>)> = Witness::ALL
+        .iter()
+        .map(|w| (*w, w.licenses().iter().map(|l| l.id()).collect()))
+        .collect();
+    assert_eq!(
+        table,
+        vec![
+            (Witness::Atlas, vec!["CC-BY-SA-4.0"]),
+            (Witness::Authored, vec!["CC0-1.0"]),
+            (Witness::Basemap, vec!["GPL-3.0-only"]),
+            (Witness::NaturalEarth, vec!["public-domain"]),
+            (Witness::OpenBible, vec!["CC-BY-4.0"]),
+            (Witness::Osm, vec!["ODbL-1.0"]),
+            (Witness::Wikimedia, vec!["CC-BY-SA-3.0"]),
+            // the composite: every dataset the plane partition consumes
+            (
+                Witness::Partition,
+                vec!["public-domain", "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-3.0", "CC-BY-SA-4.0", "ODbL-1.0"],
+            ),
+        ],
+        "each origin's terms, whole: the vendored LICENSE file of each dataset"
+    );
+    let _ = License::ALL;
+}
+
+/// The origins whose data this canon actually redistributes under
+/// share-alike terms. Naming them is the point: a consumer with a
+/// permissive-only requirement drops exactly these.
+#[test]
+fn the_share_alike_origins_are_named_not_inferred() {
+    let sa: Vec<Witness> = Witness::ALL.iter().copied().filter(|w| w.share_alike()).collect();
+    assert_eq!(
+        sa,
+        vec![
+            Witness::Atlas,
+            Witness::Basemap,
+            Witness::Osm,
+            Witness::Wikimedia,
+            // the partition inherits share-alike from four of its six inputs
+            Witness::Partition,
+        ]
+    );
+}
+
+/// WHETHER SCRIPTURE STANDS BEHIND A FACT is a property of its origin,
+/// like its terms, and it is inherited the same way: the plane partition
+/// is cut from the atlas's and our own scripture-grounded claims, so the
+/// faces it emits are grounded exactly as the claims that shaped them.
+/// Bible mode keeps what Scripture grounds; an origin that forgot to say
+/// so disappears from the map entirely.
+#[test]
+fn every_witness_says_whether_scripture_stands_behind_it() {
+    let grounded: Vec<Witness> =
+        Witness::ALL.iter().copied().filter(|w| w.scripture_grounded()).collect();
+    assert_eq!(
+        grounded,
+        vec![Witness::Atlas, Witness::Authored, Witness::Partition],
+        "the atlas's facts, our own authoring, and everything cut from them"
+    );
+}

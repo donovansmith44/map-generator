@@ -3,6 +3,7 @@
 //! canon provider carries the contract now, morphs included.
 
 use map_types::style::*;
+use map_types::license::{Credit, Credited, License};
 
 pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
     let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
@@ -74,6 +75,7 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
 }
 
 mod canon_provider_laws {
+    use map_types::license::{Credit, Credited, License};
     use std::collections::{BTreeMap, BTreeSet};
 
     use atlas_graph_types::covenant::{PlaceId, SourceId, TimePoint, Year};
@@ -285,15 +287,15 @@ mod canon_provider_laws {
         let assyria = scene
             .regions
             .iter()
-            .find(|r| r.sources.contains(&SourceId::new("witness:atlas")))
+            .find(|r| r.sources.names("witness:atlas"))
             .expect("assyria realized");
-        assert!(assyria.sources.contains(&SourceId::new("scripture")), "atlas truth is scripture-grounded");
+        assert!(assyria.sources.names("scripture"), "atlas truth is scripture-grounded");
         assert!(
             scene.labels.iter().any(|l| l.text == "Assyria"),
             "areas carry their names"
         );
         assert!(
-            scene.regions.iter().any(|r| r.sources.contains(&SourceId::new("witness:natural-earth"))),
+            scene.regions.iter().any(|r| r.sources.names("witness:natural-earth")),
             "water rides along"
         );
 
@@ -323,7 +325,7 @@ mod canon_provider_laws {
             scene
                 .regions
                 .iter()
-                .position(|r| r.sources.contains(&SourceId::new(witness)))
+                .position(|r| r.sources.names(witness))
                 .unwrap_or_else(|| panic!("{witness} region present"))
         };
         let land = idx_of("witness:atlas");
@@ -433,7 +435,7 @@ mod canon_provider_laws {
         q.pieces = q.pieces.with(Piece::Ground);
         let scene = p.render(&q).unwrap();
         let idx_of = |w: &str| {
-            scene.regions.iter().position(|r| r.sources.contains(&SourceId::new(w)))
+            scene.regions.iter().position(|r| r.sources.names(w))
                 .unwrap_or_else(|| panic!("{w} region present"))
         };
         assert!(
@@ -639,7 +641,7 @@ mod canon_provider_laws {
             scene
                 .boundaries
                 .iter()
-                .find(|b| b.sources.contains(&SourceId::new("witness:atlas")))
+                .find(|b| b.sources.names("witness:atlas"))
                 .map(|b| b.pts.len())
         };
         assert_eq!(way_pts(44), None, "not yet departed");
@@ -667,9 +669,7 @@ mod canon_provider_laws {
             .unwrap();
         assert_eq!(only.regions.len(), 1, "just assyria");
         assert!(only.labels.iter().any(|l| l.text == "Assyria"));
-        assert!(only.regions[0]
-            .sources
-            .contains(&atlas_graph_types::covenant::SourceId::new("witness:atlas")));
+        assert!(only.regions[0].sources.names("witness:atlas"));
     }
 
     /// A canon that puts SOMETHING in every piece: relief bands

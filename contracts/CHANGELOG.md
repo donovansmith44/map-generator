@@ -169,6 +169,50 @@ rule even though the change is a correction.
   turn.
   `scene-1405-levant-cam` is re-blessed.
 
+- Breaking, wire and canon: a source travels with its terms. Law 6 made
+  provenance total, which answered where a drawn thing came from but not
+  what may be done with it, and the consuming atlas has a hard
+  free-and-open-source requirement it cannot check against a name. There
+  is now a closed `License` type, a `Credit` pairing a source with its
+  terms, and a total `Witness::licenses` the compiler refuses to let a
+  new origin skip. `/api/scene` answers `attribution` (source and licence
+  per row) and `licenses` (the distinct terms the picture requires), and
+  carries `X-License`; the GeoJSON encoder's `attribution` rows gain the
+  same shape. `fact/licensing.feature` states three laws, two of them
+  stated so a constant cannot pass them: relief alone is public domain
+  and the world's political ground is not.
+
+  Two misattributions are corrected by the same change, both of which
+  had been publishing a false claim. River courses are OpenStreetMap
+  under ODbL 1.0 and the twelve-tribes allotments are Wikimedia under CC
+  BY-SA 3.0; both were recorded as our own authored work under CC0. Four
+  origins are added for what was already being ingested (`OpenBible`,
+  `Osm`, `Wikimedia`, and `Partition`), and everything cut from the
+  plane partition now names the partition as its origin, which carries
+  the terms of all six datasets feeding it at once. Identity is
+  untouched: a cohort's face is still witnessed by the atlas or by us,
+  and only what it is MADE OF follows the partition.
+
+  Giving the partition its own origin cost the map its bible mode for
+  one round, and the golden gate is what caught it. Bible mode keeps
+  what Scripture grounds, and grounding had been a hand-written list of
+  two witnesses; partition faces used to be on it by being `Authored`
+  and fell off it by becoming `Partition`, so every fill, claim and
+  river vanished under bare relief at both beloved stops. Grounding is
+  now a property the origin answers for itself and inherits exactly as
+  it inherits terms, and the provider asks the witness instead of
+  matching names, so a new origin cannot silently fall out of the map.
+  No law in this suite covers bible mode; it was green throughout.
+
+  Two readings are deliberately conservative and want the owner's eye.
+  Atlas-sourced facts are carried under CC BY-SA 4.0, because the
+  atlas's exports mix its CC0 curated rows with Theographic-derived ones
+  and do not distinguish them per row. Partition-derived geometry
+  carries every input's terms rather than only those its own face used,
+  which over-credits and never under-credits. The honest consequence,
+  visible on the wire for the first time: a full scene at the Levant
+  declares all seven licences, GPL-3.0 included.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

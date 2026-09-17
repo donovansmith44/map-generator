@@ -400,27 +400,33 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
     let scripture = SourceId::new(SCRIPTURE_SOURCE);
     // The physical stage — seas, lakes, relief — is never a claim to
     // filter: the whole world stays part of the map in bible mode.
-    let stage = |srcs: &std::collections::BTreeSet<SourceId>| {
-        srcs.iter().any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth" || s.0 == "etopo1")
+    let stage = |srcs: &std::collections::BTreeSet<map_types::license::Credit>| {
+        srcs.iter().any(|c| {
+            let n = &c.source.0;
+            n == "witness:natural-earth" || n == "natural-earth" || n == "etopo1"
+        })
+    };
+    let grounded = |srcs: &std::collections::BTreeSet<map_types::license::Credit>| {
+        srcs.iter().any(|c| c.source == scripture)
     };
     let regions: Vec<_> = scene
         .regions
         .iter()
-        .filter(|r| r.sources.contains(&scripture) || stage(&r.sources))
+        .filter(|r| grounded(&r.sources) || stage(&r.sources))
         .cloned()
         .collect();
     let boundaries: Vec<_> =
-        scene.boundaries.iter().filter(|b| b.sources.contains(&scripture)).cloned().collect();
+        scene.boundaries.iter().filter(|b| grounded(&b.sources)).cloned().collect();
     let kept_regions: std::collections::BTreeSet<_> = regions.iter().map(|r| r.region).collect();
     let kept_bounds: std::collections::BTreeSet<_> = boundaries.iter().map(|b| b.boundary).collect();
     // Markers select by their own sources — a journey's stations are
     // as scripture-grounded as the way through them.
     let markers: Vec<_> =
-        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+        scene.markers.iter().filter(|m| grounded(&m.sources)).cloned().collect();
     let kept_places: std::collections::BTreeSet<_> =
         markers.iter().filter_map(|m| m.place.clone()).collect();
     let inscriptions: Vec<_> =
-        scene.inscriptions.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+        scene.inscriptions.iter().filter(|m| grounded(&m.sources)).cloned().collect();
     let kept_memories: std::collections::BTreeSet<_> =
         inscriptions.iter().map(|m| m.place.clone()).collect();
     let labels = scene
@@ -1134,7 +1140,10 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     .filter(|r| {
                         r.sources
                             .iter()
-                            .any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth")
+                            .any(|c| {
+                                c.source.0 == "witness:natural-earth"
+                                    || c.source.0 == "natural-earth"
+                            })
                     })
                     .collect(),
                 boundaries: Vec::new(),
@@ -1211,8 +1220,13 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
-                        scene.attribution.iter().map(|s| s.0.clone()).collect();
+                        scene.attribution.iter().map(|c| c.to_string()).collect();
+                    // The terms come with the bytes: a consumer decides
+                    // what it may redistribute without parsing the body.
+                    let licenses: Vec<&str> =
+                        scene.licenses().iter().map(|l| l.id()).collect();
                     let mut headers = vec![
+                        ("X-License".to_string(), licenses.join(", ")),
                         ("X-Attribution".to_string(), attribution.join(", ")),
                         ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
                     ];
@@ -1271,10 +1285,18 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                         // ladder needs it) must never leak into it.
                         let (vlat, vlon, vzoom) =
                             map_encoders::resolve_globe_view(&scene, face, None);
-                        let headers = vec![(
-                            "X-Resolved-View".to_string(),
-                            format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),
-                        )];
+                        // The terms ride the response, so a consumer can
+                        // decide what it may redistribute without reading
+                        // the body at all.
+                        let licenses: Vec<&str> =
+                            scene.licenses().iter().map(|l| l.id()).collect();
+                        let headers = vec![
+                            ("X-License".to_string(), licenses.join(", ")),
+                            (
+                                "X-Resolved-View".to_string(),
+                                format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),
+                            ),
+                        ];
                         (200, "application/json", es.manifest_json(), headers)
                     }
                 }
@@ -1330,8 +1352,18 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
-                        scene.attribution.iter().map(|s| s.0.clone()).collect();
-                    (200, ctype, body, vec![("X-Attribution".to_string(), attribution.join(", "))])
+                        scene.attribution.iter().map(|c| c.to_string()).collect();
+                    let licenses: Vec<&str> =
+                        scene.licenses().iter().map(|l| l.id()).collect();
+                    (
+                        200,
+                        ctype,
+                        body,
+                        vec![
+                            ("X-License".to_string(), licenses.join(", ")),
+                            ("X-Attribution".to_string(), attribution.join(", ")),
+                        ],
+                    )
                 }
             }
         }
@@ -1568,7 +1600,7 @@ mod tests {
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(1, 2, 3, 200) },
-            sources: [SourceId::new(src)].into(),
+            sources: [map_types::license::Credit::new(SourceId::new(src), map_types::license::License::Cc0)].into(),
             piece,
         };
         let mut scene = Snapshot::empty();
@@ -1594,7 +1626,15 @@ mod tests {
             trace: None,
             at: UnitVec::from_lat_lon_deg(32.0, 35.0),
             style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
-            sources: src.map(SourceId::new).into_iter().collect(),
+            sources: src
+                .map(|n| {
+                    map_types::license::Credit::new(
+                        SourceId::new(n),
+                        map_types::license::License::Cc0,
+                    )
+                })
+                .into_iter()
+                .collect(),
             place: None,
             piece: Piece::Markers,
         };
@@ -1603,7 +1643,7 @@ mod tests {
         scene.markers.push(mk(None));
         let kept = scripture_only(&scene);
         assert_eq!(kept.markers.len(), 1, "exactly the scripture-grounded marker survives");
-        assert!(kept.markers[0].sources.contains(&SourceId::new(SCRIPTURE_SOURCE)));
+        assert!(map_types::license::Credited::names(&kept.markers[0].sources, SCRIPTURE_SOURCE));
     }
 
     /// The ghost backdrop must not re-draw what the subject scene

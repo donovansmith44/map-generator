@@ -13,11 +13,10 @@
 use std::collections::BTreeSet;
 
 use atlas_graph_types::covenant::TimePoint;
-use atlas_graph_types::covenant::SourceId;
-
 use crate::algebra::{mconcat, Monoid};
 use crate::geom::{covers_sphere, inside_ring, Ring, UnitVec};
 use crate::ident::{BoundaryId, Canon, MapAddressed, MapKind, RegionId};
+use crate::license::{Credit, License};
 use crate::style::{LabelStyle, MarkerStyle, Paint, Stroke};
 use crate::timeline::{ChangeEvent, Interval};
 
@@ -38,7 +37,7 @@ pub struct StyledRegion {
     pub outer: Vec<Ring>,
     pub holes: Vec<Ring>,
     pub paint: Paint,
-    pub sources: BTreeSet<SourceId>,
+    pub sources: BTreeSet<Credit>,
     /// WHICH PIECE this face belongs to — Ground, Water, Fills or
     /// Claims. The scene type used to carry no such notion, so the
     /// provider recorded a paint RANK at push time (`scene_at`'s
@@ -58,7 +57,7 @@ pub struct StyledBoundary {
     pub boundary: BoundaryId,
     pub pts: Vec<UnitVec>,
     pub stroke: Stroke,
-    pub sources: BTreeSet<SourceId>,
+    pub sources: BTreeSet<Credit>,
     /// WHICH PIECE this edge belongs to — Borders, Claims, Water (a
     /// river), Journeys (a road) or Ground (a range render's age-tinted
     /// relief outline). The scene type used to carry no such notion, so
@@ -75,7 +74,7 @@ pub struct StyledBoundary {
 pub struct StyledMarker {
     pub at: UnitVec,
     pub style: MarkerStyle,
-    pub sources: BTreeSet<SourceId>,
+    pub sources: BTreeSet<Credit>,
     /// The gazetteer place this marker stands on, when it stands on
     /// one — selection follows markers by their place (law 10's
     /// spirit), never by guessing from position.
@@ -95,7 +94,7 @@ pub struct StyledMarker {
 pub struct StyledInscription {
     pub at: UnitVec,
     pub place: crate::boundary::AtlasPlaceRef,
-    pub sources: BTreeSet<SourceId>,
+    pub sources: BTreeSet<Credit>,
     pub piece: crate::piece::Piece,
     pub trace: Option<Trace>,
 }
@@ -163,7 +162,7 @@ pub struct Snapshot {
     pub markers: Vec<StyledMarker>,
     pub inscriptions: Vec<StyledInscription>,
     pub labels: Vec<PlacedLabel>,
-    pub attribution: BTreeSet<SourceId>,
+    pub attribution: BTreeSet<Credit>,
 }
 
 /// "Overlay maps in a clean fashion" IS this monoid (law 8): identity
@@ -196,7 +195,7 @@ impl MapAddressed for Snapshot {
             r.paint.canon(c);
             let srcs: Vec<_> = r.sources.iter().collect();
             c.seq(&srcs, |c, s| {
-                c.str_(&s.0);
+                c.str_(&s.source.0).str_(s.license.id());
             });
             // Two scenes differing only in attribution are genuinely
             // different answers, so the pid must see the piece.
@@ -209,7 +208,7 @@ impl MapAddressed for Snapshot {
             b.stroke.canon(c);
             let srcs: Vec<_> = b.sources.iter().collect();
             c.seq(&srcs, |c, s| {
-                c.str_(&s.0);
+                c.str_(&s.source.0).str_(s.license.id());
             });
             c.str_(b.piece.name());
             canon_trace(c, &b.trace);
@@ -220,7 +219,7 @@ impl MapAddressed for Snapshot {
             c.u8_(r).u8_(g).u8_(bl).u8_(a).f64_(m.style.size);
             let srcs: Vec<_> = m.sources.iter().collect();
             c.seq(&srcs, |c, s| {
-                c.str_(&s.0);
+                c.str_(&s.source.0).str_(s.license.id());
             });
             match &m.place {
                 None => c.str_(""),
@@ -234,7 +233,7 @@ impl MapAddressed for Snapshot {
             c.str_(&m.place.0 .0);
             let srcs: Vec<_> = m.sources.iter().collect();
             c.seq(&srcs, |c, s| {
-                c.str_(&s.0);
+                c.str_(&s.source.0).str_(s.license.id());
             });
             c.str_(m.piece.name());
             canon_trace(c, &m.trace);
@@ -257,7 +256,7 @@ impl MapAddressed for Snapshot {
         });
         let sources: Vec<_> = self.attribution.iter().collect();
         c.seq(&sources, |c, s| {
-            c.str_(&s.0);
+            c.str_(&s.source.0).str_(s.license.id());
         });
         c.done()
     }
@@ -322,6 +321,61 @@ impl Snapshot {
             labels: self.labels.iter().filter(|l| keep.contains(l.piece)).cloned().collect(),
             attribution: self.attribution.clone(),
         }
+    }
+
+    /// The terms redistributing this scene requires, derived from what it
+    /// actually draws. Never asserted beside the picture, because an
+    /// assertion can go stale and this cannot.
+    pub fn licenses(&self) -> BTreeSet<License> {
+        self.attribution.iter().map(|c| c.license).collect()
+    }
+
+    /// Whether anything drawn here carries share-alike terms onto a work
+    /// that redistributes it.
+    pub fn requires_share_alike(&self) -> bool {
+        self.licenses().iter().any(|l| l.share_alike())
+    }
+
+    /// The scene a consumer bound by `permitted` may actually
+    /// redistribute. An element survives only if EVERY source it was
+    /// built from is permitted, since geometry derived from a source
+    /// carries that source's terms. A name whose subject did not survive
+    /// goes with it, the same rule the view already applies to a label
+    /// whose thing is not drawn.
+    pub fn under(&self, permitted: &BTreeSet<License>) -> Snapshot {
+        let ok = |sources: &BTreeSet<Credit>| sources.iter().all(|c| permitted.contains(&c.license));
+        let regions: Vec<StyledRegion> =
+            self.regions.iter().filter(|r| ok(&r.sources)).cloned().collect();
+        let boundaries: Vec<StyledBoundary> =
+            self.boundaries.iter().filter(|b| ok(&b.sources)).cloned().collect();
+        let markers: Vec<StyledMarker> =
+            self.markers.iter().filter(|m| ok(&m.sources)).cloned().collect();
+        let inscriptions: Vec<StyledInscription> =
+            self.inscriptions.iter().filter(|i| ok(&i.sources)).cloned().collect();
+
+        let kept_regions: BTreeSet<RegionId> = regions.iter().map(|r| r.region).collect();
+        let kept_boundaries: BTreeSet<BoundaryId> =
+            boundaries.iter().map(|b| b.boundary).collect();
+        let labels: Vec<PlacedLabel> = self
+            .labels
+            .iter()
+            .filter(|l| match &l.subject {
+                LabelSubject::Region(r) => kept_regions.contains(r),
+                LabelSubject::Boundary(b) => kept_boundaries.contains(b),
+                _ => true,
+            })
+            .cloned()
+            .collect();
+
+        let attribution = regions
+            .iter()
+            .flat_map(|r| r.sources.iter().cloned())
+            .chain(boundaries.iter().flat_map(|b| b.sources.iter().cloned()))
+            .chain(markers.iter().flat_map(|m| m.sources.iter().cloned()))
+            .chain(inscriptions.iter().flat_map(|i| i.sources.iter().cloned()))
+            .collect();
+
+        Snapshot { regions, boundaries, markers, inscriptions, labels, attribution }
     }
 
     /// Select one subject's contribution out of a scene. Law 10

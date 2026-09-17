@@ -3,6 +3,7 @@
 //! upstream — is enforced inside map-types by its grep test.)
 
 use std::collections::BTreeSet;
+use map_types::license::{Credit, Credited, License};
 
 use atlas_graph_types::covenant::SourceId;
 use map_types::scene::{LabelSubject, StyledMarker};
@@ -30,7 +31,8 @@ fn uv(lat: f64, lon: f64) -> UnitVec {
 
 fn sample_scene() -> Snapshot {
     let mut s = Snapshot::empty();
-    let sources: BTreeSet<SourceId> = [SourceId::new("historical-basemaps")].into();
+    let sources: BTreeSet<Credit> =
+        [Credit::new(SourceId::new("historical-basemaps"), License::Gpl3)].into();
     s.regions.push(StyledRegion {
             trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(1)),
@@ -243,7 +245,7 @@ fn flat_zooms_to_a_window() {
         .unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
-        sources: [SourceId::new("test")].into(),
+        sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
         piece: map_types::Piece::Fills,
     };
     let scene = Snapshot {
@@ -252,7 +254,7 @@ fn flat_zooms_to_a_window() {
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let windowed = SvgEncoder {
         projection: Projection::Flat { center: Some((32.0, 36.0)), zoom: Some(5.0) },
@@ -281,7 +283,8 @@ fn geojson_is_deterministic_and_parses() {
     let v: serde_json::Value = serde_json::from_str(&a).unwrap();
     assert_eq!(v["type"], "FeatureCollection");
     assert_eq!(v["features"].as_array().unwrap().len(), 4);
-    assert_eq!(v["attribution"][0], "historical-basemaps");
+    assert_eq!(v["attribution"][0]["source"], "historical-basemaps");
+    assert_eq!(v["attribution"][0]["license"], "GPL-3.0-only");
 }
 
 #[test]
@@ -434,7 +437,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         outer: vec![Ring::new(ring).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(10 + n as u8, 20, 30, 200) },
-        sources: [SourceId::new("test")].into(),
+        sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
         piece: map_types::Piece::Fills,
     };
     let square = |lat0: f64, lon0: f64, d: f64| {
@@ -455,7 +458,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let enc = SvgEncoder {
         width: 800.0,
@@ -510,7 +513,7 @@ fn swallowing_geometry_ships_thin() {
             outer: vec![Ring::new(circle.clone()).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(10, 20, 30, 200) },
-            sources: [SourceId::new("test")].into(),
+            sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
             piece: map_types::Piece::Fills,
         }],
         boundaries: vec![StyledBoundary {
@@ -518,13 +521,13 @@ fn swallowing_geometry_ships_thin() {
             boundary: map_types::BoundaryId(ContentHash(2)),
             pts: circle,
             stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
-            sources: [SourceId::new("test")].into(),
+            sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
             piece: map_types::Piece::Borders,
         }],
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let enc = SvgEncoder {
         width: 800.0,
@@ -557,7 +560,7 @@ fn markers_with_places_are_clickable() {
         )),
         piece: map_types::Piece::Markers,
     });
-    scene.attribution.insert(SourceId::new("test"));
+    scene.attribution.insert(Credit::new(SourceId::new("test"), License::Cc0));
     let svg = SvgEncoder {
         projection: Projection::Globe { center: Some((37.94, 27.34)), zoom: Some(5.0) },
         ..SvgEncoder::default()
@@ -1934,4 +1937,28 @@ fn a_city_says_which_ground_it_stands_on_whatever_the_camera() {
         assert_eq!(ground("Judah & <friends>"), Some(None), "a free name stands on no ground the law asks about");
     }
     assert!(gpu_encode(&scene).manifest_json().contains("\"ground\":\"unclaimed\""));
+}
+
+/// LAW 6 ON THE WIRE THAT IS ACTUALLY USED. Attribution was a field on
+/// the semantic scene that the retained renderer's manifest never
+/// published, so the answer a consumer really reads carried no sources
+/// and no terms at all. A consumer with a licensing requirement cannot
+/// meet it against a picture that will not say what it is made of.
+#[test]
+fn the_manifest_publishes_every_source_it_draws_and_that_source_s_terms() {
+    let scene = sample_scene();
+    let enc = GpuSceneEncoder::default();
+    let out = enc.encode(&scene).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&out.manifest_json()).unwrap();
+
+    assert_eq!(
+        v["attribution"],
+        serde_json::json!([{ "source": "historical-basemaps", "license": "GPL-3.0-only" }]),
+        "the manifest names its sources with their terms, whole"
+    );
+    assert_eq!(
+        v["licenses"],
+        serde_json::json!(["GPL-3.0-only"]),
+        "and the distinct terms redistributing it requires"
+    );
 }

@@ -449,7 +449,7 @@ fn emit_labels(s: &mut String, scene: &Snapshot, proj: &Projector, overflow_em: 
 }
 
 fn svg_head(width: f64, height: f64, scene: &Snapshot, paper: map_types::style::Paint) -> String {
-    let sources: Vec<String> = scene.attribution.iter().map(|src| src.0.clone()).collect();
+    let sources: Vec<String> = scene.attribution.iter().map(|c| c.to_string()).collect();
     // THE PAPER IS DRESS DATA: the page carries its own ground, so a
     // dark style stands on a dark page wherever the file lands.
     format!(
@@ -1181,7 +1181,11 @@ impl SceneEncoder for GeoJsonEncoder {
                 "geometry": { "type": "Point", "coordinates": [lon, lat] }
             }));
         }
-        let sources: Vec<String> = scene.attribution.iter().map(|s| s.0.clone()).collect();
+        let sources: Vec<serde_json::Value> = scene
+            .attribution
+            .iter()
+            .map(|c| serde_json::json!({ "source": c.source.0, "license": c.license.id() }))
+            .collect();
         let doc = serde_json::json!({
             "type": "FeatureCollection",
             "attribution": sources,

@@ -531,7 +531,15 @@ pub fn bridge_partition(
     let n_faces = part.faces.len();
     let n_rivers = part.rivers.len();
 
-    let prov = |note: String| Provenance { witness: Witness::Authored, verses: Vec::new(), note };
+    // EVERY face and river here is cut from the plane partition, whose
+    // inputs are six vendored datasets with six sets of terms. The
+    // identity a face carries is still its cohort's; what it is made OF
+    // is the partition, and that is what licensing follows.
+    let prov = |note: String| Provenance {
+        witness: Witness::Partition,
+        verses: Vec::new(),
+        note,
+    };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     // WHO STANDS WHEN comes from the data: each cohort ring declares
@@ -671,7 +679,7 @@ pub fn bridge_partition(
             }));
             store.set_provenance(
                 fid,
-                Provenance { witness: area.witness, verses: area.verses, note: area.note },
+                Provenance { witness: Witness::Partition, verses: area.verses, note: area.note },
             );
             per_layer.entry(area.layer).or_default().insert(fid);
         }

@@ -17,6 +17,7 @@ use atlas_graph_types::covenant::{ContentHash, PlaceId, SourceId, TimePoint};
 use map_canon::{
     Area, CanonStore, EntityId, Feature, FeatureId, LayerKind, Route, Timestamp, Witness,
 };
+use map_types::license::{Credit, License};
 use map_types::scene::{LabelSubject, StyledMarker};
 use map_types::style::Paint;
 use map_types::Monoid;
@@ -243,13 +244,21 @@ fn layers_wanted(pieces: PieceSet) -> Vec<LayerKind> {
     .collect()
 }
 
-fn witness_source(w: Witness) -> SourceId {
-    SourceId::new(match w {
+/// An origin and what it permits, together. The terms are read off the
+/// witness itself, so a feature can never be credited without them. A
+/// composite origin carries one credit per set of terms it inherits.
+fn witness_credits(w: Witness) -> BTreeSet<Credit> {
+    let name = match w {
         Witness::Atlas => "witness:atlas",
         Witness::Authored => "witness:authored",
         Witness::Basemap => "witness:basemap",
         Witness::NaturalEarth => "witness:natural-earth",
-    })
+        Witness::OpenBible => "witness:openbible",
+        Witness::Osm => "witness:osm",
+        Witness::Wikimedia => "witness:wikimedia",
+        Witness::Partition => "witness:partition",
+    };
+    w.licenses().into_iter().map(|l| Credit::new(SourceId::new(name), l)).collect()
 }
 
 impl CanonProvider {
@@ -353,12 +362,14 @@ impl CanonProvider {
         self.styles.get(&id).ok_or(MapError::UnknownStyle(id))
     }
 
-    fn sources_of(&self, fid: FeatureId) -> BTreeSet<SourceId> {
+    fn sources_of(&self, fid: FeatureId) -> BTreeSet<Credit> {
         let mut out = BTreeSet::new();
         if let Some(p) = self.store.provenance().get(&fid) {
-            out.insert(witness_source(p.witness));
-            if matches!(p.witness, Witness::Atlas | Witness::Authored) {
-                out.insert(SourceId::new(SCRIPTURE_SOURCE));
+            out.extend(witness_credits(p.witness));
+            if p.witness.scripture_grounded() {
+                // The Word itself is under no one's terms; the atlas's
+                // reading of it is credited separately, by its witness.
+                out.insert(Credit::new(SourceId::new(SCRIPTURE_SOURCE), License::PublicDomain));
             }
         }
         out
@@ -931,7 +942,11 @@ impl CanonProvider {
                 .places
                 .get(&place.0)
                 .ok_or_else(|| MapError::UnknownPlace(place.0 .0.clone()))?;
-            let sources = BTreeSet::from([SourceId::new(SCRIPTURE_SOURCE)]);
+            // The name is Scripture's; the coordinate is the atlas
+            // gazetteer's, and carries the gazetteer's own terms.
+            let mut sources =
+                BTreeSet::from([Credit::new(SourceId::new(SCRIPTURE_SOURCE), License::PublicDomain)]);
+            sources.extend(witness_credits(Witness::Atlas));
             scene.attribution.extend(sources.iter().cloned());
             if q.pieces.contains(Piece::Markers) {
                 scene.markers.push(StyledMarker {
@@ -1008,6 +1023,10 @@ impl CanonProvider {
                         Witness::Authored => "authored",
                         Witness::Basemap => "basemap",
                         Witness::NaturalEarth => "natural-earth",
+                        Witness::OpenBible => "openbible",
+                        Witness::Osm => "osm",
+                        Witness::Wikimedia => "wikimedia",
+                        Witness::Partition => "partition",
                     })
                     .unwrap_or("unknown");
                 out.push((f.entity().clone(), f.name().to_string(), kind_name, witness));

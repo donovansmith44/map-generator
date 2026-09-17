@@ -277,6 +277,11 @@ pub struct SceneManifest {
     pub markers: Vec<MarkerResource>,
     pub inscriptions: Vec<InscriptionResource>,
     pub dress: ManifestDress,
+    /// EVERY SOURCE THIS PICTURE IS MADE OF, with the terms each is
+    /// available under. Law 6 says provenance is total; a consumer that
+    /// must decide what it may redistribute needs the terms too, and the
+    /// retained renderer's manifest is the answer it actually reads.
+    pub attribution: std::collections::BTreeSet<map_types::license::Credit>,
 }
 
 /// The encoder's whole answer (§18).
@@ -791,6 +796,7 @@ impl GpuSceneEncoder {
                 labels,
                 markers,
                 inscriptions,
+                attribution: scene.attribution.clone(),
                 dress: ManifestDress {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
@@ -981,10 +987,29 @@ impl EncodedScene {
         let d = &m.dress;
         let _ = write!(
             s,
-            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}],\"labelOverflowEm\":{}}}}}",
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}],\"labelOverflowEm\":{}}}",
             d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha,
             d.dashed.0, d.dashed.1, d.hatched.0, d.hatched.1,
             d.veil.0, d.veil.1, d.veil.2, d.veil.3, d.label_overflow_em
+        );
+        let credits: Vec<serde_json::Value> = m
+            .attribution
+            .iter()
+            .map(|c| serde_json::json!({ "source": c.source.0, "license": c.license.id() }))
+            .collect();
+        let licenses: Vec<&str> = m
+            .attribution
+            .iter()
+            .map(|c| c.license)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|l| l.id())
+            .collect();
+        let _ = write!(
+            s,
+            ",\"attribution\":{},\"licenses\":{}}}",
+            serde_json::Value::Array(credits),
+            serde_json::json!(licenses)
         );
         s
     }
