@@ -56,7 +56,7 @@ case "${1:-start}" in
         '(Start-Process -FilePath $env:DEMO_EXE -WorkingDirectory $env:DEMO_ROOT -WindowStyle Hidden -PassThru).Id' > "$PID_FILE"
     else
       [ -x "$EXE" ] || { echo "Build the workbench first: $EXE" >&2; exit 1; }
-      MAP_VIEWER_PORT="$PORT" nohup "$EXE" > "$ROOT/out/demo.log" 2>&1 < /dev/null &
+      MAP_VIEWER_PORT="$PORT" setsid nohup "$EXE" > "$ROOT/out/demo.log" 2>&1 < /dev/null &
       echo "$!" > "$PID_FILE"
     fi
     pid="$(tr -d '\r\n' < "$PID_FILE")"
