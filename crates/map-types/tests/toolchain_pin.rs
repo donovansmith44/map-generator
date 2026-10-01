@@ -1,8 +1,3 @@
-//! TOOLCHAIN-1 (atlas spec 2026-09-14-relational-artifact-design §3.2):
-//! map-generator path-depends on atlas-graph-types from eight crates and
-//! pins the atlas version root (C6). The two repos must build with the
-//! same compiler, or the root the atlas computes and the root this repo
-//! recomputes could disagree with ZERO data change.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,7 +5,6 @@ use std::process::Command;
 const PINNED: &str = "1.97.1";
 
 fn repo_root() -> PathBuf {
-    // crates/map-types/ -> crates/ -> repo root
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 

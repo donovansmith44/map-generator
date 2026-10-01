@@ -7,7 +7,7 @@ edition = "2021"
 # API into typed vendored files (refresh), and compiles every witness
 # into data/canon. All intelligence lives here; the renderer stays dumb.
 [dependencies]
-atlas-graph-types = { path = "../../../../scratch/bible-atlas-sketch/.claude/worktrees/bible-atlas-m1/graph-types" }
+atlas-graph-types.workspace = true
 map-types = { path = "../map-types" }
 map-canon = { path = "../map-canon" }
 map-partition = { path = "../map-partition" }
