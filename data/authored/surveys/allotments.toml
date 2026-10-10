@@ -11,6 +11,11 @@ alternative = "Retain each competing Site and Course claim in the atlas; an unlo
 [dating]
 scale = "exodus_1446"
 exodus_year = -1446
+exodus_grounds = ["1KI.6.1"]
+temple_begun_year = -966
+temple_begun_precision = "approximate"
+exodus_to_temple_years = 480
+source_chronology = "Ussher is retained as source provenance only; none of his dates supplies an adopted interval endpoint."
 late_wilderness_year = -1407
 late_wilderness_grounds = ["NUM.33.38", "DEU.1.3", "NUM.33.50", "NUM.36.13"]
 gilgal_from_year = -1401

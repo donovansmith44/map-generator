@@ -43,32 +43,6 @@ struct Waypoint {
     lon: f64,
 }
 
-/// The promised land's borders, specified by God to Moses — NUM
-/// 34:1-12, walked in text order: south side west along Edom, up the
-/// Great Sea, the north border to Hazar-enan, then down the east side
-/// to the Salt Sea. A closed circuit.
-const NUM_34_CIRCUIT: &[Waypoint] = &[
-    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
-    Waypoint { name: "ascent of Akrabbim", lat: 30.95, lon: 35.20 },
-    Waypoint { name: "wilderness of Zin", lat: 30.80, lon: 34.80 },
-    Waypoint { name: "Kadesh-barnea", lat: 30.69, lon: 34.49 },
-    Waypoint { name: "Hazar-addar", lat: 30.75, lon: 34.30 },
-    Waypoint { name: "Azmon", lat: 30.85, lon: 34.20 },
-    Waypoint { name: "Brook of Egypt", lat: 31.16, lon: 33.80 },
-    Waypoint { name: "Great Sea off Joppa", lat: 32.05, lon: 34.70 },
-    Waypoint { name: "Great Sea off Tyre", lat: 33.27, lon: 35.18 },
-    Waypoint { name: "mount Hor (northern)", lat: 34.30, lon: 35.90 },
-    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
-    Waypoint { name: "Zedad", lat: 34.31, lon: 36.60 },
-    Waypoint { name: "Ziphron", lat: 34.35, lon: 36.85 },
-    Waypoint { name: "Hazar-enan", lat: 34.23, lon: 37.24 },
-    Waypoint { name: "Shepham", lat: 33.80, lon: 36.40 },
-    Waypoint { name: "Riblah east of Ain", lat: 33.40, lon: 35.95 },
-    Waypoint { name: "east slope of the sea of Chinnereth", lat: 32.83, lon: 35.65 },
-    Waypoint { name: "the Jordan at Bethabara", lat: 32.00, lon: 35.55 },
-    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
-];
-
 // --------------------------------- the table of nations (GEN 10)
 //
 // The ancestral homelands after the scattering (GEN 11:8-9), placed by
@@ -462,25 +436,6 @@ macro_rules! city_note {
         concat!($commentary, " ", city_note!())
     };
 }
-
-/// The division of the land, Ussher's traditional year.
-
-const SURVEYS: &[SurveySpec] = &[
-    SurveySpec {
-        tag: "NUM34",
-        label: "the land promised (NUM 34)",
-        note: "The border circuit God specified to Moses, NUM 34:1-12; waypoint \
-               coordinates are approximate traditional identifications (stand-in, \
-               see provenance), several northern and eastern ones uncertain.",
-        book: 4, chapter: 34, verse_from: 1, verse_to: 12,
-        year: -1452,
-        // The promise-as-map yields at the exile: the loss of the
-        // land ends the survey's world, not the covenant.
-        stands: Stands::Until(-586), holds: Holds::Claim,
-        grade: Grade::BorderText,
-        circuit: NUM_34_CIRCUIT,
-    },
-];
 
 const NATIONS_NOTE: &str = "An ancestral homeland of the table of nations, placed by \
     traditional identifications as a broad hull (rendered Unknown); rise at the \
@@ -894,7 +849,7 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
                 },
         );
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         for w in s.circuit {
             add(w);
         }
@@ -1217,7 +1172,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
             }
         }
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         push(
             s.tag.to_string(),
             atlas.resolve_event(s.book, (s.chapter, s.verse_from), (s.chapter, s.verse_to)),
@@ -1255,7 +1210,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
 /// disclosed stand-ins. None = fully stand-in (fixtures, tests).
 pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     let mut tl = WorldTimeline::default();
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         add_survey(&mut tl, s, atlas);
     }
     for e in KINGDOMS {
@@ -1265,13 +1220,6 @@ pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
         add_route(&mut tl, r, atlas);
     }
     tl.events.sort_by_key(|e| e.at);
-    tl
-}
-
-/// The NUM 34 survey alone (the founding fixture; tests lean on it).
-pub fn promised_land_timeline() -> WorldTimeline {
-    let mut tl = WorldTimeline::default();
-    add_survey(&mut tl, &SURVEYS[0], None);
     tl
 }
 
@@ -1364,14 +1312,56 @@ mod allotment_laws {
 
     #[test]
     fn the_promised_land_is_not_present_at_the_exodus_stop() {
-        let timeline = super::promised_land_timeline();
+        let timeline = super::scripture_timeline();
         assert!(
-            timeline.boundaries.values().all(|history| history
-                .versions
-                .iter()
-                .all(|(valid, _)| valid.from.year.get() > -1446)),
-            "Numbers 34 must not draw its late-wilderness promise at the 1446 Exodus stop"
+            !timeline.boundaries.is_empty(),
+            "the remaining Scripture surveys must still be rendered"
         );
+        assert_eq!(
+            numbers_34_boundaries(&timeline),
+            Vec::<map_types::BoundaryId>::new(),
+            "Numbers 34 must remain undrawn until its dating and selected courses are admitted"
+        );
+    }
+
+    #[test]
+    fn an_export_placement_cannot_restore_the_unlocated_numbers_34_circuit() {
+        for year in -1500..=-1300 {
+            let gazetteer = json!({"format_version": 1, "atlas_version_root": "1", "places": []});
+            let chronology = json!({
+                "format_version": 1, "atlas_version_root": "1",
+                "events": [{"id": "fixture-numbers-survey", "label": "fixture survey", "attestations": ["NUM.34.1"], "placement": {"from_year": year, "to_year": year, "basis": "Textual"}}]
+            });
+            let atlas =
+                crate::exports::load_exports(&gazetteer.to_string(), &chronology.to_string())
+                    .expect("the complete fixture export must load");
+            let timeline = super::scripture_timeline_with(Some(&atlas));
+            assert_eq!(
+                numbers_34_boundaries(&timeline),
+                Vec::<map_types::BoundaryId>::new(),
+                "a matched placement must not supply an unprovided Numbers 34 course"
+            );
+        }
+    }
+
+    fn numbers_34_boundaries(timeline: &map_types::WorldTimeline) -> Vec<map_types::BoundaryId> {
+        timeline
+            .boundaries
+            .iter()
+            .filter_map(|(id, history)| {
+                history
+                    .versions
+                    .iter()
+                    .any(|(_, boundary)| match &boundary.source {
+                        map_types::BoundarySource::Survey(survey) => {
+                            survey.verses.from.unit.book == 4
+                                && survey.verses.from.unit.chapter == 34
+                        }
+                        _ => false,
+                    })
+                    .then_some(*id)
+            })
+            .collect()
     }
 
     #[test]
@@ -1553,6 +1543,11 @@ mod allotment_laws {
             json!({
                 "scale": "exodus_1446",
                 "exodus_year": -1446,
+                "exodus_grounds": ["1KI.6.1"],
+                "temple_begun_year": -966,
+                "temple_begun_precision": "approximate",
+                "exodus_to_temple_years": 480,
+                "source_chronology": "Ussher is retained as source provenance only; none of his dates supplies an adopted interval endpoint.",
                 "late_wilderness_year": -1407,
                 "late_wilderness_grounds": ["NUM.33.38", "DEU.1.3", "NUM.33.50", "NUM.36.13"],
                 "gilgal_from_year": -1401,
