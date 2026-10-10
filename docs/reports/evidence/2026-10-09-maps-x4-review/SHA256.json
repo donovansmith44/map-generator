@@ -1,0 +1,58 @@
+{
+  "author-blank-red.log.gz": {
+    "stored_sha256": "10a60d91fa5fa413f99a26ed8f699c52be4d64ae8d7c997f4132d231ae64f40e",
+    "stored_bytes": 557,
+    "decoded_sha256": "0b7ea9e9686e42ec158b296677b96785d0137f351c45514c26d11edaf0e43d30",
+    "decoded_bytes": 987
+  },
+  "author-identity-red.log.gz": {
+    "stored_sha256": "a310b8be6e21b2676c81327b99b442956339a1a09ba151c13bab6d64a9ab3e34",
+    "stored_bytes": 1291,
+    "decoded_sha256": "9e6cde28346d71e209453203018d53276b10f4a2036b479d39fc5af05759e187",
+    "decoded_bytes": 3529
+  },
+  "author-omitted-red.log.gz": {
+    "stored_sha256": "3c1871cbfad33facc7f6ceae66b817fba3b165464ccd5e2f8d97a44f1f8ee5d4",
+    "stored_bytes": 1133,
+    "decoded_sha256": "1a44aa664416ed17778cbbcf0e8aadf507d37a60b9ef5cf7215e07ed286441ed",
+    "decoded_bytes": 2853
+  },
+  "author-red.log.gz": {
+    "stored_sha256": "da76a2d0cf39a66bfc14b0e71cce54fff001c1e7db7fa418355610d59549b3a1",
+    "stored_bytes": 1440,
+    "decoded_sha256": "7a55e07482435de820e1202e9a76d515e50f02ca12ea9b15a9b22a9da0a89e37",
+    "decoded_bytes": 3761
+  },
+  "author-shape-red.log.gz": {
+    "stored_sha256": "d5b5e2ced6f4fe6aabdf34a5f26035a6c87e78472b602f0917011a32535e242b",
+    "stored_bytes": 1099,
+    "decoded_sha256": "a9476995be5c010493cdf8cc7fc183a0682cebe791781d767cbacf137ed95019",
+    "decoded_bytes": 2620
+  },
+  "gate.log.gz": {
+    "stored_sha256": "a7b973b67f496efa5c2229c3c019d10c3f410adac8543ad48ac5593d3ef6577e",
+    "stored_bytes": 2671,
+    "decoded_sha256": "9b477bad5c1854644b2ee53810fb6a898be77cbee05b7bf3dabf76453bfff079",
+    "decoded_bytes": 8708
+  },
+  "inventory.json.gz": {
+    "stored_sha256": "2c9213c9185cbb046a88a2ee4901a0715db04d5aeec357383b657aecefcfd30b",
+    "stored_bytes": 3212,
+    "decoded_sha256": "7e1ed09335c74745e823269d679958bdc378d7b46cc4cd8b9c4385d29941a9d5",
+    "decoded_bytes": 14172
+  },
+  "observations.json": {
+    "stored_sha256": "54caa3f34fd4ecef4301965ad382d1e621a61896fd764343a6e0991202feb21e",
+    "stored_bytes": 2836
+  },
+  "review_registry_decode.rs": {
+    "stored_sha256": "f6a275045344576f0fb255d27f58494cd1699d3015188291e150a2858fc9a8ee",
+    "stored_bytes": 1590
+  },
+  "reviewed.diff.gz": {
+    "stored_sha256": "c913d3a40e9bc68cd19e62d5c4489686c4af45c9d092f12afaabcfe1bde73860",
+    "stored_bytes": 14969,
+    "decoded_sha256": "01c27e3387d1907cfb4071300146178017dba655be7c52a980a0873d38fb3260",
+    "decoded_bytes": 49693
+  }
+}

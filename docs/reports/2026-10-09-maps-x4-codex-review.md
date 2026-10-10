@@ -1,0 +1,197 @@
+# MAPS-X4 second Codex review
+
+**CHANGES REQUESTED** at `62d5a951bfb8b090e27d0912cda6d3c124f16f24`.
+Reviewed `origin/lane/claude/MG-BASE` (`6ac32bfbf67e26b9cfe94560806fda293db05801`)
+through that head. MG-BASE exists; the CX-M0 fallback was unnecessary. The sole
+review branch, `lane/codex/MAPS-X4-review`, starts at the reviewed head. This is
+the owner/controller-authorized second review, with Important/Critical findings
+only, PRINCIPLES 14b and 24a/24b, and one scoped gate invocation.
+
+The added parsed-row refusals are useful and preserve the inherited wiring.
+The C2 inventory is complete for the requested declarations and PLACE-1a
+retirements. Declaration closure, generated refusal coverage and the touched
+interface vocabulary still need repair. No Critical finding was identified.
+
+## Accepted evidence
+
+- MG-BASE is the ordinary merge of CX-M0 `9f99a90` and MG-LOCAL `61cde6b`.
+  `main.rs`, `compile.rs`, `timeline_bridge.rs` and `partition_bridge.rs` are
+  byte-identical between the base and the reviewed head. The registry JSON
+  has SHA-256 `726a07fb0676b61b2bd38105729802963403fb522866ee9f7e379fec2138da45`
+  at local `089a4bf`, MG-LOCAL, MG-BASE and X4. No alias or reason was reminted.
+- The three map namespace aliases are accounted for. The pinned polity,
+  narrative and `place:`-prefixed gazetteer inventory law enumerates the inputs
+  and finds zero outgoing registry moves. This is a declaration-set observation,
+  not a whole-pipeline identity proof or a NodeId equivalence proof.
+- Replayed the existing MG-LOCAL inventory tool against the atlas export:
+  roots `a1b93a3b049a1fe0` to `21d9db9b4c4a9e188a95aa442f7e6b59`,
+  1,373 to 1,358 places, all fifteen report pairs match the recorded absorptions,
+  no added key, no unmatched removal, every survivor present. The report names
+  Place/AbsorbedInto, the original decision commit and a pinned source containing
+  the original reasons. C2 can consume these local keys through its existing
+  NodeId vocabulary and retain those exact original reasons/provenance. The
+  summary prose is not a replacement identity ruling. Ten legacy era Map moves
+  remain explicitly C2-owned; X4 need not invent them or write C2's TOML file.
+- Read the five available author red logs: duplicate justification overwrite,
+  SameId used for distinct ids, malformed collections, conflicting kinds,
+  blank ids, non-object documents and omitted collections fail before their
+  fixes. These are preserved author diagnostics, not independently replayed
+  historical builds. The new bounded id laws do exercise name collision,
+  direct aliases, dangling homes and immutable duplicate refusals.
+- All fourteen added test bodies have plain messages and one fact per assertion
+  (24 assertions). Added application-comment scan and range whitespace check
+  are clean. No new dead member was identified in the delta.
+
+## F-279 — Important: the declaration decoder still silently discards conflicting fields
+
+`crates/map-compile/src/identity.rs:78–100` first decodes into
+`serde_json::Value`. Duplicate JSON object fields have already been folded before
+the new collection and alias checks run. Consequently these author documents
+are accepted:
+
+```json
+{"unifications":[{"canonical":"home","minted":"a","kind":"Place","reason":"written identity"}],"unifications":[]}
+```
+
+```json
+{"unifications":[{"canonical":"home","minted":"original","minted":"replacement","kind":"Place","reason":"written identity"}]}
+```
+
+The first erases the entire authored declaration set; the second replaces an
+authored source identity. Neither is a duplicate alias in the already-decoded
+array, so the submitted duplicate-alias law cannot detect it. The author report
+acknowledges this inherited decoder limitation, but the newly claimed
+"refuse ambiguous registry declarations" category remains open at its public
+load door. This is the same document/refusal category as the repaired omitted
+and malformed collection paths, not a request to write a general JSON parser.
+
+**Closure:** decode directly into an explicit declaration document/row using the
+maintained serde machinery, refuse duplicate collection and semantic row fields
+before information loss, and preserve the intentionally supported empty document
+and authored metadata explicitly. Map library errors once into the domain's
+closed refusal vocabulary. Coordinate any manifest change with its reserved
+writer. Add generated duplicate-field controls at root and row level, including
+field order and conflicting canonical/minted/kind/reason values, plus valid
+controls. Repair through the one Identity load owner; no caller-local checks.
+
+## F-280 — Important: new runtime refusal tests still use fixed examples
+
+`identity.rs:186–262` tests scalar documents, missing collections, malformed
+collections and conflicting kinds using only fixed literals/pairs.
+`registry.rs:324–348,374–388` tests missing justification/source and blank ids
+using fixed strings. These are runtime admission/refusal laws, not source or
+committed-data inventories. The bounded generated-id loops in other tests do
+not make these changed behaviors generated. The main A-EMPHASIS and
+A-WIRE-LOCAL-IDS reviews reject this same distinction under F-207.
+
+The agreeing-kind test also repeats all ten kind spellings at
+`identity.rs:267–278`, separately from `kind_of` and `EntityKind`. A new kind can
+be added without extending the purported all-kind law. This is 14b's duplicated
+closed vocabulary and 24b's incomplete category enumeration.
+
+**Closure:** use maintained generated-property tooling for valid/invalid
+documents, ids, reasons and sources, taking these readable examples as seeds.
+Generate declaration sets and relevant insertion/field orders; check complete
+typed refusals and unchanged registry state, with one plain fact per assertion.
+Derive the finite kind universe from its single typed declaration, including
+conflicting pairs, instead of maintaining another string list. Keep the real
+authored-fixture and export inventories as honest structural checks. No
+production behavior repair should precede its failing law.
+
+## F-281 — Important: touched public rules are still carried by strings
+
+`Registry::declare` (`registry.rs:65–92`), `Identity::check` and `load_registry`
+(`identity.rs:50–145`) expose `Result<_, String>`. This packet extends that
+interface with new refusal sentences; the new laws assert formatted prose
+instead of a closed declaration/refusal outcome. `WitnessRef.kind`
+(`registry.rs:25–30`) and `Identity::witness`/`implied_kind`
+(`identity.rs:22–36,164–175`) use a string for the closed geometry vocabulary.
+An unknown spelling silently enters the wildcard kind inference. `kind_of`
+separately restates the enum's vocabulary as string matching.
+
+The report discloses this inherited Important type debt and assigns a future
+coordinated writer. That is honest, but it is not an owner-approved exception to
+the binding "everything in types" and 14b bar for the touched registry door.
+
+**Closure:** reuse one closed geometry-kind vocabulary and one domain refusal
+sum at their existing owners. Keep free prose as reason/source text, and render
+the refusal's user message at one outer boundary. Reuse the EntityKind declaration
+for decoding and law enumeration. Coordinate every caller migration with X5 and
+the contract/dependency owners; do not create a second vocabulary, change
+map-types/graph-types unilaterally or patch reserved files on the side. Generated
+laws cover every variant and unknown wire spelling, and the type system rejects
+unknown internal geometry kinds.
+
+## Existing producer category remains open at its reserved owners
+
+Retain the already recorded Important queue category "X4 identity outside
+Registry" rather than allocate another finding number:
+
+- `main.rs:403–439`: bg_shadows decides suppression using slugified polity ids
+  and names; X2 owns removal/migration.
+- `timeline_bridge.rs:60–113`: the available source region id is ignored when
+  minting `prefix:slug(label)`. Distinct source identities with colliding labels
+  collapse before Registry sees them; X5 owns explicit source-id migration.
+- `compile.rs:124` and `main.rs:220–224`: atlas narrative and kept authored Route
+  entities are emitted without Identity observation/resolution; X5 owns both.
+
+These are inherited faithfully, not introduced by the three-file delta. The
+name-collision test exercises Registry directly; the words "same coordinates"
+are only a name string. It cannot fence lost identities or emitters outside that
+door. Registry itself has no coordinate input, which correctly gives proximity
+no authority there. Whole-pipeline closure needs generated source identities
+with colliding names and identical/nearby geometry, explicit written aliases,
+and an exhaustive emitted-feature/registered-home law. Every feature family
+must enter through the one identity owner. `Identity::check` alone cannot check
+features it never observed. No X4 side edits or expanded source admission are
+requested; the controller must coordinate the reserved writers before claiming
+the plan's every-minted-id completion condition.
+
+Inherited unused imports, CITY_NOTE and partition/provider dead members stay
+with their recorded owners. No new warning waiver, golden acceptance, licensed
+geometry admission or whole-map registry approval is granted by this review.
+
+## Independent gate and handoff
+
+One invocation, with the reviewed source and the temporary review-only
+integration diagnostic:
+
+```text
+. ~/.bible-atlas-env
+CARGO_TARGET_DIR=~/mut/target nice -n 10 cargo test -j 2 -p map-canon -p map-compile --no-fail-fast
+```
+
+| Observation | Result |
+|---|---|
+| Submitted map-canon tests | 36 passed, 0 failed |
+| Submitted map-compile tests | 26 passed, 0 failed |
+| Ambiguous root/row decoder diagnostics | 2 expected failures, each first failing at index 0 |
+| Unambiguous decoder control | 1 passed, all 32 generated identities |
+| Overall invocation | Exit 101, solely the review diagnostic target |
+
+The run initially waited on the shared Cargo build-directory lock held by other
+work. Cargo then compiled the dependencies and map crates from this review
+worktree; no shared-target clean or source timestamp workaround was used. The
+reported 2m35s build duration includes the lock wait. Warnings are the inherited
+CITY_NOTE, unused imports and Bundle.biggest sites; none originates in the two
+X4 source files. The temporary integration test was removed after the invocation;
+all application/test paths are restored byte-for-byte to the reviewed head.
+
+The atlas heavy lock is held by `codex-maps-land2` for C12 landing gates. This
+review ran only the scoped non-mutation tests above, not a competing workspace
+gate. Full workspace/contract/golden gates were not independently run. The
+author's single aggregate gate is carried evidence: Haskell 381 passed,
+contract check/vocabulary passed, Rust stopped at the inherited encoder limb
+fixture drift; later semver unrun. The browser golden remains unrun because the
+X4 worktree has no compiled canon/workbench, and excluded ingests must not be
+used to manufacture one. No fixture was re-blessed and port 8080 was untouched.
+
+Evidence lives in `docs/reports/evidence/2026-10-09-maps-x4-review/`: review-only
+decoder diagnostics, gate log, replayed inventory, author red logs, range diff
+and their stored/decoded SHA-256 manifest. The diagnostics are evidence, not a
+production pipeline or repaired author tests. No source repair, source/data
+admission, fixture blessing, serving change or geometry generation was made.
+Claude owns repair and landing; re-review the next exact head on this same review
+branch. Review changes are documentation/evidence only.
+No own lock, server or running job remains. Tracked application LOC delta is
+zero; all review additions are this report and its evidence.

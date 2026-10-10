@@ -1,0 +1,76 @@
+{
+  "base": "6ac32bfbf67e26b9cfe94560806fda293db05801",
+  "head": "62d5a951bfb8b090e27d0912cda6d3c124f16f24",
+  "fallback_used": false,
+  "reviewed_input_sha256": {
+    "crates/map-canon/src/registry.rs": "98c0edcb5a1fbeae592453f03b062575ed9836efe1f7377b87a1ba5aa994254b",
+    "crates/map-compile/src/identity.rs": "7e5bbd943fed80b410538c9a775e5e9c5e6118ed8b2523adf28dd31b337fe17e",
+    "data/authored/registry.json": "726a07fb0676b61b2bd38105729802963403fb522866ee9f7e379fec2138da45",
+    "crates/map-compile/src/main.rs": "cc4e9fa709dc85fefc6c16ba6125d1419c34b94beb612c53bc2623e737735a62",
+    "crates/map-compile/src/compile.rs": "60d51787f166a55cb4f15a8e84b2e31466931548791eeaa94e78c858833e665f",
+    "crates/map-compile/src/timeline_bridge.rs": "704c863d51ce9e2cbf1fd6ac9c3505752056e050bfb56dc35a58d7de1c8363e7",
+    "crates/map-compile/src/partition_bridge.rs": "cfd507d4f112bf9b8a7d5dc39620bcc4f443d4bf28e05d39304898798ffee17d",
+    "docs/reports/2026-10-09-maps-x4.md": "96f058f946c29df879a4681c05589f6b03deb7978aa998034da2a60d08e2e979"
+  },
+  "inventory_command": "python3 docs/reports/evidence/2026-10-07-mg-local-integration/inventory.py --atlas /home/donovan/src/bible-atlas",
+  "exports": {
+    "old_root": "a1b93a3b049a1fe0",
+    "current_root": "21d9db9b4c4a9e188a95aa442f7e6b59",
+    "old_place_count": 1373,
+    "current_place_count": 1358,
+    "added_place_keys": [],
+    "removed_place_keys": [
+      "ai_36",
+      "antioch_69",
+      "antipatris_70",
+      "appii_forum_427",
+      "bethlehem_218",
+      "bethsaida_231",
+      "calneh_269",
+      "ephraim_401",
+      "lydda_741",
+      "moreh_817",
+      "olivet_907",
+      "phenice_945",
+      "rehoboth-ir_992",
+      "solomons_portico_1109",
+      "ur_1189"
+    ]
+  },
+  "all_report_pairs_match": true,
+  "all_survivors_present": true,
+  "unchanged_bridge_paths": {
+    "crates/map-compile/src/main.rs": true,
+    "crates/map-compile/src/compile.rs": true,
+    "crates/map-compile/src/timeline_bridge.rs": true,
+    "crates/map-compile/src/partition_bridge.rs": true
+  },
+  "law_body_audit": {
+    "canon": {
+      "tests": 6,
+      "assertions": 13
+    },
+    "compile": {
+      "tests": 8,
+      "assertions": 11
+    },
+    "missing_plain_messages": 0,
+    "combined_facts": 0,
+    "method": "manual review of all fourteen added bodies"
+  },
+  "whitespace_exit": 0,
+  "gate": {
+    "invocations": 1,
+    "command": ". ~/.bible-atlas-env; CARGO_TARGET_DIR=~/mut/target nice -n 10 cargo test -j 2 -p map-canon -p map-compile --no-fail-fast",
+    "exit_code": 101,
+    "canon_passed": 36,
+    "compile_passed": 26,
+    "submitted_failed": 0,
+    "review_diagnostic_passed": 1,
+    "review_diagnostic_failed": 2,
+    "valid_control_trials": 32,
+    "first_failing_input_index": 0,
+    "shared_cargo_lock_wait": true
+  },
+  "all_tracked_source_restored": true
+}
