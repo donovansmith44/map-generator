@@ -27,6 +27,12 @@ fn year_after(y: i32) -> i32 {
 pub fn gather_witnesses(
     polities: &[PolityRow],
 ) -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
+    let polity_points: Vec<_> = polities.iter().flat_map(|row| &row.rings)
+        .flatten().map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon)).collect();
+    crate::exclusion::check_points(&polity_points)
+        .map_err(|error| format!("excluded input: {error:?}"))?;
+    crate::exclusion::check_build_inputs(&data_path("data"))
+        .map_err(|error| format!("excluded input: {error:?}"))?;
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
 
@@ -91,6 +97,10 @@ pub fn gather_witnesses(
         });
     }
 
+    crate::exclusion::check_points(
+        regions.iter().flat_map(|region| &region.rings).flatten()
+            .chain(polylines.iter().flat_map(|line| &line.pts)),
+    ).map_err(|error| format!("excluded input: {error:?}"))?;
     Ok((regions, polylines))
 }
 
@@ -518,6 +528,8 @@ pub fn bridge_partition(
     }
     overlay_features(store, LayerKind::Water, &water_fids, t0, None)?;
 
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(format!(
         "partition: {n_faces} faces, {n_rivers} river paths, 4π residual {residual:.2e} sr;          {n_cities} cities stand, {} remembered beneath the waters ({})",
         drowned.len(),
@@ -540,6 +552,8 @@ fn load_ne_med() -> Result<Vec<Vec<UnitVec>>, String> {
     let text = std::fs::read_to_string(data_path("data/natural-earth/med_clip.geojson"))
         .map_err(|e| format!("med clip: {e}"))?;
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("med clip: {e}"))?;
+    crate::exclusion::check_geojson(&v)
+        .map_err(|error| format!("excluded input: {error:?}"))?;
     let mut out = Vec::new();
     for f in v["features"].as_array().into_iter().flatten() {
         let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first()) else {

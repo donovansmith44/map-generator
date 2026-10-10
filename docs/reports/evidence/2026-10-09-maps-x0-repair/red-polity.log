@@ -1,0 +1,82 @@
+    Updating crates.io index
+     Locking 27 packages to latest compatible versions
+      Adding autocfg v1.5.1
+      Adding block-buffer v0.10.4
+      Adding cfg-if v1.0.5
+      Adding cpufeatures v0.2.17
+      Adding crypto-common v0.1.7
+      Adding digest v0.10.7
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding getrandom v0.3.4
+      Adding libc v0.2.190
+      Adding num-traits v0.2.19
+      Adding ppv-lite86 v0.2.21
+      Adding proptest v1.11.0
+      Adding r-efi v5.3.0
+      Adding rand v0.9.5
+      Adding rand_chacha v0.9.0
+      Adding rand_core v0.9.5
+      Adding rand_xorshift v0.4.0
+      Adding regex-syntax v0.8.11
+      Adding sha2 v0.10.9 (available: v0.11.0)
+      Adding syn v2.0.119 (available: v3.0.6)
+      Adding typenum v1.20.1
+      Adding unarray v0.1.4
+      Adding version_check v0.9.5
+      Adding wasip2 v1.0.4+wasi-0.2.12
+      Adding wit-bindgen v0.57.1
+      Adding zerocopy v0.8.62
+      Adding zerocopy-derive v0.8.62
+ Downloading crates ...
+  Downloaded crypto-common v0.1.7
+  Downloaded typenum v1.20.1
+   Compiling proc-macro2 v1.0.107
+   Compiling generic-array v0.14.7
+   Compiling quote v1.0.47
+   Compiling typenum v1.20.1
+   Compiling map-types v0.1.0 (/home/donovan/w/CX2-w-x0b/crates/map-types)
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling syn v3.0.6
+   Compiling digest v0.10.7
+   Compiling cpufeatures v0.2.17
+   Compiling sha2 v0.10.9
+   Compiling map-canon v0.1.0 (/home/donovan/w/CX2-w-x0b/crates/map-canon)
+   Compiling serde_derive v1.0.229
+   Compiling map-adapters v0.1.0 (/home/donovan/w/CX2-w-x0b/crates/map-adapters)
+   Compiling serde v1.0.229
+   Compiling map-partition v0.1.0 (/home/donovan/w/CX2-w-x0b/crates/map-partition)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-w-x0b/crates/map-compile)
+   Compiling syn v2.0.119
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: `map-compile` (lib) generated 2 warnings (run `cargo fix --lib -p map-compile` to apply 2 suggestions)
+error[E0507]: cannot move out of `admitted.rings` which is behind a shared reference
+   --> crates/map-compile/tests/exclusion_content.rs:183:25
+    |
+183 |         prop_assert_eq!(admitted.rings, vec![points], "the complete permitted replacement geometry survives admission");
+    |                         ^^^^^^^^^^^^^^ move occurs because `admitted.rings` has type `Vec<Vec<UnitVec>>`, which does not implement the `Copy` trait
+    |
+help: consider borrowing here
+    |
+183 |         prop_assert_eq!(&admitted.rings, vec![points], "the complete permitted replacement geometry survives admission");
+    |                         +
+help: consider cloning the value if the performance cost is acceptable
+    |
+183 |         prop_assert_eq!(admitted.rings.clone(), vec![points], "the complete permitted replacement geometry survives admission");
+    |                                       ++++++++
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `map-compile` (test "exclusion_content") due to 1 previous error

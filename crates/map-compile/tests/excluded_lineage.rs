@@ -1,10 +1,3 @@
-#[derive(Clone, Copy, Debug)]
-enum ExcludedSource {
-    KnowingTheBible,
-    Tribes12,
-    SplicedRegions,
-}
-
 #[test]
 fn excluded_lineage_is_removed_from_partition_provenance() {
     assert_eq!(
@@ -18,51 +11,31 @@ fn excluded_lineage_is_removed_from_partition_provenance() {
     );
 }
 
-impl ExcludedSource {
-    fn witness_ids(self) -> &'static [&'static str] {
-        match self {
-            Self::KnowingTheBible => &["canaan"],
-            Self::Tribes12 => &[
-                "judah",
-                "simeon",
-                "benjamin",
-                "ephraim",
-                "manasseh-west",
-                "dan",
-                "issachar",
-                "zebulun",
-                "asher",
-                "naphtali",
-                "reuben",
-                "gad",
-                "manasseh-east",
-            ],
-            Self::SplicedRegions => &["philistia", "phoenicia", "geshur", "ammon", "moab", "edom"],
-        }
-    }
-}
-
 #[test]
 fn excluded_lineage_never_enters_the_partition() {
-    let (regions, _) =
+    let (regions, polylines) =
         map_compile::partition_bridge::gather_witnesses(&[]).expect("partition sources load");
-    for source in [
-        ExcludedSource::KnowingTheBible,
-        ExcludedSource::Tribes12,
-        ExcludedSource::SplicedRegions,
-    ] {
-        for id in source.witness_ids() {
-            assert!(
-                regions.iter().all(|region| region.id != *id),
-                "excluded {source:?} witness {id} never enters the partition"
-            );
-        }
-    }
+    assert_eq!(
+        map_compile::exclusion::check_points(
+            regions
+                .iter()
+                .flat_map(|region| &region.rings)
+                .flatten()
+                .chain(polylines.iter().flat_map(|line| &line.pts)),
+        ),
+        Ok(()),
+        "every admitted partition geometry is free of quarantined content"
+    );
 }
 
 #[test]
 fn excluded_lineage_never_enters_the_scripture_timeline() {
     let timeline = map_adapters::scripture_timeline();
+    assert_eq!(
+        map_compile::exclusion::check_timeline(&timeline),
+        Ok(()),
+        "every Scripture boundary is free of quarantined content"
+    );
     for history in timeline.boundaries.values() {
         for (_, boundary) in &history.versions {
             assert!(
