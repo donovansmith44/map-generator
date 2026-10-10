@@ -1,0 +1,740 @@
+[evidence]
+source = "kjv"
+licence = "public_domain"
+provenance = "KJV Joshua 13-19 and Numbers 34; MAPS-C12 1399 and 1446 golden specifications, 2026-10-07"
+site_authority = "atlas_site_claims"
+course_authority = "atlas_selected_border_evidence"
+geometry = "none"
+justification = "This table records Scripture's survey evidence. C14 selects Site claims with alternatives; X16 selects Course evidence and draws through the shared partition. A named place is not an exact coordinate and a text sequence is not an interpolated polygon."
+alternative = "Retain each competing Site and Course claim in the atlas; an unlocated place or segment remains recorded without geometry."
+
+[dating]
+scale = "exodus_1446"
+exodus_year = -1446
+late_wilderness_year = -1407
+late_wilderness_grounds = ["NUM.33.38", "DEU.1.3", "NUM.33.50", "NUM.36.13"]
+gilgal_from_year = -1401
+gilgal_to_year = -1400
+gilgal_grounds = ["JOS.14.6", "JOS.14.7", "JOS.14.10"]
+division_from_year = -1401
+division_to_year = -1399
+shown_at_year = -1399
+shown_at_basis = "owner_ruled"
+shown_at_grounds = ["JOS.18.1", "JOS.19.51"]
+alternative_years = [-1400, -1401]
+justification = "The fortieth year uses inclusive counting: 1446 minus 39 is 1407. Caleb's forty-five years and ages give circa 1401-1400. Shiloh follows Gilgal without its own exact year; 1399 is the owner-chosen completed-allotment stop. Joshua 13 recalls Moses' earlier grants; no lot is asserted at 1446."
+alternative = "1400 uses Caleb's ages as elapsed years; 1401 uses the inclusive forty-five years. Neither reading dates the Shiloh survey exactly. Joshua 19:47 is undated and is recorded separately. No universal shift is applied to other chronology."
+
+
+[[survey]]
+lot = "promised_land"
+source = "kjv"
+period = "late_wilderness"
+verses = ["NUM.34.1-12"]
+justification = "A promise given to Moses in the plains of Moab; never a possessed state or a border at 1446."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "The south side is a text walk. The ascent and uncertain named sites are resolved only by the atlas Site claims; no straight connectors are supplied."
+waypoints = [
+  { name = "south end of the Salt Sea", verse = "NUM.34.3", relation = "from", site = { unlocated = "south end of the Salt Sea" } },
+  { name = "ascent of Akrabbim", verse = "NUM.34.4", relation = "unto", site = { atlas = "akrabbim" } },
+  { name = "Zin", verse = "NUM.34.4", relation = "along", site = { atlas = "zin-1" } },
+  { name = "Kadesh-barnea", verse = "NUM.34.4", relation = "south_of", site = { atlas = "kadesh-barnea" } },
+  { name = "Hazar-addar", verse = "NUM.34.4", relation = "unto", site = { atlas = "hazar-addar" } },
+  { name = "Azmon", verse = "NUM.34.4", relation = "unto", site = { atlas = "azmon" } },
+  { name = "river of Egypt", verse = "NUM.34.5", relation = "unto", site = { atlas = "brook-of-egypt" } },
+  { name = "Great Sea", verse = "NUM.34.5", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "west"
+justification = "The sea itself is the west border; no off-Joppa or off-Tyre vertices occur in the verse."
+waypoints = [
+  { name = "Great Sea", verse = "NUM.34.6", relation = "along", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "north"
+justification = "Northern mount Hor is distinguished from the mount Hor of Aaron's death. The verse supplies names and order, not coordinates or courses."
+waypoints = [
+  { name = "Great Sea", verse = "NUM.34.7", relation = "from", site = { unlocated = "Great Sea" } },
+  { name = "northern mount Hor", verse = "NUM.34.7", relation = "unto", site = { atlas = "mount-hor-2" } },
+  { name = "entrance of Hamath", verse = "NUM.34.8", relation = "unto", site = { atlas = "lebo-hamath" } },
+  { name = "Zedad", verse = "NUM.34.8", relation = "outgoing", site = { atlas = "zedad" } },
+  { name = "Ziphron", verse = "NUM.34.9", relation = "unto", site = { atlas = "ziphron" } },
+  { name = "Hazar-enan", verse = "NUM.34.9", relation = "outgoing", site = { atlas = "hazar-enan" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "east"
+justification = "Riblah east of Ain is preserved as a relative relation; uncertain ends are not replaced with stand-in coordinates."
+waypoints = [
+  { name = "Hazar-enan", verse = "NUM.34.10", relation = "from", site = { atlas = "hazar-enan" } },
+  { name = "Shepham", verse = "NUM.34.10", relation = "unto", site = { atlas = "shepham" } },
+  { name = "Riblah", verse = "NUM.34.11", relation = "unto", site = { atlas = "riblah-2" } },
+  { name = "Ain", verse = "NUM.34.11", relation = "east_of", site = { unlocated = "Ain" } },
+  { name = "sea of Chinnereth", verse = "NUM.34.11", relation = "east_of", site = { atlas = "sea-of-galilee" } },
+  { name = "Jordan", verse = "NUM.34.12", relation = "along", site = { atlas = "jordan" } },
+  { name = "Salt Sea", verse = "NUM.34.12", relation = "outgoing", site = { unlocated = "Salt Sea" } },
+]
+
+[[survey]]
+lot = "reuben"
+source = "kjv"
+period = "moses_grant_recalled"
+verses = ["JOS.13.15-23"]
+justification = "Joshua records the inheritance then in force and recalls Moses' grant; the grant belongs to late wilderness, not 1446. A city list is not a closed border."
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "south"
+justification = "The Arnon and Aroer are stated; the unnamed city is recorded unlocated."
+waypoints = [
+  { name = "Aroer by the Arnon", verse = "JOS.13.16", relation = "from", site = { atlas = "aroer-1" } },
+  { name = "Arnon", verse = "JOS.13.16", relation = "along", site = { atlas = "valley-of-the-arnon" } },
+  { name = "city in the midst of the river", verse = "JOS.13.16", relation = "within", site = { unlocated = "city in the midst of the river" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "Listed inheritance places; this order supplies no boundary course. Gad's building of cities is a separate predicate, not a conflicting allotment."
+waypoints = [
+  { name = "Medeba", verse = "JOS.13.16", relation = "at", site = { atlas = "medeba" } },
+  { name = "Heshbon", verse = "JOS.13.17", relation = "at", site = { atlas = "heshbon" } },
+  { name = "Dibon", verse = "JOS.13.17", relation = "at", site = { atlas = "dibon-1" } },
+  { name = "Bamoth-baal", verse = "JOS.13.17", relation = "at", site = { atlas = "bamoth-baal" } },
+  { name = "Beth-baal-meon", verse = "JOS.13.17", relation = "at", site = { atlas = "baal-meon" } },
+  { name = "Jahaz", verse = "JOS.13.18", relation = "at", site = { atlas = "jahaz" } },
+  { name = "Kedemoth", verse = "JOS.13.18", relation = "at", site = { atlas = "kedemoth" } },
+  { name = "Mephaath", verse = "JOS.13.18", relation = "at", site = { atlas = "mephaath" } },
+  { name = "Kirjathaim", verse = "JOS.13.19", relation = "at", site = { atlas = "kiriathaim-1" } },
+  { name = "Sibmah", verse = "JOS.13.19", relation = "at", site = { atlas = "sibmah" } },
+  { name = "Zareth-shahar", verse = "JOS.13.19", relation = "at", site = { atlas = "zereth-shahar" } },
+  { name = "Beth-peor", verse = "JOS.13.20", relation = "at", site = { atlas = "beth-peor" } },
+  { name = "Ashdoth-pisgah", verse = "JOS.13.20", relation = "at", site = { atlas = "pisgah" } },
+  { name = "Beth-jeshimoth", verse = "JOS.13.20", relation = "at", site = { atlas = "beth-jeshimoth" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "west"
+justification = "The Jordan is named as the border; the eastern desert edge remains unrecorded, never inferred unclaimed."
+waypoints = [
+  { name = "Jordan", verse = "JOS.13.23", relation = "along", site = { atlas = "jordan" } },
+]
+
+[[survey]]
+lot = "gad"
+source = "kjv"
+period = "moses_grant_recalled"
+verses = ["JOS.13.24-28"]
+justification = "Joshua recalls Moses' grant. Separate from Reuben and eastern Manasseh; the text does not give a closed circuit."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "east"
+justification = "Half the land of Ammon is retained as the text's wording, not an assertion that Gad conquered Ammon's remaining land; alternatives remain with the atlas Extent claim."
+waypoints = [
+  { name = "Jazer", verse = "JOS.13.25", relation = "from", site = { atlas = "jazer" } },
+  { name = "Gilead", verse = "JOS.13.25", relation = "within", site = { atlas = "gilead-1" } },
+  { name = "land of Ammon", verse = "JOS.13.25", relation = "within", site = { atlas = "ammon" } },
+  { name = "Aroer before Rabbah", verse = "JOS.13.25", relation = "unto", site = { atlas = "aroer-2" } },
+  { name = "Rabbah", verse = "JOS.13.25", relation = "before", site = { atlas = "rabbah-1" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "Heshbon to Ramath-mizpeh and Betonim is its own sequence."
+waypoints = [
+  { name = "Heshbon", verse = "JOS.13.26", relation = "from", site = { atlas = "heshbon" } },
+  { name = "Ramath-mizpeh", verse = "JOS.13.26", relation = "unto", site = { atlas = "ramath-mizpeh" } },
+  { name = "Betonim", verse = "JOS.13.26", relation = "unto", site = { atlas = "betonim" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "north"
+justification = "Mahanaim has an unlocated selected Site claim in C14; no segment through it is drawn. Debir here is distinct from Judah's southern city."
+waypoints = [
+  { name = "Mahanaim", verse = "JOS.13.26", relation = "from", site = { atlas = "mahanaim" } },
+  { name = "border of Debir", verse = "JOS.13.26", relation = "unto", site = { atlas = "debir-3" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "valley"
+justification = "Valley cities are kept separate from the river course."
+waypoints = [
+  { name = "Beth-aram", verse = "JOS.13.27", relation = "at", site = { atlas = "beth-haram" } },
+  { name = "Beth-nimrah", verse = "JOS.13.27", relation = "at", site = { atlas = "beth-nimrah" } },
+  { name = "Succoth", verse = "JOS.13.27", relation = "at", site = { atlas = "succoth-1" } },
+  { name = "Zaphon", verse = "JOS.13.27", relation = "at", site = { atlas = "zaphon-1" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "west"
+justification = "Jordan and its border reach the edge of Chinnereth; no eastern foot-of-hills course is invented."
+waypoints = [
+  { name = "Jordan", verse = "JOS.13.27", relation = "along", site = { atlas = "jordan" } },
+  { name = "sea of Chinnereth", verse = "JOS.13.27", relation = "unto", site = { atlas = "sea-of-galilee" } },
+]
+
+[[survey]]
+lot = "manasseh_east"
+source = "kjv"
+period = "moses_grant_recalled"
+verses = ["JOS.13.29-31"]
+justification = "Moses' eastern half-lot, recalled at the division. Mahanaim is a start point, not a determined course against Gad."
+
+[[survey.sequence]]
+kind = "extent_list"
+side = "interior"
+justification = "The text lists extent and cities; no ring or speculative eastern and northern course follows from their list."
+waypoints = [
+  { name = "Mahanaim", verse = "JOS.13.30", relation = "from", site = { atlas = "mahanaim" } },
+  { name = "Bashan", verse = "JOS.13.30", relation = "within", site = { atlas = "bashan" } },
+  { name = "towns of Jair", verse = "JOS.13.30", relation = "within", site = { atlas = "havvoth-jair" } },
+  { name = "Gilead", verse = "JOS.13.31", relation = "within", site = { atlas = "gilead-1" } },
+  { name = "Ashtaroth", verse = "JOS.13.31", relation = "at", site = { atlas = "ashtaroth" } },
+  { name = "Edrei", verse = "JOS.13.31", relation = "at", site = { atlas = "edrei-1" } },
+]
+
+[[survey]]
+lot = "judah"
+source = "kjv"
+period = "gilgal"
+verses = ["JOS.15.1-12"]
+justification = "Judah's walked boundary, separate from its city districts and from possession. Edom and Zin remain relative boundary evidence."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "Hezron keeps its vicinity uncertainty; Adar and Karkaa keep unlocated selected Site claims. Kadesh alternatives stay on its Site claim."
+waypoints = [
+  { name = "south bay of the Salt Sea", verse = "JOS.15.2", relation = "from", site = { unlocated = "south bay of the Salt Sea" } },
+  { name = "Maaleh-acrabbim", verse = "JOS.15.3", relation = "south_of", site = { atlas = "akrabbim" } },
+  { name = "Zin", verse = "JOS.15.3", relation = "along", site = { atlas = "zin-1" } },
+  { name = "Kadesh-barnea", verse = "JOS.15.3", relation = "south_of", site = { atlas = "kadesh-barnea" } },
+  { name = "Hezron", verse = "JOS.15.3", relation = "unto", site = { atlas = "hezron" } },
+  { name = "Adar", verse = "JOS.15.3", relation = "unto", site = { atlas = "addar" } },
+  { name = "Karkaa", verse = "JOS.15.3", relation = "unto", site = { atlas = "karka" } },
+  { name = "Azmon", verse = "JOS.15.4", relation = "unto", site = { atlas = "azmon" } },
+  { name = "river of Egypt", verse = "JOS.15.4", relation = "unto", site = { atlas = "brook-of-egypt" } },
+  { name = "Great Sea", verse = "JOS.15.4", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "east"
+justification = "The Salt Sea is the east border; no invented northern or southern shore coordinate is supplied."
+waypoints = [
+  { name = "Salt Sea", verse = "JOS.15.5", relation = "along", site = { unlocated = "Salt Sea" } },
+  { name = "end of Jordan", verse = "JOS.15.5", relation = "unto", site = { atlas = "jordan" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "north"
+justification = "Named relations and text order are retained. Debir here is the boundary waypoint from Achor, not the southern city. Kirjath-jearim uses the selected Kh. Erma Site extent, never the legacy gazetteer coordinate."
+waypoints = [
+  { name = "bay of the Salt Sea at Jordan", verse = "JOS.15.5", relation = "from", site = { unlocated = "bay of the Salt Sea at Jordan" } },
+  { name = "Beth-hoglah", verse = "JOS.15.6", relation = "unto", site = { atlas = "beth-hoglah" } },
+  { name = "Beth-arabah", verse = "JOS.15.6", relation = "north_of", site = { atlas = "beth-arabah" } },
+  { name = "stone of Bohan", verse = "JOS.15.6", relation = "unto", site = { unlocated = "stone of Bohan" } },
+  { name = "Debir from Achor", verse = "JOS.15.7", relation = "unto", site = { atlas = "debir-2" } },
+  { name = "valley of Achor", verse = "JOS.15.7", relation = "from", site = { atlas = "valley-of-achor" } },
+  { name = "Gilgal", verse = "JOS.15.7", relation = "toward", site = { atlas = "gilgal-3" } },
+  { name = "Adummim", verse = "JOS.15.7", relation = "before", site = { atlas = "adummim" } },
+  { name = "En-shemesh", verse = "JOS.15.7", relation = "unto", site = { atlas = "en-shemesh" } },
+  { name = "En-rogel", verse = "JOS.15.7", relation = "outgoing", site = { atlas = "en-rogel" } },
+  { name = "valley of Hinnom", verse = "JOS.15.8", relation = "along", site = { atlas = "valley-of-hinnom" } },
+  { name = "Jebusite Jerusalem", verse = "JOS.15.8", relation = "south_of", site = { atlas = "jerusalem" } },
+  { name = "hilltop west of Hinnom", verse = "JOS.15.8", relation = "west_of", site = { unlocated = "hilltop west of Hinnom" } },
+  { name = "Nephtoah", verse = "JOS.15.9", relation = "unto", site = { atlas = "nephtoah" } },
+  { name = "cities of mount Ephron", verse = "JOS.15.9", relation = "unto", site = { atlas = "mount-ephron" } },
+  { name = "Baalah which is Kirjath-jearim", verse = "JOS.15.9", relation = "unto", site = { atlas = "kiriath-jearim" } },
+  { name = "mount Seir", verse = "JOS.15.10", relation = "unto", site = { atlas = "mount-seir-2" } },
+  { name = "mount Jearim", verse = "JOS.15.10", relation = "north_of", site = { atlas = "mount-jearim" } },
+  { name = "Chesalon", verse = "JOS.15.10", relation = "at", site = { atlas = "chesalon" } },
+  { name = "Beth-shemesh", verse = "JOS.15.10", relation = "unto", site = { atlas = "beth-shemesh-1" } },
+  { name = "Timnah", verse = "JOS.15.10", relation = "unto", site = { atlas = "timnah-1" } },
+  { name = "Ekron", verse = "JOS.15.11", relation = "north_of", site = { atlas = "ekron" } },
+  { name = "Shicron", verse = "JOS.15.11", relation = "unto", site = { atlas = "shikkeron" } },
+  { name = "mount Baalah", verse = "JOS.15.11", relation = "unto", site = { atlas = "mount-baalah" } },
+  { name = "Jabneel", verse = "JOS.15.11", relation = "unto", site = { atlas = "jabneel-1" } },
+  { name = "Great Sea", verse = "JOS.15.11", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "west"
+justification = "The Great Sea is the western boundary."
+waypoints = [
+  { name = "Great Sea", verse = "JOS.15.12", relation = "along", site = { unlocated = "Great Sea" } },
+]
+
+[[survey]]
+lot = "ephraim"
+source = "kjv"
+period = "gilgal"
+verses = ["JOS.16.1-9"]
+justification = "Joseph's southern line and Ephraim's own lines are separate sequences; Ephraim's cities within Manasseh are not lost by a polygon test."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "The southern line is Joseph's common line. Unidentified Archi and Japhleti are recorded without coordinates."
+waypoints = [
+  { name = "Jordan by Jericho", verse = "JOS.16.1", relation = "from", site = { atlas = "jordan" } },
+  { name = "water of Jericho", verse = "JOS.16.1", relation = "unto", site = { atlas = "waters-of-jericho" } },
+  { name = "wilderness from Jericho", verse = "JOS.16.1", relation = "along", site = { unlocated = "wilderness from Jericho" } },
+  { name = "mount Bethel", verse = "JOS.16.1", relation = "unto", site = { atlas = "bethel-1" } },
+  { name = "Bethel", verse = "JOS.16.2", relation = "from", site = { atlas = "bethel-1" } },
+  { name = "Luz", verse = "JOS.16.2", relation = "unto", site = { atlas = "luz-1" } },
+  { name = "border of Archi", verse = "JOS.16.2", relation = "along", site = { unlocated = "border of Archi" } },
+  { name = "Ataroth", verse = "JOS.16.2", relation = "unto", site = { atlas = "ataroth-2" } },
+  { name = "Japhleti", verse = "JOS.16.3", relation = "along", site = { unlocated = "Japhleti" } },
+  { name = "nether Beth-horon", verse = "JOS.16.3", relation = "unto", site = { atlas = "lower-beth-horon" } },
+  { name = "Gezer", verse = "JOS.16.3", relation = "unto", site = { atlas = "gezer" } },
+  { name = "Great Sea", verse = "JOS.16.3", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "east"
+justification = "A separate east-side statement, not an automatic join to the next sequence."
+waypoints = [
+  { name = "Ataroth-addar", verse = "JOS.16.5", relation = "at", site = { atlas = "ataroth-addar" } },
+  { name = "upper Beth-horon", verse = "JOS.16.5", relation = "unto", site = { atlas = "upper-beth-horon" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "north"
+justification = "Michmethah uses the selected vicinity, not a fabricated exact point; site alternatives stay on the atlas claim."
+waypoints = [
+  { name = "Michmethah", verse = "JOS.16.6", relation = "unto", site = { atlas = "michmethath" } },
+  { name = "Taanath-shiloh", verse = "JOS.16.6", relation = "unto", site = { atlas = "taanath-shiloh" } },
+  { name = "Janohah", verse = "JOS.16.6", relation = "east_of", site = { atlas = "janoah-1" } },
+  { name = "Janohah", verse = "JOS.16.7", relation = "from", site = { atlas = "janoah-1" } },
+  { name = "Ataroth", verse = "JOS.16.7", relation = "unto", site = { atlas = "ataroth-3" } },
+  { name = "Naarath", verse = "JOS.16.7", relation = "unto", site = { atlas = "naarah" } },
+  { name = "Jericho", verse = "JOS.16.7", relation = "unto", site = { atlas = "jericho-1" } },
+  { name = "Jordan", verse = "JOS.16.7", relation = "outgoing", site = { atlas = "jordan" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "northwest"
+justification = "The river is named; X16's selected course evidence is the geometry authority."
+waypoints = [
+  { name = "Tappuah", verse = "JOS.16.8", relation = "from", site = { atlas = "tappuah-1" } },
+  { name = "river Kanah", verse = "JOS.16.8", relation = "unto", site = { atlas = "kanah-1" } },
+  { name = "Great Sea", verse = "JOS.16.8", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey]]
+lot = "manasseh_west"
+source = "kjv"
+period = "gilgal"
+verses = ["JOS.17.7-11"]
+justification = "The southern boundary is described; northern and eastern neighbours do not determine courses. Enclaved cities are separate inheritance facts."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "Asher in verse 7 is a place on the line, not the tribe. Shechem is a relative reference, not Manasseh's city. Tappuah town and land are different subjects (17:8)."
+waypoints = [
+  { name = "Asher on the line", verse = "JOS.17.7", relation = "from", site = { unlocated = "Asher on the line" } },
+  { name = "Michmethah", verse = "JOS.17.7", relation = "unto", site = { atlas = "michmethath" } },
+  { name = "Shechem", verse = "JOS.17.7", relation = "before", site = { atlas = "shechem" } },
+  { name = "En-tappuah", verse = "JOS.17.7", relation = "unto", site = { atlas = "en-tappuah" } },
+  { name = "river Kanah", verse = "JOS.17.9", relation = "unto", site = { atlas = "kanah-1" } },
+  { name = "Great Sea", verse = "JOS.17.9", relation = "outgoing", site = { unlocated = "Great Sea" } },
+]
+
+[[survey.sequence]]
+kind = "neighbours"
+side = "northeast"
+justification = "Tribal neighbours are stated without a border course; absence of a line is not absence of occupation."
+waypoints = [
+  { name = "Asher", verse = "JOS.17.10", relation = "north_of", site = { unlocated = "Asher" } },
+  { name = "Issachar", verse = "JOS.17.10", relation = "east_of", site = { unlocated = "Issachar" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "enclaves"
+justification = "These cities are allotted in Issachar and Asher. No conversion of the list into an outer ring, and no inferred expulsion of their holders."
+waypoints = [
+  { name = "Beth-shean", verse = "JOS.17.11", relation = "at", site = { atlas = "beth-shan" } },
+  { name = "Ibleam", verse = "JOS.17.11", relation = "at", site = { atlas = "ibleam" } },
+  { name = "Dor", verse = "JOS.17.11", relation = "at", site = { atlas = "dor" } },
+  { name = "Endor", verse = "JOS.17.11", relation = "at", site = { atlas = "en-dor" } },
+  { name = "Taanach", verse = "JOS.17.11", relation = "at", site = { atlas = "taanach" } },
+  { name = "Megiddo", verse = "JOS.17.11", relation = "at", site = { atlas = "megiddo" } },
+]
+
+[[survey]]
+lot = "benjamin"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.18.11-20"]
+justification = "Benjamin's boundary sequences preserve each side's text order; city lists and actual holders remain separate."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "north"
+justification = "A hill and a relative site relation are not identified exact vertices."
+waypoints = [
+  { name = "Jordan", verse = "JOS.18.12", relation = "from", site = { atlas = "jordan" } },
+  { name = "Jericho", verse = "JOS.18.12", relation = "north_of", site = { atlas = "jericho-1" } },
+  { name = "mountains westward", verse = "JOS.18.12", relation = "along", site = { unlocated = "mountains westward" } },
+  { name = "wilderness of Beth-aven", verse = "JOS.18.12", relation = "outgoing", site = { atlas = "beth-aven-1" } },
+  { name = "Luz which is Bethel", verse = "JOS.18.13", relation = "south_of", site = { atlas = "bethel-1" } },
+  { name = "Ataroth-adar", verse = "JOS.18.13", relation = "unto", site = { atlas = "ataroth-addar" } },
+  { name = "hill south of nether Beth-horon", verse = "JOS.18.13", relation = "unto", site = { unlocated = "hill south of nether Beth-horon" } },
+  { name = "nether Beth-horon", verse = "JOS.18.13", relation = "south_of", site = { atlas = "lower-beth-horon" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "west"
+justification = "Kirjath-jearim remains a city of Judah and a waypoint of Benjamin; its selected Site is not rederived here."
+waypoints = [
+  { name = "hill before Beth-horon", verse = "JOS.18.14", relation = "from", site = { unlocated = "hill before Beth-horon" } },
+  { name = "nether Beth-horon", verse = "JOS.18.14", relation = "south_of", site = { atlas = "lower-beth-horon" } },
+  { name = "Kirjath-baal which is Kirjath-jearim", verse = "JOS.18.14", relation = "outgoing", site = { atlas = "kiriath-jearim" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "The southern walk is recorded independently in its own text order; shared edges are assembled once by X16, not drawn twice here."
+waypoints = [
+  { name = "Kirjath-jearim", verse = "JOS.18.15", relation = "from", site = { atlas = "kiriath-jearim" } },
+  { name = "waters of Nephtoah", verse = "JOS.18.15", relation = "unto", site = { atlas = "nephtoah" } },
+  { name = "end of mountain before Hinnom", verse = "JOS.18.16", relation = "unto", site = { unlocated = "end of mountain before Hinnom" } },
+  { name = "valley of giants", verse = "JOS.18.16", relation = "north_of", site = { unlocated = "valley of giants" } },
+  { name = "valley of Hinnom", verse = "JOS.18.16", relation = "along", site = { atlas = "valley-of-hinnom" } },
+  { name = "Jebusi Jerusalem", verse = "JOS.18.16", relation = "south_of", site = { atlas = "jerusalem" } },
+  { name = "En-rogel", verse = "JOS.18.16", relation = "unto", site = { atlas = "en-rogel" } },
+  { name = "En-shemesh", verse = "JOS.18.17", relation = "unto", site = { atlas = "en-shemesh" } },
+  { name = "Geliloth", verse = "JOS.18.17", relation = "toward", site = { atlas = "geliloth" } },
+  { name = "Adummim", verse = "JOS.18.17", relation = "before", site = { atlas = "adummim" } },
+  { name = "stone of Bohan", verse = "JOS.18.17", relation = "unto", site = { unlocated = "stone of Bohan" } },
+  { name = "Arabah", verse = "JOS.18.18", relation = "north_of", site = { atlas = "arabah" } },
+  { name = "Arabah", verse = "JOS.18.18", relation = "unto", site = { atlas = "arabah" } },
+  { name = "Beth-hoglah", verse = "JOS.18.19", relation = "north_of", site = { atlas = "beth-hoglah" } },
+  { name = "north bay of the Salt Sea", verse = "JOS.18.19", relation = "outgoing", site = { unlocated = "north bay of the Salt Sea" } },
+  { name = "south end of Jordan", verse = "JOS.18.19", relation = "unto", site = { atlas = "jordan" } },
+]
+
+[[survey.sequence]]
+kind = "named_feature"
+side = "east"
+justification = "The Jordan is the stated east border."
+waypoints = [
+  { name = "Jordan", verse = "JOS.18.20", relation = "along", site = { atlas = "jordan" } },
+]
+
+[[survey]]
+lot = "simeon"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.1-9"]
+justification = "Within Judah (19:1,9): cities and villages only, no invented boundary or hull."
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "Text names stay recorded even where the selected identification shares a site or is unlocated. Sheba's identification with Beer-sheba is not silently applied to the text list."
+waypoints = [
+  { name = "Beer-sheba", verse = "JOS.19.2", relation = "at", site = { atlas = "beersheba-1" } },
+  { name = "Sheba", verse = "JOS.19.2", relation = "at", site = { atlas = "sheba-2" } },
+  { name = "Moladah", verse = "JOS.19.2", relation = "at", site = { atlas = "moladah" } },
+  { name = "Hazar-shual", verse = "JOS.19.3", relation = "at", site = { atlas = "hazar-shual" } },
+  { name = "Balah", verse = "JOS.19.3", relation = "at", site = { atlas = "balah" } },
+  { name = "Azem", verse = "JOS.19.3", relation = "at", site = { atlas = "ezem" } },
+  { name = "Eltolad", verse = "JOS.19.4", relation = "at", site = { atlas = "eltolad" } },
+  { name = "Bethul", verse = "JOS.19.4", relation = "at", site = { atlas = "bethul" } },
+  { name = "Hormah", verse = "JOS.19.4", relation = "at", site = { atlas = "hormah" } },
+  { name = "Ziklag", verse = "JOS.19.5", relation = "at", site = { atlas = "ziklag" } },
+  { name = "Beth-marcaboth", verse = "JOS.19.5", relation = "at", site = { atlas = "beth-marcaboth" } },
+  { name = "Hazar-susah", verse = "JOS.19.5", relation = "at", site = { atlas = "hazar-susah" } },
+  { name = "Beth-lebaoth", verse = "JOS.19.6", relation = "at", site = { atlas = "beth-lebaoth" } },
+  { name = "Sharuhen", verse = "JOS.19.6", relation = "at", site = { atlas = "sharuhen" } },
+  { name = "Ain", verse = "JOS.19.7", relation = "at", site = { atlas = "ain-2" } },
+  { name = "Remmon", verse = "JOS.19.7", relation = "at", site = { atlas = "rimmon-2" } },
+  { name = "Ether", verse = "JOS.19.7", relation = "at", site = { atlas = "ether-2" } },
+  { name = "Ashan", verse = "JOS.19.7", relation = "at", site = { atlas = "ashan" } },
+  { name = "Baalath-beer", verse = "JOS.19.8", relation = "at", site = { atlas = "baalath-beer" } },
+  { name = "Ramath of the south", verse = "JOS.19.8", relation = "unto", site = { atlas = "ramah-6" } },
+]
+
+[[survey]]
+lot = "zebulun"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.10-16"]
+justification = "Sarid is the common start of separate westward and eastward walks, not a forced closed ring."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "west"
+justification = "The river relation is retained; its physical identification and course belong to X16."
+waypoints = [
+  { name = "Sarid", verse = "JOS.19.10", relation = "from", site = { atlas = "sarid" } },
+  { name = "Maralah", verse = "JOS.19.11", relation = "unto", site = { atlas = "mareal" } },
+  { name = "Dabbasheth", verse = "JOS.19.11", relation = "unto", site = { atlas = "dabbesheth" } },
+  { name = "river before Jokneam", verse = "JOS.19.11", relation = "unto", site = { unlocated = "river before Jokneam" } },
+  { name = "Jokneam", verse = "JOS.19.11", relation = "before", site = { atlas = "jokneam" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "east"
+justification = "Unlocated chosen sites do not become vertices; northward turning preserves the sequence rather than implying closure."
+waypoints = [
+  { name = "Sarid", verse = "JOS.19.12", relation = "from", site = { atlas = "sarid" } },
+  { name = "Chisloth-tabor", verse = "JOS.19.12", relation = "unto", site = { atlas = "chisloth-tabor" } },
+  { name = "Daberath", verse = "JOS.19.12", relation = "unto", site = { atlas = "daberath" } },
+  { name = "Japhia", verse = "JOS.19.12", relation = "unto", site = { atlas = "japhia" } },
+  { name = "Gittah-hepher", verse = "JOS.19.13", relation = "unto", site = { atlas = "gath-hepher" } },
+  { name = "Ittah-kazin", verse = "JOS.19.13", relation = "unto", site = { atlas = "eth-kazin" } },
+  { name = "Remmon-methoar", verse = "JOS.19.13", relation = "unto", site = { atlas = "rimmon-3" } },
+  { name = "Neah", verse = "JOS.19.13", relation = "unto", site = { atlas = "neah" } },
+  { name = "Hannathon", verse = "JOS.19.14", relation = "unto", site = { atlas = "hannathon" } },
+  { name = "valley of Jiphthah-el", verse = "JOS.19.14", relation = "outgoing", site = { atlas = "valley-of-iphtahel" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "These are cities, distinct from the preceding boundary walk."
+waypoints = [
+  { name = "Kattath", verse = "JOS.19.15", relation = "at", site = { atlas = "kattath" } },
+  { name = "Nahallal", verse = "JOS.19.15", relation = "at", site = { atlas = "nahalal" } },
+  { name = "Shimron", verse = "JOS.19.15", relation = "at", site = { atlas = "shimron" } },
+  { name = "Idalah", verse = "JOS.19.15", relation = "at", site = { atlas = "idalah" } },
+  { name = "Beth-lehem", verse = "JOS.19.15", relation = "at", site = { atlas = "bethlehem-2" } },
+]
+
+[[survey]]
+lot = "issachar"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.17-23"]
+justification = "A city list with one stated coast reaching the Jordan; no complete boundary is supplied."
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "The city list is preserved in verse order; no list-derived outer course is asserted."
+waypoints = [
+  { name = "Jezreel", verse = "JOS.19.18", relation = "at", site = { atlas = "jezreel-2" } },
+  { name = "Chesulloth", verse = "JOS.19.18", relation = "at", site = { atlas = "chesulloth" } },
+  { name = "Shunem", verse = "JOS.19.18", relation = "at", site = { atlas = "shunem" } },
+  { name = "Hapharaim", verse = "JOS.19.19", relation = "at", site = { atlas = "hapharaim" } },
+  { name = "Shion", verse = "JOS.19.19", relation = "at", site = { atlas = "shion" } },
+  { name = "Anaharath", verse = "JOS.19.19", relation = "at", site = { atlas = "anaharath" } },
+  { name = "Rabbith", verse = "JOS.19.20", relation = "at", site = { atlas = "rabbith" } },
+  { name = "Kishion", verse = "JOS.19.20", relation = "at", site = { atlas = "kishion" } },
+  { name = "Abez", verse = "JOS.19.20", relation = "at", site = { atlas = "ebez" } },
+  { name = "Remeth", verse = "JOS.19.21", relation = "at", site = { atlas = "remeth" } },
+  { name = "En-gannim", verse = "JOS.19.21", relation = "at", site = { atlas = "en-gannim-2" } },
+  { name = "En-haddah", verse = "JOS.19.21", relation = "at", site = { atlas = "en-haddah" } },
+  { name = "Beth-pazzez", verse = "JOS.19.21", relation = "at", site = { atlas = "beth-pazzez" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "east"
+justification = "Tabor is the mountain, not the Levitical town. Shahazimah follows the owner's permitted primary; Beth-shemesh's selected Site uncertainty remains with C14."
+waypoints = [
+  { name = "Tabor", verse = "JOS.19.22", relation = "unto", site = { atlas = "mount-tabor" } },
+  { name = "Shahazimah", verse = "JOS.19.22", relation = "unto", site = { atlas = "shahazumah" } },
+  { name = "Beth-shemesh", verse = "JOS.19.22", relation = "unto", site = { atlas = "beth-shemesh-2" } },
+  { name = "Jordan", verse = "JOS.19.22", relation = "outgoing", site = { atlas = "jordan" } },
+]
+
+[[survey]]
+lot = "asher"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.24-31"]
+justification = "Boundary and city statements remain distinct. Carmel is the mountain, not the Judah city."
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "The initial city list does not authorize straight boundary links."
+waypoints = [
+  { name = "Helkath", verse = "JOS.19.25", relation = "at", site = { atlas = "helkath" } },
+  { name = "Hali", verse = "JOS.19.25", relation = "at", site = { atlas = "hali" } },
+  { name = "Beten", verse = "JOS.19.25", relation = "at", site = { atlas = "beten" } },
+  { name = "Achshaph", verse = "JOS.19.25", relation = "at", site = { atlas = "achshaph" } },
+  { name = "Alammelech", verse = "JOS.19.26", relation = "at", site = { atlas = "allammelech" } },
+  { name = "Amad", verse = "JOS.19.26", relation = "at", site = { atlas = "amad" } },
+  { name = "Misheal", verse = "JOS.19.26", relation = "at", site = { atlas = "mishal" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "coast"
+justification = "The walk names places and turns. Asher's Beth-dagon keeps its selected Site claim; no stand-in or inherited plate line is used."
+waypoints = [
+  { name = "Carmel", verse = "JOS.19.26", relation = "unto", site = { atlas = "mount-carmel" } },
+  { name = "Shihor-libnath", verse = "JOS.19.26", relation = "unto", site = { atlas = "shihor-libnath" } },
+  { name = "Beth-dagon", verse = "JOS.19.27", relation = "unto", site = { atlas = "beth-dagon-2" } },
+  { name = "Zebulun", verse = "JOS.19.27", relation = "unto", site = { unlocated = "Zebulun" } },
+  { name = "valley of Jiphthah-el", verse = "JOS.19.27", relation = "unto", site = { atlas = "valley-of-iphtahel" } },
+  { name = "Beth-emek", verse = "JOS.19.27", relation = "north_of", site = { atlas = "beth-emek" } },
+  { name = "Neiel", verse = "JOS.19.27", relation = "unto", site = { atlas = "neiel" } },
+  { name = "Cabul", verse = "JOS.19.27", relation = "outgoing", site = { atlas = "cabul-1" } },
+  { name = "Hebron Ebron", verse = "JOS.19.28", relation = "at", site = { atlas = "ebron" } },
+  { name = "Rehob", verse = "JOS.19.28", relation = "at", site = { atlas = "rehob-2" } },
+  { name = "Hammon", verse = "JOS.19.28", relation = "at", site = { atlas = "hammon-1" } },
+  { name = "Kanah", verse = "JOS.19.28", relation = "at", site = { atlas = "kanah-2" } },
+  { name = "great Zidon", verse = "JOS.19.28", relation = "unto", site = { atlas = "sidon" } },
+  { name = "Ramah", verse = "JOS.19.29", relation = "unto", site = { atlas = "ramah-2" } },
+  { name = "Tyre", verse = "JOS.19.29", relation = "unto", site = { atlas = "tyre" } },
+  { name = "Hosah", verse = "JOS.19.29", relation = "unto", site = { atlas = "hosah" } },
+  { name = "Great Sea", verse = "JOS.19.29", relation = "outgoing", site = { unlocated = "Great Sea" } },
+  { name = "Achzib", verse = "JOS.19.29", relation = "from", site = { atlas = "achzib-2" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "Additional cities stay separate from the course."
+waypoints = [
+  { name = "Ummah", verse = "JOS.19.30", relation = "at", site = { atlas = "ummah" } },
+  { name = "Aphek", verse = "JOS.19.30", relation = "at", site = { atlas = "aphek-1" } },
+  { name = "Rehob", verse = "JOS.19.30", relation = "at", site = { atlas = "rehob-3" } },
+]
+
+[[survey]]
+lot = "naphtali"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.32-39"]
+justification = "A text walk and fenced cities. Judah upon Jordan is a relative boundary reading, never a separate invented city or a line to southern Judah."
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "south"
+justification = "The KJV's Adami and Nekeb are kept as separate names; shared atlas identification does not collapse the text. Lakum retains its unlocated chosen Site."
+waypoints = [
+  { name = "Heleph", verse = "JOS.19.33", relation = "from", site = { atlas = "heleph" } },
+  { name = "Allon", verse = "JOS.19.33", relation = "from", site = { atlas = "allon" } },
+  { name = "Zaanannim", verse = "JOS.19.33", relation = "unto", site = { atlas = "zaanannim" } },
+  { name = "Adami", verse = "JOS.19.33", relation = "unto", site = { atlas = "adami-nekeb" } },
+  { name = "Nekeb", verse = "JOS.19.33", relation = "unto", site = { atlas = "adami-nekeb" } },
+  { name = "Jabneel", verse = "JOS.19.33", relation = "unto", site = { atlas = "jabneel-2" } },
+  { name = "Lakum", verse = "JOS.19.33", relation = "unto", site = { atlas = "lakkum" } },
+  { name = "Jordan", verse = "JOS.19.33", relation = "outgoing", site = { atlas = "jordan" } },
+]
+
+[[survey.sequence]]
+kind = "border_walk"
+side = "west"
+justification = "Hukkok remains recorded with its unlocated selected Site; the segment is not drawn by a guessed coordinate."
+waypoints = [
+  { name = "Aznoth-tabor", verse = "JOS.19.34", relation = "unto", site = { atlas = "aznoth-tabor" } },
+  { name = "Hukkok", verse = "JOS.19.34", relation = "unto", site = { atlas = "hukkok" } },
+]
+
+[[survey.sequence]]
+kind = "neighbours"
+side = "surrounding"
+justification = "The owner-chosen reading is the eastern upper-Jordan boundary. Keil's Havoth-jair, the town-Judah reading and the textual witness remain alternatives on the atlas claim; no certainty is raised here."
+waypoints = [
+  { name = "Zebulun", verse = "JOS.19.34", relation = "south_of", site = { unlocated = "Zebulun" } },
+  { name = "Asher", verse = "JOS.19.34", relation = "west_of", site = { unlocated = "Asher" } },
+  { name = "Judah upon Jordan", verse = "JOS.19.34", relation = "east_of", site = { atlas = "jordan" } },
+]
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "Fenced cities, without a derived polygon or a claim that all were actually held."
+waypoints = [
+  { name = "Ziddim", verse = "JOS.19.35", relation = "at", site = { atlas = "ziddim" } },
+  { name = "Zer", verse = "JOS.19.35", relation = "at", site = { atlas = "zer" } },
+  { name = "Hammath", verse = "JOS.19.35", relation = "at", site = { atlas = "hammath-1" } },
+  { name = "Rakkath", verse = "JOS.19.35", relation = "at", site = { atlas = "rakkath" } },
+  { name = "Chinnereth", verse = "JOS.19.35", relation = "at", site = { atlas = "chinnereth" } },
+  { name = "Adamah", verse = "JOS.19.36", relation = "at", site = { atlas = "adamah" } },
+  { name = "Ramah", verse = "JOS.19.36", relation = "at", site = { atlas = "ramah-3" } },
+  { name = "Hazor", verse = "JOS.19.36", relation = "at", site = { atlas = "hazor-1" } },
+  { name = "Kedesh", verse = "JOS.19.37", relation = "at", site = { atlas = "kedesh-1" } },
+  { name = "Edrei", verse = "JOS.19.37", relation = "at", site = { atlas = "edrei-2" } },
+  { name = "En-hazor", verse = "JOS.19.37", relation = "at", site = { atlas = "en-hazor" } },
+  { name = "Iron", verse = "JOS.19.38", relation = "at", site = { atlas = "yiron" } },
+  { name = "Migdal-el", verse = "JOS.19.38", relation = "at", site = { atlas = "migdal-el" } },
+  { name = "Horem", verse = "JOS.19.38", relation = "at", site = { atlas = "horem" } },
+  { name = "Beth-anath", verse = "JOS.19.38", relation = "at", site = { atlas = "beth-anath" } },
+  { name = "Beth-shemesh", verse = "JOS.19.38", relation = "at", site = { atlas = "beth-shemesh-3" } },
+]
+
+[[survey]]
+lot = "dan"
+source = "kjv"
+period = "shiloh"
+verses = ["JOS.19.40-46", "JOS.19.48"]
+justification = "The initial lot is a city list with a border before Japho. The later move in 19:47 is an undated separate reading and is not drawn at 1399."
+
+[[survey.sequence]]
+kind = "city_list"
+side = "interior"
+justification = "The cities are allotted places, not a boundary circuit. Competing earlier allotments remain as alternatives in the atlas; actual holders remain separate facts."
+waypoints = [
+  { name = "Zorah", verse = "JOS.19.41", relation = "at", site = { atlas = "zorah" } },
+  { name = "Eshtaol", verse = "JOS.19.41", relation = "at", site = { atlas = "eshtaol" } },
+  { name = "Ir-shemesh", verse = "JOS.19.41", relation = "at", site = { atlas = "ir-shemesh" } },
+  { name = "Shaalabbin", verse = "JOS.19.42", relation = "at", site = { atlas = "shaalbim" } },
+  { name = "Ajalon", verse = "JOS.19.42", relation = "at", site = { atlas = "aijalon-1" } },
+  { name = "Jethlah", verse = "JOS.19.42", relation = "at", site = { atlas = "ithlah" } },
+  { name = "Elon", verse = "JOS.19.43", relation = "at", site = { atlas = "elon" } },
+  { name = "Thimnathah", verse = "JOS.19.43", relation = "at", site = { atlas = "timnah-1" } },
+  { name = "Ekron", verse = "JOS.19.43", relation = "at", site = { atlas = "ekron" } },
+  { name = "Eltekeh", verse = "JOS.19.44", relation = "at", site = { atlas = "eltekeh" } },
+  { name = "Gibbethon", verse = "JOS.19.44", relation = "at", site = { atlas = "gibbethon" } },
+  { name = "Baalath", verse = "JOS.19.44", relation = "at", site = { atlas = "baalath-1" } },
+  { name = "Jehud", verse = "JOS.19.45", relation = "at", site = { atlas = "jehud" } },
+  { name = "Bene-berak", verse = "JOS.19.45", relation = "at", site = { atlas = "bene-berak" } },
+  { name = "Gath-rimmon", verse = "JOS.19.45", relation = "at", site = { atlas = "gath-rimmon-1" } },
+  { name = "Me-jarkon", verse = "JOS.19.46", relation = "at", site = { atlas = "me-jarkon" } },
+  { name = "Rakkon", verse = "JOS.19.46", relation = "at", site = { atlas = "rakkon" } },
+]
+
+[[survey.sequence]]
+kind = "relative_limit"
+side = "west"
+justification = "The verse says before Japho, not that Dan holds Joppa or that the whole boundary follows the coast."
+waypoints = [
+  { name = "Japho", verse = "JOS.19.46", relation = "before", site = { atlas = "joppa" } },
+]
+
+[[later_reading]]
+lot = "dan"
+verse = "JOS.19.47"
+period = "undated"
+site = { atlas = "dan" }
+justification = "The move to Leshem is narrated here but is not dated relative to the initial lots. It is recorded without geometry at the completed-allotment stop."
+alternative = "Placement at a later stop requires its own dating evidence; no chronological shift or inferred date is supplied here."
+
+[[excluded_allotment]]
+tribe = "levi"
+verses = ["JOS.13.14", "JOS.13.33", "JOS.14.3-4"]
+justification = "Scripture explicitly gives Levi no tribal lot; Levitical cities are separate city allotments. This is a positive textual statement, not an inference from missing data."
+
