@@ -1,0 +1,142 @@
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: `map-compile` (lib) generated 2 warnings (run `cargo fix --lib -p map-compile` to apply 2 suggestions)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-w-x3c/crates/map-compile)
+warning: unused import: `PolityRow`
+   --> crates/map-compile/src/tests.rs:101:49
+    |
+101 |     use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    |                                                 ^^^^^^^^^
+
+warning: `map-compile` (lib test) generated 3 warnings (2 duplicates) (run `cargo fix --lib -p map-compile --tests` to apply 1 suggestion)
+   Compiling map-adapters v0.1.0 (/home/donovan/w/CX2-w-x3c/crates/map-adapters)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.80s
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_adapters-be4d2e3bde86d0a5)
+
+running 28 tests
+test tests::epoch_differences_are_narrated ... ok
+test surveys::allotment_laws::the_promised_land_is_not_present_at_the_exodus_stop ... ok
+test tests::epoch_labels_parse ... ok
+test tests::fidelity_and_arc_sharing_on_fixture ... ok
+test tests::pre_anchor_epochs_are_excluded_with_exemption ... ok
+test tests::ring_cleaning_normalizes ... ok
+test tests::journeys_cover_the_whole_bible ... ok
+test tests::routes_wear_the_way_character ... ok
+test tests::scripture_surveys_are_lawful_alone_and_merged ... ok
+test tests::snap_closes_near_miss_borders ... ok
+test tests::terrain_contours_close_and_ingest_lawfully ... ok
+test tests::unnamed_features_are_counted_not_silently_dropped ... ok
+test tests::waters_are_explorable_regions ... ok
+test surveys::allotment_laws::survey_evidence_cannot_supply_coordinates_or_geometry ... ok
+test surveys::allotment_laws::judahs_south_walk_retains_the_text_order ... ok
+test surveys::allotment_laws::the_promised_land_and_thirteen_lots_are_recorded ... ok
+test surveys::allotment_laws::every_allotment_survey_row_cites_scripture ... ok
+test surveys::allotment_laws::city_lists_do_not_become_boundary_walks ... ok
+test surveys::allotment_laws::the_selected_scale_keeps_late_wilderness_and_gilgal_distinct ... ok
+test surveys::allotment_laws::dans_northern_move_is_a_separate_undated_record ... ok
+test surveys::allotment_laws::allotment_evidence_does_not_read_an_excluded_source ... ok
+test surveys::allotment_laws::missing_and_non_survey_verses_fail_for_every_row ... ok
+test surveys::allotment_laws::inherited_atlas_place_ids_are_references_without_coordinates ... ok
+test surveys::allotment_laws::an_export_placement_cannot_restore_the_unlocated_numbers_34_circuit ... ok
+test tests::atlas_exports_bind_the_scripture_set ... ok
+test tests::chronology_audit_reports_disagreements ... ok
+test tests::terrain_real_grid_smoke ... ok
+test tests::real_source_ingests_lawfully ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_compile-a083e3028a8e7072)
+
+running 18 tests
+test tests::a_cohort_enters_time_at_its_moment ... ok
+test tests::compile_laws::unresolvable_places_fail_loud ... ok
+test tests::compile_laws::polity_eras_become_territory_moments ... ok
+test tests::events_parse_with_time_places_verses ... ok
+test tests::one_entity_per_era_however_many_witnesses_claimed_it ... ok
+test tests::reconcile_laws::authored_routes_require_reconciliation_rows ... ok
+test tests::narratives_parse_with_ordered_legs ... ok
+test tests::eras_landmarks_landmask_parse ... ok
+test tests::shape_drift_is_a_named_error ... ok
+test tests::reconcile_laws::supersessions_must_resolve ... ok
+test tests::the_compile_refuses_a_registry_no_witness_backs ... ok
+test tests::the_registry_file_declares_every_unification_and_nothing_else ... ok
+test tests::waiver_laws::territory_waivers_parse_and_match ... ok
+test tests::polities_parse_typed_and_sane ... ok
+test tests::vendor_writes_are_deterministic_and_pinned ... ok
+test tests::compile_laws::narratives_become_routes_with_dated_legs ... ok
+test tests::bridge_laws::old_regions_become_layer_areas_with_moments ... ok
+test tests::physical_partition_face_census ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.04s
+
+     Running unittests src/main.rs (/home/donovan/mut/target/debug/deps/map_compile-31a220843b4a13cc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/excluded_bytes.rs (/home/donovan/mut/target/debug/deps/excluded_bytes-bd6ba50d23302048)
+
+running 1 test
+test excluded_lineage_has_no_compiled_plate_or_vendored_descendants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/excluded_lineage.rs (/home/donovan/mut/target/debug/deps/excluded_lineage-64396f97d98073dc)
+
+running 3 tests
+test excluded_lineage_is_removed_from_partition_provenance ... ok
+test excluded_lineage_never_enters_the_scripture_timeline ... ok
+test excluded_lineage_never_enters_the_partition ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.17s
+
+     Running tests/exclusion_content.rs (/home/donovan/mut/target/debug/deps/exclusion_content-3bf6b99c24ecf8cc)
+
+running 8 tests
+test restoration_probe_child ... ignored
+test restored_med_input_is_refused ... ok
+test permitted_controls_survive_with_biblical_names ... ok
+test restored_judah_is_refused_through_another_polity_input ... ok
+test excluded_content_split_across_input_files_is_refused ... ok
+test every_excluded_original_is_bound_to_its_content ... ok
+test renamed_split_and_indirect_descendants_keep_the_excluded_content ... ok
+test permitted_replacements_survive_the_real_input_door ... ok
+
+test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 13.65s
+
+     Running tests/survey_relations.rs (/home/donovan/mut/target/debug/deps/survey_relations-5651be96f31cbbab)
+
+running 5 tests
+test scripture_preserves_subject_target_and_destination_as_distinct_facts ... ok
+test every_waypoint_has_typed_relations_with_resolvable_targets ... ok
+test every_relative_and_neighbour_clause_matches_its_complete_scripture_outcome ... ok
+test valid_reference_and_direction_mutations_cannot_pass_the_scripture_controls ... ok
+test every_relative_family_detects_changed_attachment_with_a_valid_citation ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.27s
+
+   Doc-tests map_adapters
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests map_compile
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

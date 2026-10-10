@@ -251,7 +251,8 @@ proptest! {
         let features: Vec<_> = positions.chunks(split).map(|part| serde_json::json!({"geometry":{"coordinates":part},"properties":{"name":name}})).collect();
         let json = serde_json::json!({"derived":{"renamed":{"features":features}}});
         prop_assert_eq!(exclusion::check_geojson(&json), Err(expected.clone()), "nested renamed raw inputs retain the complete excluded-source refusal");
-        let mut timeline = map_adapters::promised_land_timeline();
+        let mut timeline = map_adapters::scripture_timeline();
+        prop_assert!(!timeline.boundaries.is_empty(), "the retained Scripture fixture supplies a nonempty timeline control");
         timeline.boundaries.values_mut().next().expect("survey boundary").versions[0].1.pts = points.clone();
         let mut compiled = map_canon::CanonStore::default();
         let result = map_compile::timeline_bridge::bridge_timeline_regions(
