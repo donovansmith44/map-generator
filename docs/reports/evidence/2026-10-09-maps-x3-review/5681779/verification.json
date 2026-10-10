@@ -1,0 +1,22 @@
+{
+  "gate": {
+    "command": ". ~/.bible-atlas-env; CARGO_TARGET_DIR=~/mut/target CARGO_INCREMENTAL=0 nice -n 10 cargo test -p map-adapters -p map-compile -j 4",
+    "exit": 0,
+    "passed": 62,
+    "failed": 0,
+    "ignored": 1,
+    "repeated": false
+  },
+  "reference_probe": {
+    "red_exit": 1,
+    "in_memory_neutral_control_exit": 0,
+    "production_data_written": false
+  },
+  "heavy_owner": "codex-maps-land2 / MAPS-C12 / e0ef86a1 / 2026-10-09T20:09:32-04:00",
+  "full_workspace": false,
+  "contract": false,
+  "goldens": false,
+  "fallback_used": false,
+  "new_finding_number": null,
+  "next_free_number_at_snapshot": 295
+}

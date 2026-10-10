@@ -188,3 +188,184 @@ finding list, not claimed clean.
 Review-only files are this report and its checksummed evidence. Source,
 data, KJV, types, contracts and goldens were not edited. No own lock,
 server or background job remains. Own implementation LOC delta **0**.
+
+## Repair re-review at 5681779 (2026-10-09)
+
+**CHANGES REQUESTED — F-290 CLOSED; Important F-291 remains.** The deleted
+producer's consumer migration is accepted. The original Janohah, Gilgal
+and Geliloth attachments are repaired, but the new unnamed-river reference
+contradicts the adopted relation in the same verse. No new finding number
+is allocated for this existing category; the next free number at this
+review's queue snapshot is F-295.
+
+### Exact scope and ownership
+
+Owner/controller-authorized review in `~/w/CX2-rev-x3b`. Repair range:
+`ecd35634dbe7ec1a9da4d3fb247e83d251f50160..568177905021f566d3a8c2a1919fc43f42e67c77`.
+The latest remote head was fetched again after verification and is unchanged.
+The source was inspected and tested detached at that exact head, then this
+worktree returned to `lane/codex/MAPS-X3-review` at `be5dd7b` to append only
+review documentation and evidence. No author branch was changed.
+
+The requested whole endpoint comparison is current
+`origin/lane/claude/MAPS-X0`,
+`46c738aabc0c7f629574e3317ffd76a78f00c7dd..568177905021f566d3a8c2a1919fc43f42e67c77`.
+X3 actually inherits X0 through `7bcbaba`, merged by `c0e3b94`. The current
+X0's later ordered-lineage/point-key repair is absent from this head; that
+endpoint difference is not attributed to X3 as a newly authored reversal.
+X3's own full range `7bcbaba..5681779` and the whole migration range
+`6ac32bfbf67e26b9cfe94560806fda293db05801..5681779` were also inspected.
+MG-BASE exists, so **no CX-M0 fallback** was used.
+
+Re-read the binding rules, current Lane B X3 row, migration plan from atlas
+`origin/lane/claude/MAPS-C12`, and earlier emphasis/local-id reviews on their
+local review branches. The legacy `.superpowers/QUEUE.md` path remains
+absent; the ops queue is authoritative. Important/Critical findings only,
+one native gate, no delegation or implementation repair.
+
+### F-290 closure accepted
+
+`crates/map-compile/tests/exclusion_content.rs:254` now obtains a retained
+`scripture_timeline`; its next assertion establishes a nonempty control.
+The full generated body still checks renamed/split/indirect descendants,
+complete independent provenance refusals and the unchanged compiler store.
+The source-wide search finds no live `promised_land_timeline` or
+`NUM_34_CIRCUIT` site. The complete two-crate gate compiles the formerly
+broken integration target and executes the property successfully.
+
+The author's retained red-api log reproduces the original E0425. I inspected
+that log and the repair; I did not repeat its historical build. No shim,
+guessed NUM34 restoration, property deletion or new exclusion-rule owner
+was introduced. **F-290 is CLOSED.**
+
+### F-291 residual: the unnamed referent reverses its own adopted relation
+
+**Important, existing category.** At exact `5681779`,
+`data/authored/surveys/allotments.toml:262` asserts that the **ascent of
+Adummim is south of the river**, with an explicit subject and target.
+The new reference at `:263`, including its `site.unlocated` identity, is
+instead named **"river south of Adummim"**. Its name describes the opposite
+ordering. The recorded primary at `:759` explicitly adopts the ascent
+south of the unnamed river, so this is an internal contradiction even
+before choosing between the recorded grammatical alternatives.
+
+Read-only repository KJV Joshua 15:7 supports that adopted primary's
+attachment; its alternative qualifies Gilgal instead. Neither recorded
+reading justifies the newly named river south of Adummim. The new whole
+inventory oracle at `crates/map-compile/tests/survey_relations.rs:183` and
+the whole-waypoint expectation at `:228` repeat the inverted reference
+verbatim, so all five submitted evidence tests pass it. Keeping it undrawn
+avoids a current rendering error but does not make the evidence correct.
+
+A separate read-only evidence diagnostic is **red, exit 1**, with one
+plain-message assertion that the river reference must not reverse the
+adopted Adummim-south-of-river relation. An in-memory neutral-reference
+control passes, exit 0; it updates the reference and its links consistently
+without changing any repository file, relation, coordinate or dating.
+These are evidence diagnostics, not another native gate or a substitute
+pipeline. Full observed rows and KJV text are retained in `audit.json`.
+
+**Closure:** X3's evidence owner gives unnamed referents neutral textual
+identities and keeps directional claims solely in their explicit
+subject/predicate/target records. Sweep every relationally named unlocated
+reference for the same reversal/unsupported-attachment category, preserve
+the Scripture-grounded alternatives, and correct all reference links and
+complete expectations together. Pin the contradiction red first. Keep
+X5's single typed reader, C14's Site decisions and X16's Course/drawing
+ownership; no invented river identification, coordinate, certainty,
+shared-type change or competing admission door is requested. The original
+three attachment repairs and the hill-clause sweep are accepted progress,
+but **F-291 is not CLOSED**.
+
+### Accepted checks and limits
+
+Independent maintained-TOMLI audit gives **14 surveys, 43 sequences,
+302 cited references, 37 unresolved identities**, with **34 Position and
+5 Neighbour statements**. All survey/waypoint citations exist in the
+repository KJV and lie in Num 34 or Josh 13–19; the undated Josh 19:47
+reading remains separate. All survey sources are `kjv`, every named
+subject/target resolves in its survey, and there are no coordinate or
+geometry fields. The additional unnamed river and valley-of-giants
+reference remain recorded. No new excluded source read, Course, Site
+selection, precision or High promotion was introduced by X3's repair.
+The four grammatical-reading records retain their justifications and
+Medium confidence; C14/X16 still own Site/Course alternatives and drawing.
+
+Ten exact rows were independently compared with read-only
+`~/src/bible-atlas/data/raw/kjv.json`, atlas checkout
+`f6eb9fb963c6f608beffdaf09c259214059a421b`, unchanged SHA-256
+`f0b09dc49dfb97bb84f03aae1fbf026485048c3cab31a7a41017e2d86ac1d11c`:
+
+| Survey reference | Verse | Assessment |
+|---|---|---|
+| NUM34 Riblah / Ain | Num 34:11 | Separate subject/target and Medium alternative retained |
+| Reuben Aroer / Arnon | Josh 13:16 | Bank target and separately unlocated river city retained |
+| Gad Mahanaim | Josh 13:26 | Unlocated reference retained without a drawn course |
+| Judah Adummim / unnamed river | Josh 15:7 | Gilgal attachment repaired; inverted river identity is F-291 residual |
+| Judah hill / two valleys | Josh 15:8 | Explicit valley relations and Medium alternative retained |
+| Ephraim Janohah | Josh 16:6 | Destination distinct from Taanath-shiloh positional target |
+| Manasseh northern Asher neighbour | Josh 17:10 | Subject and neighbour direction explicit; no course inferred |
+| Benjamin Geliloth | Josh 18:17 | Geliloth relates to Adummim's ascent |
+| Naphtali Adami / Nekeb | Josh 19:33 | Separate textual names retained |
+| Dan before Japho | Josh 19:46 | Border relation retained without possession inference |
+
+The dating record still derives the adopted 1446 scale from 1 Kings 6:1,
+480 years and the approximately 966 temple anchor. It distinguishes source
+chronology, late-wilderness context, Gilgal and the owner-chosen Shiloh
+stop; no blanket shift or precise guessed NUM34 date is introduced.
+The full nonempty chronology law and all 201 matched-export placement
+controls pass honestly because the unadmitted NUM34 drawing is absent.
+**F-142 remains OPEN** across add_survey/add_route/add_era/kept-route
+insertion and the producer/root seam. There is still no complete adopted
+interval door. The production serde/TOML reader is explicitly deferred
+to X5. The closed serde shapes and TOMLI subprocess here are test-owned
+evidence controls; they do not establish production semantic closure.
+No runtime subprocess reader, copied export, hand-edited root or chronology
+workaround appeared. Complete X3 remains blocked:X5/producer.
+
+### Verification and review bar
+
+Exactly **ONE native gate** at the exact candidate, sourced environment,
+shared target, incremental disabled, nice 10 and four jobs:
+`cargo test -p map-adapters -p map-compile -j 4`.
+**62 passed, 0 failed, 1 inherited ignored helper**, exit 0; both binaries,
+integration targets and doc tests compile. The ignored restoration child
+is exercised by its passing parent test. The same three inherited unused
+import sites warn; no new repair warning. No gate was repeated.
+
+The maintained tree-sitter whole-body assertion audit gives repair
+**19 changed bodies / 28 assertions**, and X3's own full range
+**34 bodies / 48 assertions**, each **zero message-free, zero tuple or
+Boolean-vector observations**. The MG-BASE whole-migration audit gives
+54/74 with one inherited witness/licence mapping table candidate; manual
+inspection confirms a whole semantic mapping outcome, rather than a
+combined Boolean observation. The nine inherited X0 evidence checksums
+verify. Author red-relation and E0425 logs were read and independently
+hashed; their historical execution remains author evidence. The generated
+attachment controls exercise this finite authored corpus, not an admitted
+production reader. Their independent expected-reference defect is reported
+under F-291 rather than excused by the green gate.
+
+D.R.Y./Haskell-bar and category pass: explicit relation sums improve the
+evidence structure and the removed API has no spare implementation. F-291
+is the remaining duplication of a directional claim inside a free-text
+reference identity; copied expectations preserve that contradiction.
+X5 retains the one production door and its eventual type ownership.
+No added application/test comments in the repair or X3 range; the current
+X0 endpoint comparison's point-key doc comment is retained older code,
+not a new X3 addition. Relevant diff checks are clean. No dependency,
+public type, wire, contract or golden change is made by this review.
+
+The foreign atlas heavy lock is still C12's `codex-maps-land2`, `e0ef86a1`,
+since 20:09:32 EDT. Workspace, make-contract and fresh 8090 golden gates
+were not independently run. No view/fixture was blessed, canon rebuilt,
+port touched, foreign lock released or owner permission inferred for a
+type change. No reviewer-owned lock, host or background job remains.
+Own implementation LOC delta **0**.
+
+Evidence: [checksummed payloads](evidence/2026-10-09-maps-x3-review/5681779/SHA256.json),
+including the one gate log, read-only red/control, ten full KJV samples,
+exact range diffs, source/author-log hashes and reproducible assertion audits.
+Next: X3 repairs F-291's reference/category residual on its sole branch;
+X5/producer blockers retain their existing owners. This verdict does not
+approve the full X3 migration or silently close F-142.

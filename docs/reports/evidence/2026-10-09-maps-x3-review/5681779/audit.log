@@ -1,0 +1,23 @@
+{
+  "head": "568177905021f566d3a8c2a1919fc43f42e67c77",
+  "survey_count": 14,
+  "sequence_count": 43,
+  "waypoint_count": 302,
+  "unresolved_identity_count": 37,
+  "sources": [
+    "kjv"
+  ],
+  "invalid_survey_citations": [],
+  "invalid_waypoint_citations": [],
+  "missing_relation_references": [],
+  "relation_kind_counts": {
+    "boundary": 6,
+    "extent": 9,
+    "listed": 111,
+    "neighbour": 5,
+    "position": 34,
+    "reference": 12,
+    "travel": 146
+  },
+  "forbidden_geometry_fields": []
+}

@@ -1,0 +1,73 @@
+{
+  "head": "568177905021f566d3a8c2a1919fc43f42e67c77",
+  "input_hashes": {
+    "crates/map-adapters/src/lib.rs": "6db57493ea2f9227518e1f5c451790a7d261136f209f47d4aa953c720a20f650",
+    "crates/map-adapters/src/surveys.rs": "5cc2d38425313db2129d2bfd94a08c9e84b85103c627f6fc0d7d049f6e3a76f8",
+    "crates/map-adapters/src/tests.rs": "05f7cabc8a43bfffcc6db3f436bc6bbeed736deddf4e8f141a35af1c8012b235",
+    "crates/map-compile/tests/exclusion_content.rs": "89f3ff7f5fae9699204094a6da9f42fb026b76c19a416e860a587b2f32ae6eed",
+    "crates/map-compile/tests/survey_relations.rs": "f6f31d863235c302b5979050d55740502f45faabebb4556e3e2db3f76822b6f5",
+    "data/authored/surveys/allotments.toml": "2672640d1fb52ddd98bac29988611296b058d4cec8cd9153375081a6c5c85094",
+    "docs/reports/2026-10-09-maps-x3.md": "a36a1580486b4e76e0d70d9c0cdf5180193beb460200cbdce4ebc20c2b2e46c0",
+    "docs/errata/quarantine.md": "611b9dcb22dcb490a6881a22d9784f39bdbb3f01662a9e9faabd3bdeb2d1ba49",
+    "Cargo.toml": "99b7cec1a6874515a8148b50a1a43475773e53a66fc68fa8e13e862ced0110e0",
+    "Cargo.lock": "6c79e620bbfe1c1aa0388b888e7a56ecc72e137d2c788adcb49e4a697d6eb5f9",
+    "crates/map-compile/Cargo.toml": "38b9eb2f7d2b3b529d697fc78fcfaf53b85befa70e03a71e76ad327a934d3078"
+  },
+  "author_relation_log_hashes": {
+    "compile-typo.log.gz": {
+      "compressed_sha256": "abc577cd79d42d40be7ffa466653d3feae277fbdf70767262c32b754f329518b",
+      "raw_sha256": "698b234357e034ce186173a07ee471f2b209ac20bcc06f76627e0c650ec40696"
+    },
+    "red-api.log.gz": {
+      "compressed_sha256": "2da8823bbfb6cf418fdced2ecbbd88428ce8615d3c97cf33f072dc2ed606ed62",
+      "raw_sha256": "fcb12eed4ed074e964cebd865c2f46e52cba039250d7c224d269dda030d3fd32"
+    },
+    "gate.log.gz": {
+      "compressed_sha256": "90aa492bc7bc7bec0c38de570051c2941f506d8b57c63b9c758a739c57e8fc42",
+      "raw_sha256": "45025fe3d0510d339e214982902f916f1d71f9b068dd6f15bccdef4f3d367209"
+    },
+    "red-relations.log.gz": {
+      "compressed_sha256": "a045924c7e770e44220af4ce13414a09b75c25574101030a01c0eefe29e933b3",
+      "raw_sha256": "3a9f8e7a7d0f5d73da7a5106f487977e7e2d06533d0c3a2b2c87149034efafb2"
+    }
+  },
+  "inherited_x0_checksum_checks": {
+    "assertion-audit.json": true,
+    "assertion-audit.log": true,
+    "assertion_audit.py": true,
+    "audit-requirements.txt": true,
+    "gate.log.gz": true,
+    "green-content.log.gz": true,
+    "green-independent-outcomes.log.gz": true,
+    "red-polity.log.gz": true,
+    "red-restoration.log.gz": true
+  },
+  "comment_scan_candidates": {
+    "repair": [
+      "+                    *row,"
+    ],
+    "x3": [
+      "+                    *row,"
+    ],
+    "requested-x0": [
+      "+                    *row,",
+      "+/// Deterministic byte key for a point (used to fix all orderings)."
+    ],
+    "whole": [
+      "+                    *row,"
+    ]
+  },
+  "added_comment_lines": {
+    "repair": [],
+    "x3": [],
+    "requested-x0": [
+      "+/// Deterministic byte key for a point (used to fix all orderings)."
+    ],
+    "whole": []
+  },
+  "removed_api_search": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": ""
+  }
+}

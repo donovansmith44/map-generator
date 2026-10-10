@@ -1,0 +1,9 @@
+[
+  {
+    "revision": "HEAD",
+    "test_functions_changed": 34,
+    "assertions": 48,
+    "missing_message": [],
+    "tuple_or_boolean_vector": []
+  }
+]

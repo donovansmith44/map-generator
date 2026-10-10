@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/tmp/maps-x3-review2/reference_probe.py", line 14, in <module>
+    assert river['name'] != 'river south of Adummim', 'the unnamed river reference must not reverse the adopted Adummim-south-of-river relation'
+AssertionError: the unnamed river reference must not reverse the adopted Adummim-south-of-river relation
