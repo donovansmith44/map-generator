@@ -180,7 +180,7 @@ fn build(args: &[String]) {
             .unwrap_or_else(|e| die(&format!("registry.json: {e}"))),
         "data/authored/registry.json",
     )
-    .unwrap_or_else(|e| die(&e));
+    .unwrap_or_else(|e| die(&format!("registry declaration refused: {e:?}")));
     let authored = map_adapters::authored_routes();
     let tags: Vec<String> = authored.iter().map(|r| r.tag.to_string()).collect();
     let narrative_ids: Vec<String> = narratives.iter().map(|n| n.id.clone()).collect();
@@ -498,7 +498,7 @@ fn build(args: &[String]) {
         }
         std::process::exit(1);
     }
-    identity.check().unwrap_or_else(|e| die(&e));
+    identity.check().unwrap_or_else(|e| die(&format!("registry witnesses refused: {e:?}")));
     let bytes = map_canon::persist::to_bytes(&store).unwrap_or_else(|e| die(&e));
     std::fs::write(std::path::Path::new(&out_dir).join("canon.json"), &bytes)
         .unwrap_or_else(|e| die(&format!("{e}")));

@@ -684,7 +684,7 @@ fn the_registry_resolves_totally_in_one_hop_and_refuses_chains() {
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: GeometryKind::Area };
 
     r.observe(e("phoenicia"), "Phoenicia", EntityKind::Polity, w("phoenicia", Witness::Atlas));
     r.observe(e("partition:phoenicia"), "Phoenicia", EntityKind::Polity, w("partition:phoenicia", Witness::Authored));
@@ -743,7 +743,7 @@ fn slug_equality_alone_never_unifies_anything() {
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let w = |s: &str| WitnessRef { minted_as: e(s), witness: Witness::Atlas, layer: LayerKind::Territory, kind: "area" };
+    let w = |s: &str| WitnessRef { minted_as: e(s), witness: Witness::Atlas, layer: LayerKind::Territory, kind: GeometryKind::Area };
     r.observe(e("basemap:judea"), "Judea", EntityKind::Polity, w("basemap:judea"));
     r.observe(e("authored:judea"), "Judea", EntityKind::Polity, w("authored:judea"));
     assert_ne!(r.resolve(&e("basemap:judea")), r.resolve(&e("authored:judea")));
@@ -759,7 +759,7 @@ fn kind_conflict_between_two_witnesses_is_reported() {
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: GeometryKind::Area };
 
     r.observe(e("partition:dan"), "Dan", EntityKind::District, w("partition:dan", Witness::Authored));
     r.observe(e("place:dan"), "Dan", EntityKind::People, w("place:dan", Witness::Atlas));
@@ -786,7 +786,7 @@ fn validate_reports_every_violation_not_just_the_first() {
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: "area" };
+    let w = |s: &str, wit| WitnessRef { minted_as: e(s), witness: wit, layer: LayerKind::Territory, kind: GeometryKind::Area };
 
     r.observe(e("phoenicia"), "Phoenicia", EntityKind::Polity, w("phoenicia", Witness::Atlas));
     r.observe(e("partition:phoenicia"), "Phoenicia", EntityKind::Polity, w("partition:phoenicia", Witness::Authored));
@@ -818,7 +818,7 @@ fn observing_the_same_minted_id_twice_records_same_id() {
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let w = |wit| WitnessRef { minted_as: e("dan"), witness: wit, layer: LayerKind::Territory, kind: "area" };
+    let w = |wit| WitnessRef { minted_as: e("dan"), witness: wit, layer: LayerKind::Territory, kind: GeometryKind::Area };
 
     assert!(r.why(&e("dan")).is_none(), "nothing to explain before any sighting");
     r.observe(e("dan"), "Dan", EntityKind::District, w(Witness::Atlas));
@@ -838,18 +838,15 @@ fn declare_refuses_self_unification_and_silent_redeclaration() {
     let e = |s: &str| EntityId(s.to_string());
 
     let err = r.declare(e("dan"), e("dan"), Unification::SameId).unwrap_err();
-    assert!(err.contains("cannot unify"), "self-unification is refused with a named reason, got: {err}");
-    assert!(err.contains("dan"), "the offending id is named, got: {err}");
+    assert_eq!(err, DeclarationRefusal::SelfUnification(e("dan")), "self unification names the refused identity");
 
     r.declare(e("phoenicia"), e("partition:phoenicia"),
               Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
     let err2 = r.declare(e("something-else"), e("partition:phoenicia"),
               Unification::Declared { reason: "y".into(), source: "t".into() }).unwrap_err();
-    assert!(err2.contains("already declared"), "redeclaring to a different canonical is refused, got: {err2}");
-    assert!(
-        err2.contains("phoenicia") && err2.contains("something-else"),
-        "both the standing and the proposed canonical are named, got: {err2}"
-    );
+    assert_eq!(err2, DeclarationRefusal::ConflictingHome {
+        minted: e("partition:phoenicia"), existing: e("phoenicia"), proposed: e("something-else"),
+    }, "conflicting homes name the standing and proposed identities");
 }
 
 /// The byte-determinism invariant, pinned by CONTENT, not count: names
@@ -860,7 +857,7 @@ fn witnesses_sort_by_witness_then_layer_then_minted_id_and_names_sort_deduped() 
     use crate::registry::*;
     let mut r = Registry::default();
     let e = |s: &str| EntityId(s.to_string());
-    let mk = |s: &str, wit, layer| WitnessRef { minted_as: e(s), witness: wit, layer, kind: "area" };
+    let mk = |s: &str, wit, layer| WitnessRef { minted_as: e(s), witness: wit, layer, kind: GeometryKind::Area };
 
     // Inserted deliberately out of (witness, layer, minted_as) order,
     // and "Alpha" observed twice — it must collapse to one name.

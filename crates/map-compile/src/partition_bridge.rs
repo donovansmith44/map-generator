@@ -668,7 +668,7 @@ pub fn bridge_partition(
         }
         for area in unify_era_areas(rows) {
             for w in &area.witnessed {
-                identity.witness(w, &area.name, area.layer, area.witness, "area");
+                identity.witness(w, &area.name, area.layer, area.witness, map_canon::GeometryKind::Area);
             }
             let fid = store.insert_feature(Feature::Area(Area {
                 entity: area.entity,
@@ -703,7 +703,7 @@ pub fn bridge_partition(
         } else {
             "partition:rivers".into()
         });
-        identity.witness(&minted, &format!("{} (river)", r.id), LayerKind::Water, Witness::Authored, "line");
+        identity.witness(&minted, &format!("{} (river)", r.id), LayerKind::Water, Witness::Authored, map_canon::GeometryKind::Line);
         let entity = identity.resolve(&minted).clone();
         let fid = store.insert_feature(Feature::Line(PathLine {
             entity,
@@ -738,7 +738,7 @@ pub fn bridge_partition(
             // beneath the waters: the site becomes a MEMORY — its own
             // canon kind, rendered as an inscription, never a dot
             let minted = EntityId(format!("place:{place}"));
-            identity.witness(&minted, &name, LayerKind::ScriptureClaims, Witness::Atlas, "memory");
+            identity.witness(&minted, &name, LayerKind::ScriptureClaims, Witness::Atlas, map_canon::GeometryKind::Memory);
             let fid = store.insert_feature(Feature::Memory(map_canon::Memory {
                 entity: identity.resolve(&minted).clone(),
                 name: name.clone(),
@@ -758,7 +758,7 @@ pub fn bridge_partition(
             continue;
         }
         let minted = EntityId(format!("place:{place}"));
-        identity.witness(&minted, &name, LayerKind::ScriptureClaims, Witness::Atlas, "point");
+        identity.witness(&minted, &name, LayerKind::ScriptureClaims, Witness::Atlas, map_canon::GeometryKind::Point);
         let fid = store.insert_feature(Feature::Point(map_canon::Landmark {
             entity: identity.resolve(&minted).clone(),
             name,

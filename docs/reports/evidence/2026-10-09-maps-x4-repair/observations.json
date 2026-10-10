@@ -1,0 +1,17 @@
+{
+  "base": "62d5a951bfb8b090e27d0912cda6d3c124f16f24",
+  "final_scoped": {
+    "map_canon": 39,
+    "map_compile": 37,
+    "decoder": 8,
+    "failed": 0
+  },
+  "generated_properties": 33,
+  "aggregate_gate": "not invoked: heavy lease refused three times",
+  "foreign_lock": "codex-maps-land2 / MAPS-C12",
+  "last_lock_refusal": "2026-10-09T20:39:40-04:00",
+  "browser_golden": "unrun: no fresh canon or workbench",
+  "existing_dependency_pins": "preserved",
+  "active_aliases": 2,
+  "pinned_atlas_moves": 0
+}

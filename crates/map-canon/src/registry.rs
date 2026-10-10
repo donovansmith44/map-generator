@@ -1,8 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{EntityId, LayerKind, Witness};
+use crate::{EntityId, GeometryKind, LayerKind, Witness};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Deserialize,
+    serde::Serialize,
+    strum::EnumIter,
+)]
 pub enum EntityKind {
     Polity,
     District,
@@ -17,6 +28,19 @@ pub enum EntityKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DeclarationRefusal {
+    SelfUnification(EntityId),
+    BlankIdentity,
+    MissingProvenance,
+    Duplicate(EntityId),
+    ConflictingHome {
+        minted: EntityId,
+        existing: EntityId,
+        proposed: EntityId,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Unification {
     SameId,
     Declared { reason: String, source: String },
@@ -27,7 +51,7 @@ pub struct WitnessRef {
     pub minted_as: EntityId,
     pub witness: Witness,
     pub layer: LayerKind,
-    pub kind: &'static str,
+    pub kind: GeometryKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,29 +91,27 @@ impl Registry {
         canonical: EntityId,
         minted: EntityId,
         why: Unification,
-    ) -> Result<(), String> {
+    ) -> Result<(), DeclarationRefusal> {
         if canonical == minted {
-            return Err(format!("cannot unify {:?} with itself", minted.0));
+            return Err(DeclarationRefusal::SelfUnification(minted));
         }
         if canonical.0.trim().is_empty() || minted.0.trim().is_empty() {
-            return Err("unification ids must not be blank".into());
+            return Err(DeclarationRefusal::BlankIdentity);
         }
         match &why {
             Unification::Declared { reason, source }
                 if !reason.trim().is_empty() && !source.trim().is_empty() => {}
-            _ => return Err("distinct ids require a written reason and source".into()),
+            _ => return Err(DeclarationRefusal::MissingProvenance),
         }
         if let Some(existing) = self.aliases.get(&minted) {
             if *existing != canonical {
-                return Err(format!(
-                    "{:?} is already declared to resolve to {:?}; refusing to silently redeclare it to {:?}",
-                    minted.0, existing.0, canonical.0
-                ));
+                return Err(DeclarationRefusal::ConflictingHome {
+                    minted,
+                    existing: existing.clone(),
+                    proposed: canonical,
+                });
             }
-            return Err(format!(
-                "{:?} is already declared; refusing a duplicate unification",
-                minted.0
-            ));
+            return Err(DeclarationRefusal::Duplicate(minted));
         }
         self.aliases.insert(minted.clone(), canonical.clone());
         self.why.insert(minted.clone(), why);
@@ -209,187 +231,329 @@ fn merge_name(names: &mut Vec<String>, name: &str) {
 #[cfg(test)]
 mod laws {
     use super::*;
+    use proptest::prelude::*;
+    use strum::IntoEnumIterator;
 
-    const GENERATED_IDS: usize = 32;
+    const MAX_DECLARATIONS: usize = 12;
 
-    #[test]
-    fn every_generated_id_keeps_its_identity_when_names_collide() {
-        for name in ["", "Dan", "dan", "Dan ", "same coordinates"] {
+    proptest! {
+        #[test]
+        fn generated_identities_stay_distinct_when_names_collide(
+            tokens in proptest::collection::btree_set("[a-z0-9]{1,12}", 1..MAX_DECLARATIONS),
+            name in any::<String>(),
+        ) {
             let mut registry = Registry::default();
-            let ids: Vec<_> = (0..GENERATED_IDS).map(id).collect();
-            for minted in &ids {
-                registry.observe(minted.clone(), name, EntityKind::Place, witness(minted));
-            }
-            let resolved: Vec<_> = ids
+            let ids: Vec<_> = tokens
                 .iter()
-                .map(|minted| registry.resolve(minted).clone())
+                .map(|token| EntityId(format!("id:{token}")))
                 .collect();
-            assert_eq!(resolved, ids, "names cannot change any minted identity");
+            for minted in &ids {
+                registry.observe(minted.clone(), &name, EntityKind::Place, witness(minted));
+            }
+            let resolved: Vec<_> = ids.iter().map(|id| registry.resolve(id).clone()).collect();
+            prop_assert_eq!(
+                resolved,
+                ids.clone(),
+                "names cannot change any minted identity"
+            );
             let live: Vec<_> = registry
                 .entities()
                 .map(|entity| entity.id.clone())
                 .collect();
-            assert_eq!(live, ids, "every distinct id has exactly one live entity");
-            assert_eq!(
+            prop_assert_eq!(live, ids, "every distinct id has one live entity");
+            prop_assert_eq!(
                 registry.validate(),
                 vec![],
-                "independent identities satisfy registry laws"
+                "independent identities satisfy the registry laws"
             );
         }
-    }
 
-    #[test]
-    fn every_generated_alias_resolves_to_one_live_home() {
-        for home in (0..GENERATED_IDS).map(id) {
+        #[test]
+        fn generated_aliases_share_one_written_live_home(
+            tokens in proptest::collection::btree_set("[a-z0-9]{1,12}", 1..MAX_DECLARATIONS),
+            reason in written_text(),
+            source in written_text(),
+            before in any::<bool>(),
+        ) {
             let mut registry = Registry::default();
+            let home = EntityId("home".into());
             registry.observe(
                 home.clone(),
                 "Shared name",
                 EntityKind::Place,
                 witness(&home),
             );
-            let aliases: Vec<_> = (0..GENERATED_IDS)
-                .map(|n| EntityId(format!("alias:{n:02}")))
+            let aliases: Vec<_> = tokens
+                .iter()
+                .map(|token| EntityId(format!("alias:{token}")))
                 .collect();
-            for alias in &aliases {
+            for minted in &aliases {
+                if before {
+                    registry.observe(
+                        minted.clone(),
+                        "Shared name",
+                        EntityKind::Place,
+                        witness(minted),
+                    );
+                }
                 registry
-                    .declare(home.clone(), alias.clone(), reason())
-                    .expect("generated declaration");
-                registry.observe(
-                    alias.clone(),
-                    "Shared name",
-                    EntityKind::Place,
-                    witness(alias),
-                );
+                    .declare(
+                        home.clone(),
+                        minted.clone(),
+                        Unification::Declared {
+                            reason: reason.clone(),
+                            source: source.clone(),
+                        },
+                    )
+                    .expect("written identity decision");
+                if !before {
+                    registry.observe(
+                        minted.clone(),
+                        "Shared name",
+                        EntityKind::Place,
+                        witness(minted),
+                    );
+                }
             }
             let resolved: Vec<_> = aliases
                 .iter()
-                .map(|alias| registry.resolve(alias).clone())
+                .map(|id| registry.resolve(id).clone())
                 .collect();
-            assert_eq!(
+            prop_assert_eq!(
                 resolved,
-                vec![home.clone(); GENERATED_IDS],
-                "all aliases resolve directly to their written home"
+                vec![home.clone(); aliases.len()],
+                "all aliases retain their written home"
             );
             let live: Vec<_> = registry
                 .entities()
                 .map(|entity| entity.id.clone())
                 .collect();
-            assert_eq!(
+            prop_assert_eq!(
                 live,
                 vec![home],
-                "aliases do not create additional live ids"
+                "declared aliases create no additional live identities"
             );
-            assert_eq!(
+            prop_assert_eq!(
                 registry.validate(),
                 vec![],
                 "all written homes are live and unchained"
             );
         }
-    }
 
-    #[test]
-    fn a_repeated_alias_cannot_replace_its_written_justification() {
-        for minted in (0..GENERATED_IDS).map(id) {
-            let mut registry = Registry::default();
-            let home = EntityId("home".into());
-            registry
-                .declare(home.clone(), minted.clone(), reason())
-                .expect("first declaration");
+        #[test]
+        fn generated_duplicate_aliases_preserve_the_entire_registry(
+            token in "[a-z0-9]{1,24}",
+            reason in written_text(),
+            source in written_text(),
+            replacement in written_text(),
+        ) {
+            let minted = EntityId(format!("alias:{token}"));
+            let home = EntityId(format!("home:{token}"));
+            let mut registry = populated(&home, &minted, &reason, &source);
             let before = registry.clone();
             let actual = registry.declare(
                 home,
                 minted.clone(),
                 Unification::Declared {
-                    reason: "replacement".into(),
-                    source: "other source".into(),
+                    reason: replacement,
+                    source,
                 },
             );
-            assert_eq!(
+            prop_assert_eq!(
                 actual,
-                Err(format!(
-                    "{:?} is already declared; refusing a duplicate unification",
-                    minted.0
-                )),
-                "each alias has exactly one declaration"
+                Err(DeclarationRefusal::Duplicate(minted)),
+                "a duplicate alias has a closed refusal"
             );
-            assert_eq!(
-                registry, before,
-                "a duplicate cannot replace the recorded reason"
-            );
-        }
-    }
-
-    #[test]
-    fn different_ids_require_a_written_reason_and_source() {
-        for why in [
-            Unification::SameId,
-            Unification::Declared {
-                reason: " ".into(),
-                source: "source".into(),
-            },
-            Unification::Declared {
-                reason: "reason".into(),
-                source: " ".into(),
-            },
-        ] {
-            let mut registry = Registry::default();
-            let actual = registry.declare(id(0), id(1), why);
-            assert_eq!(
-                actual,
-                Err("distinct ids require a written reason and source".into()),
-                "identity is never inferred without provenance"
-            );
-            assert_eq!(
+            prop_assert_eq!(
                 registry,
-                Registry::default(),
-                "an unjustified declaration leaves no alias"
+                before,
+                "a duplicate preserves every recorded identity and justification"
             );
         }
-    }
 
-    #[test]
-    fn every_generated_alias_refuses_an_unobserved_home() {
-        for home in (0..GENERATED_IDS).map(id) {
+        #[test]
+        fn generated_conflicting_homes_preserve_the_entire_registry(
+            token in "[a-z0-9]{1,24}",
+            reason in written_text(),
+            source in written_text(),
+        ) {
+            let minted = EntityId(format!("alias:{token}"));
+            let home = EntityId(format!("home:{token}"));
+            let proposed = EntityId(format!("other:{token}"));
+            let mut registry = populated(&home, &minted, &reason, &source);
+            let before = registry.clone();
+            let actual = registry.declare(
+                proposed.clone(),
+                minted.clone(),
+                Unification::Declared { reason, source },
+            );
+            prop_assert_eq!(
+                actual,
+                Err(DeclarationRefusal::ConflictingHome {
+                    minted,
+                    existing: home,
+                    proposed
+                }),
+                "conflicting homes name the complete refused decision"
+            );
+            prop_assert_eq!(
+                registry,
+                before,
+                "a conflicting home preserves the entire registry"
+            );
+        }
+
+        #[test]
+        fn generated_self_unifications_have_a_typed_refusal(token in "[a-z0-9]{1,24}") {
+            let minted = EntityId(format!("id:{token}"));
             let mut registry = Registry::default();
-            let alias = EntityId("alias".into());
+            let before = registry.clone();
+            let actual = registry.declare(minted.clone(), minted.clone(), Unification::SameId);
+            prop_assert_eq!(
+                actual,
+                Err(DeclarationRefusal::SelfUnification(minted)),
+                "self unification names the refused identity"
+            );
+            prop_assert_eq!(
+                registry,
+                before,
+                "self unification preserves the entire registry"
+            );
+        }
+
+        #[test]
+        fn generated_blank_ids_never_change_the_registry(
+            token in "[a-z0-9]{1,24}",
+            blank in blank_text(),
+            reason in written_text(),
+            source in written_text(),
+        ) {
+            for (home, minted) in [
+                (EntityId(blank.clone()), EntityId(format!("alias:{token}"))),
+                (EntityId(format!("home:{token}")), EntityId(blank.clone())),
+            ] {
+                let mut registry = Registry::default();
+                let before = registry.clone();
+                let actual = registry.declare(
+                    home,
+                    minted,
+                    Unification::Declared {
+                        reason: reason.clone(),
+                        source: source.clone(),
+                    },
+                );
+                prop_assert_eq!(
+                    actual,
+                    Err(DeclarationRefusal::BlankIdentity),
+                    "both identities must be nonblank"
+                );
+                prop_assert_eq!(
+                    registry,
+                    before,
+                    "a blank identity leaves the registry unchanged"
+                );
+            }
+        }
+
+        #[test]
+        fn generated_missing_provenance_never_changes_the_registry(
+            token in "[a-z0-9]{1,24}",
+            blank in blank_text(),
+            reason in written_text(),
+            source in written_text(),
+        ) {
+            for why in [
+                Unification::SameId,
+                Unification::Declared {
+                    reason: blank.clone(),
+                    source: source.clone(),
+                },
+                Unification::Declared {
+                    reason: reason.clone(),
+                    source: blank.clone(),
+                },
+            ] {
+                let mut registry = Registry::default();
+                let before = registry.clone();
+                let actual = registry.declare(
+                    EntityId(format!("home:{token}")),
+                    EntityId(format!("alias:{token}")),
+                    why,
+                );
+                prop_assert_eq!(
+                    actual,
+                    Err(DeclarationRefusal::MissingProvenance),
+                    "a distinct identity requires a written reason and source"
+                );
+                prop_assert_eq!(
+                    registry,
+                    before,
+                    "missing provenance leaves the registry unchanged"
+                );
+            }
+        }
+
+        #[test]
+        fn generated_alias_witnesses_cannot_prove_a_live_home(
+            token in "[a-z0-9]{1,24}",
+            reason in written_text(),
+            source in written_text(),
+        ) {
+            let home = EntityId(format!("home:{token}"));
+            let minted = EntityId(format!("alias:{token}"));
+            let mut registry = Registry::default();
             registry
-                .declare(home.clone(), alias.clone(), reason())
-                .expect("written declaration");
+                .declare(
+                    home.clone(),
+                    minted.clone(),
+                    Unification::Declared { reason, source },
+                )
+                .expect("written identity decision");
             registry.observe(
-                alias.clone(),
+                minted.clone(),
                 "Shared name",
                 EntityKind::Place,
-                witness(&alias),
+                witness(&minted),
             );
-            assert_eq!(
+            prop_assert_eq!(
                 registry.validate(),
                 vec![RegistryViolation::DanglingCanonical(home)],
-                "an alias witness cannot prove that its declared home was minted"
+                "an alias does not prove that its written home was minted"
             );
+        }
+
+        #[test]
+        fn generated_witness_kind_conflicts_keep_both_votes(token in "[a-z0-9]{1,24}") {
+            for first in EntityKind::iter() {
+                for second in EntityKind::iter().filter(|kind| *kind != first) {
+                    let minted = EntityId(format!("id:{token}"));
+                    let mut registry = Registry::default();
+                    registry.observe(minted.clone(), "Shared name", first, witness(&minted));
+                    registry.observe(minted.clone(), "Shared name", second, witness(&minted));
+                    prop_assert_eq!(
+                        registry.validate(),
+                        vec![RegistryViolation::KindConflict {
+                            entity: minted,
+                            a: first,
+                            b: second
+                        }],
+                        "conflicting witnesses retain both entity kinds"
+                    );
+                }
+            }
         }
     }
 
-    #[test]
-    fn blank_ids_cannot_enter_the_alias_table() {
-        for (home, minted) in [(" ", "alias"), ("home", " ")] {
-            let mut registry = Registry::default();
-            let actual = registry.declare(EntityId(home.into()), EntityId(minted.into()), reason());
-            assert_eq!(
-                actual,
-                Err("unification ids must not be blank".into()),
-                "each declared identity must name an id"
-            );
-            assert_eq!(
-                registry,
-                Registry::default(),
-                "blank ids cannot leave a declaration behind"
-            );
-        }
+    fn written_text() -> impl Strategy<Value = String> {
+        "[a-zA-Z][a-zA-Z0-9 .:'\\-]{0,48}"
     }
 
-    fn id(index: usize) -> EntityId {
-        EntityId(format!("id:{index:02}"))
+    fn blank_text() -> impl Strategy<Value = String> {
+        proptest::collection::vec(
+            proptest::sample::select(vec![' ', '\t', '\n', '\r', '\u{2003}']),
+            0..16,
+        )
+        .prop_map(|chars| chars.into_iter().collect())
     }
 
     fn witness(minted: &EntityId) -> WitnessRef {
@@ -397,14 +561,24 @@ mod laws {
             minted_as: minted.clone(),
             witness: Witness::Atlas,
             layer: LayerKind::ScriptureClaims,
-            kind: "point",
+            kind: GeometryKind::Point,
         }
     }
 
-    fn reason() -> Unification {
-        Unification::Declared {
-            reason: "Explicit test identity decision".into(),
-            source: "generated registry laws".into(),
-        }
+    fn populated(home: &EntityId, minted: &EntityId, reason: &str, source: &str) -> Registry {
+        let mut registry = Registry::default();
+        registry.observe(home.clone(), "Home", EntityKind::Place, witness(home));
+        registry
+            .declare(
+                home.clone(),
+                minted.clone(),
+                Unification::Declared {
+                    reason: reason.into(),
+                    source: source.into(),
+                },
+            )
+            .expect("written identity decision");
+        registry.observe(minted.clone(), "Alias", EntityKind::Place, witness(minted));
+        registry
     }
 }

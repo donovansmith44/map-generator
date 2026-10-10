@@ -12,3 +12,9 @@ edition = "2021"
 atlas-graph-types.workspace = true
 map-types = { path = "../map-types" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+
+serde = { version = "1", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
+
+[dev-dependencies]
+proptest = { version = "1.11", default-features = false, features = ["std"] }

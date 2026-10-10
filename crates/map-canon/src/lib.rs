@@ -121,7 +121,9 @@ pub struct PathLine {
     pub border: BorderId,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants)]
+#[strum_discriminants(name(GeometryKind))]
+#[strum_discriminants(derive(strum::EnumIter))]
 pub enum Feature {
     Area(Area),
     Way(Route),
@@ -275,7 +277,7 @@ impl PresenceBook {
 
 /// The layers of the canon. Within Territory, overlap at a moment is a
 /// contradiction; across layers, overlap is meaning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, strum::EnumIter)]
 pub enum LayerKind {
     Territory,
     ScriptureClaims,
@@ -968,7 +970,7 @@ fn census_change_sort_key(c: &CensusChange) -> (&'static str, &'static str, Stri
 
 pub mod persist;
 pub mod registry;
-pub use registry::{Entity, EntityKind, Registry, RegistryViolation, Unification, WitnessRef};
+pub use registry::{DeclarationRefusal, Entity, EntityKind, Registry, RegistryViolation, Unification, WitnessRef};
 
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,25 @@
+{
+  "decode-red.log.gz": {
+    "stored_sha256": "f3f0d5831c9e308ff914011848d78ca312c5c975b84648fc4ef0b5c121968a8d",
+    "decoded_sha256": "61b33f3b9fae56450eb0f8b18cc291c3c9e4388b6328c0392526cd36411ef1e8"
+  },
+  "final-red.log.gz": {
+    "stored_sha256": "c32fd7682bda22bbbd2a7da84ec2050ab52104743e78675f931b7f2eef295e81",
+    "decoded_sha256": "0e2f29d3f8cbfc4e91337058de7b6b896cec70a01c02f811deaf81ed6ddf6d3e"
+  },
+  "final-scoped.log.gz": {
+    "stored_sha256": "73702b4e651d39cf9f6d7d6172159c1567ec37f7ebdd534b3343eb50ca52c5d2",
+    "decoded_sha256": "e509e72ad9faad19686143bad6bfa781636dda206a56cc6912dc4d4be6acc631"
+  },
+  "kind-shape-red.log.gz": {
+    "stored_sha256": "b28f45233f500218b3e413dbb88eab8566d317e0c7d8e3edb0aa7c3a3bfe110d",
+    "decoded_sha256": "8e5d471ee2fda075126eebf4e1525b7ac53a3166aaa38a044f548970abf4c5c8"
+  },
+  "observations.json": {
+    "stored_sha256": "737b68537d8d5f22570bf0bc1e9b30c8143c5faf49b0cd386e1a1d17276720e7"
+  },
+  "type-red.log.gz": {
+    "stored_sha256": "9e7bd35a83ebee15524ae8fd4531c58eda342d33c7f02ef2e90e3031295f409f",
+    "decoded_sha256": "ed5d403a1bbf2e76c0183c1e63561d72667a430a49fec13e77156d82eabb9041"
+  }
+}

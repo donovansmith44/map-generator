@@ -1,5 +1,5 @@
 {
-  "_comment": "THE ENTITY REGISTRY (2026-09-07, spec §2 equation 1). One identity per real thing. Every row here is a written act: two minted ids are ONE entity because a person said so and said why. Slug equality has no authority — this file replaces the bg_shadows slug matcher in map-compile. OWNER-REVIEWABLE DATA.",
+  "_comment": "THE ENTITY REGISTRY (2026-09-07, spec §2 equation 1). One identity per real thing. Every row here is a written act: two minted ids are ONE entity because a person said so and said why. Slug equality has no authority — this file replaces the bg_shadows slug matcher in map-compile. OWNER-REVIEWABLE DATA. Canaan (Gen 10:19) remains recorded; the basemap:canaan -> partition:canaan drawing-dependent alias is retired under MAPS-X0 source quarantine (docs/errata/quarantine.md on lane/claude/MAPS-X0, 9cb7e9aa7ec8f5c6d11e8c710835f69c98a41861). The excluded plate supplies no live canonical witness. Original alias and reason are retained in docs/reports/2026-10-09-maps-x4.md; future permitted geometry requires its own justified declaration.",
   "unifications": [
     {
       "canonical": "phoenicia",
@@ -12,12 +12,6 @@
       "minted": "authored:judea",
       "kind": "District",
       "reason": "The basemap's Judea and the authored scripture survey of Judea are the same Roman district, witnessed twice."
-    },
-    {
-      "canonical": "partition:canaan",
-      "minted": "basemap:canaan",
-      "kind": "Polity",
-      "reason": "The basemap's Canaan and the partitioned scripture frame's Canaan are the same land, witnessed twice; the frame stands the whole way from the dawn to the monarchy."
     }
   ]
 }

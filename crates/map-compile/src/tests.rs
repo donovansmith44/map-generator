@@ -657,12 +657,12 @@ fn the_compile_refuses_a_registry_no_witness_backs() {
     use map_canon::{EntityId, LayerKind, Witness};
     let text = r#"{"unifications":[{"canonical":"x","minted":"y","kind":"Polity","reason":"one"}]}"#;
     let mut id = crate::identity::load_registry(text, "t").unwrap();
-    id.witness(&EntityId("y".into()), "Y", LayerKind::Territory, Witness::Atlas, "area");
+    id.witness(&EntityId("y".into()), "Y", LayerKind::Territory, Witness::Atlas, map_canon::GeometryKind::Area);
     let err = id.check().unwrap_err();
-    assert!(err.contains("x"), "{err}");
-    id.witness(&EntityId("x".into()), "X", LayerKind::Territory, Witness::Atlas, "area");
-    assert!(id.check().is_ok());
-    assert_eq!(id.resolve(&EntityId("y".into())), &EntityId("x".into()));
+    assert_eq!(err, vec![map_canon::RegistryViolation::DanglingCanonical(EntityId("x".into()))], "an unobserved home has a complete typed refusal");
+    id.witness(&EntityId("x".into()), "X", LayerKind::Territory, Witness::Atlas, map_canon::GeometryKind::Area);
+    assert_eq!(id.check(), Ok(()), "a witnessed home satisfies the identity laws");
+    assert_eq!(id.resolve(&EntityId("y".into())), &EntityId("x".into()), "the alias retains its written home");
 }
 
 /// Within one era, every bundle that resolves to one entity is one

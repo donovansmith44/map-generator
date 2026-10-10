@@ -108,7 +108,7 @@ pub fn bridge_filtered(
                 .map(|(_, b)| b.provenance.clone())
                 .unwrap_or_default();
             let minted = EntityId(format!("{prefix}:{entity_slug}"));
-            identity.witness(&minted, &label, layer, witness, "area");
+            identity.witness(&minted, &label, layer, witness, map_canon::GeometryKind::Area);
             let fid = store.insert_feature(Feature::Area(Area {
                 entity: identity.resolve(&minted).clone(),
                 name: label,
