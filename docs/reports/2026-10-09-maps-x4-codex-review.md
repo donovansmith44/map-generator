@@ -252,7 +252,7 @@ and reason-source revision remain available for C2's AbsorbedInto rows. The
 appendix explicitly supersedes the earlier three-active-alias inventory. C2's
 ten legacy era Map moves and successor serving remain C2-owned.
 
-### F-287 — Important: generated laws do not have sound, independent oracles
+### F-288 — Important: generated laws do not have sound, independent oracles
 
 `crates/map-compile/src/identity.rs:242–247` generates
 `"unification{token}"` as an allegedly unknown field. `token = "s"` produces the
@@ -279,7 +279,7 @@ inference function to compute its own expected answer. The type-derived universe
 must still fence every case, and each assertion keeps one fact/plain message.
 No production decoder rejection of the valid collection is requested.
 
-### F-288 — Important: assertions inside touched registry tests lack plain messages
+### F-289 — Important: assertions inside touched registry tests lack plain messages
 
 The mechanical GeometryKind migration changes seven test bodies in
 `crates/map-canon/src/tests.rs`. Eleven assertions in those touched bodies still
@@ -315,7 +315,7 @@ CARGO_TARGET_DIR=/home/donovan/mut/target nice -n 10 cargo test -j 4 -p map-cano
 | exact original reviewer probes and control | 3 | 0 |
 | Total | 86 | 1 |
 
-Exit **101**, solely the invalid unknown-field property in F-287; build 5.24s.
+Exit **101**, solely the invalid unknown-field property in F-288; build 5.24s.
 No retry, mutation run, workspace gate or aggregate contract run. The foreign
 atlas heavy lock remains `codex-maps-land2 / MAPS-C12`; this was a permitted
 scoped run. Full workspace/contract gates and browser goldens remain unrun in
