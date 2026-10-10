@@ -63,3 +63,22 @@ splice, not as a statement that `regions.geojson` still exists.
 Persisted legacy canon files outside this worktree are not changed. They must
 be regenerated from the cleaned source branch before serving it. Existing
 licence vocabulary remains able to describe legacy artifacts honestly.
+
+## Executable content guard (reviewer 2 repair)
+
+`data/authored/excluded-geometry-fingerprints.json` records107 excluded
+geometries from6ac32bfbf67e26b9cfe94560806fda293db05801 with source family,
+original path and source SHA-256. The shapes themselves remain removed.
+`tools/quarantine_fingerprints.py --check` reproduces that catalogue.
+Compiler admission checks every supplied polity and timeline boundary,
+all repository GeoJSON inputs, and all compiled border outputs. Content
+matching uses the partition's existing quantized Cartesian point keys
+hashed with SHA-256; unions preserve excluded vertex sets across renamed,
+reordered, nested and split inputs/outputs.
+
+This replaces the former biblical-ID ban. A permitted future Judah or Canaan
+geometry can be admitted under its biblical identity. The guard records
+actual matching content with all excluded-source provenance; it does not
+assert missing geography is unclaimed, grant a licence, or infer the ancestry
+of arbitrarily changed coordinates without retained derivation records.
+The general permissive-lineage policy remains C4's responsibility.
