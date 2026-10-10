@@ -56,6 +56,8 @@ pub fn bridge_filtered(
     shadow_spans: &BTreeMap<String, Vec<(i32, i32)>>,
     identity: &mut crate::identity::Identity,
 ) -> Result<(), String> {
+    crate::exclusion::check_timeline(tl)
+        .map_err(|error| format!("excluded input: {error:?}"))?;
     let mut rows: Vec<(map_types::Interval, String, map_canon::FeatureId)> = Vec::new();
 
     for (rid, hist) in &tl.regions {
@@ -194,6 +196,8 @@ pub fn bridge_filtered(
     }
     world = merged;
     store.set_layer(layer, world);
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(())
 }
 
