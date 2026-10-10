@@ -43,32 +43,6 @@ struct Waypoint {
     lon: f64,
 }
 
-/// The promised land's borders, specified by God to Moses — NUM
-/// 34:1-12, walked in text order: south side west along Edom, up the
-/// Great Sea, the north border to Hazar-enan, then down the east side
-/// to the Salt Sea. A closed circuit.
-const NUM_34_CIRCUIT: &[Waypoint] = &[
-    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
-    Waypoint { name: "ascent of Akrabbim", lat: 30.95, lon: 35.20 },
-    Waypoint { name: "wilderness of Zin", lat: 30.80, lon: 34.80 },
-    Waypoint { name: "Kadesh-barnea", lat: 30.69, lon: 34.49 },
-    Waypoint { name: "Hazar-addar", lat: 30.75, lon: 34.30 },
-    Waypoint { name: "Azmon", lat: 30.85, lon: 34.20 },
-    Waypoint { name: "Brook of Egypt", lat: 31.16, lon: 33.80 },
-    Waypoint { name: "Great Sea off Joppa", lat: 32.05, lon: 34.70 },
-    Waypoint { name: "Great Sea off Tyre", lat: 33.27, lon: 35.18 },
-    Waypoint { name: "mount Hor (northern)", lat: 34.30, lon: 35.90 },
-    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
-    Waypoint { name: "Zedad", lat: 34.31, lon: 36.60 },
-    Waypoint { name: "Ziphron", lat: 34.35, lon: 36.85 },
-    Waypoint { name: "Hazar-enan", lat: 34.23, lon: 37.24 },
-    Waypoint { name: "Shepham", lat: 33.80, lon: 36.40 },
-    Waypoint { name: "Riblah east of Ain", lat: 33.40, lon: 35.95 },
-    Waypoint { name: "east slope of the sea of Chinnereth", lat: 32.83, lon: 35.65 },
-    Waypoint { name: "the Jordan at Bethabara", lat: 32.00, lon: 35.55 },
-    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
-];
-
 // --------------------------------- the table of nations (GEN 10)
 //
 // The ancestral homelands after the scattering (GEN 11:8-9), placed by
@@ -462,25 +436,6 @@ macro_rules! city_note {
         concat!($commentary, " ", city_note!())
     };
 }
-
-/// The division of the land, Ussher's traditional year.
-
-const SURVEYS: &[SurveySpec] = &[
-    SurveySpec {
-        tag: "NUM34",
-        label: "the land promised (NUM 34)",
-        note: "The border circuit God specified to Moses, NUM 34:1-12; waypoint \
-               coordinates are approximate traditional identifications (stand-in, \
-               see provenance), several northern and eastern ones uncertain.",
-        book: 4, chapter: 34, verse_from: 1, verse_to: 12,
-        year: -1452,
-        // The promise-as-map yields at the exile: the loss of the
-        // land ends the survey's world, not the covenant.
-        stands: Stands::Until(-586), holds: Holds::Claim,
-        grade: Grade::BorderText,
-        circuit: NUM_34_CIRCUIT,
-    },
-];
 
 const NATIONS_NOTE: &str = "An ancestral homeland of the table of nations, placed by \
     traditional identifications as a broad hull (rendered Unknown); rise at the \
@@ -894,7 +849,7 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
                 },
         );
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         for w in s.circuit {
             add(w);
         }
@@ -1217,7 +1172,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
             }
         }
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         push(
             s.tag.to_string(),
             atlas.resolve_event(s.book, (s.chapter, s.verse_from), (s.chapter, s.verse_to)),
@@ -1255,7 +1210,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
 /// disclosed stand-ins. None = fully stand-in (fixtures, tests).
 pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     let mut tl = WorldTimeline::default();
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         add_survey(&mut tl, s, atlas);
     }
     for e in KINGDOMS {
@@ -1265,13 +1220,6 @@ pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
         add_route(&mut tl, r, atlas);
     }
     tl.events.sort_by_key(|e| e.at);
-    tl
-}
-
-/// The NUM 34 survey alone (the founding fixture; tests lean on it).
-pub fn promised_land_timeline() -> WorldTimeline {
-    let mut tl = WorldTimeline::default();
-    add_survey(&mut tl, &SURVEYS[0], None);
     tl
 }
 
@@ -1356,4 +1304,377 @@ pub fn authored_routes() -> Vec<AuthoredRoute> {
             stations: r.stations.iter().map(|w| (w.name, w.lat, w.lon)).collect(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod allotment_laws {
+    use serde_json::{json, Value};
+
+    #[test]
+    fn the_promised_land_is_not_present_at_the_exodus_stop() {
+        let timeline = super::scripture_timeline();
+        assert!(
+            !timeline.boundaries.is_empty(),
+            "the remaining Scripture surveys must still be rendered"
+        );
+        assert_eq!(
+            numbers_34_boundaries(&timeline),
+            Vec::<map_types::BoundaryId>::new(),
+            "Numbers 34 must remain undrawn until its dating and selected courses are admitted"
+        );
+    }
+
+    #[test]
+    fn an_export_placement_cannot_restore_the_unlocated_numbers_34_circuit() {
+        for year in -1500..=-1300 {
+            let gazetteer = json!({"format_version": 1, "atlas_version_root": "1", "places": []});
+            let chronology = json!({
+                "format_version": 1, "atlas_version_root": "1",
+                "events": [{"id": "fixture-numbers-survey", "label": "fixture survey", "attestations": ["NUM.34.1"], "placement": {"from_year": year, "to_year": year, "basis": "Textual"}}]
+            });
+            let atlas =
+                crate::exports::load_exports(&gazetteer.to_string(), &chronology.to_string())
+                    .expect("the complete fixture export must load");
+            let timeline = super::scripture_timeline_with(Some(&atlas));
+            assert_eq!(
+                numbers_34_boundaries(&timeline),
+                Vec::<map_types::BoundaryId>::new(),
+                "a matched placement must not supply an unprovided Numbers 34 course"
+            );
+        }
+    }
+
+    fn numbers_34_boundaries(timeline: &map_types::WorldTimeline) -> Vec<map_types::BoundaryId> {
+        timeline
+            .boundaries
+            .iter()
+            .filter_map(|(id, history)| {
+                history
+                    .versions
+                    .iter()
+                    .any(|(_, boundary)| match &boundary.source {
+                        map_types::BoundarySource::Survey(survey) => {
+                            survey.verses.from.unit.book == 4
+                                && survey.verses.from.unit.chapter == 34
+                        }
+                        _ => false,
+                    })
+                    .then_some(*id)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_allotment_survey_row_cites_scripture() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            assert!(
+                cites_scripture(survey),
+                "each survey and waypoint must cite its Scripture verse"
+            );
+        }
+    }
+
+    #[test]
+    fn allotment_evidence_does_not_read_an_excluded_source() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            assert_eq!(
+                survey["source"], "kjv",
+                "every survey source must be the public-domain KJV"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_and_non_survey_verses_fail_for_every_row() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            for invalid in [
+                json!([]),
+                json!([""]),
+                json!(["GEN.10.1"]),
+                json!(["JOS.19.47"]),
+                json!(["JOS.15.1-bad"]),
+                json!(["JOS.16.11"]),
+            ] {
+                let mut changed = survey.clone();
+                changed["verses"] = invalid;
+                assert!(
+                    !cites_scripture(&changed),
+                    "missing or out-of-scope survey citations must be refused"
+                );
+            }
+            for (sequence_index, sequence) in sequences(survey).iter().enumerate() {
+                for waypoint_index in 0..waypoints(sequence).len() {
+                    let mut changed = survey.clone();
+                    changed["sequence"][sequence_index]["waypoints"][waypoint_index]["verse"] =
+                        json!("");
+                    assert!(
+                        !cites_scripture(&changed),
+                        "every waypoint needs its own verse rather than a survey-level fallback"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_promised_land_and_thirteen_lots_are_recorded() {
+        let evidence = evidence();
+        let lots: Vec<_> = surveys(&evidence)
+            .iter()
+            .map(|row| row["lot"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            lots,
+            vec![
+                "promised_land",
+                "reuben",
+                "gad",
+                "manasseh_east",
+                "judah",
+                "ephraim",
+                "manasseh_west",
+                "benjamin",
+                "simeon",
+                "zebulun",
+                "issachar",
+                "asher",
+                "naphtali",
+                "dan"
+            ],
+            "the evidence inventory must retain all thirteen lots and the distinct promise"
+        );
+    }
+
+    #[test]
+    fn judahs_south_walk_retains_the_text_order() {
+        let evidence = evidence();
+        let judah = surveys(&evidence)
+            .iter()
+            .find(|row| row["lot"] == "judah")
+            .unwrap();
+        let south = sequences(judah)
+            .iter()
+            .find(|row| row["side"] == "south")
+            .unwrap();
+        let names: Vec<_> = waypoints(south)
+            .iter()
+            .map(|row| row["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "JOS.15.2:sea-bay",
+                "Maaleh-acrabbim",
+                "Zin",
+                "Kadesh-barnea",
+                "Hezron",
+                "Adar",
+                "Karkaa",
+                "Azmon",
+                "river of Egypt",
+                "Great Sea"
+            ],
+            "Judah's south walk must follow Joshua 15:2-4 in order"
+        );
+    }
+
+    #[test]
+    fn city_lists_do_not_become_boundary_walks() {
+        let evidence = evidence();
+        for lot in ["simeon", "dan"] {
+            let survey = surveys(&evidence)
+                .iter()
+                .find(|row| row["lot"] == lot)
+                .unwrap();
+            assert!(
+                sequences(survey)
+                    .iter()
+                    .all(|row| row["kind"] != "border_walk"),
+                "a city list must not be promoted to a walked boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn survey_evidence_cannot_supply_coordinates_or_geometry() {
+        let evidence = evidence();
+        assert!(
+            has_no_geometry(&evidence),
+            "survey evidence must leave geometry and selected Site extents to the atlas"
+        );
+    }
+
+    #[test]
+    fn inherited_atlas_place_ids_are_references_without_coordinates() {
+        let evidence = evidence();
+        let gazetteer: Value =
+            serde_json::from_str(include_str!("../../../data/atlas-exports/gazetteer.json"))
+                .unwrap();
+        let ids: std::collections::BTreeSet<_> = gazetteer["places"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["id"].as_str().unwrap())
+            .collect();
+        for survey in surveys(&evidence) {
+            for sequence in sequences(survey) {
+                for waypoint in waypoints(sequence) {
+                    if let Some(place) = waypoint["site"]["atlas"].as_str() {
+                        assert!(
+                            ids.contains(place),
+                            "each atlas reference must use an existing place identity"
+                        );
+                    } else {
+                        assert!(waypoint["site"]["unlocated"].as_str().is_some_and(|name| !name.is_empty()), "an unresolved waypoint must remain explicitly recorded without a point");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_selected_scale_keeps_late_wilderness_and_gilgal_distinct() {
+        let evidence = evidence();
+        assert_eq!(
+            evidence["dating"],
+            json!({
+                "scale": "exodus_1446",
+                "exodus_year": -1446,
+                "exodus_grounds": ["1KI.6.1"],
+                "temple_begun_year": -966,
+                "temple_begun_precision": "approximate",
+                "exodus_to_temple_years": 480,
+                "source_chronology": "Ussher is retained as source provenance only; none of his dates supplies an adopted interval endpoint.",
+                "late_wilderness_year": -1407,
+                "late_wilderness_grounds": ["NUM.33.38", "DEU.1.3", "NUM.33.50", "NUM.36.13"],
+                "gilgal_from_year": -1401,
+                "gilgal_to_year": -1400,
+                "gilgal_grounds": ["JOS.14.6", "JOS.14.7", "JOS.14.10"],
+                "division_from_year": -1401,
+                "division_to_year": -1399,
+                "shown_at_year": -1399,
+                "shown_at_basis": "owner_ruled",
+                "shown_at_grounds": ["JOS.18.1", "JOS.19.51"],
+                "alternative_years": [-1400, -1401],
+                "justification": "The fortieth year uses inclusive counting: 1446 minus 39 is 1407. Caleb's forty-five years and ages give circa 1401-1400. Shiloh follows Gilgal without its own exact year; 1399 is the owner-chosen completed-allotment stop. Joshua 13 recalls Moses' earlier grants; no lot is asserted at 1446.",
+                "alternative": "1400 uses Caleb's ages as elapsed years; 1401 uses the inclusive forty-five years. Neither reading dates the Shiloh survey exactly. Joshua 19:47 is undated and is recorded separately. No universal shift is applied to other chronology."
+            }),
+            "the adopted dating must retain its grounds, owner ruling and alternatives"
+        );
+    }
+
+    #[test]
+    fn dans_northern_move_is_a_separate_undated_record() {
+        let evidence = evidence();
+        assert_eq!(
+            evidence["later_reading"],
+            json!([{
+                "lot": "dan", "verse": "JOS.19.47", "period": "undated", "site": {"atlas": "dan"},
+                "justification": "The move to Leshem is narrated here but is not dated relative to the initial lots. It is recorded without geometry at the completed-allotment stop.",
+                "alternative": "Placement at a later stop requires its own dating evidence; no chronological shift or inferred date is supplied here."
+            }]),
+            "Dan's later northern move must stay recorded outside the initial survey period"
+        );
+    }
+
+    fn evidence() -> Value {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/authored/surveys/allotments.toml");
+        let output = std::process::Command::new("python3")
+            .args(["-c", "import json,sys,tomli; json.dump(tomli.loads(open(sys.argv[1]).read()),sys.stdout)"])
+            .arg(path)
+            .output()
+            .expect("the evidence laws require Python 3 with the MIT-licensed tomli parser");
+        assert!(
+            output.status.success(),
+            "the authored survey table must parse as TOML: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout)
+            .expect("tomli's parsed evidence must be JSON serializable")
+    }
+
+    fn surveys(evidence: &Value) -> &[Value] {
+        evidence["survey"].as_array().unwrap()
+    }
+
+    fn sequences(survey: &Value) -> &[Value] {
+        survey["sequence"].as_array().unwrap()
+    }
+
+    fn waypoints(sequence: &Value) -> &[Value] {
+        sequence["waypoints"].as_array().unwrap()
+    }
+
+    fn cites_scripture(survey: &Value) -> bool {
+        survey["verses"]
+            .as_array()
+            .is_some_and(|verses| !verses.is_empty() && verses.iter().all(survey_verse))
+            && sequences(survey).iter().all(|sequence| {
+                !waypoints(sequence).is_empty()
+                    && waypoints(sequence)
+                        .iter()
+                        .all(|waypoint| survey_verse(&waypoint["verse"]))
+            })
+    }
+
+    fn survey_verse(value: &Value) -> bool {
+        let Some(text) = value.as_str() else {
+            return false;
+        };
+        let (start, end) = match text.split_once('-') {
+            Some((start, end)) => {
+                let Ok(end) = end.parse::<u16>() else {
+                    return false;
+                };
+                (start, Some(end))
+            }
+            None => (text, None),
+        };
+        let Some((book, chapter, verse)) = crate::exports::parse_locus(start) else {
+            return false;
+        };
+        let allowed = match book {
+            4 => chapter == 34 && (1..=15).contains(&verse),
+            6 => match chapter {
+                13 => (1..=33).contains(&verse),
+                14 => (1..=15).contains(&verse),
+                15 => (1..=63).contains(&verse),
+                16 => (1..=10).contains(&verse),
+                17 => (1..=18).contains(&verse),
+                18 => (1..=28).contains(&verse),
+                19 => (1..=51).contains(&verse) && verse != 47,
+                _ => false,
+            },
+            _ => false,
+        };
+        allowed
+            && start.split('.').count() == 3
+            && end.is_none_or(|end| {
+                end >= verse
+                    && !(book == 6 && chapter == 19 && verse <= 47 && end >= 47)
+                    && survey_verse(&json!(format!(
+                        "{}.{}.{}",
+                        if book == 4 { "NUM" } else { "JOS" },
+                        chapter,
+                        end
+                    )))
+            })
+    }
+
+    fn has_no_geometry(value: &Value) -> bool {
+        match value {
+            Value::Object(fields) => fields.iter().all(|(key, value)| {
+                !matches!(
+                    key.as_str(),
+                    "lat" | "lon" | "coordinates" | "pts" | "polygon" | "ring"
+                ) && has_no_geometry(value)
+            }),
+            Value::Array(values) => values.iter().all(has_no_geometry),
+            _ => true,
+        }
+    }
 }

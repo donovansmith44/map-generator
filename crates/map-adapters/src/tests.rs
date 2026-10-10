@@ -121,30 +121,13 @@ fn ring_cleaning_normalizes() {
 
 
 #[test]
-fn promised_land_survey_is_lawful_alone_and_merged() {
+fn scripture_surveys_are_lawful_alone_and_merged() {
     use crate::surveys::*;
-    use map_types::BoundarySource;
 
-    let survey_tl = promised_land_timeline();
+    let survey_tl = scripture_timeline();
     let gaz = stand_in_gazetteer();
     let (chron, _) = empty_exports();
-    assert_eq!(
-        map_types::validate_all(&survey_tl, &chron, &gaz),
-        vec![],
-        "the NUM 34 survey alone satisfies every timeline law"
-    );
-
-    let (_, hist) = survey_tl.boundaries.iter().next().unwrap();
-    let b = &hist.versions[0].1;
-    assert!(
-        matches!(b.source, BoundarySource::Survey(_)),
-        "the NUM 34 boundary records its survey source"
-    );
-    assert_eq!(b.pts.first(), b.pts.last(), "the circuit closes");
-    assert!(
-        !b.justification.grounds.is_empty(),
-        "the text is the ground"
-    );
+    assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![], "the retained Scripture surveys satisfy every timeline law");
 
     let world = crate::hydro::ingest_water(
         &SourceId::new("natural-earth"),
@@ -157,6 +140,7 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     )
     .unwrap();
     let merged = merge_timelines(world, survey_tl.clone()).unwrap();
+<<<<<<< HEAD
     assert_eq!(
         map_types::validate_all(&merged, &chron, &gaz),
         vec![],
@@ -167,6 +151,10 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         2,
         "the survey and water region both survive the merge"
     );
+=======
+    assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![], "the merged survey and world satisfy every timeline law");
+    assert_eq!(merged.regions.len(), 28, "the twenty-seven retained Scripture regions and imported region survive the merge");
+>>>>>>> origin/lane/claude/MAPS-X3
 
     assert!(
         matches!(
@@ -177,11 +165,15 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     );
 
     let all = scripture_timeline();
+<<<<<<< HEAD
     assert_eq!(
         all.regions.len(),
         28,
         "the Scripture set without excluded tracing"
     );
+=======
+    assert_eq!(all.regions.len(), 27, "the Scripture set excludes the unlocated Numbers 34 drawing");
+>>>>>>> origin/lane/claude/MAPS-X3
     let journeys = all
         .boundaries
         .values()
