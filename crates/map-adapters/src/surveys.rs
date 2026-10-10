@@ -1466,7 +1466,7 @@ mod allotment_laws {
         assert_eq!(
             names,
             vec![
-                "south bay of the Salt Sea",
+                "JOS.15.2:sea-bay",
                 "Maaleh-acrabbim",
                 "Zin",
                 "Kadesh-barnea",

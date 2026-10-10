@@ -45,7 +45,7 @@ kind = "border_walk"
 side = "south"
 justification = "The south side is a text walk. The ascent and uncertain named sites are resolved only by the atlas Site claims; no straight connectors are supplied."
 waypoints = [
-  { name = "south end of the Salt Sea", verse = "NUM.34.3", site = { unlocated = "south end of the Salt Sea" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "south end of the Salt Sea", part = "site" } }] },
+  { name = "NUM.34.3:sea-end", verse = "NUM.34.3", site = { unlocated = "NUM.34.3:sea-end" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "NUM.34.3:sea-end", part = "site" } }] },
   { name = "ascent of Akrabbim", verse = "NUM.34.4", site = { atlas = "akrabbim" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "ascent of Akrabbim", part = "site" } }] },
   { name = "Zin", verse = "NUM.34.4", site = { atlas = "zin-1" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "Zin", part = "site" } }] },
   { name = "Kadesh-barnea", verse = "NUM.34.4", site = { atlas = "kadesh-barnea" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Kadesh-barnea", part = "site" } }] },
@@ -102,9 +102,9 @@ kind = "named_feature"
 side = "south"
 justification = "The Arnon and Aroer are stated; the unnamed city is recorded unlocated."
 waypoints = [
-  { name = "Aroer by the Arnon", verse = "JOS.13.16", site = { atlas = "aroer-1" }, relations = [{ kind = "extent", verb = "from", target = { reference = "Aroer by the Arnon", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Aroer by the Arnon", part = "site" }, predicate = "at", target = { reference = "Arnon", part = "bank" } }] },
+  { name = "Aroer (JOS.13.16)", verse = "JOS.13.16", site = { atlas = "aroer-1" }, relations = [{ kind = "extent", verb = "from", target = { reference = "Aroer (JOS.13.16)", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Aroer (JOS.13.16)", part = "site" }, predicate = "at", target = { reference = "Arnon", part = "bank" } }] },
   { name = "Arnon", verse = "JOS.13.16", site = { atlas = "valley-of-the-arnon" }, relations = [{ kind = "reference", target = { reference = "Arnon", part = "site" } }] },
-  { name = "city in the midst of the river", verse = "JOS.13.16", site = { unlocated = "city in the midst of the river" }, relations = [{ kind = "extent", verb = "includes", target = { reference = "city in the midst of the river", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "city in the midst of the river", part = "site" }, predicate = "within", target = { reference = "Arnon", part = "site" } }] },
+  { name = "JOS.13.16:city", verse = "JOS.13.16", site = { unlocated = "JOS.13.16:city" }, relations = [{ kind = "extent", verb = "includes", target = { reference = "JOS.13.16:city", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.13.16:city", part = "site" }, predicate = "within", target = { reference = "Arnon", part = "site" } }] },
 ]
 
 [[survey.sequence]]
@@ -146,12 +146,12 @@ justification = "Joshua recalls Moses' grant. Separate from Reuben and eastern M
 [[survey.sequence]]
 kind = "border_walk"
 side = "east"
-justification = "Half the land of Ammon is retained as the text's wording, not an assertion that Gad conquered Ammon's remaining land; alternatives remain with the atlas Extent claim."
+justification = "JOS.13.25 grounds the partial Ammon extent; it supplies no conquest claim over the remainder. Alternatives remain with the atlas Extent claim."
 waypoints = [
   { name = "Jazer", verse = "JOS.13.25", site = { atlas = "jazer" }, relations = [{ kind = "extent", verb = "includes", target = { reference = "Jazer", part = "site" } }] },
   { name = "Gilead", verse = "JOS.13.25", site = { atlas = "gilead-1" }, relations = [{ kind = "extent", verb = "includes", target = { reference = "Gilead", part = "cities" } }] },
   { name = "land of Ammon", verse = "JOS.13.25", site = { atlas = "ammon" }, relations = [{ kind = "extent", verb = "half", target = { reference = "land of Ammon", part = "site" } }] },
-  { name = "Aroer before Rabbah", verse = "JOS.13.25", site = { atlas = "aroer-2" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Aroer before Rabbah", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Aroer before Rabbah", part = "site" }, predicate = "before", target = { reference = "Rabbah", part = "site" } }] },
+  { name = "Aroer (JOS.13.25)", verse = "JOS.13.25", site = { atlas = "aroer-2" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Aroer (JOS.13.25)", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Aroer (JOS.13.25)", part = "site" }, predicate = "before", target = { reference = "Rabbah", part = "site" } }] },
   { name = "Rabbah", verse = "JOS.13.25", site = { atlas = "rabbah-1" }, relations = [{ kind = "reference", target = { reference = "Rabbah", part = "site" } }] },
 ]
 
@@ -171,7 +171,7 @@ side = "north"
 justification = "Mahanaim has an unlocated selected Site claim in C14; no segment through it is drawn. Debir here is distinct from Judah's southern city."
 waypoints = [
   { name = "Mahanaim", verse = "JOS.13.26", site = { atlas = "mahanaim" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Mahanaim", part = "site" } }] },
-  { name = "border of Debir", verse = "JOS.13.26", site = { atlas = "debir-3" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "border of Debir", part = "border" } }] },
+  { name = "Debir (JOS.13.26)", verse = "JOS.13.26", site = { atlas = "debir-3" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Debir (JOS.13.26)", part = "border" } }] },
 ]
 
 [[survey.sequence]]
@@ -226,7 +226,7 @@ kind = "border_walk"
 side = "south"
 justification = "Hezron keeps its vicinity uncertainty; Adar and Karkaa keep unlocated selected Site claims. Kadesh alternatives stay on its Site claim."
 waypoints = [
-  { name = "south bay of the Salt Sea", verse = "JOS.15.2", site = { unlocated = "south bay of the Salt Sea" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "south bay of the Salt Sea", part = "site" } }] },
+  { name = "JOS.15.2:sea-bay", verse = "JOS.15.2", site = { unlocated = "JOS.15.2:sea-bay" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "JOS.15.2:sea-bay", part = "site" } }] },
   { name = "Maaleh-acrabbim", verse = "JOS.15.3", site = { atlas = "akrabbim" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Maaleh-acrabbim", part = "south_side" } }] },
   { name = "Zin", verse = "JOS.15.3", site = { atlas = "zin-1" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "Zin", part = "site" } }] },
   { name = "Kadesh-barnea", verse = "JOS.15.3", site = { atlas = "kadesh-barnea" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Kadesh-barnea", part = "south_side" } }] },
@@ -244,7 +244,7 @@ side = "east"
 justification = "The Salt Sea is the east border; no invented northern or southern shore coordinate is supplied."
 waypoints = [
   { name = "Salt Sea", verse = "JOS.15.5", site = { unlocated = "Salt Sea" }, relations = [{ kind = "boundary", target = { reference = "Salt Sea", part = "site" } }] },
-  { name = "end of Jordan", verse = "JOS.15.5", site = { atlas = "jordan" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "end of Jordan", part = "site" } }] },
+  { name = "Jordan terminus", verse = "JOS.15.5", site = { atlas = "jordan" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Jordan terminus", part = "site" } }] },
 ]
 
 [[survey.sequence]]
@@ -252,24 +252,24 @@ kind = "border_walk"
 side = "north"
 justification = "Named relations and text order are retained. Debir here is the boundary waypoint from Achor, not the southern city. Kirjath-jearim uses the selected Kh. Erma Site extent, never the legacy gazetteer coordinate."
 waypoints = [
-  { name = "bay of the Salt Sea at Jordan", verse = "JOS.15.5", site = { unlocated = "bay of the Salt Sea at Jordan" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "bay of the Salt Sea at Jordan", part = "site" } }] },
+  { name = "JOS.15.5:sea-bay", verse = "JOS.15.5", site = { unlocated = "JOS.15.5:sea-bay" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "JOS.15.5:sea-bay", part = "site" } }] },
   { name = "Beth-hoglah", verse = "JOS.15.6", site = { atlas = "beth-hoglah" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Beth-hoglah", part = "site" } }] },
   { name = "Beth-arabah", verse = "JOS.15.6", site = { atlas = "beth-arabah" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "north_of", target = { reference = "Beth-arabah", part = "site" } }] },
-  { name = "stone of Bohan", verse = "JOS.15.6", site = { unlocated = "stone of Bohan" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "stone of Bohan", part = "site" } }] },
-  { name = "Debir from Achor", verse = "JOS.15.7", site = { atlas = "debir-2" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Debir from Achor", part = "site" } }] },
+  { name = "Bohan stone", verse = "JOS.15.6", site = { unlocated = "Bohan stone" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Bohan stone", part = "site" } }] },
+  { name = "Debir (JOS.15.7)", verse = "JOS.15.7", site = { atlas = "debir-2" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Debir (JOS.15.7)", part = "site" } }] },
   { name = "valley of Achor", verse = "JOS.15.7", site = { atlas = "valley-of-achor" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "valley of Achor", part = "site" } }] },
   { name = "Gilgal", verse = "JOS.15.7", site = { atlas = "gilgal-3" }, relations = [{ kind = "travel", verb = "toward", direction = "north", target = { reference = "Gilgal", part = "site" } }] },
-  { name = "Adummim", verse = "JOS.15.7", site = { atlas = "adummim" }, relations = [{ kind = "position", subject = { kind = "reference", reference = "Adummim", part = "ascent" }, predicate = "south_of", target = { reference = "river south of Adummim", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Gilgal", part = "site" }, predicate = "before", target = { reference = "Adummim", part = "ascent" } }] },
-  { name = "river south of Adummim", verse = "JOS.15.7", site = { unlocated = "river south of Adummim" }, relations = [{ kind = "reference", target = { reference = "river south of Adummim", part = "site" } }] },
+  { name = "Adummim", verse = "JOS.15.7", site = { atlas = "adummim" }, relations = [{ kind = "position", subject = { kind = "reference", reference = "Adummim", part = "ascent" }, predicate = "south_of", target = { reference = "JOS.15.7:river", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Gilgal", part = "site" }, predicate = "before", target = { reference = "Adummim", part = "ascent" } }] },
+  { name = "JOS.15.7:river", verse = "JOS.15.7", site = { unlocated = "JOS.15.7:river" }, relations = [{ kind = "reference", target = { reference = "JOS.15.7:river", part = "site" } }] },
   { name = "En-shemesh", verse = "JOS.15.7", site = { atlas = "en-shemesh" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "En-shemesh", part = "site" } }] },
   { name = "En-rogel", verse = "JOS.15.7", site = { atlas = "en-rogel" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "En-rogel", part = "site" } }] },
   { name = "valley of Hinnom", verse = "JOS.15.8", site = { atlas = "valley-of-hinnom" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "valley of Hinnom", part = "site" } }] },
-  { name = "Jebusite Jerusalem", verse = "JOS.15.8", site = { atlas = "jerusalem" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Jebusite Jerusalem", part = "site" } }] },
-  { name = "hilltop west of Hinnom", verse = "JOS.15.8", site = { unlocated = "hilltop west of Hinnom" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "hilltop west of Hinnom", part = "top" } }, { kind = "position", subject = { kind = "reference", reference = "hilltop west of Hinnom", part = "site" }, predicate = "before", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "hilltop west of Hinnom", part = "site" }, predicate = "west_of", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "hilltop west of Hinnom", part = "site" }, predicate = "at", target = { reference = "valley of giants", part = "north_end" } }] },
-  { name = "valley of giants", verse = "JOS.15.8", site = { atlas = "valley-of-rephaim" }, relations = [{ kind = "reference", target = { reference = "valley of giants", part = "site" } }] },
+  { name = "Jerusalem", verse = "JOS.15.8", site = { atlas = "jerusalem" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Jerusalem", part = "site" } }] },
+  { name = "JOS.15.8:mountain", verse = "JOS.15.8", site = { unlocated = "JOS.15.8:mountain" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "JOS.15.8:mountain", part = "top" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.15.8:mountain", part = "site" }, predicate = "before", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.15.8:mountain", part = "site" }, predicate = "west_of", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.15.8:mountain", part = "site" }, predicate = "at", target = { reference = "Rephaim valley", part = "north_end" } }] },
+  { name = "Rephaim valley", verse = "JOS.15.8", site = { atlas = "valley-of-rephaim" }, relations = [{ kind = "reference", target = { reference = "Rephaim valley", part = "site" } }] },
   { name = "Nephtoah", verse = "JOS.15.9", site = { atlas = "nephtoah" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Nephtoah", part = "site" } }] },
-  { name = "cities of mount Ephron", verse = "JOS.15.9", site = { atlas = "mount-ephron" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "cities of mount Ephron", part = "cities" } }] },
-  { name = "Baalah which is Kirjath-jearim", verse = "JOS.15.9", site = { atlas = "kiriath-jearim" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Baalah which is Kirjath-jearim", part = "site" } }] },
+  { name = "mount Ephron", verse = "JOS.15.9", site = { atlas = "mount-ephron" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "mount Ephron", part = "cities" } }] },
+  { name = "Baalah/Kirjath-jearim", verse = "JOS.15.9", site = { atlas = "kiriath-jearim" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Baalah/Kirjath-jearim", part = "site" } }] },
   { name = "mount Seir", verse = "JOS.15.10", site = { atlas = "mount-seir-2" }, relations = [{ kind = "travel", verb = "unto", direction = "west", target = { reference = "mount Seir", part = "site" } }] },
   { name = "mount Jearim", verse = "JOS.15.10", site = { atlas = "mount-jearim" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "mount Jearim", part = "north_side" } }] },
   { name = "Chesalon", verse = "JOS.15.10", site = { atlas = "chesalon" }, relations = [{ kind = "position", subject = { kind = "reference", reference = "Chesalon", part = "site" }, predicate = "same_as", target = { reference = "mount Jearim", part = "site" } }] },
@@ -302,13 +302,13 @@ kind = "border_walk"
 side = "south"
 justification = "The southern line is Joseph's common line. Unidentified Archi and Japhleti are recorded without coordinates."
 waypoints = [
-  { name = "Jordan by Jericho", verse = "JOS.16.1", site = { atlas = "jordan" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Jordan by Jericho", part = "site" } }] },
-  { name = "water of Jericho", verse = "JOS.16.1", site = { atlas = "waters-of-jericho" }, relations = [{ kind = "travel", verb = "unto", direction = "east", target = { reference = "water of Jericho", part = "site" } }] },
-  { name = "wilderness from Jericho", verse = "JOS.16.1", site = { unlocated = "wilderness from Jericho" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "wilderness from Jericho", part = "site" } }] },
+  { name = "Jordan (JOS.16.1)", verse = "JOS.16.1", site = { atlas = "jordan" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Jordan (JOS.16.1)", part = "site" } }] },
+  { name = "Jericho water", verse = "JOS.16.1", site = { atlas = "waters-of-jericho" }, relations = [{ kind = "travel", verb = "unto", direction = "east", target = { reference = "Jericho water", part = "site" } }] },
+  { name = "JOS.16.1:wilderness", verse = "JOS.16.1", site = { unlocated = "JOS.16.1:wilderness" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "JOS.16.1:wilderness", part = "site" } }] },
   { name = "mount Bethel", verse = "JOS.16.1", site = { atlas = "bethel-1" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "mount Bethel", part = "site" } }] },
   { name = "Bethel", verse = "JOS.16.2", site = { atlas = "bethel-1" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Bethel", part = "site" } }] },
   { name = "Luz", verse = "JOS.16.2", site = { atlas = "luz-1" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Luz", part = "site" } }] },
-  { name = "border of Archi", verse = "JOS.16.2", site = { unlocated = "border of Archi" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "border of Archi", part = "border" } }] },
+  { name = "Archi", verse = "JOS.16.2", site = { unlocated = "Archi" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "Archi", part = "border" } }] },
   { name = "Ataroth", verse = "JOS.16.2", site = { atlas = "ataroth-2" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Ataroth", part = "site" } }] },
   { name = "Japhleti", verse = "JOS.16.3", site = { unlocated = "Japhleti" }, relations = [{ kind = "travel", verb = "unto", direction = "west", target = { reference = "Japhleti", part = "border" } }] },
   { name = "nether Beth-horon", verse = "JOS.16.3", site = { atlas = "lower-beth-horon" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "nether Beth-horon", part = "border" } }] },
@@ -362,7 +362,7 @@ kind = "border_walk"
 side = "south"
 justification = "Asher in verse 7 is a place on the line, not the tribe. Shechem is a relative reference, not Manasseh's city. Tappuah town and land are different subjects (17:8)."
 waypoints = [
-  { name = "Asher on the line", verse = "JOS.17.7", site = { unlocated = "Asher on the line" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Asher on the line", part = "site" } }] },
+  { name = "Asher (JOS.17.7)", verse = "JOS.17.7", site = { unlocated = "Asher (JOS.17.7)" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Asher (JOS.17.7)", part = "site" } }] },
   { name = "Michmethah", verse = "JOS.17.7", site = { atlas = "michmethath" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Michmethah", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Michmethah", part = "site" }, predicate = "before", target = { reference = "Shechem", part = "site" } }] },
   { name = "Shechem", verse = "JOS.17.7", site = { atlas = "shechem" }, relations = [{ kind = "reference", target = { reference = "Shechem", part = "site" } }] },
   { name = "En-tappuah", verse = "JOS.17.7", site = { atlas = "en-tappuah" }, relations = [{ kind = "travel", verb = "unto", direction = "right_hand", target = { reference = "En-tappuah", part = "site" } }] },
@@ -406,11 +406,11 @@ justification = "A hill and a relative site relation are not identified exact ve
 waypoints = [
   { name = "Jordan", verse = "JOS.18.12", site = { atlas = "jordan" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Jordan", part = "site" } }] },
   { name = "Jericho", verse = "JOS.18.12", site = { atlas = "jericho-1" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "north_of", target = { reference = "Jericho", part = "site" } }] },
-  { name = "mountains westward", verse = "JOS.18.12", site = { unlocated = "mountains westward" }, relations = [{ kind = "travel", verb = "along", direction = "west", target = { reference = "mountains westward", part = "site" } }] },
-  { name = "wilderness of Beth-aven", verse = "JOS.18.12", site = { atlas = "beth-aven-1" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "wilderness of Beth-aven", part = "site" } }] },
-  { name = "Luz which is Bethel", verse = "JOS.18.13", site = { atlas = "bethel-1" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Luz which is Bethel", part = "site" } }] },
-  { name = "Ataroth-adar", verse = "JOS.18.13", site = { atlas = "ataroth-addar" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Ataroth-adar", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Ataroth-adar", part = "site" }, predicate = "near", target = { reference = "hill south of nether Beth-horon", part = "site" } }] },
-  { name = "hill south of nether Beth-horon", verse = "JOS.18.13", site = { unlocated = "hill south of nether Beth-horon" }, relations = [{ kind = "position", subject = { kind = "reference", reference = "hill south of nether Beth-horon", part = "site" }, predicate = "south_of", target = { reference = "nether Beth-horon", part = "site" } }] },
+  { name = "JOS.18.12:mountains", verse = "JOS.18.12", site = { unlocated = "JOS.18.12:mountains" }, relations = [{ kind = "travel", verb = "along", direction = "west", target = { reference = "JOS.18.12:mountains", part = "site" } }] },
+  { name = "Beth-aven wilderness", verse = "JOS.18.12", site = { atlas = "beth-aven-1" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "Beth-aven wilderness", part = "site" } }] },
+  { name = "Luz/Bethel", verse = "JOS.18.13", site = { atlas = "bethel-1" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Luz/Bethel", part = "site" } }] },
+  { name = "Ataroth-adar", verse = "JOS.18.13", site = { atlas = "ataroth-addar" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Ataroth-adar", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Ataroth-adar", part = "site" }, predicate = "near", target = { reference = "JOS.18.13:hill", part = "site" } }] },
+  { name = "JOS.18.13:hill", verse = "JOS.18.13", site = { unlocated = "JOS.18.13:hill" }, relations = [{ kind = "position", subject = { kind = "reference", reference = "JOS.18.13:hill", part = "site" }, predicate = "south_of", target = { reference = "nether Beth-horon", part = "site" } }] },
   { name = "nether Beth-horon", verse = "JOS.18.13", site = { atlas = "lower-beth-horon" }, relations = [{ kind = "reference", target = { reference = "nether Beth-horon", part = "site" } }] },
 ]
 
@@ -419,9 +419,9 @@ kind = "border_walk"
 side = "west"
 justification = "Kirjath-jearim remains a city of Judah and a waypoint of Benjamin; its selected Site is not rederived here."
 waypoints = [
-  { name = "hill before Beth-horon", verse = "JOS.18.14", site = { unlocated = "hill before Beth-horon" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "hill before Beth-horon", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "hill before Beth-horon", part = "site" }, predicate = "before", target = { reference = "nether Beth-horon", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "hill before Beth-horon", part = "site" }, predicate = "south_of", target = { reference = "nether Beth-horon", part = "site" } }] },
+  { name = "JOS.18.14:hill", verse = "JOS.18.14", site = { unlocated = "JOS.18.14:hill" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "JOS.18.14:hill", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.18.14:hill", part = "site" }, predicate = "before", target = { reference = "nether Beth-horon", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.18.14:hill", part = "site" }, predicate = "south_of", target = { reference = "nether Beth-horon", part = "site" } }] },
   { name = "nether Beth-horon", verse = "JOS.18.14", site = { atlas = "lower-beth-horon" }, relations = [{ kind = "reference", target = { reference = "nether Beth-horon", part = "site" } }] },
-  { name = "Kirjath-baal which is Kirjath-jearim", verse = "JOS.18.14", site = { atlas = "kiriath-jearim" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "Kirjath-baal which is Kirjath-jearim", part = "site" } }] },
+  { name = "Kirjath-baal/Kirjath-jearim", verse = "JOS.18.14", site = { atlas = "kiriath-jearim" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "Kirjath-baal/Kirjath-jearim", part = "site" } }] },
 ]
 
 [[survey.sequence]]
@@ -430,21 +430,21 @@ side = "south"
 justification = "The southern walk is recorded independently in its own text order; shared edges are assembled once by X16, not drawn twice here."
 waypoints = [
   { name = "Kirjath-jearim", verse = "JOS.18.15", site = { atlas = "kiriath-jearim" }, relations = [{ kind = "travel", verb = "from", direction = "unstated", target = { reference = "Kirjath-jearim", part = "end" } }] },
-  { name = "waters of Nephtoah", verse = "JOS.18.15", site = { atlas = "nephtoah" }, relations = [{ kind = "travel", verb = "unto", direction = "west", target = { reference = "waters of Nephtoah", part = "site" } }] },
-  { name = "end of mountain before Hinnom", verse = "JOS.18.16", site = { unlocated = "end of mountain before Hinnom" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "end of mountain before Hinnom", part = "end" } }, { kind = "position", subject = { kind = "reference", reference = "end of mountain before Hinnom", part = "site" }, predicate = "before", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "end of mountain before Hinnom", part = "site" }, predicate = "within", target = { reference = "valley of giants", part = "north_side" } }] },
-  { name = "valley of giants", verse = "JOS.18.16", site = { unlocated = "valley of giants" }, relations = [{ kind = "reference", target = { reference = "valley of giants", part = "site" } }] },
+  { name = "Nephtoah waters", verse = "JOS.18.15", site = { atlas = "nephtoah" }, relations = [{ kind = "travel", verb = "unto", direction = "west", target = { reference = "Nephtoah waters", part = "site" } }] },
+  { name = "JOS.18.16:mountain", verse = "JOS.18.16", site = { unlocated = "JOS.18.16:mountain" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "JOS.18.16:mountain", part = "end" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.18.16:mountain", part = "site" }, predicate = "before", target = { reference = "valley of Hinnom", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.18.16:mountain", part = "site" }, predicate = "within", target = { reference = "Rephaim valley", part = "north_side" } }] },
+  { name = "Rephaim valley", verse = "JOS.18.16", site = { unlocated = "Rephaim valley" }, relations = [{ kind = "reference", target = { reference = "Rephaim valley", part = "site" } }] },
   { name = "valley of Hinnom", verse = "JOS.18.16", site = { atlas = "valley-of-hinnom" }, relations = [{ kind = "travel", verb = "along", direction = "unstated", target = { reference = "valley of Hinnom", part = "site" } }] },
-  { name = "Jebusi Jerusalem", verse = "JOS.18.16", site = { atlas = "jerusalem" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Jebusi Jerusalem", part = "site" } }] },
+  { name = "Jerusalem", verse = "JOS.18.16", site = { atlas = "jerusalem" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "south_of", target = { reference = "Jerusalem", part = "site" } }] },
   { name = "En-rogel", verse = "JOS.18.16", site = { atlas = "en-rogel" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "En-rogel", part = "site" } }] },
   { name = "En-shemesh", verse = "JOS.18.17", site = { atlas = "en-shemesh" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "En-shemesh", part = "site" } }] },
   { name = "Geliloth", verse = "JOS.18.17", site = { atlas = "geliloth" }, relations = [{ kind = "travel", verb = "toward", direction = "unstated", target = { reference = "Geliloth", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "Geliloth", part = "site" }, predicate = "over_against", target = { reference = "Adummim", part = "ascent" } }] },
   { name = "Adummim", verse = "JOS.18.17", site = { atlas = "adummim" }, relations = [{ kind = "reference", target = { reference = "Adummim", part = "site" } }] },
-  { name = "stone of Bohan", verse = "JOS.18.17", site = { unlocated = "stone of Bohan" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "stone of Bohan", part = "site" } }] },
+  { name = "Bohan stone", verse = "JOS.18.17", site = { unlocated = "Bohan stone" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Bohan stone", part = "site" } }] },
   { name = "Arabah", verse = "JOS.18.18", site = { atlas = "arabah" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "over_against", target = { reference = "Arabah", part = "north_side" } }] },
   { name = "Arabah", verse = "JOS.18.18", site = { atlas = "arabah" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Arabah", part = "site" } }] },
   { name = "Beth-hoglah", verse = "JOS.18.19", site = { atlas = "beth-hoglah" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "north_of", target = { reference = "Beth-hoglah", part = "site" } }] },
-  { name = "north bay of the Salt Sea", verse = "JOS.18.19", site = { unlocated = "north bay of the Salt Sea" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "north bay of the Salt Sea", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "north bay of the Salt Sea", part = "site" }, predicate = "at", target = { reference = "south end of Jordan", part = "end" } }] },
-  { name = "south end of Jordan", verse = "JOS.18.19", site = { atlas = "jordan" }, relations = [{ kind = "reference", target = { reference = "south end of Jordan", part = "site" } }] },
+  { name = "JOS.18.19:sea-bay", verse = "JOS.18.19", site = { unlocated = "JOS.18.19:sea-bay" }, relations = [{ kind = "travel", verb = "outgoing", direction = "unstated", target = { reference = "JOS.18.19:sea-bay", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.18.19:sea-bay", part = "site" }, predicate = "at", target = { reference = "JOS.18.19:Jordan-end", part = "end" } }] },
+  { name = "JOS.18.19:Jordan-end", verse = "JOS.18.19", site = { atlas = "jordan" }, relations = [{ kind = "reference", target = { reference = "JOS.18.19:Jordan-end", part = "site" } }] },
 ]
 
 [[survey.sequence]]
@@ -504,7 +504,7 @@ waypoints = [
   { name = "Sarid", verse = "JOS.19.10", site = { atlas = "sarid" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Sarid", part = "site" } }] },
   { name = "Maralah", verse = "JOS.19.11", site = { atlas = "mareal" }, relations = [{ kind = "travel", verb = "unto", direction = "sea_ward", target = { reference = "Maralah", part = "site" } }] },
   { name = "Dabbasheth", verse = "JOS.19.11", site = { atlas = "dabbesheth" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "Dabbasheth", part = "site" } }] },
-  { name = "river before Jokneam", verse = "JOS.19.11", site = { unlocated = "river before Jokneam" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "river before Jokneam", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "river before Jokneam", part = "site" }, predicate = "before", target = { reference = "Jokneam", part = "site" } }] },
+  { name = "JOS.19.11:river", verse = "JOS.19.11", site = { unlocated = "JOS.19.11:river" }, relations = [{ kind = "travel", verb = "unto", direction = "unstated", target = { reference = "JOS.19.11:river", part = "site" } }, { kind = "position", subject = { kind = "reference", reference = "JOS.19.11:river", part = "site" }, predicate = "before", target = { reference = "Jokneam", part = "site" } }] },
   { name = "Jokneam", verse = "JOS.19.11", site = { atlas = "jokneam" }, relations = [{ kind = "reference", target = { reference = "Jokneam", part = "site" } }] },
 ]
 
@@ -669,7 +669,7 @@ justification = "The owner-chosen reading is the eastern upper-Jordan boundary. 
 waypoints = [
   { name = "Zebulun", verse = "JOS.19.34", site = { unlocated = "Zebulun" }, relations = [{ kind = "neighbour", subject = "naphtali", side = "south", target = { reference = "Zebulun", part = "site" } }] },
   { name = "Asher", verse = "JOS.19.34", site = { unlocated = "Asher" }, relations = [{ kind = "neighbour", subject = "naphtali", side = "west", target = { reference = "Asher", part = "site" } }] },
-  { name = "Judah upon Jordan", verse = "JOS.19.34", site = { atlas = "jordan" }, relations = [{ kind = "neighbour", subject = "naphtali", side = "east", target = { reference = "Judah upon Jordan", part = "site" } }] },
+  { name = "Judah/Jordan", verse = "JOS.19.34", site = { atlas = "jordan" }, relations = [{ kind = "neighbour", subject = "naphtali", side = "east", target = { reference = "Judah/Jordan", part = "site" } }] },
 ]
 
 [[survey.sequence]]
@@ -729,7 +729,7 @@ waypoints = [
 [[survey.sequence]]
 kind = "relative_limit"
 side = "west"
-justification = "The verse says before Japho, not that Dan holds Joppa or that the whole boundary follows the coast."
+justification = "JOS.19.46 grounds the positional limit relative to Japho. Possession and a coastal course require separate evidence."
 waypoints = [
   { name = "Japho", verse = "JOS.19.46", site = { atlas = "joppa" }, relations = [{ kind = "position", subject = { kind = "border" }, predicate = "before", target = { reference = "Japho", part = "site" } }] },
 ]
@@ -759,18 +759,18 @@ verse = "JOS.15.7"
 primary = "The ascent of Adummim lies south of the unnamed river."
 alternative = "The south-of-river clause qualifies Gilgal rather than the intervening ascent."
 confidence = "medium"
-justification = "The nearest antecedent in the KJV is the going up to Adummim. The unnamed river remains unlocated; no modern river identification is chosen."
+justification = "JOS.15.7 attaches the river-relative clause to the Adummim ascent as the nearest antecedent. The river identity is JOS.15.7:river; direction is recorded only by the typed relation. Its Site remains unlocated."
 
 [[relation_reading]]
 verse = "JOS.15.8"
 primary = "The hill is before and west of Hinnom, at the northern end of the valley of giants."
 alternative = "Northward describes the border's arrival at the end of the valley rather than naming its northern end."
 confidence = "medium"
-justification = "The KJV relates the hill to both valleys. Joshua 18:16 separately places the mountain in the valley of giants on the north; the two verses' wording is retained without identifying the hill."
+justification = "JOS.15.8 grounds the mountain relations to Hinnom and Rephaim. JOS.18.16 supplies separate valley-relative evidence; the citation identities do not assert that the two unnamed mountains share a Site."
 
 [[relation_reading]]
 verse = "JOS.19.34"
 primary = "Judah upon Jordan is the owner-chosen eastern upper-Jordan boundary reference."
 alternative = "Keil's Havoth-jair reading, a town named Judah, and the textual witness remain alternatives on the atlas claim."
 confidence = "medium"
-justification = "The owner-chosen reading is retained as a neighbour relation toward the sunrising, never a course to southern Judah or a possession assertion."
+justification = "JOS.19.34 grounds an eastern neighbour relation under the owner's upper-Jordan reading. A course to southern Judah and possession require separate evidence."
