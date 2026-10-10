@@ -1,11 +1,15 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use geo::algorithm::bool_ops::unary_union;
+use geo::{
+    Bearing, BooleanOps, BoundingRect, Buffer, Coord, Densify, Destination, Distance, Euclidean,
+    Haversine, Length, LineString, MultiLineString, MultiPolygon, Point,
+};
 use map_canon::CanonStore;
-use map_partition::PointKey;
 use map_types::{UnitVec, WorldTimeline};
+use rstar::{RTree, AABB};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ExcludedSource {
@@ -14,16 +18,13 @@ pub enum ExcludedSource {
     SplicedRegions,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-struct Fingerprint(String);
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ExcludedGeometry {
     pub source: ExcludedSource,
     pub geometry: String,
     pub origin: String,
     pub source_sha256: String,
-    vertices: Vec<[Fingerprint; PointKey::LINEAGE_NEIGHBOR_COUNT]>,
+    coordinates: Vec<[f64; 2]>,
 }
 
 impl ExcludedGeometry {
@@ -34,134 +35,173 @@ impl ExcludedGeometry {
         source_sha256: String,
         points: &[UnitVec],
     ) -> Self {
-        let mut vertices: Vec<_> = points
-            .iter()
-            .map(|point| PointKey::lineage_neighborhood(point).map(fingerprint))
-            .collect();
-        if vertices.len() > 1 && vertices.first() == vertices.last() {
-            vertices.pop();
-        }
         Self {
             source,
             geometry,
             origin,
             source_sha256,
-            vertices,
+            coordinates: points
+                .iter()
+                .map(|point| {
+                    let (lat, lon) = point.to_lat_lon_deg();
+                    [lon, lat]
+                })
+                .collect(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub struct GeometricPolicy {
+    pub tolerance_meters: f64,
+    pub maximum_unexplained_meters: f64,
+    pub short_line_fraction: f64,
 }
 
 #[derive(Deserialize)]
 struct Catalogue {
     base: String,
     decision: String,
+    policy: GeometricPolicy,
     geometries: Vec<ExcludedGeometry>,
+    permitted: Vec<PermittedGeometry>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RunDirection {
-    Forward,
-    Reverse,
+#[derive(Deserialize)]
+struct PermittedGeometry {
+    origin: String,
+    source_sha256: String,
+    license: NaturalEarthLicense,
+    coordinates: Vec<Vec<[f64; 2]>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExcludedRun {
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub enum NaturalEarthLicense {
+    #[serde(rename = "Public Domain")]
+    PublicDomain,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExcludedStretch {
     pub geometry: ExcludedGeometry,
-    pub input_start: usize,
-    pub ring_start: usize,
-    pub vertex_count: usize,
-    pub direction: RunDirection,
+    pub policy: GeometricPolicy,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExclusionError {
     CatalogueDecode(String),
     EmptyCatalogue,
-    InputRead {
-        path: std::path::PathBuf,
-        message: String,
-    },
-    InputDecode {
-        path: std::path::PathBuf,
-        message: String,
-    },
-    Excluded(ExcludedRun),
-}
-
-#[derive(Clone, Copy)]
-struct VertexLocation {
-    geometry: usize,
-    vertex: usize,
+    InputRead { path: PathBuf, message: String },
+    InputDecode { path: PathBuf, message: String },
+    Excluded(ExcludedStretch),
 }
 
 pub struct LineageIndex {
-    geometries: Vec<ExcludedGeometry>,
-    vertices: BTreeMap<Fingerprint, Vec<VertexLocation>>,
+    geometries: Vec<BufferedExclusion>,
+    policy: GeometricPolicy,
+}
+
+struct BufferedExclusion {
+    geometry: ExcludedGeometry,
+    frame: MeterFrame,
+    unexplained: MultiPolygon,
+    envelope: AABB<Point>,
+    threshold: f64,
 }
 
 impl LineageIndex {
-    pub const REFUSED_RUN_LENGTH: usize = 3;
-
-    pub fn new(geometries: Vec<ExcludedGeometry>) -> Self {
-        let mut vertices: BTreeMap<Fingerprint, Vec<VertexLocation>> = BTreeMap::new();
-        for (geometry, ring) in geometries.iter().enumerate() {
-            for (vertex, neighborhood) in ring.vertices.iter().enumerate() {
-                for fingerprint in neighborhood {
-                    vertices
-                        .entry(fingerprint.clone())
-                        .or_default()
-                        .push(VertexLocation { geometry, vertex });
-                }
-            }
-        }
-        Self {
-            geometries,
-            vertices,
-        }
+    pub fn new(
+        geometries: Vec<ExcludedGeometry>,
+        policy: GeometricPolicy,
+        permitted: &[Vec<UnitVec>],
+    ) -> Self {
+        let permitted = segment_index(
+            &permitted
+                .iter()
+                .map(|points| unit_line(points.iter()))
+                .collect::<Vec<_>>(),
+        );
+        let geometries = geometries
+            .into_iter()
+            .filter_map(|geometry| {
+                let coordinates = geographic_line(&geometry.coordinates);
+                let origin = coordinates.points().next()?;
+                let frame = MeterFrame(origin);
+                let line = frame.line(&coordinates);
+                let threshold = policy
+                    .maximum_unexplained_meters
+                    .min(Haversine.length(&coordinates) * policy.short_line_fraction);
+                let mut unexplained = line.buffer(policy.tolerance_meters);
+                let geographic_bounds = Haversine
+                    .densify(&coordinates, MAXIMUM_GEODESIC_SEGMENT_METERS)
+                    .bounding_rect()?;
+                let southwest = Haversine.destination(
+                    geographic_bounds.min().into(),
+                    225.0,
+                    policy.tolerance_meters * 2.0_f64.sqrt(),
+                );
+                let northeast = Haversine.destination(
+                    geographic_bounds.max().into(),
+                    45.0,
+                    policy.tolerance_meters * 2.0_f64.sqrt(),
+                );
+                let envelope = AABB::from_corners(southwest, northeast);
+                let explained = permitted
+                    .locate_in_envelope_intersecting(&envelope)
+                    .map(|segment| frame.line(&LineString::from(vec![segment.start, segment.end])))
+                    .map(|line| line.buffer(policy.tolerance_meters))
+                    .collect::<Vec<_>>();
+                unexplained = unexplained.difference(&unary_union(&explained));
+                Some(BufferedExclusion {
+                    geometry,
+                    frame,
+                    unexplained,
+                    envelope,
+                    threshold,
+                })
+            })
+            .collect();
+        Self { geometries, policy }
     }
 
     pub fn check_points<'a>(
         &self,
         points: impl IntoIterator<Item = &'a UnitVec>,
     ) -> Result<(), ExclusionError> {
-        let mut window = VecDeque::new();
-        for (position, point) in points.into_iter().enumerate() {
-            window.push_back(fingerprint(PointKey::lineage(point)));
-            if window.len() < Self::REFUSED_RUN_LENGTH {
-                continue;
-            }
-            let mut candidates = self.vertices.get(&window[0]).cloned().unwrap_or_default();
-            candidates.sort_by_key(|candidate| (candidate.geometry, candidate.vertex));
-            for candidate in candidates {
-                let ring = &self.geometries[candidate.geometry];
-                if ring.vertices.len() < Self::REFUSED_RUN_LENGTH {
-                    continue;
-                }
-                for direction in [RunDirection::Forward, RunDirection::Reverse] {
-                    let matches = window.iter().enumerate().all(|(offset, keys)| {
-                        let vertex = match direction {
-                            RunDirection::Forward => {
-                                (candidate.vertex + offset) % ring.vertices.len()
-                            }
-                            RunDirection::Reverse => {
-                                (candidate.vertex + ring.vertices.len() - offset)
-                                    % ring.vertices.len()
-                            }
-                        };
-                        ring.vertices[vertex].contains(keys)
-                    });
-                    if matches {
-                        return Err(ExclusionError::Excluded(ExcludedRun {
-                            geometry: ring.clone(),
-                            input_start: position + 1 - Self::REFUSED_RUN_LENGTH,
-                            ring_start: candidate.vertex,
-                            vertex_count: Self::REFUSED_RUN_LENGTH,
-                            direction,
-                        }));
-                    }
+        self.check_lines(&[unit_line(points)])
+    }
+
+    pub fn check_sequences<'a>(
+        &self,
+        sequences: impl IntoIterator<Item = &'a [UnitVec]>,
+    ) -> Result<(), ExclusionError> {
+        self.check_lines(
+            &sequences
+                .into_iter()
+                .map(|points| unit_line(points.iter()))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn check_lines(&self, lines: &[LineString]) -> Result<(), ExclusionError> {
+        let segments = segment_index(lines);
+        for excluded in &self.geometries {
+            let mut length = 0.0;
+            for segment in segments.locate_in_envelope_intersecting(&excluded.envelope) {
+                let line = excluded
+                    .frame
+                    .line(&LineString::from(vec![segment.start, segment.end]));
+                let clipped = excluded
+                    .unexplained
+                    .clip(&MultiLineString(vec![line]), false);
+                length += Euclidean.length(&clipped);
+                if length > excluded.threshold {
+                    return Err(ExclusionError::Excluded(ExcludedStretch {
+                        geometry: excluded.geometry.clone(),
+                        policy: self.policy,
+                    }));
                 }
             }
-            window.pop_front();
         }
         Ok(())
     }
@@ -176,10 +216,7 @@ pub fn check_points<'a>(
 pub fn check_sequences<'a>(
     sequences: impl IntoIterator<Item = &'a [UnitVec]>,
 ) -> Result<(), ExclusionError> {
-    for points in sequences {
-        check_points(points)?;
-    }
-    Ok(())
+    catalogue()?.check_sequences(sequences)
 }
 
 pub fn check_timeline(timeline: &WorldTimeline) -> Result<(), ExclusionError> {
@@ -191,32 +228,63 @@ pub fn check_timeline(timeline: &WorldTimeline) -> Result<(), ExclusionError> {
     }))
 }
 
+pub fn check_timeline_and_compiled(
+    timeline: &WorldTimeline,
+    store: &CanonStore,
+) -> Result<(), ExclusionError> {
+    check_inputs_and_sequences(
+        &build_data_root(),
+        timeline
+            .boundaries
+            .values()
+            .flat_map(|history| {
+                history
+                    .versions
+                    .iter()
+                    .map(|(_, boundary)| boundary.pts.as_slice())
+            })
+            .chain(store.borders().values().map(|border| border.0.as_slice())),
+    )
+}
+
 pub fn check_compiled(store: &CanonStore) -> Result<(), ExclusionError> {
-    check_sequences(store.borders().values().map(|border| border.0.as_slice()))
+    check_inputs_and_sequences(
+        &build_data_root(),
+        store.borders().values().map(|border| border.0.as_slice()),
+    )
 }
 
 pub fn check_geojson(value: &serde_json::Value) -> Result<(), ExclusionError> {
-    match value {
-        serde_json::Value::Object(fields) => {
-            for (name, value) in fields {
-                if name == "coordinates" {
-                    check_coordinates(value)?;
-                } else {
-                    check_geojson(value)?;
-                }
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                check_geojson(value)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+    catalogue()?.check_lines(&geojson_lines(value))
 }
 
-pub fn check_build_inputs(root: &std::path::Path) -> Result<(), ExclusionError> {
+pub fn check_build_inputs(root: &Path) -> Result<(), ExclusionError> {
+    check_inputs_and_sequences(root, std::iter::empty())
+}
+
+pub fn check_inputs_and_sequences<'a>(
+    root: &Path,
+    sequences: impl IntoIterator<Item = &'a [UnitVec]>,
+) -> Result<(), ExclusionError> {
+    let mut lines = sequences
+        .into_iter()
+        .map(|points| unit_line(points.iter()))
+        .collect::<Vec<_>>();
+    catalogue()?.check_lines(&lines)?;
+    collect_inputs(root, &mut lines)?;
+    catalogue()?.check_lines(&lines)
+}
+
+fn build_data_root() -> PathBuf {
+    let direct = PathBuf::from("data");
+    if direct.is_dir() {
+        direct
+    } else {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data")
+    }
+}
+
+fn collect_inputs(root: &Path, lines: &mut Vec<LineString>) -> Result<(), ExclusionError> {
     let entries = std::fs::read_dir(root).map_err(|error| ExclusionError::InputRead {
         path: root.to_path_buf(),
         message: error.to_string(),
@@ -235,7 +303,29 @@ pub fn check_build_inputs(root: &std::path::Path) -> Result<(), ExclusionError> 
     paths.sort();
     for path in paths {
         if path.is_dir() {
-            check_build_inputs(&path)?;
+            collect_inputs(&path, lines)?;
+        } else if path.file_name().is_some_and(|name| name == "polities.json") {
+            let text =
+                std::fs::read_to_string(&path).map_err(|error| ExclusionError::InputRead {
+                    path: path.clone(),
+                    message: error.to_string(),
+                })?;
+            let polities = crate::vendor::parse_polities(&text).map_err(|message| {
+                ExclusionError::InputDecode {
+                    path: path.clone(),
+                    message,
+                }
+            })?;
+            lines.extend(
+                polities
+                    .iter()
+                    .flat_map(|polity| &polity.rings)
+                    .map(|ring| {
+                        ring.iter()
+                            .map(|(lat, lon)| Coord { x: *lon, y: *lat })
+                            .collect::<LineString>()
+                    }),
+            );
         } else if path
             .extension()
             .is_some_and(|extension| extension == "geojson")
@@ -249,7 +339,7 @@ pub fn check_build_inputs(root: &std::path::Path) -> Result<(), ExclusionError> 
                     path: path.clone(),
                     message: error.to_string(),
                 })?;
-            check_geojson(&value)?;
+            collect_geojson(&value, lines);
         }
     }
     Ok(())
@@ -269,41 +359,139 @@ fn catalogue() -> Result<&'static LineageIndex, ExclusionError> {
                 || catalogue
                     .geometries
                     .iter()
-                    .any(|geometry| geometry.vertices.is_empty())
+                    .any(|geometry| geometry.coordinates.len() < 2)
+                || catalogue
+                    .permitted
+                    .iter()
+                    .any(|geometry| geometry.origin.is_empty() || geometry.source_sha256.is_empty())
             {
                 return Err(ExclusionError::EmptyCatalogue);
             }
-            Ok(LineageIndex::new(catalogue.geometries))
+            let permitted = catalogue
+                .permitted
+                .into_iter()
+                .flat_map(|geometry| {
+                    let coordinates = match geometry.license {
+                        NaturalEarthLicense::PublicDomain => geometry.coordinates,
+                    };
+                    coordinates.into_iter().map(|line| {
+                        line.into_iter()
+                            .map(|[lon, lat]| UnitVec::from_lat_lon_deg(lat, lon))
+                            .collect()
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(LineageIndex::new(
+                catalogue.geometries,
+                catalogue.policy,
+                &permitted,
+            ))
         })
         .as_ref()
         .map_err(Clone::clone)
 }
 
-fn fingerprint(key: PointKey) -> Fingerprint {
-    Fingerprint(format!("{:x}", Sha256::digest(key.bytes())))
+struct MeterFrame(Point);
+
+impl MeterFrame {
+    fn line(&self, line: &LineString) -> LineString {
+        Haversine
+            .densify(line, MAXIMUM_GEODESIC_SEGMENT_METERS)
+            .points()
+            .map(|point| {
+                let distance = Haversine.distance(self.0, point);
+                let bearing = Haversine.bearing(self.0, point).to_radians();
+                let (east, north) = bearing.sin_cos();
+                Coord {
+                    x: distance * east,
+                    y: distance * north,
+                }
+            })
+            .collect()
+    }
 }
 
-fn check_coordinates(value: &serde_json::Value) -> Result<(), ExclusionError> {
+const MAXIMUM_GEODESIC_SEGMENT_METERS: f64 = 10_000.0;
+
+fn segment_index(lines: &[LineString]) -> RTree<geo::Line> {
+    RTree::bulk_load(
+        lines
+            .iter()
+            .flat_map(|line| {
+                Haversine
+                    .densify(line, MAXIMUM_GEODESIC_SEGMENT_METERS)
+                    .lines()
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+    )
+}
+
+fn unit_line<'a>(points: impl IntoIterator<Item = &'a UnitVec>) -> LineString {
+    points
+        .into_iter()
+        .map(|point| {
+            let (lat, lon) = point.to_lat_lon_deg();
+            Coord { x: lon, y: lat }
+        })
+        .collect()
+}
+
+fn geographic_line(coordinates: &[[f64; 2]]) -> LineString {
+    coordinates
+        .iter()
+        .map(|[lon, lat]| Coord { x: *lon, y: *lat })
+        .collect()
+}
+
+pub fn geojson_lines(value: &serde_json::Value) -> Vec<LineString> {
+    let mut lines = Vec::new();
+    collect_geojson(value, &mut lines);
+    lines
+}
+
+fn collect_geojson(value: &serde_json::Value, lines: &mut Vec<LineString>) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            for (name, value) in fields {
+                if name == "coordinates" {
+                    collect_coordinates(value, lines);
+                } else {
+                    collect_geojson(value, lines);
+                }
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_geojson(value, lines);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_coordinates(value: &serde_json::Value, lines: &mut Vec<LineString>) {
     let Some(values) = value.as_array() else {
-        return Ok(());
+        return;
     };
     let point = |position: &serde_json::Value| {
         let values = position.as_array()?;
         let [lon, lat, ..] = values.as_slice() else {
             return None;
         };
-        Some(UnitVec::from_lat_lon_deg(lat.as_f64()?, lon.as_f64()?))
+        Some(Coord {
+            x: lon.as_f64()?,
+            y: lat.as_f64()?,
+        })
     };
     if point(value).is_some() {
-        return Ok(());
+        return;
     }
     if values.first().and_then(point).is_some() {
-        let points: Vec<_> = values.iter().filter_map(point).collect();
-        check_points(&points)
+        lines.push(values.iter().filter_map(point).collect());
     } else {
         for value in values {
-            check_coordinates(value)?;
+            collect_coordinates(value, lines);
         }
-        Ok(())
     }
 }

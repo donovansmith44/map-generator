@@ -64,40 +64,98 @@ Persisted legacy canon files outside this worktree are not changed. They must
 be regenerated from the cleaned source branch before serving it. Existing
 licence vocabulary remains able to describe legacy artifacts honestly.
 
-## Executable content guard (reviewer 2 repair)
+## Executable geometric guard (F-283 repair)
 
-`data/authored/excluded-geometry-fingerprints.json` records107 excluded
-geometries from6ac32bfbf67e26b9cfe94560806fda293db05801 with source family,
-original path and source SHA-256. The shapes themselves remain removed.
-`tools/quarantine_fingerprints.py --check` reproduces that catalogue.
-Compiler admission checks every supplied polity and timeline boundary,
-all repository GeoJSON inputs, and all compiled border outputs. Controller
-ruling (2026-10-09): exclusion is an ordered vertex-run law, not whole-ring
-identity. Three consecutive vertices from one excluded ring are refused in
-either direction, including runs across that ring's starting point. The
-refusal records the source, original path/checksum, input start, source-ring
-start, direction and three-vertex span. Separate coordinate sequences retain
-their boundaries; concatenating unrelated features never establishes lineage.
+Controller ruling supplied to this worker on 2026-10-09 supersedes the ordered
+three-vertex rule: exclusion is geometric. The legacy-named
+`data/authored/excluded-geometry-fingerprints.json` now records the 107 excluded
+polylines from `6ac32bfbf67e26b9cfe94560806fda293db05801`, their source family,
+original path and original SHA-256, plus the explicit geometric policy. These
+coordinates are negative admission evidence inside the guard; they are never
+loaded as witnesses or drawn. The excluded map inputs and tools remain removed.
+Recovering only vertex hashes cannot implement this ruling; retaining only the
+old run detector was rejected because resampling and feature splitting bypass it.
 
-`map-partition::PointKey` owns both established partition byte identity
-(Cartesian components rounded at1e9 units) and lineage keys (latitude and
-longitude rounded to1e-6 degrees). The catalogue producer calls the Rust
-owner, stores each ordered vertex's nine neighboring cell fingerprints,
-and the compiler indexes them. This admits sub-microdegree perturbations
-across rounding-cell boundaries without storing excluded coordinates.
-The neighborhood comparison is conservative: rounded components differing
-by at most one cell match, so some differences above1e-6 degrees can match.
-The compiler hashes each observed vertex once. Closed-ring duplicate endpoints
-are normalized by the same producer; cyclic matching preserves start-point
-independence. Catalogue generation/checking requires the built Rust
-`quarantine_keys` example and the configured shared `CARGO_TARGET_DIR`.
+The stated tolerance is **100 meters**. For each excluded polyline separately,
+refuse when the sum of unexplained segment lengths across every feature in the
+build exceeds **the lesser of 2,000 meters and 10 percent of that excluded
+polyline's spherical length**. The inequality is strict. Counts preserve segment
+occurrences, including duplicates and reversals; features are not dissolved and
+unrelated features never acquire connecting edges. Inputs and outputs contribute
+to the same check. Partition admission combines supplied polities, repository
+GeoJSON and vendored polity rings, then checks those with gathered outputs.
+Timeline admission and exit combine its boundaries, current compiled borders and
+repository inputs. Other compiler exits check repository inputs with every
+compiled border. GeoJSON checks aggregate before deciding, including nested
+features and directories. Refusals carry the complete source record and policy.
 
-This replaces the former biblical-ID ban. A permitted future Judah or Canaan
-geometry can be admitted under its biblical identity. The guard records
-actual retained ordered content; it does not assert missing geography is
-unclaimed, grant a licence, or infer arbitrary ancestry after derivation
-records have been destroyed. One or two vertices, nonconsecutive subsets,
-and descendants retaining no three-vertex source run do not meet this
-controller-approved law. Three historical two-vertex paths remain recorded
-in the catalogue, rather than silently disappearing. The general permissive
-source/derivation-lineage policy remains C4's responsibility.
+A stretch also within 100 meters of a pinned permitted line is explained and
+removed before counting. The generated catalogue pins paths, SHA-256 and the
+closed public-domain licence of Natural Earth's retained native 10m/50m/110m land, ocean and lake lines,
+10m river/lake centerlines and the retained NE Mediterranean clip. Source properties
+and filenames in incoming builds never grant an exemption. A future permitted
+survey needs cited source data at this same catalogue door; no surveyed course is
+invented here. NE explanations are clipped to the excluded geometry's extent with
+a tolerance margin by the owning Rust producer, using library polygon clipping.
+The fixed list of source files at the pinned historical base supplies the evidence; no imported NE coordinates are
+retuned. General source eligibility/derivation policy remains C4's responsibility.
+
+The maintained `geo` crate owns spherical distance, bearing, interpolation,
+densification and length, as well as planar meter buffering, difference and line
+clipping. Each excluded line has a local azimuthal-equidistant meter frame: geo's
+spherical distance and bearing from its first point are expressed as east/north
+coordinates. Great-circle arcs are densified by geo at at most 10km intervals
+before projection/indexing. This is a numerical approximation for the regional
+quarantine geometry, not a claim of exact geodesic buffering at global antipodes;
+the spherical sagitta of a 10km chord is under 2m. No tolerance or threshold was
+tuned to a shape or a gate. `rstar` selects candidate segments; each segment is
+clipped separately so overlapping feature occurrences remain in the length sum.
+
+Library survey: [geo](https://docs.rs/geo/0.31.0/geo/) (MIT/Apache-2.0, maintained
+GeoRust crate) supplies the required algorithms and is the controller's choice.
+[BooleanOps clipping](https://docs.rs/geo/0.31.0/geo/algorithm/bool_ops/trait.BooleanOps.html)
+and [Buffer](https://docs.rs/geo/0.31.0/geo/algorithm/buffer/trait.Buffer.html) fit
+partial segment measurement and permitted-buffer subtraction directly.
+[rstar](https://docs.rs/rstar/0.12.2/rstar/) (MIT/Apache-2.0, maintained GeoRust
+crate, also used by geo) avoids a new spatial index.
+[proj4rs](https://docs.rs/proj4rs/latest/proj4rs/) was considered for a separate
+projection engine; geo's spherical distance and bearing already supply the local
+meter frame, so no additional CRS/datum conversion machinery is needed.
+Existing Serde and tree-sitter own JSON and historical Rust parsing; the existing
+coordinate walker now collects sequences once and is shared by guard and producer.
+There is no new JSON parser, geodesic solver, buffer or clipping implementation.
+Dependency licences are recorded in `LICENSES.md`.
+
+`map-partition::PointKey` remains the single owner of existing partition identity
+(Cartesian components rounded at 1e9 units and big-endian encoding). Both partition
+consumers still call it. The unused latitude/longitude lineage quantizer and
+vertex-run machinery are removed. Catalogue coordinates remain floating source
+coordinates: no second quantizer or vertex equality decides geometric lineage.
+
+`tools/quarantine_fingerprints.py --check` reproduces the complete negative and
+permitted catalogue through the built Rust `quarantine_keys` example, using the
+shared `CARGO_TARGET_DIR`. Generated laws cover resampling, splitting, reversal,
+single-vertex deletion and sub-tolerance perturbation, independent geometry,
+permitted explanation, permitted sub-tolerance geometry, short-line thresholds,
+partial explanations and repeated features. The reviewer's real Judah midpoint
+and fan probes, renamed GeoJSON, multiple nested files, compiled borders,
+timeline entry/unchanged-output and restored-med input controls bind the actual
+admission doors. Historical two-point paths are recorded and measured. The
+absence of a match does not establish absence of a place, claim or lineage; it
+only admits geometry under this explicitly ruled check.
+
+A read-only isolation on this repair finds unexplained matches in retained OSM
+rivers, twelve GPL historical basemaps, several vendored atlas polity courses and
+some disclosed Scripture stand-in courses. This establishes geometric overlap
+under the controller rule, not proof that these sources copied an excluded map.
+X1/X2 remove their assigned OSM/GPL inputs; X3/C4 own the remaining course
+provenance/explanations. No input receives an eligibility exemption just because
+it is called Atlas or Scripture. Existing course coordinates and confidence are
+not changed here. The full retained-corpus compile consequently stays refused
+until those owners supply permitted explanations or eligible replacements.
+
+For concurrent shared-target builds, set `QUARANTINE_KEYS_EXECUTABLE` to the
+verified producer image when generating/checking the catalogue and running the
+producer law. Otherwise the standard shared-target example path is used. A
+build's executable may be captured outside the target tree; this avoids consuming
+a different worktree's producer after it overwrites the common example pathname.

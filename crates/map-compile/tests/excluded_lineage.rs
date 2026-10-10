@@ -16,12 +16,12 @@ fn excluded_lineage_never_enters_the_partition() {
     let (regions, polylines) =
         map_compile::partition_bridge::gather_witnesses(&[]).expect("partition sources load");
     assert_eq!(
-        map_compile::exclusion::check_points(
+        map_compile::exclusion::check_sequences(
             regions
                 .iter()
                 .flat_map(|region| &region.rings)
-                .flatten()
-                .chain(polylines.iter().flat_map(|line| &line.pts)),
+                .map(Vec::as_slice)
+                .chain(polylines.iter().map(|line| line.pts.as_slice())),
         ),
         Ok(()),
         "every admitted partition geometry is free of quarantined content"

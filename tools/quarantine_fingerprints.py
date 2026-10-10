@@ -84,8 +84,25 @@ def catalogue():
         ('crates/map-adapters/src/plate_water.rs', 'KnowingTheBible', rust_geometries('crates/map-adapters/src/plate_water.rs', True)),
     ]:
         rows.extend(source_rows(path, source, geometries))
-    output = subprocess.check_output([str(Path(os.environ['CARGO_TARGET_DIR']) / 'debug/examples/quarantine_keys')], input=json.dumps(rows).encode())
-    return {'base': BASE, 'decision': 'docs/errata/quarantine.md', 'geometries': json.loads(output)}
+    permitted = []
+    for path in [
+        'data/natural-earth/ne_10m_land.geojson',
+        'data/natural-earth/ne_10m_ocean.geojson',
+        'data/natural-earth/ne_10m_lakes.geojson',
+        'data/natural-earth/ne_50m_land.geojson',
+        'data/natural-earth/ne_50m_lakes.geojson',
+        'data/natural-earth/ne_110m_land.geojson',
+        'data/natural-earth/ne_110m_ocean.geojson',
+        'data/natural-earth/ne_110m_lakes.geojson',
+        'data/natural-earth/ne_10m_rivers_lake_centerlines.geojson',
+        'data/natural-earth/med_clip.geojson',
+    ]:
+        raw = historical(path)
+        permitted.append({'origin': path, 'source_sha256': hashlib.sha256(raw).hexdigest(), 'license': 'Public Domain', 'value': json.loads(raw)})
+    policy = {'tolerance_meters': 100.0, 'maximum_unexplained_meters': 2000.0, 'short_line_fraction': 0.1}
+    output = subprocess.check_output([os.environ.get('QUARANTINE_KEYS_EXECUTABLE', str(Path(os.environ['CARGO_TARGET_DIR']) / 'debug/examples/quarantine_keys'))], input=json.dumps({'policy': policy, 'geometries': rows, 'permitted': permitted}).encode())
+    return {'base': BASE, 'decision': 'docs/errata/quarantine.md', 'policy': policy, **json.loads(output)}
+
 
 
 def main():
@@ -99,7 +116,7 @@ def main():
             raise SystemExit('quarantine fingerprints differ from their recorded source geometries')
     else:
         path.write_text(expected)
-    print(f'{len(json.loads(expected)["geometries"])} excluded geometries fingerprinted')
+    print(f'{len(json.loads(expected)["geometries"])} excluded geometries catalogued')
 
 
 if __name__ == '__main__':

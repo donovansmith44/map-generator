@@ -27,12 +27,8 @@ fn year_after(y: i32) -> i32 {
 pub fn gather_witnesses(
     polities: &[PolityRow],
 ) -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
-    for ring in polities.iter().flat_map(|row| &row.rings) {
-        let points: Vec<_> = ring.iter().map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon)).collect();
-        crate::exclusion::check_points(&points)
-            .map_err(|error| format!("excluded input: {error:?}"))?;
-    }
-    crate::exclusion::check_build_inputs(&data_path("data"))
+    let inputs: Vec<Vec<UnitVec>> = polities.iter().flat_map(|row| &row.rings).map(|ring| ring.iter().map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon)).collect()).collect();
+    crate::exclusion::check_inputs_and_sequences(&data_path("data"), inputs.iter().map(Vec::as_slice))
         .map_err(|error| format!("excluded input: {error:?}"))?;
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
@@ -145,9 +141,9 @@ pub fn gather_witnesses(
         });
     }
 
-    crate::exclusion::check_sequences(
-        regions.iter().flat_map(|region| &region.rings).map(Vec::as_slice)
-            .chain(polylines.iter().map(|line| line.pts.as_slice())),
+    crate::exclusion::check_inputs_and_sequences(&data_path("data"),
+        inputs.iter().map(Vec::as_slice).chain(regions.iter().flat_map(|region| &region.rings).map(Vec::as_slice)
+            .chain(polylines.iter().map(|line| line.pts.as_slice()))),
     ).map_err(|error| format!("excluded input: {error:?}"))?;
     Ok((regions, polylines))
 }

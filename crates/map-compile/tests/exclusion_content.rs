@@ -2,8 +2,10 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
+use geo::{Destination, Haversine, InterpolatePoint, Point};
 use map_compile::exclusion::{
-    self, ExcludedGeometry, ExcludedRun, ExcludedSource, ExclusionError, LineageIndex, RunDirection,
+    self, ExcludedGeometry, ExcludedSource, ExcludedStretch, ExclusionError, GeometricPolicy,
+    LineageIndex,
 };
 use map_compile::vendor::PolityRow;
 use map_partition::PointKey;
@@ -11,97 +13,210 @@ use map_types::UnitVec;
 use proptest::prelude::*;
 
 const HISTORICAL_GEOMETRY_COUNT: usize = 107;
-const JUDAH_VERTEX_COUNT: usize = 156;
+const POLICY: GeometricPolicy = GeometricPolicy {
+    tolerance_meters: 100.0,
+    maximum_unexplained_meters: 2000.0,
+    short_line_fraction: 0.1,
+};
 
 #[test]
-fn judah_with_one_unique_vertex_removed_is_refused_as_a_polity() {
-    let source: serde_json::Value =
-        serde_json::from_str(&historical("data/wikimedia/tribes12.geojson"))
-            .expect("historical Judah decodes");
-    let original = source["features"][0]["geometry"]["coordinates"][0]
-        .as_array()
-        .expect("Judah outer ring exists");
-    assert_eq!(
-        original.len(),
-        JUDAH_VERTEX_COUNT,
-        "the historical source contains every original Judah vertex"
-    );
-    let removed = original
-        .iter()
-        .enumerate()
-        .find(|(_, candidate)| original.iter().filter(|point| *point == *candidate).count() == 1)
-        .expect("a unique Judah vertex exists")
-        .0;
-    let points: Vec<_> = original
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| *index != removed)
-        .map(|(_, point)| {
-            UnitVec::from_lat_lon_deg(
-                point[1].as_f64().expect("latitude"),
-                point[0].as_f64().expect("longitude"),
+fn reviewer_densification_is_refused() {
+    if std::env::var_os("MAPS_X0_ISOLATED_INPUT").is_none() {
+        return isolated_input_door("reviewer_densification_is_refused");
+    }
+    let original = &originals()[0].points;
+    let mut points = Vec::new();
+    for pair in original.windows(2) {
+        points.push(pair[0]);
+        points.push(
+            UnitVec::normalize(
+                pair[0].x() + pair[1].x(),
+                pair[0].y() + pair[1].y(),
+                pair[0].z() + pair[1].z(),
             )
-        })
-        .collect();
-    let expected = expected_historical_run(&points);
-    let result = map_compile::partition_bridge::gather_witnesses(&[polity(
-        &points,
-        "review-renamed".into(),
-    )]);
+            .expect("the reviewer's spherical midpoint exists"),
+        );
+    }
+    points.push(*original.last().expect("closed endpoint exists"));
     assert_eq!(
-        result.err(),
-        Some(format!("excluded input: {expected:?}")),
-        "removing one unique vertex reports the excluded Judah ring and matched span"
+        map_compile::partition_bridge::gather_witnesses(&[polity(
+            &points,
+            "review-densified".into()
+        )])
+        .err(),
+        Some(format!("excluded input: {:?}", historical_refusal())),
+        "inserting the reviewer's spherical midpoints preserves the complete Judah exclusion"
     );
 }
 
 #[test]
-fn every_historical_sequence_is_bound_to_its_ordered_content() {
+fn reviewer_split_features_are_refused() {
+    if std::env::var_os("MAPS_X0_ISOLATED_INPUT").is_none() {
+        return isolated_input_door("reviewer_split_features_are_refused");
+    }
+    let original = &originals()[0].points;
+    let (x, y, z) = original.iter().fold((0.0, 0.0, 0.0), |(x, y, z), point| {
+        (x + point.x(), y + point.y(), z + point.z())
+    });
+    let center = UnitVec::normalize(x, y, z).expect("fan center exists");
+    let rows: Vec<_> = original
+        .windows(2)
+        .enumerate()
+        .map(|(index, pair)| {
+            polity(
+                &[pair[0], pair[1], center, pair[0]],
+                format!("review-split-{index}"),
+            )
+        })
+        .collect();
     assert_eq!(
-        originals().len(),
-        HISTORICAL_GEOMETRY_COUNT,
-        "all recorded excluded geometries have an executable content control"
+        map_compile::partition_bridge::gather_witnesses(&rows).err(),
+        Some(format!("excluded input: {:?}", historical_refusal())),
+        "all reviewer's fan features share the complete excluded Judah outcome"
     );
-    for original in originals() {
-        let expected = independent_historical_match(&original.points);
+}
+
+#[test]
+fn judah_with_one_unique_vertex_removed_is_refused_as_a_polity() {
+    if std::env::var_os("MAPS_X0_ISOLATED_INPUT").is_none() {
+        return isolated_input_door("judah_with_one_unique_vertex_removed_is_refused_as_a_polity");
+    }
+    let mut points = originals()[0].points.clone();
+    let removed = points
+        .iter()
+        .position(|point| {
+            points
+                .iter()
+                .filter(|candidate| *candidate == point)
+                .count()
+                == 1
+        })
+        .expect("unique vertex exists");
+    points.remove(removed);
+    assert_eq!(
+        map_compile::partition_bridge::gather_witnesses(&[polity(
+            &points,
+            "review-deletion".into()
+        )])
+        .err(),
+        Some(format!("excluded input: {:?}", historical_refusal())),
+        "removing a unique Judah vertex preserves the complete excluded geometry outcome"
+    );
+}
+
+#[test]
+fn all_historical_geometries_are_recorded_in_the_negative_catalogue() {
+    assert_eq!(
+        recorded().len(),
+        HISTORICAL_GEOMETRY_COUNT,
+        "every historical excluded line remains recorded"
+    );
+    for (geometry, original) in recorded().into_iter().zip(originals()) {
+        let index = LineageIndex::new(vec![geometry.clone()], POLICY, &[]);
         assert_eq!(
-            exclusion::check_points(&original.points),
-            expected,
-            "{} reports its complete run refusal or the explicit shorter-than-three control",
-            original.name
+            index.check_points(&original.points),
+            Err(refusal(geometry)),
+            "even a two-vertex historical path is refused by its geometric length"
         );
     }
 }
 
 #[test]
-fn restored_judah_is_refused_through_another_polity_input() {
-    let points = &originals()[0].points;
-    let expected = expected_historical_run(points);
-    let result = map_compile::partition_bridge::gather_witnesses(&[polity(
-        points,
-        "renamed-control".into(),
-    )]);
+fn split_geojson_features_are_summed_without_connecting_them() {
+    let features: Vec<_> = originals()[0].points.windows(2).map(|pair| serde_json::json!({"type":"Feature","properties":{"name":"renamed","source":"Natural Earth"},"geometry":{"type":"LineString","coordinates":positions(pair)}})).collect();
     assert_eq!(
-        result.err(),
-        Some(format!("excluded input: {expected:?}")),
-        "a renamed full Judah input is refused with its ring and span"
+        exclusion::check_geojson(
+            &serde_json::json!({"type":"FeatureCollection","features":features})
+        ),
+        Err(historical_refusal()),
+        "renaming every feature and claiming permitted metadata cannot erase excluded geometry"
+    );
+}
+
+#[test]
+fn compiled_edges_are_summed_across_all_borders() {
+    let mut store = map_canon::CanonStore::default();
+    for pair in originals()[0].points.windows(2) {
+        store.insert_border(map_canon::Border(pair.to_vec()));
+    }
+    assert_eq!(
+        exclusion::check_compiled(&store),
+        Err(historical_refusal()),
+        "separate compiled borders retain their complete excluded source decision"
+    );
+    assert_eq!(
+        map_compile::compile::append_ways(&mut store, &[]),
+        Err(format!("excluded output: {:?}", historical_refusal())),
+        "the real compiler output door refuses split excluded borders"
+    );
+}
+
+#[test]
+fn timeline_refusal_preserves_the_complete_output() {
+    let mut timeline = map_adapters::promised_land_timeline();
+    timeline
+        .boundaries
+        .values_mut()
+        .next()
+        .expect("survey boundary")
+        .versions[0]
+        .1
+        .pts = resample(&originals()[0].points, 3);
+    let mut store = map_canon::CanonStore::default();
+    let result = map_compile::timeline_bridge::bridge_timeline_regions(
+        &mut store,
+        &timeline,
+        map_canon::LayerKind::ScriptureClaims,
+        map_canon::Witness::Authored,
+        "renamed",
+    );
+    assert_eq!(
+        result,
+        Err(format!("excluded input: {:?}", historical_refusal())),
+        "the timeline door refuses resampled ancestry before its transforms"
+    );
+    assert_eq!(
+        store,
+        map_canon::CanonStore::default(),
+        "refused timeline geometry leaves the entire output unchanged"
+    );
+}
+
+#[test]
+fn every_input_file_contributes_to_the_build_total() {
+    let root = std::env::temp_dir().join(format!("maps-x0-geometric-files-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("nested")).expect("own input directory exists");
+    for (index, pair) in originals()[0].points.windows(2).enumerate() {
+        let value = serde_json::json!({"type":"LineString","coordinates":positions(pair)});
+        std::fs::write(
+            root.join("nested")
+                .join(format!("fragment-{index}.geojson")),
+            serde_json::to_vec(&value).expect("input encodes"),
+        )
+        .expect("own file writes");
+    }
+    let result = exclusion::check_build_inputs(&root);
+    std::fs::remove_dir_all(&root).expect("own files removed");
+    assert_eq!(
+        result,
+        Err(historical_refusal()),
+        "splitting every excluded edge into a separate nested file preserves exclusion"
     );
 }
 
 #[test]
 fn restored_med_input_is_refused() {
-    let root = std::env::temp_dir().join(format!("maps-x0-restoration-{}", std::process::id()));
-    let directory = root.join("data/natural-earth");
-    std::fs::create_dir_all(&directory).expect("temporary probe directory");
-    let source: serde_json::Value =
-        serde_json::from_str(&historical("data/wikimedia/tribes12.geojson"))
-            .expect("historical Judah parses");
-    let data = serde_json::json!({"type":"FeatureCollection","features":[{"type":"Feature","geometry":source["features"][0]["geometry"],"properties":{"name":"permitted-looking-water"}}]});
+    let root = std::env::temp_dir().join(format!(
+        "maps-x0-geometric-restoration-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("data/natural-earth")).expect("own input directory exists");
+    let value = serde_json::json!({"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Polygon","coordinates":[positions(&originals()[0].points)]},"properties":{"name":"permitted-looking-water"}}]});
     std::fs::write(
-        directory.join("med_clip.geojson"),
-        serde_json::to_vec(&data).expect("probe serializes"),
+        root.join("data/natural-earth/med_clip.geojson"),
+        serde_json::to_vec(&value).expect("input encodes"),
     )
-    .expect("probe input writes");
+    .expect("own file writes");
     let output = Command::new(std::env::current_exe().expect("test executable"))
         .args([
             "--exact",
@@ -111,11 +226,11 @@ fn restored_med_input_is_refused() {
         ])
         .current_dir(&root)
         .output()
-        .expect("restoration subprocess");
-    std::fs::remove_dir_all(&root).expect("own probe removed");
+        .expect("restoration subprocess finishes");
+    std::fs::remove_dir_all(&root).expect("own files removed");
     assert!(
         output.status.success(),
-        "the real med-clip restoration is refused: {}",
+        "the real med input refuses excluded geometry: {}",
         String::from_utf8_lossy(&output.stdout)
     );
 }
@@ -123,247 +238,25 @@ fn restored_med_input_is_refused() {
 #[test]
 #[ignore]
 fn restoration_probe_child() {
-    let expected = expected_historical_run(&originals()[0].points);
-    let result = map_compile::partition_bridge::gather_witnesses(&[]);
     assert_eq!(
-        result.err(),
-        Some(format!("excluded input: {expected:?}")),
-        "the real med loader reports the excluded ring and span before transformation"
-    );
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
-
-    #[test]
-    fn historical_clips_rotations_reversals_and_deletions_are_refused(
-        index in 0usize..HISTORICAL_GEOMETRY_COUNT, start in any::<usize>(), reverse in any::<bool>(), name in "[a-z]{1,24}",
-    ) {
-        let original = &originals()[index];
-        prop_assume!(original.points.len() >= 6);
-        let mut points = original.points.clone();
-        if PointKey::lineage(points.first().expect("first")) == PointKey::lineage(points.last().expect("last")) { points.pop(); }
-        let length = points.len();
-        points.rotate_left(start % length);
-        if reverse { points.reverse(); }
-        points.remove(0);
-        let expected = expected_historical_run(&points);
-        prop_assert_eq!(exclusion::check_points(&points), Err(expected.clone()), "historical single-vertex deletion retains its complete refusal");
-        let clipped = &points[..LineageIndex::REFUSED_RUN_LENGTH];
-        prop_assert_eq!(exclusion::check_points(clipped), Err(expected.clone()), "a three-vertex clip alone retains the same ring and span");
-        let positions: Vec<_> = clipped.iter().map(|point| { let (lat, lon) = point.to_lat_lon_deg(); serde_json::json!([lon, lat]) }).collect();
-        let value = serde_json::json!({"derived":{"renamed":{"geometry":{"coordinates":positions},"name":name}}});
-        prop_assert_eq!(exclusion::check_geojson(&value), Err(expected.clone()), "nested renamed GeoJSON refuses the complete partial-descendant outcome");
-        let mut store = map_canon::CanonStore::default();
-        store.insert_border(map_canon::Border(clipped.to_vec()));
-        prop_assert_eq!(exclusion::check_compiled(&store), Err(expected.clone()), "compiled partial output reports its excluded ring and span");
-        let result = map_compile::compile::append_ways(&mut store, &[]);
-        prop_assert_eq!(result, Err(format!("excluded output: {expected:?}")), "compiler output checking refuses a clipped descendant even without new ways");
-        let mut timeline = map_adapters::promised_land_timeline();
-        timeline.boundaries.values_mut().next().expect("survey boundary").versions[0].1.pts = clipped.to_vec();
-        let mut compiled = map_canon::CanonStore::default();
-        let result = map_compile::timeline_bridge::bridge_timeline_regions(&mut compiled, &timeline, map_canon::LayerKind::ScriptureClaims, map_canon::Witness::Authored, &name);
-        prop_assert_eq!(result, Err(format!("excluded input: {expected:?}")), "timeline admission refuses the clipped ancestor with its complete provenance");
-        prop_assert_eq!(compiled, map_canon::CanonStore::default(), "refused timeline input leaves the entire output unchanged");
-        let result = map_compile::partition_bridge::gather_witnesses(&[polity(clipped, name)]);
-        prop_assert_eq!(result.err(), Some(format!("excluded input: {expected:?}")), "nonempty renamed polity inputs refuse clipped ancestry before derivation");
-    }
-
-    #[test]
-    fn generated_random_ring_subsets_are_refused(coordinates in random_ring(), start in any::<usize>(), length in 3usize..30) {
-        let points = sphere_points(&coordinates);
-        let geometry = generated_geometry(&points);
-        let length = length.min(points.len());
-        let start = start % points.len();
-        let subset: Vec<_> = (0..length).map(|offset| points[(start + offset) % points.len()]).collect();
-        let expected = generated_refusal(&geometry, 0, start, RunDirection::Forward);
-        prop_assert_eq!(LineageIndex::new(vec![geometry]).check_points(&subset), Err(expected), "every generated contiguous subset of at least three vertices reports its source span");
-    }
-
-    #[test]
-    fn generated_random_ring_rotations_are_refused(coordinates in random_ring(), start in any::<usize>()) {
-        let mut points = sphere_points(&coordinates);
-        let geometry = generated_geometry(&points);
-        let start = start % points.len();
-        points.rotate_left(start);
-        let expected = generated_refusal(&geometry, 0, start, RunDirection::Forward);
-        prop_assert_eq!(LineageIndex::new(vec![geometry]).check_points(&points), Err(expected), "a generated ring rotation retains the complete original span");
-    }
-
-    #[test]
-    fn generated_random_ring_reversals_are_refused(coordinates in random_ring(), start in any::<usize>()) {
-        let points = sphere_points(&coordinates);
-        let geometry = generated_geometry(&points);
-        let start = start % points.len();
-        let reverse: Vec<_> = (0..points.len()).map(|offset| points[(start + points.len() - offset) % points.len()]).collect();
-        let expected = generated_refusal(&geometry, 0, start, RunDirection::Reverse);
-        prop_assert_eq!(LineageIndex::new(vec![geometry]).check_points(&reverse), Err(expected), "reversed generated rings report reverse traversal from any starting vertex");
-    }
-
-    #[test]
-    fn generated_random_ring_single_vertex_deletions_are_refused(coordinates in random_ring(), removed in any::<usize>()) {
-        let mut points = sphere_points(&coordinates);
-        let geometry = generated_geometry(&points);
-        let removed = removed % points.len();
-        points.remove(removed);
-        let (input_start, ring_start) = if removed < 3 { (removed, removed + 1) } else { (0, 0) };
-        let expected = generated_refusal(&geometry, input_start, ring_start, RunDirection::Forward);
-        prop_assert_eq!(LineageIndex::new(vec![geometry]).check_points(&points), Err(expected), "deleting any single vertex from a generated ring preserves another forbidden run");
-    }
-
-    #[test]
-    fn generated_random_ring_sub_tolerance_perturbations_are_refused(
-        coordinates in random_ring(), latitude_delta in -0.999f64..0.999, longitude_delta in -0.999f64..0.999,
-    ) {
-        let points = sphere_points(&coordinates);
-        let geometry = generated_geometry(&points);
-        let perturbed: Vec<_> = coordinates.iter().map(|(lat, lon)| UnitVec::from_lat_lon_deg(lat + latitude_delta * PointKey::LINEAGE_TOLERANCE_DEGREES, lon + longitude_delta * PointKey::LINEAGE_TOLERANCE_DEGREES)).collect();
-        let expected = generated_refusal(&geometry, 0, 0, RunDirection::Forward);
-        prop_assert_eq!(LineageIndex::new(vec![geometry]).check_points(&perturbed), Err(expected), "perturbations below one microdegree cannot evade the complete run refusal");
-    }
-
-    #[test]
-    fn independently_authored_random_geometry_is_admitted(coordinates in random_ring(), authored in random_ring()) {
-        let excluded = sphere_points(&coordinates);
-        let permitted = sphere_points(&authored.iter().map(|(lat, lon)| (lat + 100.0, *lon)).collect::<Vec<_>>());
-        prop_assert_eq!(LineageIndex::new(vec![generated_geometry(&excluded)]).check_points(&permitted), Ok(()), "independently authored geometry outside the excluded latitude band is admitted");
-    }
-
-    #[test]
-    fn generated_partition_keys_preserve_the_existing_quantization(latitude in -90.0f64..90.0, longitude in -180.0f64..180.0) {
-        let point = UnitVec::from_lat_lon_deg(latitude, longitude);
-        let expected: Vec<_> = [point.x(), point.y(), point.z()].into_iter().flat_map(|value| ((value * 1_000_000_000.0).round() as i64).to_be_bytes()).collect();
-        prop_assert_eq!(PointKey::partition(&point).bytes().to_vec(), expected, "the owning key preserves every generated signed Cartesian byte identity");
-    }
-
-    #[test]
-    fn catalogue_producer_and_compiler_share_generated_rounding(coordinates in random_ring()) {
-        let points = sphere_points(&coordinates);
-        let expected = vec![generated_geometry(&points)];
-        let input = serde_json::json!([{"source":"Tribes12","geometry":"generated","origin":"law","source_sha256":"generated-source","vertices":coordinates.iter().map(|(lat, lon)| [lat, lon]).collect::<Vec<_>>()}]);
-        let executable = std::path::PathBuf::from(std::env::var_os("CARGO_TARGET_DIR").expect("shared target configured")).join("debug/examples/quarantine_keys");
-        let mut child = Command::new(executable).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().expect("owned catalogue producer starts");
-        child.stdin.take().expect("producer stdin").write_all(&serde_json::to_vec(&input).expect("input serializes")).expect("producer input writes");
-        let output = child.wait_with_output().expect("producer completes");
-        prop_assert!(output.status.success(), "the producer completes for generated boundary inputs");
-        let actual: Vec<ExcludedGeometry> = serde_json::from_slice(&output.stdout).expect("producer output decodes");
-        prop_assert_eq!(actual, expected, "producer and compiler emit identical complete ordered fingerprints through the one point-key owner");
-    }
-
-    #[test]
-    fn permitted_controls_survive_with_biblical_names(name in prop_oneof![Just("judah"), Just("canaan"), Just("moab")], repeats in 1usize..9) {
-        let points: Vec<_> = permitted().into_iter().cycle().take(4 * repeats).collect();
-        prop_assert_eq!(exclusion::check_points(&points), Ok(()), "permitted geometry is accepted independently of biblical identities");
-        let mut store = map_canon::CanonStore::default();
-        store.insert_border(map_canon::Border(points));
-        prop_assert_eq!(exclusion::check_compiled(&store), Ok(()), "permitted descendants remain admissible under the name {}", name);
-    }
-}
-
-#[test]
-fn unrelated_sequences_do_not_make_an_excluded_run() {
-    let points = &originals()[0].points[..LineageIndex::REFUSED_RUN_LENGTH];
-    let coordinates: Vec<_> = points
-        .iter()
-        .map(|point| {
-            let (lat, lon) = point.to_lat_lon_deg();
-            serde_json::json!([lon, lat])
-        })
-        .collect();
-    let value = serde_json::json!({"features":coordinates.into_iter().map(|point| serde_json::json!({"geometry":{"coordinates":[point]}})).collect::<Vec<_>>()});
-    assert_eq!(
-        exclusion::check_geojson(&value),
-        Ok(()),
-        "three separate one-vertex inputs do not invent a consecutive source run"
-    );
-    assert_eq!(
-        exclusion::check_sequences(points.chunks(1)),
-        Ok(()),
-        "separate compiled sequences do not invent source continuity"
-    );
-}
-
-#[test]
-fn nonconsecutive_excluded_vertices_are_admitted_under_the_run_ruling() {
-    let coordinates = vec![
-        (10.0, 10.0),
-        (11.0, 11.0),
-        (12.0, 12.0),
-        (13.0, 13.0),
-        (14.0, 14.0),
-        (15.0, 15.0),
-    ];
-    let points = sphere_points(&coordinates);
-    let selected = vec![points[0], points[2], points[4]];
-    assert_eq!(
-        LineageIndex::new(vec![generated_geometry(&points)]).check_points(&selected),
-        Ok(()),
-        "three nonconsecutive source vertices do not satisfy the ordered-run exclusion ruling"
-    );
-}
-
-#[test]
-fn the_partition_point_key_preserves_the_existing_byte_identity() {
-    let point = UnitVec::from_lat_lon_deg(0.0, 0.0);
-    let mut expected = [0; 24];
-    expected[..8].copy_from_slice(&1_000_000_000i64.to_be_bytes());
-    assert_eq!(
-        PointKey::partition(&point).bytes(),
-        expected,
-        "the owned partition key preserves the complete established Cartesian byte encoding"
-    );
-}
-
-#[test]
-fn lineage_rounding_boundaries_and_longitude_seams_preserve_nearby_keys() {
-    for latitude in [-30.0000005, 30.0000005] {
-        let original = UnitVec::from_lat_lon_deg(latitude, 179.9999999);
-        let perturbed = UnitVec::from_lat_lon_deg(latitude + 0.0000009, -179.9999999);
-        assert!(
-            PointKey::lineage_neighborhood(&perturbed).contains(&PointKey::lineage(&original)),
-            "signed half-cell rounding and the longitude seam retain the nearby source key"
-        );
-    }
-}
-
-#[test]
-fn excluded_content_in_multiple_input_files_is_refused() {
-    let root = std::env::temp_dir().join(format!("maps-x0-multiple-inputs-{}", std::process::id()));
-    std::fs::create_dir_all(&root).expect("temporary input directory");
-    let points = &originals()[0].points;
-    for (index, part) in points.chunks(50).enumerate() {
-        let positions: Vec<_> = part
-            .iter()
-            .map(|point| {
-                let (lat, lon) = point.to_lat_lon_deg();
-                serde_json::json!([lon, lat])
-            })
-            .collect();
-        let value = serde_json::json!({"geometry":{"type":"LineString","coordinates":positions}});
-        std::fs::write(
-            root.join(format!("renamed-{index}.geojson")),
-            serde_json::to_vec(&value).expect("input serializes"),
-        )
-        .expect("temporary input file");
-    }
-    let result = exclusion::check_build_inputs(&root);
-    std::fs::remove_dir_all(&root).expect("remove own temporary inputs");
-    assert_eq!(
-        result,
-        Err(expected_historical_run(&points[..50])),
-        "a renamed input file containing a partial run reports the complete source and span"
+        map_compile::partition_bridge::gather_witnesses(&[]).err(),
+        Some(format!("excluded input: {:?}", historical_refusal())),
+        "the med loader cannot admit the excluded line under a permitted path"
     );
 }
 
 #[test]
 fn permitted_replacements_survive_the_real_input_door() {
+    if std::env::var_os("MAPS_X0_ISOLATED_INPUT").is_none() {
+        return isolated_input_door("permitted_replacements_survive_the_real_input_door");
+    }
     let points = permitted();
     let rows: Vec<_> = ["judah", "canaan", "moab"]
         .into_iter()
         .map(|name| polity(&points, name.into()))
         .collect();
     let (regions, _) = map_compile::partition_bridge::gather_witnesses(&rows)
-        .expect("permitted replacements gather");
+        .expect("independent replacements gather");
     for row in rows {
         let expected: Vec<_> = row
             .rings
@@ -374,42 +267,360 @@ fn permitted_replacements_survive_the_real_input_door() {
                     .collect::<Vec<_>>()
             })
             .collect();
-        let admitted = regions
-            .iter()
-            .find(|region| region.id == format!("{}@-1000", row.id))
-            .expect("permitted replacement survives");
         assert_eq!(
-            admitted.rings, expected,
-            "a biblical identity retains its complete permitted replacement geometry"
+            regions
+                .iter()
+                .find(|region| region.id == format!("{}@-1000", row.id))
+                .expect("replacement survives")
+                .rings,
+            expected,
+            "the biblical identity retains its entire independent geometry"
         );
     }
 }
 
-fn random_ring() -> impl Strategy<Value = Vec<(f64, f64)>> {
-    (
-        proptest::collection::btree_set(
-            (-60_000_000i32..-10_000_000, -160_000_000i32..160_000_000),
-            6..30,
-        ),
-        -0.5f64..0.5,
-    )
-        .prop_map(|(values, phase)| {
-            values
-                .into_iter()
-                .map(|(lat, lon)| {
-                    (
-                        (lat as f64 + phase) * PointKey::LINEAGE_TOLERANCE_DEGREES,
-                        (lon as f64 + phase) * PointKey::LINEAGE_TOLERANCE_DEGREES,
-                    )
-                })
-                .collect()
-        })
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(128))]
+
+    #[test]
+    fn generated_resampling_is_refused(points in random_ring(), divisions in 2usize..8) {
+        let geometry = generated_geometry(&points);
+        prop_assert_eq!(LineageIndex::new(vec![geometry.clone()], POLICY, &[]).check_points(&resample(&points, divisions)), Err(refusal(geometry)), "any generated edge resampling retains the complete exclusion");
+    }
+
+    #[test]
+    fn generated_splitting_is_refused(points in random_ring(), divisions in 2usize..8) {
+        let geometry = generated_geometry(&points);
+        let points = resample(&points, divisions);
+        let segments: Vec<_> = points.windows(2).collect();
+        prop_assert_eq!(LineageIndex::new(vec![geometry.clone()], POLICY, &[]).check_sequences(segments), Err(refusal(geometry)), "all generated split feature lengths contribute to the same excluded line");
+    }
+
+    #[test]
+    fn generated_reversal_is_refused(mut points in random_ring()) {
+        let geometry = generated_geometry(&points);
+        points.reverse();
+        prop_assert_eq!(LineageIndex::new(vec![geometry.clone()], POLICY, &[]).check_points(&points), Err(refusal(geometry)), "reversal preserves the complete geometric refusal");
+    }
+
+    #[test]
+    fn generated_single_vertex_deletion_is_refused(mut points in random_ring(), removed in 0usize..5) {
+        let geometry = generated_geometry(&points);
+        points.remove(removed);
+        prop_assert_eq!(LineageIndex::new(vec![geometry.clone()], POLICY, &[]).check_points(&points), Err(refusal(geometry)), "single-vertex deletion retains sufficient excluded segment length");
+    }
+
+    #[test]
+    fn generated_sub_tolerance_perturbation_is_refused(points in random_ring(), meters in -99.999f64..99.999, bearing in 0.0f64..360.0) {
+        let geometry = generated_geometry(&points);
+        let moved: Vec<_> = points.iter().map(|point| {
+            let (lat, lon) = point.to_lat_lon_deg();
+            let point = Haversine.destination(Point::new(lon, lat), bearing, meters);
+            UnitVec::from_lat_lon_deg(point.y(), point.x())
+        }).collect();
+        prop_assert_eq!(LineageIndex::new(vec![geometry.clone()], POLICY, &[]).check_points(&moved), Err(refusal(geometry)), "generated perturbations below the recorded meter tolerance preserve exclusion");
+    }
+
+    #[test]
+    fn independently_authored_geometry_is_admitted(points in random_ring()) {
+        let geometry = generated_geometry(&points);
+        let independent: Vec<_> = points.iter().map(|point| { let (lat, lon) = point.to_lat_lon_deg(); UnitVec::from_lat_lon_deg(lat + 10.0, lon) }).collect();
+        prop_assert_eq!(LineageIndex::new(vec![geometry], POLICY, &[]).check_points(&independent), Ok(()), "independent geometry in a disjoint region is admitted");
+    }
+
+    #[test]
+    fn permitted_lineage_explains_generated_shared_geometry(points in random_ring(), divisions in 2usize..8) {
+        let geometry = generated_geometry(&points);
+        prop_assert_eq!(LineageIndex::new(vec![geometry], POLICY, &[points.clone()]).check_points(&resample(&points, divisions)), Ok(()), "a permitted source explains resampled shared stretches");
+    }
+
+    #[test]
+    fn sub_tolerance_permitted_geometry_is_admitted(points in random_ring(), meters in -99.999f64..99.999, bearing in 0.0f64..360.0) {
+        let geometry = generated_geometry(&points);
+        let moved: Vec<_> = points.iter().map(|point| {
+            let (lat, lon) = point.to_lat_lon_deg();
+            let point = Haversine.destination(Point::new(lon, lat), bearing, meters);
+            UnitVec::from_lat_lon_deg(point.y(), point.x())
+        }).collect();
+        prop_assert_eq!(LineageIndex::new(vec![geometry], POLICY, &[points]).check_points(&moved), Ok(()), "sub-tolerance proximity to a permitted source explains the whole shared stretch");
+    }
+
+    #[test]
+    fn generated_partition_keys_preserve_the_existing_quantization(latitude in -90.0f64..90.0, longitude in -180.0f64..180.0) {
+        let point = UnitVec::from_lat_lon_deg(latitude, longitude);
+        let expected: Vec<_> = [point.x(), point.y(), point.z()].into_iter().flat_map(|value| ((value * 1_000_000_000.0).round() as i64).to_be_bytes()).collect();
+        prop_assert_eq!(PointKey::partition(&point).bytes().to_vec(), expected, "the single point-key owner preserves all established Cartesian bytes");
+    }
+
+    #[test]
+    fn catalogue_producer_and_compiler_preserve_complete_generated_geometry(points in random_ring()) {
+        let vertices: Vec<_> = points.iter().map(|point| { let (lat, lon) = point.to_lat_lon_deg(); [lat, lon] }).collect();
+        let decoded: Vec<_> = vertices.iter().map(|[lat, lon]| UnitVec::from_lat_lon_deg(*lat, *lon)).collect();
+        let expected = vec![generated_geometry(&decoded)];
+        let input = serde_json::json!({"policy":POLICY,"geometries":[{"source":"Tribes12","geometry":"generated","origin":"law","source_sha256":"generated-source","vertices":vertices}],"permitted":[]});
+        let executable = std::env::var_os("QUARANTINE_KEYS_EXECUTABLE").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("CARGO_TARGET_DIR").expect("shared target configured")).join("debug/examples/quarantine_keys"));
+        let mut child = Command::new(executable).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().expect("owned producer starts");
+        child.stdin.take().expect("producer stdin").write_all(&serde_json::to_vec(&input).expect("input encodes")).expect("input writes");
+        let output = child.wait_with_output().expect("producer finishes");
+        prop_assert!(output.status.success(), "the producer succeeds for generated coordinates");
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("output decodes");
+        let actual: Vec<ExcludedGeometry> = serde_json::from_value(value["geometries"].clone()).expect("geometry decodes");
+        prop_assert_eq!(actual, expected, "producer and compiler preserve the entire generated source geometry");
+    }
 }
 
-fn sphere_points(coordinates: &[(f64, f64)]) -> Vec<UnitVec> {
-    coordinates
+#[test]
+fn disconnected_vertices_do_not_invent_segments() {
+    let points = &originals()[0].points;
+    assert_eq!(
+        exclusion::check_sequences(points.chunks(1)),
+        Ok(()),
+        "separate one-vertex features contribute no invented connecting segments"
+    );
+}
+
+#[test]
+fn a_short_crossing_is_admitted() {
+    let excluded = vec![
+        UnitVec::from_lat_lon_deg(0.0, -0.1),
+        UnitVec::from_lat_lon_deg(0.0, 0.1),
+    ];
+    let crossing = vec![
+        UnitVec::from_lat_lon_deg(-0.1, 0.0),
+        UnitVec::from_lat_lon_deg(0.1, 0.0),
+    ];
+    assert_eq!(
+        LineageIndex::new(vec![generated_geometry(&excluded)], POLICY, &[]).check_points(&crossing),
+        Ok(()),
+        "only the short length inside the buffer counts at a perpendicular crossing"
+    );
+}
+
+#[test]
+fn shorter_excluded_lines_use_the_fractional_threshold() {
+    let start = Point::new(0.0, 0.0);
+    let points = meter_line(start, 300.0);
+    let geometry = generated_geometry(&points);
+    let index = LineageIndex::new(vec![geometry.clone()], POLICY, &[]);
+    assert_eq!(
+        index.check_points(&meter_line(start, 20.0)),
+        Ok(()),
+        "twenty meters is below ten percent of the three-hundred-meter excluded line"
+    );
+    assert_eq!(
+        index.check_points(&meter_line(start, 40.0)),
+        Err(refusal(geometry)),
+        "forty meters exceeds the shorter line's thirty-meter threshold"
+    );
+}
+
+#[test]
+fn repeated_features_are_summed_instead_of_dissolved() {
+    let points = meter_line(Point::new(0.0, 0.0), 30000.0);
+    let geometry = generated_geometry(&points);
+    let fragment = meter_line(Point::new(0.0, 0.0), 800.0);
+    let index = LineageIndex::new(vec![geometry.clone()], POLICY, &[]);
+    assert_eq!(
+        index.check_points(&fragment),
+        Ok(()),
+        "one eight-hundred-meter fragment is below the two-kilometer threshold"
+    );
+    assert_eq!(
+        index.check_sequences([
+            fragment.as_slice(),
+            fragment.as_slice(),
+            fragment.as_slice()
+        ]),
+        Err(refusal(geometry)),
+        "three separate feature occurrences contribute twenty-four hundred meters"
+    );
+}
+
+#[test]
+fn an_unexplained_tail_is_refused_even_when_the_rest_has_permitted_lineage() {
+    let start = Point::new(0.0, 0.0);
+    let points = meter_line(start, 10000.0);
+    let geometry = generated_geometry(&points);
+    let permitted = meter_line(start, 1000.0);
+    assert_eq!(
+        LineageIndex::new(vec![geometry.clone()], POLICY, &[permitted]).check_points(&points),
+        Err(refusal(geometry)),
+        "permitted explanation removes only its own stretch and leaves the excluded tail refused"
+    );
+}
+
+#[test]
+fn input_and_output_fragments_contribute_to_one_build_total() {
+    const INLAND_JUDAH_SEGMENT_START: usize = 6;
+    const FRAGMENT_METERS: f64 = 1500.0;
+    let original = &originals()[0].points;
+    let (lat, lon) = original[INLAND_JUDAH_SEGMENT_START].to_lat_lon_deg();
+    let (end_lat, end_lon) = original[INLAND_JUDAH_SEGMENT_START + 1].to_lat_lon_deg();
+    let end = Haversine.point_at_distance_between(
+        Point::new(lon, lat),
+        Point::new(end_lon, end_lat),
+        FRAGMENT_METERS,
+    );
+    let fragment = vec![
+        original[INLAND_JUDAH_SEGMENT_START],
+        UnitVec::from_lat_lon_deg(end.y(), end.x()),
+    ];
+    let root = std::env::temp_dir().join(format!("maps-x0-geometric-total-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("own input directory exists");
+    std::fs::write(
+        root.join("input.geojson"),
+        serde_json::to_vec(
+            &serde_json::json!({"type":"LineString","coordinates":positions(&fragment)}),
+        )
+        .expect("input encodes"),
+    )
+    .expect("own file writes");
+    let input = exclusion::check_build_inputs(&root);
+    let output = exclusion::check_sequences([fragment.as_slice()]);
+    let combined = exclusion::check_inputs_and_sequences(&root, [fragment.as_slice()]);
+    std::fs::remove_dir_all(&root).expect("own input directory removed");
+    assert_eq!(
+        input,
+        Ok(()),
+        "the fifteen-hundred-meter input alone is below the build threshold"
+    );
+    assert_eq!(
+        output,
+        Ok(()),
+        "the fifteen-hundred-meter output alone is below the build threshold"
+    );
+    assert_eq!(
+        combined,
+        Err(historical_refusal()),
+        "input and output jointly exceed the threshold for the same excluded Judah line"
+    );
+}
+
+#[test]
+fn all_recorded_natural_earth_lines_are_admitted() {
+    let value: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../data/authored/excluded-geometry-fingerprints.json"
+    ))
+    .expect("catalogue decodes");
+    let coordinates: Vec<_> = value["permitted"]
+        .as_array()
+        .expect("permitted sources exist")
         .iter()
-        .map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon))
+        .flat_map(|source| {
+            source["coordinates"]
+                .as_array()
+                .expect("source lines exist")
+                .iter()
+                .cloned()
+        })
+        .collect();
+    assert_eq!(exclusion::check_geojson(&serde_json::json!({"type":"MultiLineString","coordinates":coordinates})), Ok(()), "every pinned Natural Earth coast river lake and retained clip has permitted geometric lineage");
+}
+
+#[test]
+fn every_natural_earth_input_has_permitted_lineage() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/natural-earth");
+    let mut paths: Vec<_> = std::fs::read_dir(root)
+        .expect("native sources exist")
+        .map(|entry| entry.expect("source entry exists").path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "geojson")
+        })
+        .collect();
+    paths.sort();
+    for path in paths {
+        let value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("native source reads"))
+                .expect("native geometry decodes");
+        assert_eq!(
+            exclusion::check_geojson(&value),
+            Ok(()),
+            "all geometry from the permitted native Natural Earth input {} is admitted",
+            path.display()
+        );
+    }
+}
+
+fn isolated_input_door(probe: &str) {
+    let root =
+        std::env::temp_dir().join(format!("maps-x0-isolated-{}-{probe}", std::process::id()));
+    let native = root.join("data/natural-earth");
+    std::fs::create_dir_all(&native).expect("own source directory exists");
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/natural-earth");
+    for entry in std::fs::read_dir(source).expect("permitted native inputs exist") {
+        let path = entry.expect("native input entry exists").path();
+        if path.is_file() {
+            std::fs::copy(
+                &path,
+                native.join(path.file_name().expect("native filename exists")),
+            )
+            .expect("permitted input copies without links");
+        }
+    }
+    std::fs::create_dir_all(root.join("data/osm")).expect("own empty-source directory exists");
+    std::fs::write(
+        root.join("data/osm/rivers.geojson"),
+        br#"{"type":"FeatureCollection","features":[]}"#,
+    )
+    .expect("explicit empty test input writes");
+    let output = Command::new(std::env::current_exe().expect("test executable exists"))
+        .args(["--exact", probe, "--nocapture"])
+        .env("MAPS_X0_ISOLATED_INPUT", "1")
+        .current_dir(&root)
+        .output()
+        .expect("isolated actual input door finishes");
+    std::fs::remove_dir_all(root).expect("own copied input directory removed");
+    assert!(output.status.success(), "the actual input-door probe {probe} succeeds in a build containing only its supplied geometry and permitted native inputs: {} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+}
+
+fn random_ring() -> impl Strategy<Value = Vec<UnitVec>> {
+    (10.0f64..40.0, 10.0f64..40.0, 0.05f64..0.3, 0.05f64..0.3).prop_map(
+        |(lat, lon, height, width)| {
+            vec![
+                UnitVec::from_lat_lon_deg(lat, lon),
+                UnitVec::from_lat_lon_deg(lat, lon + width),
+                UnitVec::from_lat_lon_deg(lat + height, lon + width),
+                UnitVec::from_lat_lon_deg(lat + height, lon),
+                UnitVec::from_lat_lon_deg(lat, lon),
+            ]
+        },
+    )
+}
+
+fn resample(points: &[UnitVec], divisions: usize) -> Vec<UnitVec> {
+    let mut sampled = Vec::new();
+    for pair in points.windows(2) {
+        let (lat, lon) = pair[0].to_lat_lon_deg();
+        let (end_lat, end_lon) = pair[1].to_lat_lon_deg();
+        for step in 0..divisions {
+            let point = Haversine.point_at_ratio_between(
+                Point::new(lon, lat),
+                Point::new(end_lon, end_lat),
+                step as f64 / divisions as f64,
+            );
+            sampled.push(UnitVec::from_lat_lon_deg(point.y(), point.x()));
+        }
+    }
+    sampled.push(*points.last().expect("sampled line is nonempty"));
+    sampled
+}
+
+fn meter_line(start: Point, length: f64) -> Vec<UnitVec> {
+    let end = Haversine.destination(start, 90.0, length);
+    vec![
+        UnitVec::from_lat_lon_deg(start.y(), start.x()),
+        UnitVec::from_lat_lon_deg(end.y(), end.x()),
+    ]
+}
+
+fn positions(points: &[UnitVec]) -> Vec<[f64; 2]> {
+    points
+        .iter()
+        .map(|point| {
+            let (lat, lon) = point.to_lat_lon_deg();
+            [lon, lat]
+        })
         .collect()
 }
 
@@ -423,70 +634,26 @@ fn generated_geometry(points: &[UnitVec]) -> ExcludedGeometry {
     )
 }
 
-fn generated_refusal(
-    geometry: &ExcludedGeometry,
-    input_start: usize,
-    ring_start: usize,
-    direction: RunDirection,
-) -> ExclusionError {
-    ExclusionError::Excluded(ExcludedRun {
-        geometry: geometry.clone(),
-        input_start,
-        ring_start,
-        vertex_count: LineageIndex::REFUSED_RUN_LENGTH,
-        direction,
+fn refusal(geometry: ExcludedGeometry) -> ExclusionError {
+    ExclusionError::Excluded(ExcludedStretch {
+        geometry,
+        policy: POLICY,
     })
 }
 
-fn expected_historical_run(points: &[UnitVec]) -> ExclusionError {
-    independent_historical_match(points)
-        .expect_err("the independent historical oracle finds a forbidden run")
+fn historical_refusal() -> ExclusionError {
+    refusal(recorded().remove(0))
 }
 
-fn independent_historical_match(points: &[UnitVec]) -> Result<(), ExclusionError> {
-    let catalogue: serde_json::Value = serde_json::from_str(include_str!(
+fn recorded() -> Vec<ExcludedGeometry> {
+    let value: serde_json::Value = serde_json::from_str(include_str!(
         "../../../data/authored/excluded-geometry-fingerprints.json"
     ))
-    .expect("recorded catalogue decodes");
-    for (input_start, window) in points.windows(LineageIndex::REFUSED_RUN_LENGTH).enumerate() {
-        for (index, original) in originals().iter().enumerate() {
-            let mut keys: Vec<_> = original.points.iter().map(PointKey::lineage).collect();
-            if keys.len() > 1 && keys.first() == keys.last() {
-                keys.pop();
-            }
-            if keys.len() < LineageIndex::REFUSED_RUN_LENGTH {
-                continue;
-            }
-            for ring_start in 0..keys.len() {
-                for direction in [RunDirection::Forward, RunDirection::Reverse] {
-                    if window.iter().enumerate().all(|(offset, point)| {
-                        let index = match direction {
-                            RunDirection::Forward => (ring_start + offset) % keys.len(),
-                            RunDirection::Reverse => {
-                                (ring_start + keys.len() - offset) % keys.len()
-                            }
-                        };
-                        PointKey::lineage_neighborhood(point).contains(&keys[index])
-                    }) {
-                        let geometry =
-                            serde_json::from_value(catalogue["geometries"][index].clone())
-                                .expect("recorded complete geometry decodes");
-                        return Err(generated_refusal(
-                            &geometry,
-                            input_start,
-                            ring_start,
-                            direction,
-                        ));
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
+    .expect("catalogue decodes");
+    serde_json::from_value(value["geometries"].clone()).expect("recorded geometries decode")
 }
 #[derive(Clone, Debug)]
 struct Original {
-    name: String,
     points: Vec<UnitVec>,
 }
 
@@ -512,7 +679,7 @@ fn originals() -> &'static [Original] {
         let mut originals = Vec::new();
         for path in ["data/wikimedia/tribes12.geojson", "data/openbible/regions.geojson"] {
             let value: serde_json::Value = serde_json::from_str(&historical(path)).expect("historical GeoJSON parses");
-            for (index, feature) in value["features"].as_array().expect("features exist").iter().enumerate() {
+            for feature in value["features"].as_array().expect("features exist").iter() {
                 let geometry = &feature["geometry"];
                 let polygons = if geometry["type"] == "MultiPolygon" {
                     geometry["coordinates"].as_array().expect("polygons exist").clone()
@@ -522,7 +689,6 @@ fn originals() -> &'static [Original] {
                 for polygon in polygons {
                     for ring in polygon.as_array().expect("rings exist") {
                         originals.push(Original {
-                            name: format!("{path}/{index}"),
                             points: ring.as_array().expect("positions exist").iter().map(|position| {
                                 UnitVec::from_lat_lon_deg(position[1].as_f64().expect("latitude"), position[0].as_f64().expect("longitude"))
                             }).collect(),
@@ -560,7 +726,7 @@ fn originals() -> &'static [Original] {
                     }
                 }
                 if !points.is_empty() {
-                    originals.push(Original { name: item.ident.to_string(), points });
+                    originals.push(Original { points });
                 }
             }
         }
