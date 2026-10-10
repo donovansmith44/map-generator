@@ -254,8 +254,8 @@ pub(in super::super) fn outcomes() -> Vec<CitedRelation> {
             Judah,
             "JOS.15.7",
             vec![
-                travel(Unto, Unstated, site("Debir (JOS.15.7)")),
                 travel(From, Unstated, site("valley of Achor")),
+                travel(Toward, Unstated, site("Debir (JOS.15.7)")),
                 travel(Toward, North, site("Gilgal")),
                 position(
                     reference("Adummim", Part::Ascent),
@@ -344,7 +344,12 @@ pub(in super::super) fn outcomes() -> Vec<CitedRelation> {
             "JOS.16.1",
             vec![
                 travel(From, Unstated, site("Jordan (JOS.16.1)")),
-                travel(Unto, East, site("Jericho water")),
+                travel(Unto, Unstated, site("Jericho water")),
+                position(
+                    reference("Jericho water", Part::Site),
+                    Position::EastOf,
+                    site("Jericho"),
+                ),
                 travel(Along, Unstated, site("JOS.16.1:wilderness")),
                 travel(Unto, Unstated, site("mount Bethel")),
             ],
@@ -559,7 +564,13 @@ pub(in super::super) fn outcomes() -> Vec<CitedRelation> {
                     Position::At,
                     part("JOS.18.19:Jordan-end", Part::End),
                 ),
+                position(
+                    reference("JOS.18.19:sea-bay", Part::Site),
+                    Position::Within,
+                    part("Salt Sea", Part::NorthEnd),
+                ),
                 mention("JOS.18.19:Jordan-end"),
+                mention("Salt Sea"),
             ],
         ),
         cited(
@@ -726,7 +737,7 @@ pub(in super::super) fn outcomes() -> Vec<CitedRelation> {
                 travel(Unto, Unstated, site("Tyre")),
                 travel(Unto, Unstated, site("Hosah")),
                 travel(Outgoing, Unstated, site("Great Sea")),
-                travel(From, Unstated, part("Achzib", Part::Border)),
+                travel(Unto, Unstated, part("Achzib", Part::Border)),
             ],
         ),
         cited(Asher, "JOS.19.30", cities(&["Ummah", "Aphek", "Rehob"])),

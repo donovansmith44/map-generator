@@ -68,6 +68,72 @@ fn every_survey_relation_matches_the_hand_checked_scripture_table() {
     assert_eq!(outcomes(&evidence()), survey_relations::scripture::outcomes(), "all survey relations preserve the independently read subjects, targets, feature parts and cited verses");
 }
 
+
+fn relations_cited_at(rows: Vec<CitedRelation>, verse: &str) -> Vec<CitedRelation> {
+    rows.into_iter().filter(|row| row.verse == verse).collect()
+}
+
+fn names_in_walk_order(evidence: &Value, verses: &[&str]) -> Vec<String> {
+    evidence["survey"]
+        .as_array()
+        .expect("surveys exist")
+        .iter()
+        .flat_map(|survey| survey["sequence"].as_array().expect("sequences exist"))
+        .flat_map(|sequence| sequence["waypoints"].as_array().expect("references exist"))
+        .filter(|row| verses.contains(&row["verse"].as_str().expect("each row cites a verse")))
+        .map(|row| row["name"].as_str().expect("each row is named").to_owned())
+        .collect()
+}
+
+#[test]
+fn judah_north_walk_reaches_the_valley_of_achor_before_debir() {
+    let names = names_in_walk_order(&evidence(), &["JOS.15.6", "JOS.15.7"]);
+    let at = |name: &str| names.iter().position(|row| row == name).expect("row exists");
+    assert!(
+        at("Bohan stone") < at("valley of Achor"),
+        "the walk passes Bohan before the valley of Achor"
+    );
+    assert!(
+        at("valley of Achor") < at("Debir (JOS.15.7)"),
+        "the walk passes the valley of Achor before Debir"
+    );
+}
+
+#[test]
+fn judah_north_rows_match_the_oracle_at_the_debir_verse() {
+    assert_eq!(
+        relations_cited_at(outcomes(&evidence()), "JOS.15.7"),
+        relations_cited_at(survey_relations::scripture::outcomes(), "JOS.15.7"),
+        "the Debir and Achor rows carry the verse's travel relations"
+    );
+}
+
+#[test]
+fn asher_coast_ends_at_achzib_in_the_oracle() {
+    assert_eq!(
+        relations_cited_at(outcomes(&evidence()), "JOS.19.29"),
+        relations_cited_at(survey_relations::scripture::outcomes(), "JOS.19.29"),
+        "the Achzib row is the end of the coast run"
+    );
+}
+
+#[test]
+fn jericho_waters_are_a_position_not_a_heading_in_the_oracle() {
+    assert_eq!(
+        relations_cited_at(outcomes(&evidence()), "JOS.16.1"),
+        relations_cited_at(survey_relations::scripture::outcomes(), "JOS.16.1"),
+        "the Jericho waters row places the waters east of Jericho with no heading"
+    );
+}
+
+#[test]
+fn the_benjamin_bay_is_the_north_bay_of_the_salt_sea_in_the_oracle() {
+    assert_eq!(
+        relations_cited_at(outcomes(&evidence()), "JOS.18.19"),
+        relations_cited_at(survey_relations::scripture::outcomes(), "JOS.18.19"),
+        "the bay row is tied to the north end of the Salt Sea"
+    );
+}
 proptest! {
     #![proptest_config(ProptestConfig { cases: 128, failure_persistence: None, .. ProptestConfig::default() })]
     #[test]
