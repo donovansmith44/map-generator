@@ -1,0 +1,78 @@
+[
+  {
+    "revision": "9cb7e9a",
+    "test_functions_changed": 9,
+    "assertions": 28,
+    "missing_message": [
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 324,
+        "assertion": "assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![])"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 328,
+        "assertion": "assert!(matches!(b.source, BoundarySource::Survey(_)))"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 339,
+        "assertion": "assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![])"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 340,
+        "assertion": "assert_eq!(merged.regions.len(), 2)"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 344,
+        "assertion": "assert!(matches!(\n        merge_timelines(merged, survey_tl),\n        Err(MergeError::DuplicateBoundary(_))\n    ))"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 357,
+        "assertion": "assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![])"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 367,
+        "assertion": "assert!(all.events.iter().all(|e| !e.justification.grounds.is_empty()))"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 377,
+        "assertion": "assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Line)))"
+      },
+      {
+        "file": "crates/map-adapters/src/tests.rs",
+        "function": "promised_land_survey_is_lawful_alone_and_merged",
+        "line": 378,
+        "assertion": "assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Unknown)))"
+      },
+      {
+        "file": "crates/map-canon/src/tests.rs",
+        "function": "the_share_alike_origins_are_named_not_inferred",
+        "line": 928,
+        "assertion": "assert_eq!(\n        sa,\n        vec![\n            Witness::Atlas,\n            Witness::Basemap,\n            Witness::Osm,\n            Witness::Wikimedia,\n            Witness::Partition,\n        ]\n    )"
+      }
+    ],
+    "tuple_or_boolean_vector": [
+      {
+        "file": "crates/map-canon/src/tests.rs",
+        "function": "every_witness_names_the_terms_its_data_is_available_under",
+        "line": 902,
+        "assertion": "assert_eq!(\n        table,\n        vec![\n            (Witness::Atlas, vec![\"CC-BY-SA-4.0\"]),\n            (Witness::Authored, vec![\"CC0-1.0\"]),\n            (Witness::Basemap, vec![\"GPL-3.0-only\"]),\n            (Witness::NaturalEarth, vec![\"public-domain\"]),\n            (Witness::OpenBible, vec![\"CC-BY-4.0\"]),\n            (Witness::Osm, vec![\"ODbL-1.0\"]),\n            (Witness::Wikimedia, vec![\"CC-BY-SA-3.0\"]),\n            (\n                Witness::Partition,\n                vec![\"public-domain\", \"CC-BY-SA-4.0\", \"ODbL-1.0\"],\n            ),\n        ],\n        \"each origin's terms, whole: the vendored LICENSE file of each dataset\"\n    )",
+        "candidate": "tuple-vector"
+      }
+    ]
+  }
+]

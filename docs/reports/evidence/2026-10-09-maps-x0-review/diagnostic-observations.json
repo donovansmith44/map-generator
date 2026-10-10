@@ -1,0 +1,16 @@
+{
+  "original_source": "origin/lane/claude/MG-BASE:data/wikimedia/tribes12.geojson",
+  "excluded_feature": {
+    "tribe": "judah",
+    "parent": null,
+    "stands_from": "conquest-judges",
+    "stands_until": "united-kingdom"
+  },
+  "excluded_vertices": 156,
+  "retained_file": "data/natural-earth/med_clip.geojson",
+  "retained_file_original_features": 1,
+  "original_exclusion_laws_result": "4 passed; 0 failed",
+  "admission_probe": "admitted id=great-sea-1 vertices=156\n",
+  "source_worktree_changed": false,
+  "diagnostic_fixture_committed": false
+}
