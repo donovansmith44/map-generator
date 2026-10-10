@@ -1,0 +1,8 @@
+{
+  "original_judah_med_restoration_is_refused": {
+    "exit_code": 0
+  },
+  "judah_with_one_unique_vertex_removed_is_refused_as_a_polity": {
+    "exit_code": 101
+  }
+}

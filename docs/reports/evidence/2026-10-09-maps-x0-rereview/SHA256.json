@@ -1,0 +1,14 @@
+{
+  "assertion-audit.json": "074c2ba9b873221b1a85a99ec4848f618c1edaf0029c3a37a1d84d4c75309bff",
+  "assertion-audit.log.gz": "c868ce6213bf87b595c07ddd18e637f14365a53ae80ac303b0bb14ff8333d062",
+  "assertion_audit.py": "a19c1122ba67b6970ef3419f66edd70909e389662b3f6e388a7792d7ed0f2312",
+  "audit-requirements.txt": "690e58701b195760d4abad9a42af740bdaeb881fdbdb399263405a1ee0d13e68",
+  "diagnostic-observations.json": "6f9e2206540f8a83874c46eefd9bded87210dab8063825383eaa832a5380e410",
+  "gate.log.gz": "eb0af54950c3d9a2cb4753843d520fb016e5953daf6e56b57154a39007b6a784",
+  "input-hashes.json": "34f9e3588e50d5ea8026b571bbfebf2eb0ec5219cf95787f10eaffc1578e8465",
+  "judah_with_one_unique_vertex_removed_is_refused_as_a_polity.log.gz": "36206646c6ad79870385163655ba46d436aa1d4cbd207219e2eda0b14d19d363",
+  "original_judah_med_restoration_is_refused.log.gz": "b2275e85d38cd58817178c744e7172a4ff86b3306d5b13222ad13eb6cb512644",
+  "range.txt": "943ab0fdbf0d48959d1cf684c7e0493041d0be035a4a4e591976867c7c2faf71",
+  "restoration_probe.rs": "d9268a375ba0508d5a1931347c4bdb047c97df24bdb9869b85a3d240b427760a",
+  "retained-data-hashes.json": "338c06028e61b6abf14221d268d088f22be3b6d534a24f6c5418384a0c024d34"
+}

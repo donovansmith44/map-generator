@@ -1,0 +1,23 @@
+{
+  "Cargo.lock": "6c79e620bbfe1c1aa0388b888e7a56ecc72e137d2c788adcb49e4a697d6eb5f9",
+  "crates/map-adapters/src/lib.rs": "c175fe4f7268e0ae7f7a279af9d697306c5f3993d6871126c74ce234db1cb14f",
+  "crates/map-adapters/src/surveys.rs": "25f4a73d9f0ba54e5d5b5855794edee114540d8114adcddf16bb6f21a76521ed",
+  "crates/map-adapters/src/tests.rs": "06dc294528716b6d6ac8a4bb42310b723926d6baa78d22093a31d61a5c38791d",
+  "crates/map-canon/src/lib.rs": "17a285e881dd3323a406c9bb6d5b76bb768024cd02f6ae4d766ffef99d432c35",
+  "crates/map-canon/src/tests.rs": "3e77648690a9d83cf78f784af7cac940a3062ddc0cfa0eba33d456de6cb3d066",
+  "crates/map-compile/Cargo.toml": "38b9eb2f7d2b3b529d697fc78fcfaf53b85befa70e03a71e76ad327a934d3078",
+  "crates/map-compile/src/compile.rs": "6e8ea74787dc113a7f1eb2050116fefa592d838ab82380f3504dbace342b746c",
+  "crates/map-compile/src/exclusion.rs": "d70d575212dc4564c2e20e6752494d28a73401925bc8ec999ded62c94e443806",
+  "crates/map-compile/src/lib.rs": "262b45b6c7cb86cee4fe604a8108c40939c4d000cd993aed9bab5c03e2f3d5ab",
+  "crates/map-compile/src/main.rs": "975fb67236e2de4c8da791cfb1f968a11931f847f7fea2af4eb355700bd283a5",
+  "crates/map-compile/src/partition_bridge.rs": "d78bc3a04d19871ca98a862153a1842ca975942eee778aa9c100d51042a08722",
+  "crates/map-compile/src/tests.rs": "05149d137fe3322a1268fc4983ca33994e11f064a2cc629ef099a9fa4af8ab45",
+  "crates/map-compile/src/timeline_bridge.rs": "7c03b09ed7af10b1315cd40758e6248c476c181afc3437ba907866c54f66668a",
+  "crates/map-compile/tests/excluded_bytes.rs": "2aea0e1aaf27be6e85e4f74c48b08ba85242ae8b3d75de45a6e25c3ff96acd52",
+  "crates/map-compile/tests/excluded_lineage.rs": "2d27f88796bfd58dc92bca374e2b17ab189a523cbcec2c5e779144474f4a56e8",
+  "crates/map-compile/tests/exclusion_content.rs": "ed7519ce3c82dcbfb7d3fa9b990a214352cc518cffdb881f665ab1d67343444c",
+  "data/authored/excluded-geometry-fingerprints.json": "375712fea0816fe718d422453e40465911065ae2a4b1bcc5442ebfc9bd791b36",
+  "docs/errata/quarantine.md": "611b9dcb22dcb490a6881a22d9784f39bdbb3f01662a9e9faabd3bdeb2d1ba49",
+  "docs/reports/2026-10-09-maps-x0.md": "beb61fced4e8ec507b68ec26b23198ddaa8df2160675e2f2a0d0cc7d04c71ad4",
+  "tools/quarantine_fingerprints.py": "a50ea07e80d16e37e35116311a5dd90b675ed2ac9fc4afbffdeffd8c39732e40"
+}

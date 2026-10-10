@@ -147,3 +147,135 @@ and the pinned assertion audit. No excluded geometry fixture is committed.
 Repair on the sole X0 author lane; re-review the exact repaired head before
 landing. Integrated completion also waits on the separately owned X4 blocker
 and unrun gates. No own lock, server or background job remains.
+
+## Repair review: 9cb7e9a..7bcbaba (second Codex, 2026-10-09)
+
+**CHANGES REQUESTED — F-283 remains open; new Important F-287. F-284 CLOSED.**
+Reviewed repair **9cb7e9aa7ec8f5c6d11e8c710835f69c98a41861..7bcbabab132443e535fa7b18c2cdb4500457e3c8**
+and whole item **6ac32bfbf67e26b9cfe94560806fda293db05801..7bcbabab132443e535fa7b18c2cdb4500457e3c8**.
+`origin/lane/claude/MG-BASE` exists at 6ac32bf; no fallback was used. This
+appendix supersedes the original findings' repair disposition. Applied the
+same binding rules, current Lane B X0 row, C12 migration plan and retained
+local A-EMPHASIS/A-WIRE-LOCAL-IDS review reports. The author head was checked
+out temporarily in this review worktree; its source bytes were restored
+before returning to the sole review branch. No author worktree was edited.
+
+### Accepted removal and test repair
+
+All previously reviewed excluded loaders, PLATE-CANAAN, plate-water code,
+tribes12, spliced regions and plate tools remain removed. Quarantine records
+each removal, its reason and replacement, and distinguishes excluded drawings
+from recorded biblical identities. The repair deletes no additional data.
+Independent whole-item comparison confirms **43 retained data files unchanged**;
+the only data addition is the fingerprint catalogue. No KJV, map-types,
+graph-types, contract, golden, baseline or fixture change occurs. The separate
+NUM 34 survey, NE-derived Mediterranean input and atlas-coordinate settlements
+remain. OSM/basemap and registry work retain X1/X2/X4 ownership; none is approved
+here as a permissive source by implication.
+
+**F-284 CLOSED:** replay of the pinned whole-body maintained tree-sitter audit
+at the exact head gives **22 changed bodies / 47 assertions / 0 message-free**.
+All ten reported inherited assertions now have a plain behavior message.
+The complete source-to-license tuple-vector remains the already accepted
+table observation. Manual inspection finds no combined independent Boolean
+facts. No added application/test comment line is present in the whole Rust
+diff. Independent decoding verifies all supplied evidence-file checksums;
+the retained red restoration log records two behavioral failures before
+wiring, with later green logs, rather than treating the initial compile
+error as behavioral red evidence. Catalogue regeneration reports 107 shapes.
+
+### F-283 residual — Important: dropping one vertex admits excluded ancestry
+
+`crates/map-compile/src/exclusion.rs:50–62` refuses a source only when **every**
+fingerprint of one complete historical geometry occurs in the observed union.
+The generated property at `tests/exclusion_content.rs:234–267` rotates, reverses,
+adds vertices and partitions the complete list into chunks, but retains every
+original vertex. Thus its “split and indirect descendants” never exercise
+clipping, selecting part of a ring or removing a vertex.
+
+The original independent Judah restoration probe was rerun against this head:
+the complete 156-vertex raw source in a temporary
+`data/natural-earth/med_clip.geojson` is now refused with the complete expected
+source/provenance outcome. **Accept that regression repair.**
+
+The additional independent restoration route loads the same original Judah
+ring from the pinned base, removes exactly one uniquely occurring vertex
+(index 0), and supplies the other 155 unchanged coordinates through a renamed
+`PolityRow`. Real `partition_bridge::gather_witnesses` returns success and admits
+`review-renamed@-1000` with **all 155 vertices unchanged**. A whole-ring assertion
+confirms that observation; the assertion demanding the excluded-source refusal
+then fails with `left: None`. No coordinate was tuned, replaced or perturbed.
+This is a retained-content descendant, so the report's limitation for arbitrary
+coordinate-changing ancestry does not dispose it. No contaminated full canon
+or served map is claimed.
+
+**Closure remains X0's existing F-283:** preserve excluded ancestry through
+actual source admission and derivation, including partial/clipped/simplified
+descendants and nonempty compiler families; generate those operations with
+complete refusal and permitted controls. Coordinate the authoritative lineage
+representation with X5/C4, consult before shared type changes, and leave the
+general licensing policy with C4. Complete-shape fingerprint checks can be
+supplemental evidence; lowering a matching threshold or banning biblical IDs
+would neither establish ancestry nor protect legitimate permitted geometry.
+The original category stays open, so no duplicate F-number is assigned to it.
+
+### F-287 — Important: point-key policy is copied into the new guard and producer
+
+`crates/map-compile/src/exclusion.rs:154–159` reproduces the partition point-key
+policy: multiply Cartesian components by 1e9, round to signed integers, encode
+big-endian. It does not call an owning geometry operation. The same rule
+already exists in `map-partition/src/build.rs:74–82` and the local key closure
+in `map-partition/src/lib.rs:512–519`; the new
+`tools/quarantine_fingerprints.py:26–30` independently reimplements it again.
+The report calls this reuse, but the production geometry equivalence rule now
+has four declarations. The new Rust literal also has no domain name. This is
+an explicit 14b D.R.Y. finding, independent of the ancestry counterexample;
+no current rounding mismatch is alleged. The test's independent historical
+decoder is appropriate and is not the offender.
+
+**Closure, X0 with the existing partition owner:** if the fingerprint guard is
+retained, have one owned point-key operation define quantization/byte identity
+and migrate the same-category production sites to it. Derive the catalogue
+through that owner or a mechanically generated/gated shared specification,
+instead of another handwritten copy of its rule. Generated boundary/rounding
+controls should bind the producer and compiler to that single declaration.
+No unsolicited map-types/graph-types change or alternate licensing rule is
+requested. F-287 is the next free queue number checked for this review.
+
+### Verification, category pass and limits
+
+Exactly **one scoped Cargo gate invocation** ran, using the required environment,
+shared target, nonincremental rebuild and `nice -n 10 cargo test -j 4
+-p map-adapters -p map-canon -p map-compile`. It passed **75/0**:
+adapters 16, canon 30, compiler 18, original exclusion 4, content 7; zero doctests.
+The author's subprocess entry remains deliberately ignored and is executed
+by its parent law. Three additional reviewer diagnostic entries were compiled
+as ignored tests, then invoked directly from that same executable, without
+another Cargo gate/build: full-med parent and child **green**; partial-polity
+refusal **red**. The latter is diagnostic review evidence, not a production
+test added to the author branch. Its source and full outputs are retained
+below; the temporary test and restored GeoJSON were removed immediately.
+
+The existing two library unused-import warnings and one test import warning
+remain; no new warning category was introduced. The foreign heavy lock still
+belongs to codex-maps-land2 for C12 landing. No full workspace, make contract,
+fresh canon, mutation or browser gate was run, no server was started, no lock
+was acquired and no owner port was touched. Exact golden sampling and integrated
+completion remain blocked on the separately owned X4 canonical-Canaan repair
+and outstanding full gates. No golden was re-blessed.
+
+14b accepts the closed excluded-source/refusal sums and existing maintained
+Serde/SHA2/Proptest/Syn tools; copied point-key ownership is F-287. 24a/24b
+accepts the complete current loader removals, but ancestry remains writable
+through partial descendants (F-283). All touched compiler exits use the one
+checker, whose completeness rather than wiring count is the outstanding issue.
+F-284's reported test sites are closed. No Critical finding or implementation
+repair is added. Reviewer application LOC delta: **0**. Retained review tools are evidence only;
+all reviewer diagnostics were removed from executable source directories.
+
+Evidence: [repair re-review directory](evidence/2026-10-09-maps-x0-rereview/),
+with the pinned audit/results, exact range/source and 43 retained-data hashes,
+single gate log, independent restoration source/outcomes and SHA-256 manifest.
+No excluded coordinate fixture is committed. Claude owns the repair on the
+same author lane; review its next exact head before landing. No own lock,
+server or background job remains.
