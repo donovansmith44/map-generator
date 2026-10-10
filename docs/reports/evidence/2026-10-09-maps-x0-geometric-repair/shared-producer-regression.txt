@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 143fdcad5fb5f3d3030e4e470e5282d3c3bcaee65051ba14d930c93e58b0920c # shrinks to points = [UnitVec { x: 0.9698463103929541, y: 0.17101007166283433, z: 0.17364817766693033 }, UnitVec { x: 0.9696967066815888, y: 0.1718563570073417, z: 0.17364817766693033 }, UnitVec { x: 0.9695471260473545, y: 0.17182984729280804, z: 0.174507518326992 }, UnitVec { x: 0.9696967066815888, y: 0.17098369249210651, z: 0.174507518326992 }, UnitVec { x: 0.9698463103929541, y: 0.17101007166283433, z: 0.17364817766693033 }]

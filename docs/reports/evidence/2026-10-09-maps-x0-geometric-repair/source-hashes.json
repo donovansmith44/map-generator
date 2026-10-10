@@ -1,0 +1,15 @@
+{
+  "Cargo.lock": "d5c7775b2160bee5df9871dd1413d99b7ddb98bd8f7f9964d2fdbd35d13eb202",
+  "LICENSES.md": "ca638bce14a5644349097948de2fd60ec36fb7455f43d898c97db4bd957068a3",
+  "crates/map-compile/Cargo.toml": "cba355888688fd859aec0c2a57bc19618e9847a1f1576a5b3fd7a1bc37aa6e67",
+  "crates/map-compile/examples/quarantine_keys.rs": "944aa58182ac580e3e115f3f8dee5b8b591e4d78cf0e906764611ed80fcefb3a",
+  "crates/map-compile/src/exclusion.rs": "bf08c5f3baec396ab960ca62a1fb403c80b2657c800314fbca845a485626e666",
+  "crates/map-compile/src/partition_bridge.rs": "2488998fdcada17de044a54638ef4e83e4650eef37e02e911fb84394c199146e",
+  "crates/map-compile/src/timeline_bridge.rs": "9e7ea82b40defd73f8afe7ee01562475854270e47f452b9e16529bfc65fbbedd",
+  "crates/map-compile/tests/excluded_lineage.rs": "b7622abbaa471e0855c90cc701d49e62be34b6d6ca1c0fc0a54b8fc727eab068",
+  "crates/map-compile/tests/exclusion_content.rs": "f8ef83f4c978c089042fa8147a136e41b39e976d949cf9116c9468e1137e88f1",
+  "crates/map-partition/src/point_key.rs": "d25b8302ff839552157a2c8d5a68bcc0f9350296acd52c83336dfba5ca6c1f73",
+  "data/authored/excluded-geometry-fingerprints.json": "8820f6812efe4da701abb403100c945e10b07607aca2f27c1e2ef20670b8bfe8",
+  "docs/errata/quarantine.md": "71ed8a95213fdcc35cdcf56f5bd4c2dbb9b529f743c4b78beebd1938484f5f44",
+  "tools/quarantine_fingerprints.py": "605b056d8b989f255cee810f410cc16ea52d2dee80fb562ac178d1e729c175dc"
+}

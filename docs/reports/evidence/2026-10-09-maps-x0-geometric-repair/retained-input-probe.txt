@@ -1,0 +1,33 @@
+
+#[test]
+#[ignore]
+fn diagnose_retained_geometry() {
+    fn files(root: &std::path::Path, paths: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(root).expect("input directory") {
+            let path = entry.expect("input entry").path();
+            if path.is_dir() { files(&path, paths); } else if path.extension().is_some_and(|extension| extension == "geojson") { paths.push(path); }
+        }
+    }
+    let mut paths = Vec::new();
+    files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data"), &mut paths);
+    paths.sort();
+    for path in paths {
+        let value = serde_json::from_slice(&std::fs::read(&path).expect("source reads")).expect("source decodes");
+        let result = exclusion::check_geojson(&value);
+        println!("source={} result={}", path.display(), match result { Ok(()) => "admitted".into(), Err(ExclusionError::Excluded(stretch)) => format!("refused {:?} {}", stretch.geometry.source, stretch.geometry.geometry), Err(error) => format!("error {error:?}") });
+    }
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/atlas-vendor/polities.json");
+    let rows = map_compile::vendor::parse_polities(&std::fs::read_to_string(source).expect("polities read")).expect("polities parse");
+    let mut all = Vec::new();
+    for row in rows {
+        let points: Vec<Vec<_>> = row.rings.iter().map(|ring| ring.iter().map(|(lat, lon)| UnitVec::from_lat_lon_deg(*lat, *lon)).collect()).collect();
+        println!("polity={} result={}", row.id, match exclusion::check_sequences(points.iter().map(Vec::as_slice)) { Ok(()) => "admitted".into(), Err(ExclusionError::Excluded(stretch)) => format!("refused {:?} {}", stretch.geometry.source, stretch.geometry.geometry), Err(error) => format!("error {error:?}") });
+        all.extend(points);
+    }
+    println!("polities_total={}", match exclusion::check_sequences(all.iter().map(Vec::as_slice)) { Ok(()) => "admitted".into(), Err(ExclusionError::Excluded(stretch)) => format!("refused {:?} {}", stretch.geometry.source, stretch.geometry.geometry), Err(error) => format!("error {error:?}") });
+    let timeline = map_adapters::scripture_timeline();
+    for history in timeline.boundaries.values() { for (_, boundary) in &history.versions {
+        let result = exclusion::check_points(&boundary.pts);
+        if let Err(ExclusionError::Excluded(stretch)) = result { println!("scripture_boundary={:?} provenance={} refused={:?} {}", boundary.source, boundary.provenance, stretch.geometry.source, stretch.geometry.geometry); }
+    } }
+}
