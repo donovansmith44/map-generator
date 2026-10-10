@@ -222,34 +222,6 @@ fn unnamed_features_are_counted_not_silently_dropped() {
 
 // --------------------------------------------------- the waters
 
-/// Water bodies ingest as first-class Water regions — lawful, labeled,
-/// and mergeable with the rest of the world.
-#[test]
-fn plate_water_is_water_classed_and_closed() {
-    let tl = crate::plate_water::plate_water_timeline(tp(-4004));
-    assert_eq!(tl.regions.len(), 3, "the Great Sea, the Jordan's waters, the rivers");
-    assert!(tl.regions.values().all(|r| r.class == map_types::RegionClass::Water));
-    for hist in tl.boundaries.values() {
-        for (_, b) in &hist.versions {
-            assert!(b.pts.len() > 3, "a ring, not a sliver");
-            assert_eq!(b.pts.first(), b.pts.last(), "plate water rings close");
-            assert!(b.provenance.contains("plate-trace"), "tracing disclosed");
-        }
-    }
-    // the chart's law, on real calibration data: Jerusalem's detected
-    // dot and Jerusalem's coordinates agree through the chart, both
-    // ways (the bijection is the contract, the residual the honesty).
-    let chart = crate::plate_water::plate_chart();
-    let jerusalem = map_types::UnitVec::from_lat_lon_deg(31.778, 35.229);
-    let there = chart.to_sphere(2297.0, 3474.0).expect("the dot is on the plate");
-    assert!(
-        there.angle_to(&jerusalem).to_degrees() * 111.0 < 3.0,
-        "the dot lands within the calibration residual"
-    );
-    let (x, y) = chart.from_sphere(&jerusalem).expect("Jerusalem is on the plate");
-    assert!((x - 2297.0).abs() < 45.0 && (y - 3474.0).abs() < 45.0, "and back");
-}
-
 #[test]
 fn waters_are_explorable_regions()  {
     use crate::surveys::{merge_timelines, scripture_timeline, stand_in_gazetteer};
@@ -374,16 +346,8 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         Err(MergeError::DuplicateBoundary(_))
     ));
 
-    // The full Scripture set — the promise, the nations, and the
-    // kingdom eras — is lawful as a whole: every waypoint resolves,
-    // every rise, border change, and fall narrated. (The tribal
-    // allotments left the survey book for open data: they enter
-    // through the partition now — data/wikimedia/tribes12.geojson.)
     let all = scripture_timeline();
-    // traced plate contour + promise + 17 nations + 2 vision
-    // + 4 tetrarchies + 4 kingdom eras = 29 regions; plus the
-    // journeys as open ways.
-    assert_eq!(all.regions.len(), 29, "the Scripture set");
+    assert_eq!(all.regions.len(), 28, "the Scripture set without excluded tracing");
     let journeys = all
         .boundaries
         .values()

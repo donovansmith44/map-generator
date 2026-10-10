@@ -1,16 +1,3 @@
-//! The sphere partition enters the canon: witnesses build ONE closed
-//! arrangement (map-partition), and its faces and river paths become
-//! canon features. Flushness is structural — adjacent faces share
-//! their border arcs — and the completeness law (Σ areas = 4π) is
-//! checked at compile time.
-//!
-//! Witness sourcing: the PLATE witnesses the historical region shapes
-//! (Canaan) and the Great Sea's frame; the LAKES are Natural Earth's
-//! real geometry; the RIVERS are OpenStreetMap's real connected
-//! drainage (ways share exact nodes, so junctions meet in the data,
-//! not by stitching). Rivers are clipped at the water witnesses so a
-//! mouth ends exactly on the shoreline it flows into.
-
 use std::collections::BTreeSet;
 
 use map_canon::{
@@ -40,7 +27,6 @@ fn year_after(y: i32) -> i32 {
 pub fn gather_witnesses(
     polities: &[PolityRow],
 ) -> Result<(Vec<WitnessRegion>, Vec<WitnessPolyline>), String> {
-    let canaan = map_adapters::plate_canaan_ring();
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
 
@@ -106,16 +92,7 @@ pub fn gather_witnesses(
         }
     }
 
-    // (region-to-water overlap is prepared in raster space at
-    // vendor time — see tools/plate_trace/trace_green.py)
-
     let mut regions: Vec<WitnessRegion> = Vec::new();
-    regions.push(WitnessRegion {
-        id: "canaan".into(),
-        kind: FaceKind::LandClaim,
-        rings: vec![canaan],
-        parent: None,
-    });
     for (i, ring) in seas.into_iter().enumerate() {
         regions.push(WitnessRegion {
             id: if i == 0 { "great-sea".into() } else { format!("great-sea-{i}") },
@@ -133,54 +110,6 @@ pub fn gather_witnesses(
                 id: "jordan".into(),
                 kind: FaceKind::Lake,
                 rings: vec![ring],
-                parent: None,
-            });
-        }
-    }
-    // THE TRIBES: subdivision claims, rings snapped onto the shared
-    // water and parent arcs so the arrangement receives one polyline
-    // where witnesses agree — knife-edge parallels cannot form.
-    let canaan_final = regions
-        .iter()
-        .find(|r| r.id == "canaan")
-        .map(|r| r.rings[0].clone())
-        .unwrap_or_default();
-    // targets: shorelines and the canaan border as closed rings, the
-    // Jordan as its open CENTERLINE — never the corridor ribbon,
-    // whose two banks make projection ambiguous
-    let mut snap_targets: Vec<(Vec<UnitVec>, bool)> = Vec::new();
-    snap_targets.extend(
-        regions
-            .iter()
-            .filter(|r| r.id != "canaan" && r.id != "jordan")
-            .flat_map(|r| r.rings.iter().cloned().map(|rr| (rr, true))),
-    );
-    snap_targets.push((canaan_final, true));
-    for pl in polylines.iter().filter(|p| p.id.starts_with("jordan")) {
-        snap_targets.push((pl.pts.clone(), false));
-    }
-    let budget = 3.0 / 6371.0; // the vendored witness's declared accuracy
-    for cohort in load_tribal_rings()? {
-        let snapped = snap_ring_to(&cohort.ring, &snap_targets, budget);
-        if snapped.len() >= 3 {
-            regions.push(WitnessRegion {
-                id: cohort.slug,
-                kind: FaceKind::LandClaim,
-                rings: vec![snapped],
-                parent: cohort.parent,
-            });
-        }
-    }
-    // THE NEIGHBORS: attested regions (OpenBible, CC BY 4.0) already
-    // spliced onto the tribal rings and the real water at vendor
-    // time; the smaller-witness law settles any remaining overlap.
-    for (slug, _stands, ring) in load_openbible_regions()? {
-        let snapped = snap_ring_to(&ring, &snap_targets, budget);
-        if snapped.len() >= 3 {
-            regions.push(WitnessRegion {
-                id: slug,
-                kind: FaceKind::LandClaim,
-                rings: vec![snapped],
                 parent: None,
             });
         }
@@ -229,7 +158,6 @@ const MOUTH_GAP: f64 = 5.0 / 6371.0;
 /// claimant that IS present.
 struct Bundle {
     kind: FaceKind,
-    biggest: f64,
     rings: BTreeSet<map_canon::BorderId>,
     holes: BTreeSet<map_canon::BorderId>,
     note: String,
@@ -283,7 +211,6 @@ fn bundle_faces(
     for (who, g) in gathers {
         let mut bundle = Bundle {
             kind: g.kind,
-            biggest: g.biggest,
             rings: BTreeSet::new(),
             holes: BTreeSet::new(),
             note: g.note,
@@ -371,111 +298,7 @@ pub(crate) fn load_settlements() -> Result<Vec<(String, String, f64, f64)>, Stri
     Ok(out)
 }
 
-/// The attested neighbor regions: Philistia, Phoenicia, Geshur,
-/// Ammon, Moab, Edom — OpenBible.info's 50% confidence isobands
-/// (data/openbible/LICENSE.md), vendored with shared borders spliced
-/// onto the tribes and the real water.
-fn load_openbible_regions() -> Result<Vec<(String, Option<String>, Vec<UnitVec>)>, String> {
-    let text = std::fs::read_to_string(data_path("data/openbible/regions.geojson"))
-        .map_err(|e| format!("openbible regions: {e}"))?;
-    let v: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("openbible regions: {e}"))?;
-    let mut out = Vec::new();
-    for f in v["features"].as_array().into_iter().flatten() {
-        let Some(slug) = f["properties"]["region"].as_str() else { continue };
-        let stands_until = f["properties"]["stands_until"].as_str().map(str::to_string);
-        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
-        else {
-            continue;
-        };
-        let ring: Vec<UnitVec> = outer
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| {
-                let lon = c[0].as_f64()?;
-                let lat = c[1].as_f64()?;
-                Some(UnitVec::from_lat_lon_deg(lat, lon))
-            })
-            .collect();
-        if ring.len() >= 3 {
-            out.push((slug.to_string(), stands_until, ring));
-        }
-    }
-    if let Some(expected) = v["expected_features"].as_u64() {
-        if out.len() as u64 != expected {
-            return Err(format!(
-                "openbible: the file declares {expected} regions, found {}",
-                out.len()
-            ));
-        }
-    }
-    Ok(out)
-}
 
-/// One subdivision claimant from vendored data: its slug, its parent
-/// (subdivision nests where the parent claims), WHEN IT STANDS (era
-/// ids resolved through the vendored era table — the presence algebra
-/// eats these), and its ring.
-pub(crate) struct CohortRing {
-    pub slug: String,
-    pub parent: Option<String>,
-    /// (stands_from, stands_until) as era ids; None = stands always.
-    pub stands: Option<(String, Option<String>)>,
-    pub ring: Vec<UnitVec>,
-}
-
-/// The tribal allotments: open data traced from the Wikimedia Commons
-/// twelve-tribes map (CC BY-SA 3.0, see data/wikimedia/LICENSE.md),
-/// georeferenced through that map's own city markers. Shorelines were
-/// adopted from the real water at vendor time; parents AND standings
-/// ride in the data — the code knows no tribe and no era by name.
-/// The expected feature count is the file's own declared integrity
-/// pin, not a constant here.
-fn load_tribal_rings() -> Result<Vec<CohortRing>, String> {
-    let text = std::fs::read_to_string(data_path("data/wikimedia/tribes12.geojson"))
-        .map_err(|e| format!("tribes12: {e}"))?;
-    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("tribes12: {e}"))?;
-    let mut out = Vec::new();
-    for f in v["features"].as_array().into_iter().flatten() {
-        let Some(slug) = f["properties"]["tribe"].as_str() else { continue };
-        let parent = f["properties"]["parent"].as_str().map(str::to_string);
-        let stands = f["properties"]["stands_from"].as_str().map(|from| {
-            (from.to_string(), f["properties"]["stands_until"].as_str().map(str::to_string))
-        });
-        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first())
-        else {
-            continue;
-        };
-        let ring: Vec<UnitVec> = outer
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| {
-                let lon = c[0].as_f64()?;
-                let lat = c[1].as_f64()?;
-                Some(UnitVec::from_lat_lon_deg(lat, lon))
-            })
-            .collect();
-        if ring.len() >= 3 {
-            out.push(CohortRing { slug: slug.to_string(), parent, stands, ring });
-        }
-    }
-    if let Some(expected) = v["expected_features"].as_u64() {
-        if out.len() as u64 != expected {
-            return Err(format!(
-                "tribes12: the file declares {expected} rings, found {}",
-                out.len()
-            ));
-        }
-    }
-    Ok(out)
-}
-
-/// Build the partition and bridge it into the store. Returns a
-/// human-readable summary line. `resolve_era` turns an era id from
-/// the vendored data into its opening Timestamp (the compiler's era
-/// table) — WHO STANDS WHEN arrives entirely as data.
 /// One entity's ground in one era, as the bridge is about to store it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EraArea {
@@ -519,7 +342,6 @@ pub fn unify_era_areas(rows: Vec<EraArea>) -> Vec<EraArea> {
 pub fn bridge_partition(
     store: &mut CanonStore,
     t0: Timestamp,
-    resolve_era: &dyn Fn(&str) -> Result<Timestamp, String>,
     polities: &[PolityRow],
     identity: &mut crate::identity::Identity,
 ) -> Result<String, String> {
@@ -532,7 +354,6 @@ pub fn bridge_partition(
     let n_rivers = part.rivers.len();
 
     // EVERY face and river here is cut from the plane partition, whose
-    // inputs are six vendored datasets with six sets of terms. The
     // identity a face carries is still its cohort's; what it is made OF
     // is the partition, and that is what licensing follows.
     let prov = |note: String| Provenance {
@@ -571,33 +392,6 @@ pub fn bridge_partition(
     let mut specs: std::collections::BTreeMap<String, CohortSpec> =
         std::collections::BTreeMap::new();
     let mut presence = PresenceBook::default();
-    for cohort in load_tribal_rings()? {
-        if let Some((from_era, until_era)) = &cohort.stands {
-            let from = resolve_era(from_era)?;
-            let until = match until_era {
-                Some(u) => Some(resolve_era(u)?),
-                None => None,
-            };
-            presence
-                .declare(&cohort.slug, from, until)
-                .map_err(|e| format!("presence for {}: {e:?}", cohort.slug))?;
-        }
-    }
-    // THE PARTITION BASE STANDINGS. Canaan the named territory stands
-    // from the frame's dawn until the monarchy rises — from there the
-    // land is Israel's story (Territory carries it), and the plate
-    // frame no longer names the ground. The attested neighbors end
-    // where their own data says (stands_until in regions.geojson).
-    presence
-        .declare("canaan", t0, Some(resolve_era("united-kingdom")?))
-        .map_err(|e| format!("presence for canaan: {e:?}"))?;
-    for (slug, stands_until, _) in load_openbible_regions()? {
-        if let Some(u) = stands_until {
-            presence
-                .declare(&slug, t0, Some(resolve_era(&u)?))
-                .map_err(|e| format!("presence for {slug}: {e:?}"))?;
-        }
-    }
     // Polity standings come from the rows' own years; a second book
     // keyed by ENTITY catches era-variants that would stand twice at
     // once — the same entity must not wear two witnesses at a moment.
@@ -720,7 +514,6 @@ pub fn bridge_partition(
     // THE SETTLEMENTS: city dots from the vendored join of the atlas
     // gazetteer (coordinates, verse attestations) with OpenBible's
     // place typing — only dominant-sense settlements, thresholds
-    // measured and declared in tools/plate_trace/vendor_settlements.py.
     // A CITY STANDS ON LAND: a settlement whose traditional site lies
     // beneath the map's waters (Sodom under the Dead Sea's south
     // basin) cannot stand on this map — refused here, by name,
@@ -801,118 +594,6 @@ fn data_path(rel: &str) -> std::path::PathBuf {
         return direct;
     }
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
-}
-
-/// Snap a ring onto shared water/parent arcs: points within `budget`
-/// of a target project onto it, and the target's own vertices splice
-/// in between consecutive same-target snaps — the shared line exists
-/// once, so knife-edge parallels cannot form.
-fn snap_ring_to(ring: &[UnitVec], targets: &[(Vec<UnitVec>, bool)], budget: f64) -> Vec<UnitVec> {
-    let project = |p: &UnitVec| -> Option<(usize, f64, UnitVec, f64)> {
-        let mut best: Option<(usize, f64, UnitVec, f64)> = None;
-        for (ti, (tgt, closed)) in targets.iter().enumerate() {
-            let m = tgt.len();
-            let segs = if *closed { m } else { m - 1 };
-            for s in 0..segs {
-                let a = tgt[s];
-                let b = tgt[(s + 1) % m];
-                let (nx, ny, nz) = a.cross_raw(&b);
-                let nn = (nx * nx + ny * ny + nz * nz).sqrt();
-                if nn < 1e-12 {
-                    continue;
-                }
-                let d0 = (p.x() * nx + p.y() * ny + p.z() * nz) / nn;
-                let q = match UnitVec::normalize(
-                    p.x() - d0 * nx / nn,
-                    p.y() - d0 * ny / nn,
-                    p.z() - d0 * nz / nn,
-                ) {
-                    Ok(pr) => {
-                        let full = a.angle_to(&b);
-                        if (pr.angle_to(&a) + pr.angle_to(&b) - full).abs()
-                            < full * 0.02 + 1e-9
-                        {
-                            pr
-                        } else if p.angle_to(&a) <= p.angle_to(&b) {
-                            a
-                        } else {
-                            b
-                        }
-                    }
-                    Err(_) => continue,
-                };
-                let tt = {
-                    let full = a.angle_to(&b);
-                    if full > 0.0 { q.angle_to(&a) / full } else { 0.0 }
-                };
-                let dist = p.angle_to(&q);
-                if best.as_ref().map_or(true, |(_, _, _, bd)| dist < *bd) {
-                    best = Some((ti, s as f64 + tt, q, dist));
-                }
-            }
-        }
-        best
-    };
-    #[derive(Clone)]
-    enum P {
-        Free(UnitVec),
-        On { target: usize, s: f64, at: UnitVec },
-    }
-    let snapped: Vec<P> = ring
-        .iter()
-        .map(|p| match project(p) {
-            Some((ti, s, q, d)) if d <= budget => P::On { target: ti, s, at: q },
-            _ => P::Free(*p),
-        })
-        .collect();
-    let n = snapped.len();
-    let mut out: Vec<UnitVec> = Vec::new();
-    for i in 0..n {
-        match &snapped[i] {
-            P::Free(p) => out.push(*p),
-            P::On { target, s, at } => {
-                out.push(*at);
-                if let P::On { target: t2, s: s2, .. } = &snapped[(i + 1) % n] {
-                    if target == t2 {
-                        let (tgt, closed) = &targets[*target];
-                        let m = tgt.len() as f64;
-                        let span = if *closed {
-                            let fwd = (s2 - s).rem_euclid(m);
-                            let back = (s - s2).rem_euclid(m);
-                            // closed rings: the short way, capped so a
-                            // near-antipodal pair cannot walk half the
-                            // world the wrong way
-                            let sp = if fwd <= back { fwd } else { -back };
-                            if sp.abs() > 60.0 { 0.0 } else { sp }
-                        } else {
-                            // open centerlines: direction is unambiguous
-                            s2 - s
-                        };
-                        if span.abs() > 1e-9 {
-                            let step: f64 = if span > 0.0 { 1.0 } else { -1.0 };
-                            let mut k =
-                                if step > 0.0 { s.floor() + 1.0 } else { s.ceil() - 1.0 };
-                            while (k - s) * step > 0.0 && (k - s) * step < span.abs() {
-                                let idx = (k.rem_euclid(m)) as usize % tgt.len();
-                                out.push(tgt[idx]);
-                                k += step;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut clean: Vec<UnitVec> = Vec::new();
-    for p in out {
-        if clean.last().map_or(true, |q: &UnitVec| q.angle_to(&p) > 1e-9) {
-            clean.push(p);
-        }
-    }
-    while clean.len() > 1 && clean[0].angle_to(clean.last().unwrap()) <= 1e-9 {
-        clean.pop();
-    }
-    clean
 }
 
 /// The real Mediterranean (vendored NE land complement).

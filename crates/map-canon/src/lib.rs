@@ -321,15 +321,10 @@ impl Witness {
         Witness::Partition,
     ];
 
-    /// The datasets the plane partition consumes. Geometry it emits is
-    /// derived from all of them, so it carries all of their terms.
-    pub const PARTITION_INPUTS: [Witness; 6] = [
+    pub const PARTITION_INPUTS: [Witness; 3] = [
         Witness::Atlas,
-        Witness::Authored,
         Witness::NaturalEarth,
-        Witness::OpenBible,
         Witness::Osm,
-        Witness::Wikimedia,
     ];
 
     /// The terms this origin's data is available under, from its own

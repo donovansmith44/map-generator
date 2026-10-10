@@ -336,17 +336,9 @@ fn build(args: &[String]) {
             .unwrap_or_else(|e| die(&format!("eras: {e}")));
         parse_eras(&text).unwrap_or_else(|e| die(&e))
     };
-    let resolve_era = |id: &str| -> Result<map_canon::Timestamp, String> {
-        let era = era_table
-            .iter()
-            .find(|e| e.id == id)
-            .ok_or_else(|| format!("eras: no {id} era"))?;
-        Ok(ts_or_die(era.from_year))
-    };
     let summary = map_compile::partition_bridge::bridge_partition(
         &mut store,
         tp0,
-        &resolve_era,
         &polities,
         &mut identity,
     )

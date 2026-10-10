@@ -12,7 +12,6 @@ pub mod basemaps;
 pub mod exports;
 pub mod geojson;
 pub mod hydro;
-pub mod plate_water;
 pub mod quantize;
 pub mod surveys;
 pub mod terrain;
@@ -23,8 +22,6 @@ pub use basemaps::{
 };
 pub use exports::{load_exports, AtlasExports, ExportError};
 pub use hydro::{ingest_ocean, ingest_water, WaterSource};
-pub use plate_water::{plate_chart, plate_river_paths, plate_water_timeline, plate_water_witnesses};
-pub use surveys::plate_canaan_ring;
 pub use surveys::{authored_routes, AuthoredRoute};
 pub use terrain::{ingest_terrain, ElevationGrid};
 pub use surveys::{
