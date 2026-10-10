@@ -1,0 +1,9 @@
+error[E0425]: cannot find function `promised_land_timeline` in crate `map_adapters`
+ --> docs/reports/evidence/2026-10-09-maps-x3-review/removed-api.rs:2:27
+  |
+2 |     let _ = map_adapters::promised_land_timeline();
+  |                           ^^^^^^^^^^^^^^^^^^^^^^ not found in `map_adapters`
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0425`.

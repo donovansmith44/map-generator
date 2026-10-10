@@ -1,0 +1,15 @@
+{
+  "library": "/home/donovan/mut/target/debug/libmap_adapters.rlib",
+  "manifest_path": "/home/donovan/w/CX2-rev-x3/crates/map-adapters/Cargo.toml",
+  "fresh": false,
+  "library_sha256": "33f2f3b6212934561b6a90ded9960f65ac07f5e5738d3e3601c190999461afb1",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "removed-api": {
+    "exit": 1,
+    "output": "error[E0425]: cannot find function `promised_land_timeline` in crate `map_adapters`\n --> docs/reports/evidence/2026-10-09-maps-x3-review/removed-api.rs:2:27\n  |\n2 |     let _ = map_adapters::promised_land_timeline();\n  |                           ^^^^^^^^^^^^^^^^^^^^^^ not found in `map_adapters`\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0425`.\n"
+  },
+  "retained-api": {
+    "exit": 0,
+    "output": ""
+  }
+}

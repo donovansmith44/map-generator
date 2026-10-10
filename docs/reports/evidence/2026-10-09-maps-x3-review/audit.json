@@ -1,0 +1,200 @@
+{
+  "reviewed_head": "ecd35634dbe7ec1a9da4d3fb247e83d251f50160",
+  "atlas_head": "f6eb9fb963c6f608beffdaf09c259214059a421b",
+  "kjv_path": "/home/donovan/src/bible-atlas/data/raw/kjv.json",
+  "kjv_sha256": "f0b09dc49dfb97bb84f03aae1fbf026485048c3cab31a7a41017e2d86ac1d11c",
+  "evidence_sha256": "19ec91649f54a7c74b040b06c3bfda58a585f12509ee6e7631628c39c698f2fc",
+  "survey_count": 14,
+  "sequence_count": 43,
+  "waypoint_count": 300,
+  "unresolved_identity_count": 36,
+  "survey_sources": [
+    "kjv"
+  ],
+  "invalid_survey_citations": [],
+  "invalid_waypoint_citations": [],
+  "dating": {
+    "scale": "exodus_1446",
+    "exodus_year": -1446,
+    "exodus_grounds": [
+      "1KI.6.1"
+    ],
+    "temple_begun_year": -966,
+    "temple_begun_precision": "approximate",
+    "exodus_to_temple_years": 480,
+    "source_chronology": "Ussher is retained as source provenance only; none of his dates supplies an adopted interval endpoint.",
+    "late_wilderness_year": -1407,
+    "late_wilderness_grounds": [
+      "NUM.33.38",
+      "DEU.1.3",
+      "NUM.33.50",
+      "NUM.36.13"
+    ],
+    "gilgal_from_year": -1401,
+    "gilgal_to_year": -1400,
+    "gilgal_grounds": [
+      "JOS.14.6",
+      "JOS.14.7",
+      "JOS.14.10"
+    ],
+    "division_from_year": -1401,
+    "division_to_year": -1399,
+    "shown_at_year": -1399,
+    "shown_at_basis": "owner_ruled",
+    "shown_at_grounds": [
+      "JOS.18.1",
+      "JOS.19.51"
+    ],
+    "alternative_years": [
+      -1400,
+      -1401
+    ],
+    "justification": "The fortieth year uses inclusive counting: 1446 minus 39 is 1407. Caleb's forty-five years and ages give circa 1401-1400. Shiloh follows Gilgal without its own exact year; 1399 is the owner-chosen completed-allotment stop. Joshua 13 recalls Moses' earlier grants; no lot is asserted at 1446.",
+    "alternative": "1400 uses Caleb's ages as elapsed years; 1401 uses the inclusive forty-five years. Neither reading dates the Shiloh survey exactly. Joshua 19:47 is undated and is recorded separately. No universal shift is applied to other chronology."
+  },
+  "new_test_and_helper_assertion_count": 16,
+  "touched_fixture_assertion_count": 12,
+  "assertion_review": "Manual whole-body review: one fact and a plain behavior message in every macro; no tuple or Boolean-vector observations. Counts use textual inventory only, not an AST parser.",
+  "kjv_spot_checks": [
+    {
+      "lot": "promised_land",
+      "side": "east",
+      "row": {
+        "name": "Riblah",
+        "verse": "NUM.34.11",
+        "relation": "unto",
+        "site": {
+          "atlas": "riblah-2"
+        }
+      },
+      "kjv": "And the coast shall go down from Shepham to Riblah, on the east side of Ain; and the border shall descend, and shall reach unto the side of the sea of Chinnereth eastward:",
+      "assessment": "Names and east-of-Ain relation retained; no coordinates."
+    },
+    {
+      "lot": "reuben",
+      "side": "south",
+      "row": {
+        "name": "Aroer by the Arnon",
+        "verse": "JOS.13.16",
+        "relation": "from",
+        "site": {
+          "atlas": "aroer-1"
+        }
+      },
+      "kjv": "And their coast was from Aroer, that is on the bank of the river Arnon, and the city that is in the midst of the river, and all the plain by Medeba;",
+      "assessment": "Aroer and Arnon retained; unnamed river city separately unlocated."
+    },
+    {
+      "lot": "gad",
+      "side": "north",
+      "row": {
+        "name": "Mahanaim",
+        "verse": "JOS.13.26",
+        "relation": "from",
+        "site": {
+          "atlas": "mahanaim"
+        }
+      },
+      "kjv": "And from Heshbon unto Ramath\u2013mizpeh, and Betonim; and from Mahanaim unto the border of Debir;",
+      "assessment": "Mahanaim-to-Debir reference retained; no located course claimed."
+    },
+    {
+      "lot": "judah",
+      "side": "south",
+      "row": {
+        "name": "Kadesh-barnea",
+        "verse": "JOS.15.3",
+        "relation": "south_of",
+        "site": {
+          "atlas": "kadesh-barnea"
+        }
+      },
+      "kjv": "And it went out to the south side to Maaleh\u2013acrabbim, and passed along to Zin, and ascended up on the south side unto Kadesh\u2013barnea, and passed along to Hezron, and went up to Adar, and fetched a compass to Karkaa:",
+      "assessment": "South-of-Kadesh wording retained."
+    },
+    {
+      "lot": "judah",
+      "side": "north",
+      "row": {
+        "name": "Adummim",
+        "verse": "JOS.15.7",
+        "relation": "before",
+        "site": {
+          "atlas": "adummim"
+        }
+      },
+      "kjv": "And the border went up toward Debir from the valley of Achor, and so northward, looking toward Gilgal, that is before the going up to Adummim, which is on the south side of the river: and the border passed toward the waters of En\u2013shemesh, and the goings out thereof were at En\u2013rogel:",
+      "assessment": "F-291: before-Adummim qualifies Gilgal; the flattened reference loses that subject."
+    },
+    {
+      "lot": "ephraim",
+      "side": "north",
+      "row": {
+        "name": "Janohah",
+        "verse": "JOS.16.6",
+        "relation": "east_of",
+        "site": {
+          "atlas": "janoah-1"
+        }
+      },
+      "kjv": "And the border went out toward the sea to Michmethah on the north side; and the border went about eastward unto Taanath\u2013shiloh, and passed by it on the east to Janohah;",
+      "assessment": "F-291: east of Taanath-shiloh on the way to Janohah; east_of is attached to Janohah."
+    },
+    {
+      "lot": "manasseh_west",
+      "side": "northeast",
+      "row": {
+        "name": "Asher",
+        "verse": "JOS.17.10",
+        "relation": "north_of",
+        "site": {
+          "unlocated": "Asher"
+        }
+      },
+      "kjv": "Southward it was Ephraim\u2019s, and northward it was Manasseh\u2019s, and the sea is his border; and they met together in Asher on the north, and in Issachar on the east.",
+      "assessment": "Northern tribal neighbour retained without a drawn course."
+    },
+    {
+      "lot": "benjamin",
+      "side": "south",
+      "row": {
+        "name": "Adummim",
+        "verse": "JOS.18.17",
+        "relation": "before",
+        "site": {
+          "atlas": "adummim"
+        }
+      },
+      "kjv": "And was drawn from the north, and went forth to En\u2013shemesh, and went forth toward Geliloth, which is over against the going up of Adummim, and descended to the stone of Bohan the son of Reuben,",
+      "assessment": "F-291: over-against-Adummim qualifies Geliloth; the flattened reference loses that subject."
+    },
+    {
+      "lot": "naphtali",
+      "side": "south",
+      "row": {
+        "name": "Adami",
+        "verse": "JOS.19.33",
+        "relation": "unto",
+        "site": {
+          "atlas": "adami-nekeb"
+        }
+      },
+      "kjv": "And their coast was from Heleph, from Allon to Zaanannim, and Adami, Nekeb, and Jabneel, unto Lakum; and the outgoings thereof were at Jordan:",
+      "assessment": "Adami and Nekeb remain separate textual names despite their shared atlas id."
+    },
+    {
+      "lot": "dan",
+      "side": "west",
+      "row": {
+        "name": "Japho",
+        "verse": "JOS.19.46",
+        "relation": "before",
+        "site": {
+          "atlas": "joppa"
+        }
+      },
+      "kjv": "And Me\u2013jarkon, and Rakkon, with the border before Japho.",
+      "assessment": "Before-Japho limit retained without asserting possession of Joppa."
+    }
+  ]
+}
