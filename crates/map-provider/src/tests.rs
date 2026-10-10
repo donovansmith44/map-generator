@@ -3,6 +3,7 @@
 //! canon provider carries the contract now, morphs included.
 
 use map_types::style::*;
+use map_types::license::{Credit, Credited, License};
 
 pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
     let s = |c, w, p| Stroke { color: c, width: w, pattern: p };
@@ -68,11 +69,13 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     }
 }
 
 mod canon_provider_laws {
+    use map_types::license::{Credit, Credited, License};
     use std::collections::{BTreeMap, BTreeSet};
 
     use atlas_graph_types::covenant::{PlaceId, SourceId, TimePoint, Year};
@@ -211,10 +214,18 @@ mod canon_provider_laws {
         store
     }
 
+    fn square(lat0: f64, lon0: f64, d: f64) -> map_canon::Border {
+        map_canon::Border(vec![uv(lat0, lon0), uv(lat0, lon0 + d), uv(lat0 + d, lon0 + d), uv(lat0 + d, lon0)])
+    }
+
     fn provider() -> (CanonProvider, StyleId) {
         let s = style();
         let sid = s.id();
-        let gaz = GazetteerExport {
+        (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gazetteer())), sid)
+    }
+
+    fn gazetteer() -> GazetteerExport {
+        GazetteerExport {
             atlas_root: atlas_graph_types::covenant::ContentHash(0),
             places: [
                 ("antioch", 36.2, 36.16, "Antioch"),
@@ -232,8 +243,7 @@ mod canon_provider_laws {
                 })
             })
             .collect(),
-        };
-        (CanonProvider::new(fixture(), BTreeMap::from([(sid, s)]), Some(gaz)), sid)
+        }
     }
 
     /// The piece-set spelling of the legacy default flags
@@ -259,7 +269,7 @@ mod canon_provider_laws {
         RenderQuery {
             subject: RenderSubject::World,
             time: TimeSelector::At(ts(y)),
-            viewport: None,
+            camera: None,
             lod: Lod::exact(),
             pieces,
             style: sid,
@@ -277,15 +287,15 @@ mod canon_provider_laws {
         let assyria = scene
             .regions
             .iter()
-            .find(|r| r.sources.contains(&SourceId::new("witness:atlas")))
+            .find(|r| r.sources.names("witness:atlas"))
             .expect("assyria realized");
-        assert!(assyria.sources.contains(&SourceId::new("scripture")), "atlas truth is scripture-grounded");
+        assert!(assyria.sources.names("scripture"), "atlas truth is scripture-grounded");
         assert!(
             scene.labels.iter().any(|l| l.text == "Assyria"),
             "areas carry their names"
         );
         assert!(
-            scene.regions.iter().any(|r| r.sources.contains(&SourceId::new("witness:natural-earth"))),
+            scene.regions.iter().any(|r| r.sources.names("witness:natural-earth")),
             "water rides along"
         );
 
@@ -315,7 +325,7 @@ mod canon_provider_laws {
             scene
                 .regions
                 .iter()
-                .position(|r| r.sources.contains(&SourceId::new(witness)))
+                .position(|r| r.sources.names(witness))
                 .unwrap_or_else(|| panic!("{witness} region present"))
         };
         let land = idx_of("witness:atlas");
@@ -425,7 +435,7 @@ mod canon_provider_laws {
         q.pieces = q.pieces.with(Piece::Ground);
         let scene = p.render(&q).unwrap();
         let idx_of = |w: &str| {
-            scene.regions.iter().position(|r| r.sources.contains(&SourceId::new(w)))
+            scene.regions.iter().position(|r| r.sources.names(w))
                 .unwrap_or_else(|| panic!("{w} region present"))
         };
         assert!(
@@ -435,6 +445,192 @@ mod canon_provider_laws {
     }
 
     /// Partial journeys, typed: mid-first-leg the road shows clipped;
+    /// The delta between two moments is a fact about the world, not a
+    /// dress: a provider that knows no style still animates it.
+    #[test]
+    fn the_delta_needs_no_style() {
+        let p = CanonProvider::new(fixture(), BTreeMap::new(), Some(gazetteer()));
+        let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
+        let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+    }
+
+    /// The scene the provider renders keeps the one-name law the
+    /// validator states.
+    #[test]
+    fn a_rendered_scene_names_each_thing_once() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, 49)).unwrap();
+        assert!(map_types::laws::validate_scene_names(&scene).is_empty());
+    }
+
+    /// The scene tier is a composition of the fact tier: every region,
+    /// border and marker the provider draws says which layer and
+    /// entity of the canon drew it and which borders it is made of.
+    #[test]
+    fn every_drawn_element_traces_to_its_disposition_and_borders() {
+        let (p, sid) = provider();
+        let scene = p.render(&world_q(sid, 47)).unwrap();
+        assert!(!scene.regions.is_empty() && !scene.boundaries.is_empty() && !scene.markers.is_empty());
+        for r in &scene.regions {
+            let t = r.trace.as_ref().expect("a region traces");
+            assert_eq!(t.entity, r.entity.clone().unwrap());
+            assert!(matches!(t.layer.as_str(), "territory" | "water"), "{}", t.layer);
+            assert_eq!(t.borders.len(), r.outer.len() + r.holes.len(), "one border per ring");
+        }
+        for b in &scene.boundaries {
+            let t = b.trace.as_ref().expect("a boundary traces");
+            assert!(!t.borders.is_empty());
+        }
+        for m in &scene.markers {
+            let t = m.trace.as_ref().expect("a marker traces");
+            assert_eq!(t.layer, "journeys");
+        }
+    }
+
+    /// The animation is the scene delta: what the destination has and
+    /// the origin lacks fades in, the converse fades out, and the road
+    /// back is the road there reversed.
+    #[test]
+    fn the_plan_is_the_scene_delta() {
+        let (_, sid) = provider();
+        let mut store = fixture();
+        let brief = {
+            let b = store.insert_border(square(20.0, 50.0, 2.0));
+            store.insert_feature(Feature::Area(Area {
+                entity: EntityId("brief".into()),
+                name: "Brief".into(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }))
+        };
+        let with = store.insert_snapshot(Snapshot { features: BTreeSet::from([brief]) });
+        let without = store.insert_snapshot(Snapshot { features: BTreeSet::new() });
+        let mut world = World::default();
+        world.insert(ts(-1450), with).unwrap();
+        world.insert(ts(-1420), without).unwrap();
+        store.set_layer(LayerKind::Background, world);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
+        let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        let fall = p.transition(ts(-1500), ts(-800), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(fall.steps, vec![map_types::TransitionStep::FadeOut { region: assyria }]);
+        let back = p.transition(ts(-800), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert_eq!(back.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        let still = p.transition(ts(-1500), ts(-1200), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        assert!(still.steps.is_empty(), "a region that rose and fell within the span is no difference between its ends: {:?}", still.steps);
+    }
+
+    /// A border that moves morphs along its real path: at least as many
+    /// points as the border is drawn with at the destination.
+    #[test]
+    fn a_morph_carries_the_drawn_border() {
+        let (_, sid) = provider();
+        let mut store = CanonStore::default();
+        let mut moment = |store: &mut CanonStore, world: &mut World, y: i32, lat: f64| {
+            let b = store.insert_border(square(lat, 40.0, 6.0));
+            let isle = store.insert_border(square(lat + 8.0, 40.0, 2.0));
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId("moab".into()),
+                name: "Moab".into(),
+                rings: BTreeSet::from([b, isle]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }));
+            let s = store.insert_snapshot(Snapshot { features: BTreeSet::from([fid]) });
+            world.insert(ts(y), s).unwrap();
+        };
+        let mut world = World::default();
+        moment(&mut store, &mut world, -100, 30.0);
+        moment(&mut store, &mut world, -50, 33.0);
+        store.set_layer(LayerKind::Territory, world);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let plan = p.transition(ts(-100), ts(-50), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
+        let after = p.render(&world_q_pieces(sid, -50, PieceSet::empty().with(Piece::Fills).with(Piece::Borders))).unwrap();
+        let drawn: usize = after.boundaries.iter().map(|b| map_types::densify_edges(&b.pts, true).len()).sum();
+        assert_eq!(plan.steps.len(), 1, "one morph, no fades: {:?}", plan.steps.len());
+        match &plan.steps[0] {
+            map_types::TransitionStep::Morph { from_pts, to_pts, .. } => {
+                assert_eq!(from_pts.len(), to_pts.len());
+                assert!(to_pts.len() >= drawn, "morph {} >= drawn {drawn}", to_pts.len());
+                assert!(to_pts.len() > 2, "not a stick figure");
+            }
+            other => panic!("expected a morph, got {other:?}"),
+        }
+    }
+
+    /// A place is named once per scene however many roads pass through
+    /// it and whether or not it also stands as a city: the road's
+    /// station and the gazetteer's dot are one place, and the wire
+    /// speaks its id once, without a doubled prefix.
+    #[test]
+    fn a_place_is_named_once_however_many_roads_pass_through_it() {
+        let (p, sid) = provider();
+        let mut store = fixture();
+        let ephesus = store.insert_feature(Feature::Point(map_canon::Landmark {
+            entity: EntityId("place:ephesus".into()),
+            name: "Ephesus".into(),
+            at: uv(37.9, 27.3),
+        }));
+        let sc = store.insert_snapshot(Snapshot { features: BTreeSet::from([ephesus]) });
+        let mut claims = World::default();
+        claims.insert(ts(-4004), sc).unwrap();
+        store.set_layer(LayerKind::ScriptureClaims, claims);
+        let road = store.insert_border(map_canon::Border(vec![uv(41.89, 12.49), uv(37.9, 27.3)]));
+        let back = store.insert_feature(Feature::Way(Route {
+            entity: EntityId("atlas:back".into()),
+            name: "back".into(),
+            legs: vec![Leg { from: PlaceId::new("rome".to_string()), to: PlaceId::new("ephesus".to_string()),
+                             border: road, span: (ts(48), ts(49)) }],
+        }));
+        let sj = store.insert_snapshot(Snapshot { features: BTreeSet::from([back]) });
+        let mut journeys = World::default();
+        journeys.insert(ts(45), sj).unwrap();
+        store.set_layer(LayerKind::Journeys, journeys);
+        let _ = p;
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let scene = p.render(&world_q(sid, 49)).unwrap();
+        let ephesus_names: Vec<&map_types::PlacedLabel> = scene
+            .labels
+            .iter()
+            .filter(|l| matches!(&l.subject, map_types::scene::LabelSubject::Place(pl) if pl.0 .0 == "ephesus"))
+            .collect();
+        assert_eq!(ephesus_names.len(), 1, "one name for Ephesus: {:?}", scene.labels.iter().map(|l| format!("{:?}", l.subject)).collect::<Vec<_>>());
+        assert!(!scene.labels.iter().any(|l| matches!(&l.subject, map_types::scene::LabelSubject::Place(pl) if pl.0 .0.starts_with("place:"))), "no doubled prefix");
+        assert!(scene.markers.iter().any(|m| m.place.as_ref().is_some_and(|pl| pl.0 .0 == "ephesus")), "the marker speaks the same id");
+    }
+
+    /// One entity, one name per scene: an entity two witnesses drew
+    /// into two layers is labeled once.
+    #[test]
+    fn a_region_is_named_once_however_many_layers_draw_it() {
+        let (_, sid) = provider();
+        let mut store = fixture();
+        let mut area = |store: &mut CanonStore, layer, lat: f64| {
+            let b = store.insert_border(square(lat, 34.0, 1.0));
+            let fid = store.insert_feature(Feature::Area(Area {
+                entity: EntityId("judea".into()),
+                name: "Judea".into(),
+                rings: BTreeSet::from([b]),
+                holes: BTreeSet::new(),
+                tenure: map_canon::Tenure::Held,
+            }));
+            let s = store.insert_snapshot(Snapshot { features: BTreeSet::from([fid]) });
+            let mut w = World::default();
+            w.insert(ts(-4004), s).unwrap();
+            store.set_layer(layer, w);
+        };
+        area(&mut store, LayerKind::Background, 31.0);
+        area(&mut store, LayerKind::ScriptureClaims, 31.5);
+        let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
+        let scene = p.render(&world_q(sid, 30)).unwrap();
+        let judea = scene.labels.iter().filter(|l| l.text == "Judea").count();
+        assert_eq!(judea, 1, "one entity, one name");
+        assert_eq!(scene.regions.iter().filter(|r| r.entity.as_deref() == Some("judea")).count(), 2, "both witnesses' ground is drawn");
+    }
+
     /// stations appear as reached, named from the gazetteer; outside
     /// the span, no way at all.
     #[test]
@@ -445,7 +641,7 @@ mod canon_provider_laws {
             scene
                 .boundaries
                 .iter()
-                .find(|b| b.sources.contains(&SourceId::new("witness:atlas")))
+                .find(|b| b.sources.names("witness:atlas"))
                 .map(|b| b.pts.len())
         };
         assert_eq!(way_pts(44), None, "not yet departed");
@@ -473,9 +669,7 @@ mod canon_provider_laws {
             .unwrap();
         assert_eq!(only.regions.len(), 1, "just assyria");
         assert!(only.labels.iter().any(|l| l.text == "Assyria"));
-        assert!(only.regions[0]
-            .sources
-            .contains(&atlas_graph_types::covenant::SourceId::new("witness:atlas")));
+        assert!(only.regions[0].sources.names("witness:atlas"));
     }
 
     /// A canon that puts SOMETHING in every piece: relief bands
@@ -984,7 +1178,7 @@ mod memory_laws {
             .render(&RenderQuery {
                 subject: RenderSubject::World,
                 time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
-                viewport: None,
+                camera: None,
                 lod: Lod(0.0),
                 pieces: PieceSet::empty()
                     .with(Piece::Fills)
@@ -1050,11 +1244,11 @@ mod scaling_laws {
         store
     }
 
-    fn q(lod: f64, viewport: Option<Bbox>) -> RenderQuery {
+    fn q(lod: f64, camera: Option<map_types::camera::Camera>) -> RenderQuery {
         RenderQuery {
             subject: RenderSubject::World,
             time: TimeSelector::At(TimePoint::year_only(Year::new(-1000).unwrap())),
-            viewport,
+            camera,
             lod: Lod(lod),
             pieces: PieceSet::empty()
                 .with(Piece::Fills)
@@ -1091,52 +1285,31 @@ mod scaling_laws {
         );
     }
 
-    /// THE WORLD BEYOND THE CAMERA STAYS WHOLE — AND COARSE. A far
-    /// area is never culled (the retained world has no holes to punch)
-    /// but ships at the hemisphere's derived detail, while the ground
-    /// under the camera refines at the query's own tolerance.
+    /// THE WORLD BEYOND THE VIEW IS NOT SENT. An area whose cap cannot
+    /// reach the view never leaves the provider; the ground the view
+    /// can reach ships at the query's own detail, whatever the camera.
     #[test]
-    fn the_world_beyond_the_camera_arrives_coarse() {
+    fn the_world_beyond_the_view_is_not_sent() {
         let p = provider(store_with(&[
             ("near", dense_ring(28.0, 30.0, 10.0, 64)),
+            ("edge", dense_ring(20.0, 50.0, 10.0, 64)),
             ("far", dense_ring(-45.0, -120.0, 10.0, 64)),
         ]));
-        let view = Bbox {
-            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
-            radius: 10f64.to_radians(),
-        };
+        let view = map_types::camera::Camera::new(map_types::camera::ChartKind::Globe, 32.0, 35.0, 10.0 / 1.8, 1200.0);
         let fine = 1e-4;
-        // mirror of the provider's derivation: the same page at the
-        // hemisphere's 90° half-extent
-        let floor = (fine * (std::f64::consts::FRAC_PI_2 / (view.radius / 1.8))).min(0.01);
-        let pts_of = |scene: &map_types::Snapshot, name: &str| -> usize {
+        let pts_of = |scene: &map_types::Snapshot, name: &str| -> Option<usize> {
             scene
                 .regions
                 .iter()
                 .find(|r| r.entity.as_deref() == Some(name))
-                .unwrap_or_else(|| panic!("{name} present — the world stays whole"))
-                .outer
-                .iter()
-                .map(|ring| ring.points().len())
-                .sum()
+                .map(|r| r.outer.iter().map(|ring| ring.points().len()).sum())
         };
         let with_view = p.render(&q(fine, Some(view))).unwrap();
         let fine_all = p.render(&q(fine, None)).unwrap();
-        let coarse_all = p.render(&q(floor, None)).unwrap();
-        assert_eq!(
-            pts_of(&with_view, "near"),
-            pts_of(&fine_all, "near"),
-            "inside the cap: the query's own detail"
-        );
-        assert_eq!(
-            pts_of(&with_view, "far"),
-            pts_of(&coarse_all, "far"),
-            "beyond the cap: exactly the derived hemisphere floor"
-        );
-        assert!(
-            pts_of(&coarse_all, "far") < pts_of(&fine_all, "far"),
-            "the floor genuinely coarsens this geometry"
-        );
+        assert_eq!(pts_of(&with_view, "near"), pts_of(&fine_all, "near"), "in view: the query's own detail");
+        assert_eq!(pts_of(&with_view, "edge"), pts_of(&fine_all, "edge"), "within the margin: kept whole for the encoder's exact cut");
+        assert_eq!(pts_of(&with_view, "far"), None, "beyond the view's reach: not sent");
+        assert!(pts_of(&fine_all, "far").is_some(), "with no view the whole world is sent");
     }
 
     /// The whole-sphere sentinel is never culled: its cap covers the
@@ -1149,10 +1322,7 @@ mod scaling_laws {
             UnitVec::from_lat_lon_deg(1.0, -90.0),
         ];
         let p = provider(store_with(&[("world", sentinel)]));
-        let view = Bbox {
-            center: UnitVec::from_lat_lon_deg(32.0, 35.0),
-            radius: 5f64.to_radians(),
-        };
+        let view = map_types::camera::Camera::new(map_types::camera::ChartKind::Globe, 32.0, 35.0, 5.0 / 1.8, 1200.0);
         let scene = p.render(&q(0.0, Some(view))).unwrap();
         assert!(
             scene.regions.iter().any(|r| r.entity.as_deref() == Some("world")),
@@ -1175,6 +1345,24 @@ mod scaling_laws {
             names.contains(&"speck".to_string()),
             "a sub-tolerance territory survives a coarse query (got {names:?})"
         );
+    }
+
+    /// Detail is monotone: a territory below the resolvable limit still
+    /// ships for its identity, but as the coarsest shape simplification
+    /// itself would draw, three points, never its unsimplified ring,
+    /// so leaning out never carries more vertices than leaning in.
+    #[test]
+    fn a_below_limit_ring_ships_as_a_three_point_stand_in() {
+        let p = provider(store_with(&[("speck", dense_ring(31.0, 31.0, 0.05, 16))]));
+        let pts = |lod: f64| -> usize {
+            p.render(&q(lod, None)).unwrap().regions[0].outer.iter().map(|r| r.points().len()).sum()
+        };
+        let coarse = pts(0.05);
+        let fine = pts(1e-6);
+        assert_eq!(coarse, 3, "below the limit the speck is its stand-in");
+        assert!(fine > coarse, "fine ({fine}) carries the ring, coarse ({coarse}) its stand-in");
+        let mid = pts(2e-4);
+        assert!(coarse <= mid && mid <= fine, "monotone across the rungs: {coarse} <= {mid} <= {fine}");
     }
 
     /// The counterpart law: only a feature's IDENTITY holds the

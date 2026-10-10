@@ -28,6 +28,12 @@ use crate::transition::*;
 
 // ---------------------------------------------------------------- fixtures
 
+/// A test source under terms that ask nothing, so a law about something
+/// else is never really a law about licensing.
+fn cred(name: impl Into<String>) -> crate::license::Credit {
+    crate::license::Credit::new(SourceId::new(name), crate::license::License::Cc0)
+}
+
 
 fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
     const TV: crate::style::TypeVoice = crate::style::TypeVoice {
@@ -53,6 +59,7 @@ fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     }
 }
@@ -191,13 +198,14 @@ fn honest_style() -> Style {
 fn marker_scene(tag: u8) -> Snapshot {
     let mut sc = Snapshot::empty();
     sc.markers.push(StyledMarker {
+            trace: None,
         at: uv(f64::from(tag), f64::from(tag)),
         style: MarkerStyle { color: Rgba(tag, tag, tag, 255), size: 3.0 },
         sources: Default::default(),
         place: None,
         piece: crate::piece::Piece::Markers,
     });
-    sc.attribution.insert(SourceId::new(format!("src-{tag}")));
+    sc.attribution.insert(cred(format!("src-{tag}")));
     sc
 }
 
@@ -271,7 +279,7 @@ fn law01_query_determinism() {
     let q = RenderQuery {
         subject: RenderSubject::Region(A),
         time: TimeSelector::At(tp(-586)),
-        viewport: None,
+        camera: None,
         lod: Lod(0.001),
         pieces: crate::piece::PieceSet::empty()
             .with(crate::piece::Piece::Fills)
@@ -634,12 +642,13 @@ fn law10_selection_coherence() {
     let region_scene = |id: RegionId, name: &str, lat: f64| -> Snapshot {
         let mut sc = Snapshot::empty();
         sc.regions.push(StyledRegion {
+            trace: None,
             region: id,
             entity: None,
             outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
             holes: vec![],
             paint: style.region_paint(),
-            sources: [SourceId::new("historical-source")].into(),
+            sources: [cred("historical-source")].into(),
             piece: crate::piece::Piece::Fills,
         });
         sc.labels.push(PlacedLabel {
@@ -658,7 +667,7 @@ fn law10_selection_coherence() {
             },
             piece: crate::piece::Piece::Labels,
         });
-        sc.attribution.insert(SourceId::new("historical-source"));
+        sc.attribution.insert(cred("historical-source"));
         sc
     };
     let a = region_scene(A, "Westland", 0.0);
@@ -843,6 +852,7 @@ fn labeling_voice_follows_face() {
             memory_scale: 0.85,
             station_scale: 0.8,
             city_scale: 0.85,
+            overflow_em: 0.5,
         },
     };
     assert_eq!(l.voice(LabelFace::Territory).family, "serif-t");
@@ -1196,4 +1206,276 @@ fn piece_set_is_a_monoid_over_pieces_and_round_trips() {
     // a wrong name is refused BY NAME -- not silently dropped
     assert!(PieceSet::parse("ground, topografy").is_err());
     assert!(PieceSet::parse("ground, topografy").unwrap_err().contains("topografy"));
+}
+
+mod consolidation_laws {
+    use crate::camera::{Camera, ChartKind};
+    use crate::scene::{Ground, LabelSubject, PlacedLabel, Snapshot, StyledRegion};
+    use crate::{MapAddressed, Monoid, Piece, Ring, UnitVec};
+
+    fn uv(lat: f64, lon: f64) -> UnitVec {
+        UnitVec::from_lat_lon_deg(lat, lon)
+    }
+
+    /// The camera is part of the query's identity: two queries that
+    /// differ only in where they look are two answers.
+    #[test]
+    fn a_query_is_addressed_by_its_camera() {
+        let mut q = crate::RenderQuery {
+            subject: crate::RenderSubject::World,
+            time: crate::TimeSelector::At(atlas_graph_types::covenant::TimePoint::year_only(atlas_graph_types::covenant::Year::new(-1405).unwrap())),
+            camera: None,
+            lod: crate::Lod(0.001),
+            pieces: crate::PieceSet::empty().with(Piece::Fills),
+            style: crate::StyleId(atlas_graph_types::covenant::ContentHash(7)),
+        };
+        let a = q.map_pid();
+        q.camera = Some(Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0));
+        let b = q.map_pid();
+        q.camera = Some(Camera::new(ChartKind::Globe, 31.5, 35.0, 8.0, 1200.0));
+        let c = q.map_pid();
+        assert_ne!(a, b);
+        assert_ne!(b, c);
+    }
+
+    fn land(n: u64, lat: f64, lon: f64, d: f64, piece: Piece) -> StyledRegion {
+        StyledRegion {
+            region: crate::RegionId(atlas_graph_types::covenant::ContentHash(n)),
+            entity: Some(format!("e{n}")),
+            outer: vec![Ring::new(vec![uv(lat, lon), uv(lat, lon + d), uv(lat + d, lon + d), uv(lat + d, lon)]).unwrap()],
+            holes: vec![],
+            paint: crate::style::Paint { fill: crate::style::Rgba(1, 1, 1, 255) },
+            sources: Default::default(),
+            piece,
+            trace: None,
+        }
+    }
+
+    /// What a point stands on is the scene's own question: the topmost
+    /// land or claim drawn under it, or ground nothing claims.
+    #[test]
+    fn a_snapshot_says_what_ground_a_point_stands_on() {
+        let mut s = Snapshot::empty();
+        s.regions.push(land(1, 0.0, 0.0, 10.0, Piece::Fills));
+        s.regions.push(land(2, 2.0, 2.0, 2.0, Piece::Claims));
+        s.regions.push(land(3, 20.0, 20.0, 2.0, Piece::Water));
+        assert_eq!(s.ground_at(&uv(3.0, 3.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(2))), "the claim painted on top");
+        assert_eq!(s.ground_at(&uv(8.0, 8.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(1))));
+        assert_eq!(s.ground_at(&uv(21.0, 21.0)), Ground::Unclaimed, "water is not ground");
+        assert_eq!(s.ground_at(&uv(-5.0, -5.0)), Ground::Unclaimed);
+    }
+
+    /// One thing, one name: a scene that names a subject twice breaks a
+    /// law the validator names, never a habit the provider keeps.
+    #[test]
+    fn naming_a_thing_twice_is_a_violation() {
+        let name = |subject| PlacedLabel {
+            text: "X".into(),
+            at: uv(0.0, 0.0),
+            subject,
+            style: crate::style::LabelStyle { color: crate::style::Rgba(0, 0, 0, 255), halo: crate::style::Rgba(255, 255, 255, 255), size: 12.0, halo_width_em: 0.24 },
+            face: crate::style::LabelFace::Place,
+            voice: crate::style::TypeVoice { family: "serif", weight: 400, italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.6 },
+            piece: Piece::Labels,
+        };
+        let place = |id: &str| LabelSubject::Place(crate::AtlasPlaceRef(atlas_graph_types::covenant::PlaceId::new(id.to_string())));
+        let mut s = Snapshot::empty();
+        s.labels.push(name(place("gaza")));
+        s.labels.push(name(place("sidon")));
+        assert!(crate::laws::validate_scene_names(&s).is_empty());
+        s.labels.push(name(place("gaza")));
+        assert_eq!(crate::laws::validate_scene_names(&s), vec![crate::laws::Violation::NamedTwice { subject: "place:gaza".into() }]);
+    }
+}
+
+mod camera_laws {
+    use crate::camera::{Camera, ChartKind};
+
+    #[test]
+    fn the_view_cap_is_the_zoom_with_the_declared_margin_and_the_server_clamps() {
+        let reach = crate::camera::served_reach_deg;
+        let c = Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0);
+        assert!((c.cap().radius - reach(4.0).to_radians()).abs() < 1e-12);
+        let wide = Camera::new(ChartKind::Globe, 0.0, 0.0, 90.0, 1200.0);
+        assert!((wide.cap().radius - reach(90.0).to_radians().min(std::f64::consts::PI)).abs() < 1e-12);
+        let tiny = Camera::new(ChartKind::Globe, 0.0, 0.0, 0.001, 1200.0);
+        assert!((tiny.cap().radius - reach(0.05).to_radians()).abs() < 1e-12, "zoom is clamped before the reach is derived");
+        let polar = Camera::new(ChartKind::Globe, 90.0, 0.0, 4.0, 1200.0);
+        assert_eq!(polar.lat, 89.9, "latitude is clamped the way the wire clamps it");
+    }
+
+    #[test]
+    fn a_style_refuses_a_negative_or_unbounded_overflow() {
+        let mut spec = crate::tests::honest_style_parts();
+        spec.labeling.scale.overflow_em = -0.1;
+        assert!(crate::style::Style::new(spec).is_err());
+        spec.labeling.scale.overflow_em = f64::INFINITY;
+        assert!(crate::style::Style::new(spec).is_err());
+        spec.labeling.scale.overflow_em = 0.0;
+        assert!(crate::style::Style::new(spec).is_ok());
+    }
+}
+
+mod demand_envelope_laws {
+    use crate::camera::{Camera, ChartKind};
+
+    /// The view cap covers everything the page can show at the camera
+    /// it asks with: the page rounds its zoom down to a half-octave
+    /// step and its centre onto a grid of 40% of the zoom, never finer
+    /// than a tenth of a degree, so the true view's farthest corner
+    /// lies within 2^(1/4) x sqrt(2) x zoom of the asked centre plus
+    /// that grid's own diagonal.
+    #[test]
+    fn the_view_cap_covers_the_pages_demand_envelope() {
+        for zoom in [0.05, 0.1, 0.125, 0.3, 1.0, 4.0, 22.0, 45.0, 90.0] {
+            let cap = Camera::new(ChartKind::Globe, 31.5, 35.0, zoom, 1200.0).cap().radius.to_degrees();
+            let corner = zoom * 2f64.powf(0.25) * 2f64.sqrt();
+            let grid = (0.4 * zoom).max(0.1) / 2f64.sqrt();
+            let needed = (corner + grid).min(180.0);
+            assert!(cap >= needed - 1e-9, "zoom {zoom}: cap {cap:.3} degrees covers {needed:.3}");
+            let one_pan = (corner + grid + (0.4 * zoom).max(0.1) * 2f64.sqrt()).min(180.0);
+            assert!(cap >= one_pan - 1e-9, "zoom {zoom}: cap {cap:.3} degrees reaches a neighbouring cell's envelope {one_pan:.3}");
+        }
+    }
+}
+
+// ------------------------------------- law 6a: provenance carries terms
+
+/// Law 6 says provenance is total: every drawn thing names where it came
+/// from. That is only half an answer. A consumer redistributing the scene
+/// must also know what each source PERMITS, and the atlas that consumes us
+/// has a hard free-and-open-source requirement it cannot check against a
+/// name alone. So a source and its terms travel together or not at all.
+mod licensing_laws {
+    use crate::license::{Credit, License};
+    use atlas_graph_types::covenant::SourceId;
+
+    /// The ladder, whole: every license this canon can carry, in order of
+    /// what it asks of a redistributor, with both obligations pinned.
+    #[test]
+    fn every_license_names_its_terms_and_what_they_require() {
+        let ids: Vec<&str> = License::ALL.iter().map(|l| l.id()).collect();
+        assert_eq!(
+            ids,
+            vec![
+                "public-domain",
+                "CC0-1.0",
+                "CC-BY-4.0",
+                "CC-BY-SA-3.0",
+                "CC-BY-SA-4.0",
+                "ODbL-1.0",
+                "GPL-3.0-only",
+            ]
+        );
+        let credit: Vec<bool> = License::ALL.iter().map(|l| l.credit_required()).collect();
+        assert_eq!(credit, vec![false, false, true, true, true, true, true]);
+        let sa: Vec<bool> = License::ALL.iter().map(|l| l.share_alike()).collect();
+        assert_eq!(sa, vec![false, false, false, true, true, true, true]);
+    }
+
+    /// The ladder is monotone: nothing that demands share-alike fails to
+    /// demand credit. A license that asked for the harder thing and not
+    /// the easier one would be a classification error, not a license.
+    #[test]
+    fn share_alike_never_comes_without_credit() {
+        for l in License::ALL {
+            assert!(
+                !l.share_alike() || l.credit_required(),
+                "{} asks for share-alike without credit",
+                l.id()
+            );
+        }
+    }
+
+    /// A scene answers the licensing question about ITSELF, derived from
+    /// what it actually draws rather than asserted beside it. This is the
+    /// question the consuming atlas has, and the only honest answer to it
+    /// is a function of the picture.
+    #[test]
+    fn a_scene_reports_the_terms_of_everything_it_draws() {
+        let sc = super::two_origin_scene();
+        assert_eq!(
+            sc.licenses(),
+            [License::PublicDomain, License::Gpl3].into_iter().collect()
+        );
+        assert!(sc.requires_share_alike());
+    }
+
+    /// The mechanism a permissive-only consumer needs: ask for the scene
+    /// you may redistribute and get exactly that. What you may not keep is
+    /// gone, its terms are gone with it, and the name it carried goes too.
+    #[test]
+    fn a_scene_under_permitted_terms_drops_what_it_may_not_redistribute() {
+        let sc = super::two_origin_scene();
+        let permissive: std::collections::BTreeSet<License> =
+            License::ALL.iter().copied().filter(|l| !l.share_alike()).collect();
+        let cut = sc.under(&permissive);
+
+        assert_eq!(cut.regions.len(), 1, "only the public-domain region survives");
+        assert_eq!(cut.regions[0].region, super::A);
+        assert_eq!(cut.licenses(), [License::PublicDomain].into_iter().collect());
+        assert!(!cut.requires_share_alike());
+        assert_eq!(
+            cut.labels.len(),
+            1,
+            "the dropped region's name goes with it; the kept region keeps its own"
+        );
+        assert_eq!(cut.labels[0].text, "Westland");
+
+        // and asking for everything is the scene unchanged
+        let all: std::collections::BTreeSet<License> = License::ALL.into_iter().collect();
+        assert_eq!(sc.under(&all), sc);
+    }
+
+    /// The point of the type: a source cannot be named without its terms.
+    /// `Credit` is the only way attribution is ever extended, so a scene
+    /// that draws a thing always knows what redistributing it requires.
+    #[test]
+    fn a_credit_binds_a_source_to_its_terms() {
+        let c = Credit::new(SourceId::new("historical-basemaps"), License::Gpl3);
+        assert_eq!(c.source, SourceId::new("historical-basemaps"));
+        assert_eq!(c.license, License::Gpl3);
+        assert!(c.license.share_alike());
+        assert!(c.license.credit_required());
+    }
+}
+
+/// Two regions from two origins with different terms: one public domain,
+/// one under the GPL basemap corpus. Each carries its own name.
+fn two_origin_scene() -> Snapshot {
+    use crate::license::{Credit, License};
+    let style = honest_style();
+    let mut sc = Snapshot::empty();
+    let mut push = |id: RegionId, name: &str, lat: f64, credit: Credit| {
+        sc.regions.push(StyledRegion {
+            trace: None,
+            region: id,
+            entity: None,
+            outer: vec![Ring::new(vec![uv(lat, 0.0), uv(lat, 5.0), uv(lat + 5.0, 2.5)]).unwrap()],
+            holes: vec![],
+            paint: style.region_paint(),
+            sources: [credit.clone()].into(),
+            piece: crate::piece::Piece::Fills,
+        });
+        sc.labels.push(PlacedLabel {
+            text: name.to_string(),
+            at: uv(lat + 2.0, 2.5),
+            subject: LabelSubject::Region(id),
+            style: style.label_style(),
+            face: crate::scene::LabelFace::Place,
+            voice: crate::style::TypeVoice {
+                family: "sans-serif",
+                weight: 600,
+                italic: false,
+                uppercase: false,
+                tracking_em: 0.0,
+                advance_em: 0.62,
+            },
+            piece: crate::piece::Piece::Labels,
+        });
+        sc.attribution.insert(credit);
+    };
+    push(A, "Westland", 0.0, Credit::new(SourceId::new("natural-earth"), License::PublicDomain));
+    push(B, "Eastland", 20.0, Credit::new(SourceId::new("historical-basemaps"), License::Gpl3));
+    sc
 }

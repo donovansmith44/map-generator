@@ -68,6 +68,10 @@ fn witness_name(w: &Witness) -> &'static str {
         Witness::Authored => "authored",
         Witness::Basemap => "basemap",
         Witness::NaturalEarth => "natural-earth",
+        Witness::OpenBible => "openbible",
+        Witness::Osm => "osm",
+        Witness::Wikimedia => "wikimedia",
+        Witness::Partition => "partition",
     }
 }
 
@@ -77,6 +81,10 @@ fn witness_from(s: &str) -> Result<Witness, String> {
         "authored" => Witness::Authored,
         "basemap" => Witness::Basemap,
         "natural-earth" => Witness::NaturalEarth,
+        "openbible" => Witness::OpenBible,
+        "osm" => Witness::Osm,
+        "wikimedia" => Witness::Wikimedia,
+        "partition" => Witness::Partition,
         other => return Err(format!("unknown witness '{other}'")),
     })
 }

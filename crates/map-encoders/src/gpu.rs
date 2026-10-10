@@ -3,8 +3,9 @@
 //! of a picture. The SVG encoder answers "what does this camera see";
 //! this one answers "what does a retained renderer need resident" —
 //! a manifest of semantic references plus content-addressed binary
-//! geometry payloads, so a camera change downstream is a uniform
-//! update, never a re-encode (§R1/§R2).
+//! geometry payloads. Asked at a view, the manifest carries what that
+//! view can reach and where its names sit; asked at none, the whole
+//! world, unplaced.
 //!
 //! Laws carried here:
 //! - the manifest holds NO projected vertices, no rasterized frame,
@@ -22,9 +23,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt::Write as _;
 use std::hash::{Hash, Hasher};
 
+use map_types::camera::{Camera, ChartKind, DESIGN_WIDTH};
 use map_types::ident::{Canon, ContentHash};
 use map_types::style::{Rgba, StrokePattern};
 use map_types::{EncodeError, MapAddressed, Piece, SceneEncoder, Snapshot, UnitVec};
+
+use crate::layout::{self, Projector};
 
 /// A rendering representation's content address (§7): kind + payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -72,6 +76,18 @@ pub struct SphericalBounds {
     pub radius: f64,
 }
 
+impl SphericalBounds {
+    /// In view when this cap meets the view cap; hidden when even its
+    /// nearest point lies more than a quarter turn from the eye. The
+    /// whole-sphere sentinel meets every view and hides from none.
+    pub fn reaches(&self, view: &map_types::Bbox) -> bool {
+        let (x, y, z) = self.center;
+        let dot = (x * view.center.x() + y * view.center.y() + z * view.center.z()).clamp(-1.0, 1.0);
+        let angle = dot.acos();
+        angle <= view.radius + self.radius && angle - self.radius <= std::f64::consts::FRAC_PI_2
+    }
+}
+
 /// Immutable metadata sufficient for caching and residency (§19).
 /// LOD parent/children stay empty until the refinement stages land —
 /// absent, not faked.
@@ -97,6 +113,31 @@ pub struct GeometryResource {
     pub payload: Vec<u8>,
 }
 
+/// Where a manifest entry comes from in the fact tier: a drawn entry
+/// names the disposition (`layer:entity`) that drew it and the borders
+/// it is made of; a standing buffer names every disposition standing
+/// in it; an entry the provider did not trace says nothing.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntryTrace {
+    Drawn { disposition: String, borders: Vec<ContentHash> },
+    Standing { dispositions: Vec<String> },
+    Untraced,
+}
+
+fn disposition_of(t: &Option<map_types::scene::Trace>) -> Option<String> {
+    t.as_ref().map(|t| format!("{}:{}", t.layer, t.entity))
+}
+
+fn drawn_trace(t: &Option<map_types::scene::Trace>, ring: usize) -> EntryTrace {
+    match t {
+        Some(t) => EntryTrace::Drawn {
+            disposition: format!("{}:{}", t.layer, t.entity),
+            borders: t.borders.get(ring).map(|b| vec![*b]).unwrap_or_else(|| t.borders.clone()),
+        },
+        None => EntryTrace::Untraced,
+    }
+}
+
 /// One semantic feature's reference into the resource set (§8). Order
 /// in the manifest is paint order — overlay order is meaning.
 #[derive(Clone, Debug, PartialEq)]
@@ -111,6 +152,7 @@ pub struct FeatureInstance {
     pub geometry: GeometryId,
     pub resource: ResourceId,
     pub style: StyleKey,
+    pub trace: EntryTrace,
 }
 
 /// A compiled paint's content address: the manifest's style table key.
@@ -129,11 +171,34 @@ pub enum GpuStyle {
     Marker { color: Rgba, size: f64 },
 }
 
+/// Where a name's ink sits on the page it was placed for: the box, as
+/// fractions of the page, (0,0) its top-left and (1,1) its bottom-right.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+/// The page an answer placed its names on: the chart, the camera and
+/// the page size, so a reader knows exactly which view the placements
+/// are stated for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct View {
+    pub chart: ChartKind,
+    pub lat: f64,
+    pub lon: f64,
+    pub zoom: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
 /// A label as SEMANTIC data (§46): text, spherical anchor, subject,
-/// the resolved typographic voice, and a deterministic priority.
-/// Placement is renderer work — the manifest never carries a screen
-/// position (§8), and priority is scene order: the style system's own
-/// paint order, no invented ranking (§53).
+/// the resolved typographic voice, a deterministic priority (scene
+/// order, §53), and, when the answer was asked at a view, the
+/// placement its words were settled at, so nothing is left to decide
+/// between the answer and the ink.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LabelResource {
     pub text: String,
@@ -157,6 +222,10 @@ pub struct LabelResource {
     /// ride Journeys, water names ride Water: a label's piece is not
     /// always Labels, so it is carried, never derived downstream.
     pub piece: Piece,
+    pub placement: Option<Placement>,
+    /// What a city stands on ("region:HEX" or "unclaimed"); None for a
+    /// name that is not a place's.
+    pub ground: Option<String>,
 }
 
 /// One marker with its semantic identity — hit testing maps a click
@@ -191,18 +260,28 @@ pub struct ManifestDress {
     pub hatched: (f64, f64),
     /// the focus veil: what the world outside a selection wears
     pub veil: Rgba,
+    /// how far a land name may spill past its shore, in em
+    pub label_overflow_em: f64,
 }
 
 /// The semantic scene manifest (§8): references, not pictures.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneManifest {
     pub scene_revision: ContentHash,
+    /// The view the names were placed for; None when the scene was
+    /// asked at no view, and then no name carries a placement.
+    pub view: Option<View>,
     pub features: Vec<FeatureInstance>,
     pub styles: BTreeMap<StyleKey, GpuStyle>,
     pub labels: Vec<LabelResource>,
     pub markers: Vec<MarkerResource>,
     pub inscriptions: Vec<InscriptionResource>,
     pub dress: ManifestDress,
+    /// EVERY SOURCE THIS PICTURE IS MADE OF, with the terms each is
+    /// available under. Law 6 says provenance is total; a consumer that
+    /// must decide what it may redistribute needs the terms too, and the
+    /// retained renderer's manifest is the answer it actually reads.
+    pub attribution: std::collections::BTreeSet<map_types::license::Credit>,
 }
 
 /// The encoder's whole answer (§18).
@@ -218,6 +297,10 @@ pub struct EncodedScene {
 pub struct GpuSceneEncoder {
     pub paper: map_types::style::Paint,
     pub pattern: map_types::style::PatternGeometry,
+    pub label_overflow_em: f64,
+    /// The view to place names for; None answers a catalogue whose
+    /// names carry no placement.
+    pub camera: Option<Camera>,
 }
 
 impl Default for GpuSceneEncoder {
@@ -225,6 +308,8 @@ impl Default for GpuSceneEncoder {
         GpuSceneEncoder {
             paper: map_types::style::Paint { fill: Rgba(246, 241, 228, 255) },
             pattern: Default::default(),
+            label_overflow_em: 0.5,
+            camera: None,
         }
     }
 }
@@ -371,46 +456,6 @@ fn split_ring_at_antimeridian(pts: &[UnitVec]) -> Vec<Vec<UnitVec>> {
     [clip(true), clip(false)].into_iter().filter(|piece| piece.len() >= 3).collect()
 }
 
-/// Maximum edge length (radians) in a packed resource. A consumer
-/// clipping at the globe's limb folds hidden vertices onto the limb
-/// circle and joins them with chords; the chord's deviation from the
-/// true limb arc is ≈ step²/8 × (page/2). At 0.05 rad and the design
-/// page (1200 px) that is ~0.19 px — under the project's half-pixel
-/// law. Derived, not tuned: a longer step would let a folded chord
-/// cut visibly across the disc and flip fill parity over the lens
-/// between chord and arc (the smeared-continent artifact).
-const MAX_EDGE_STEP: f64 = 0.05;
-
-/// Subdivide long edges along their great circles so no packed edge
-/// exceeds `MAX_EDGE_STEP`. Pure refinement: every original vertex
-/// survives, inserted points lie on the original arcs — the drawn
-/// shape is identical on every chart.
-fn densify_run(pts: &[UnitVec], closed: bool) -> Vec<UnitVec> {
-    let n = pts.len();
-    if n < 2 {
-        return pts.to_vec();
-    }
-    let edges = if closed { n } else { n - 1 };
-    let mut out = Vec::with_capacity(n * 2);
-    for i in 0..edges {
-        let (p, q) = (&pts[i], &pts[(i + 1) % n]);
-        out.push(*p);
-        let angle = p.angle_to(q);
-        if angle > MAX_EDGE_STEP {
-            let steps = (angle / MAX_EDGE_STEP).ceil() as usize;
-            for k in 1..steps {
-                if let Ok(mid) = map_types::slerp(p, q, k as f64 / steps as f64) {
-                    out.push(mid);
-                }
-            }
-        }
-    }
-    if !closed {
-        out.push(pts[n - 1]);
-    }
-    out
-}
-
 /// Packet magic: "MGR1" — map geometry resource, format 1.
 pub const RESOURCE_MAGIC: [u8; 4] = *b"MGR1";
 
@@ -500,7 +545,7 @@ impl GpuSceneEncoder {
         let mut features: Vec<FeatureInstance> = Vec::new();
         let mut styles: BTreeMap<StyleKey, GpuStyle> = BTreeMap::new();
 
-        let mut add = |resources: &mut Vec<GeometryResource>,
+        let add = |resources: &mut Vec<GeometryResource>,
                        seen: &mut BTreeMap<ResourceId, usize>,
                        kind: ResourceKind,
                        pts: &[UnitVec]|
@@ -515,7 +560,7 @@ impl GpuSceneEncoder {
             });
             (id, geom)
         };
-        let mut style_of = |styles: &mut BTreeMap<StyleKey, GpuStyle>, s: GpuStyle| -> StyleKey {
+        let style_of = |styles: &mut BTreeMap<StyleKey, GpuStyle>, s: GpuStyle| -> StyleKey {
             let key = style_key(&s);
             styles.entry(key).or_insert(s);
             key
@@ -528,7 +573,7 @@ impl GpuSceneEncoder {
         // arrive in ring order.
         for r in &scene.regions {
             let sk = style_of(&mut styles, GpuStyle::Fill { color: r.paint.fill });
-            for ring in r.outer.iter().chain(&r.holes) {
+            for (ring_index, ring) in r.outer.iter().chain(&r.holes).enumerate() {
                 for piece in split_ring_at_antimeridian(ring.points()) {
                     // The sentinel stays its raw ≤5 points (its mark IS
                     // covers_sphere); everything else densifies so limb
@@ -536,7 +581,7 @@ impl GpuSceneEncoder {
                     let piece = if map_types::covers_sphere(&piece) {
                         piece
                     } else {
-                        densify_run(&piece, true)
+                        map_types::densify_edges(&piece, true)
                     };
                     let (id, geom) =
                         add(&mut resources, &mut seen, ResourceKind::RingLoop, &piece);
@@ -546,6 +591,7 @@ impl GpuSceneEncoder {
                         geometry: geom,
                         resource: id,
                         style: sk,
+                        trace: drawn_trace(&r.trace, ring_index),
                     });
                 }
             }
@@ -562,7 +608,7 @@ impl GpuSceneEncoder {
                 },
             );
             for piece in split_line_at_antimeridian(&b.pts) {
-                let piece = densify_run(&piece, false);
+                let piece = map_types::densify_edges(&piece, false);
                 let (id, geom) = add(&mut resources, &mut seen, ResourceKind::LineStrip, &piece);
                 features.push(FeatureInstance {
                     feature: format!("boundary:{:016x}", b.boundary.0 .0),
@@ -570,9 +616,27 @@ impl GpuSceneEncoder {
                     geometry: geom,
                     resource: id,
                     style: sk,
+                    trace: match &b.trace {
+                        Some(t) => EntryTrace::Drawn {
+                            disposition: format!("{}:{}", t.layer, t.entity),
+                            borders: t.borders.clone(),
+                        },
+                        None => EntryTrace::Untraced,
+                    },
                 });
             }
         }
+        let cap = self.camera.as_ref().map(|c| c.cap());
+        // A standing point is in view when the view cap holds it and the
+        // horizon does not hide it.
+        let point_in_view = |at: &UnitVec| match &cap {
+            None => true,
+            Some(v) => v.center.angle_to(at) <= v.radius.min(std::f64::consts::FRAC_PI_2),
+        };
+        let markers_in_view: Vec<&map_types::scene::StyledMarker> =
+            scene.markers.iter().filter(|m| point_in_view(&m.at)).collect();
+        let inscriptions_in_view: Vec<&map_types::scene::StyledInscription> =
+            scene.inscriptions.iter().filter(|m| point_in_view(&m.at)).collect();
         // MARKERS, BY PAINT AND PIECE. The previous key was paint alone,
         // so every piece's markers landed in one buffer whose CONTENTS
         // depended on which pieces were enabled — turning journeys off
@@ -589,32 +653,56 @@ impl GpuSceneEncoder {
         // there was no answer to preserve. Piece-major would instead
         // re-sort every marker entry against every other one, changing
         // pixels wherever markers of unrelated paints overlap.
-        let mut by_style_piece: BTreeMap<(StyleKey, Piece), Vec<UnitVec>> = BTreeMap::new();
-        for m in &scene.markers {
+        let mut by_style_piece: BTreeMap<(StyleKey, Piece), (Vec<UnitVec>, Vec<String>)> = BTreeMap::new();
+        for m in &markers_in_view {
             let sk = style_of(
                 &mut styles,
                 GpuStyle::Marker { color: m.style.color, size: m.style.size },
             );
-            by_style_piece.entry((sk, m.piece)).or_default().push(m.at);
+            let slot = by_style_piece.entry((sk, m.piece)).or_default();
+            slot.0.push(m.at);
+            slot.1.extend(disposition_of(&m.trace));
         }
-        for ((sk, piece), pts) in by_style_piece {
+        for ((sk, piece), (pts, mut dispositions)) in by_style_piece {
             let (id, geom) = add(&mut resources, &mut seen, ResourceKind::Points, &pts);
+            dispositions.sort();
+            dispositions.dedup();
             features.push(FeatureInstance {
                 feature: format!("markers:{}", piece.name()),
                 piece,
                 geometry: geom,
                 resource: id,
                 style: sk,
+                trace: if dispositions.is_empty() {
+                    EntryTrace::Untraced
+                } else {
+                    EntryTrace::Standing { dispositions }
+                },
             });
         }
 
-        // Labels ride the manifest as semantics (§46): the renderer
-        // owns placement; the scene owns text, anchor, and dress.
-        let labels: Vec<LabelResource> = scene
-            .labels
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
+        let projector = self.camera.as_ref().map(|c| Projector::of(c, layout::PAGE_PADDING));
+        let view = self.camera.as_ref().zip(projector.as_ref()).map(|(c, p)| View {
+            chart: c.chart,
+            lat: c.lat,
+            lon: c.lon,
+            zoom: c.zoom,
+            width: p.width,
+            height: p.height,
+        });
+        // Names that are placed for the view, or every name when there
+        // is no view to place them on.
+        let settled: Vec<(usize, Option<layout::Laid>)> = match &projector {
+            Some(p) => layout::layout(scene, p, self.label_overflow_em)
+                .into_iter()
+                .map(|laid| (laid.index, Some(laid)))
+                .collect(),
+            None => (0..scene.labels.len()).map(|i| (i, None)).collect(),
+        };
+        let labels: Vec<LabelResource> = settled
+            .into_iter()
+            .map(|(i, laid)| {
+                let l = &scene.labels[i];
                 use map_types::scene::LabelSubject;
                 let subject = match &l.subject {
                     LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
@@ -636,7 +724,10 @@ impl GpuSceneEncoder {
                     },
                     color: l.style.color,
                     halo: l.style.halo,
-                    size: l.style.size,
+                    size: match (&laid, &projector) {
+                        (Some(laid), Some(p)) => laid.size * DESIGN_WIDTH / p.width,
+                        _ => l.style.size,
+                    },
                     halo_width_em: l.style.halo_width_em,
                     voice_family: l.voice.family,
                     voice_weight: l.voice.weight,
@@ -646,12 +737,18 @@ impl GpuSceneEncoder {
                     voice_advance_em: l.voice.advance_em,
                     priority: i as u32,
                     piece: l.piece,
+                    placement: laid.as_ref().zip(projector.as_ref()).map(|(laid, p)| Placement {
+                        left: laid.bounds.0 / p.width,
+                        top: laid.bounds.1 / p.height,
+                        right: laid.bounds.2 / p.width,
+                        bottom: laid.bounds.3 / p.height,
+                    }),
+                    ground: scene.stands_on(l).map(|g| g.wire()),
                 }
             })
             .collect();
 
-        let markers: Vec<MarkerResource> = scene
-            .markers
+        let markers: Vec<MarkerResource> = markers_in_view
             .iter()
             .map(|m| MarkerResource {
                 at: (m.at.x(), m.at.y(), m.at.z()),
@@ -661,8 +758,7 @@ impl GpuSceneEncoder {
             })
             .collect();
 
-        let inscriptions: Vec<InscriptionResource> = scene
-            .inscriptions
+        let inscriptions: Vec<InscriptionResource> = inscriptions_in_view
             .iter()
             .map(|m| InscriptionResource {
                 at: (m.at.x(), m.at.y(), m.at.z()),
@@ -671,14 +767,36 @@ impl GpuSceneEncoder {
             })
             .collect();
 
+        // THE VIEW'S CUT, on the bounds the wire publishes: an entry
+        // whose cap misses the view cap, or lies wholly beyond the
+        // horizon, is not sent, and a resource nothing references any
+        // more goes with it.
+        let (features, resources) = match &cap {
+            None => (features, resources),
+            Some(v) => {
+                let bounds_of: BTreeMap<ResourceId, SphericalBounds> =
+                    resources.iter().map(|r| (r.descriptor.id, r.descriptor.bounds)).collect();
+                let features: Vec<FeatureInstance> = features
+                    .into_iter()
+                    .filter(|f| bounds_of.get(&f.resource).is_some_and(|b| b.reaches(v)))
+                    .collect();
+                let referenced: std::collections::BTreeSet<ResourceId> =
+                    features.iter().map(|f| f.resource).collect();
+                let resources =
+                    resources.into_iter().filter(|r| referenced.contains(&r.descriptor.id)).collect();
+                (features, resources)
+            }
+        };
         EncodedScene {
             manifest: SceneManifest {
                 scene_revision: scene.map_pid().hash,
+                view,
                 features,
                 styles,
                 labels,
                 markers,
                 inscriptions,
+                attribution: scene.attribution.clone(),
                 dress: ManifestDress {
                     paper: self.paper.fill,
                     zonal_width: self.pattern.zonal_width,
@@ -688,6 +806,7 @@ impl GpuSceneEncoder {
                     // one veil for every dress and every place — the
                     // focus law, never a per-template value
                     veil: map_types::style::VEIL.fill,
+                    label_overflow_em: self.label_overflow_em,
                 },
             },
             resources,
@@ -709,11 +828,19 @@ impl EncodedScene {
     pub fn manifest_json(&self) -> String {
         let m = &self.manifest;
         let mut s = String::new();
-        let _ = write!(s, "{{\"scene\":\"{:016x}\",\"features\":[", m.scene_revision.0);
+        let view = match &m.view {
+            None => "null".to_string(),
+            Some(v) => serde_json::json!({
+                "chart": v.chart.name(), "lat": v.lat, "lon": v.lon, "zoom": v.zoom,
+                "width": v.width, "height": v.height,
+            })
+            .to_string(),
+        };
+        let _ = write!(s, "{{\"scene\":\"{:016x}\",\"view\":{view},\"features\":[", m.scene_revision.0);
         for (i, f) in m.features.iter().enumerate() {
             let _ = write!(
                 s,
-                "{}{{\"feature\":\"{}\",\"piece\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"}}",
+                "{}{{\"feature\":\"{}\",\"piece\":\"{}\",\"geometry\":\"{:016x}\",\"resource\":\"{:016x}\",\"style\":\"{:016x}\"",
                 if i > 0 { "," } else { "" },
                 f.feature,
                 f.piece.name(),
@@ -721,6 +848,22 @@ impl EncodedScene {
                 f.resource.0 .0,
                 f.style.0
             );
+            match &f.trace {
+                EntryTrace::Drawn { disposition, borders } => {
+                    let hexes: Vec<String> = borders.iter().map(|b| format!("\"{:016x}\"", b.0)).collect();
+                    let _ = write!(
+                        s,
+                        ",\"disposition\":{},\"borders\":[{}]",
+                        serde_json::json!(disposition),
+                        hexes.join(",")
+                    );
+                }
+                EntryTrace::Standing { dispositions } => {
+                    let _ = write!(s, ",\"dispositions\":{}", serde_json::json!(dispositions));
+                }
+                EntryTrace::Untraced => {}
+            }
+            s.push('}');
         }
         s.push_str("],\"styles\":{");
         for (i, (k, v)) in m.styles.iter().enumerate() {
@@ -768,7 +911,7 @@ impl EncodedScene {
                 s.push(',');
             }
             // serde escapes the free text; everything else is plain.
-            let row = serde_json::json!({
+            let mut row = serde_json::json!({
                 "text": l.text,
                 "anchor": [l.anchor.0, l.anchor.1, l.anchor.2],
                 "subject": l.subject,
@@ -788,6 +931,14 @@ impl EncodedScene {
                 "priority": l.priority,
                 "piece": l.piece.name(),
             });
+            if let Some(p) = &l.placement {
+                row["placement"] = serde_json::json!({
+                    "left": p.left, "top": p.top, "right": p.right, "bottom": p.bottom,
+                });
+            }
+            if let Some(g) = &l.ground {
+                row["ground"] = serde_json::json!(g);
+            }
             s.push_str(&row.to_string());
         }
         s.push_str("],\"markers\":[");
@@ -836,10 +987,29 @@ impl EncodedScene {
         let d = &m.dress;
         let _ = write!(
             s,
-            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}]}}}}",
+            "],\"dress\":{{\"paper\":[{},{},{},{}],\"zonalWidth\":{},\"zonalAlpha\":{},\"dashed\":[{},{}],\"hatched\":[{},{}],\"veil\":[{},{},{},{}],\"labelOverflowEm\":{}}}",
             d.paper.0, d.paper.1, d.paper.2, d.paper.3, d.zonal_width, d.zonal_alpha,
             d.dashed.0, d.dashed.1, d.hatched.0, d.hatched.1,
-            d.veil.0, d.veil.1, d.veil.2, d.veil.3
+            d.veil.0, d.veil.1, d.veil.2, d.veil.3, d.label_overflow_em
+        );
+        let credits: Vec<serde_json::Value> = m
+            .attribution
+            .iter()
+            .map(|c| serde_json::json!({ "source": c.source.0, "license": c.license.id() }))
+            .collect();
+        let licenses: Vec<&str> = m
+            .attribution
+            .iter()
+            .map(|c| c.license)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|l| l.id())
+            .collect();
+        let _ = write!(
+            s,
+            ",\"attribution\":{},\"licenses\":{}}}",
+            serde_json::Value::Array(credits),
+            serde_json::json!(licenses)
         );
         s
     }

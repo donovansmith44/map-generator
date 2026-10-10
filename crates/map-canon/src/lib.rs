@@ -286,6 +286,10 @@ pub enum LayerKind {
 }
 
 /// Which witness a feature's truth stands on, with its grounds.
+///
+/// A witness is an ORIGIN, so it is also the unit licensing is decided at:
+/// two datasets that disagree about what redistribution requires cannot
+/// share a variant, however alike their geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Witness {
     Atlas,
@@ -293,6 +297,90 @@ pub enum Witness {
     Basemap,
     /// Natural Earth / ETOPO physical base data (coasts, lakes, relief).
     NaturalEarth,
+    /// OpenBible.info geocoding: the six coastal and Transjordan regions.
+    OpenBible,
+    /// OpenStreetMap: river courses.
+    Osm,
+    /// Wikimedia Commons: the twelve-tribes allotment map.
+    Wikimedia,
+    /// The plane partition: faces and rivers built from EVERY witness
+    /// above that fed it. A composite origin, so its terms are the terms
+    /// of all of them at once.
+    Partition,
+}
+
+impl Witness {
+    pub const ALL: [Witness; 8] = [
+        Witness::Atlas,
+        Witness::Authored,
+        Witness::Basemap,
+        Witness::NaturalEarth,
+        Witness::OpenBible,
+        Witness::Osm,
+        Witness::Wikimedia,
+        Witness::Partition,
+    ];
+
+    /// The datasets the plane partition consumes. Geometry it emits is
+    /// derived from all of them, so it carries all of their terms.
+    pub const PARTITION_INPUTS: [Witness; 6] = [
+        Witness::Atlas,
+        Witness::Authored,
+        Witness::NaturalEarth,
+        Witness::OpenBible,
+        Witness::Osm,
+        Witness::Wikimedia,
+    ];
+
+    /// The terms this origin's data is available under, from its own
+    /// vendored LICENSE file. Total: an origin that names no license does
+    /// not compile, which is the only place this can be enforced.
+    ///
+    /// `Atlas` is the conservative reading. The atlas's own corpus mixes
+    /// its CC0 curated rows with Theographic-derived ones under CC BY-SA
+    /// 4.0, and its exports do not yet distinguish them per row, so every
+    /// fact we take from it is carried under the stricter of the two.
+    pub fn licenses(self) -> std::collections::BTreeSet<map_types::license::License> {
+        use map_types::license::License;
+        let one = |l: License| std::collections::BTreeSet::from([l]);
+        match self {
+            Witness::Atlas => one(License::CcBySa4),
+            Witness::Authored => one(License::Cc0),
+            Witness::Basemap => one(License::Gpl3),
+            Witness::NaturalEarth => one(License::PublicDomain),
+            Witness::OpenBible => one(License::CcBy4),
+            Witness::Osm => one(License::Odbl1),
+            Witness::Wikimedia => one(License::CcBySa3),
+            Witness::Partition => {
+                Witness::PARTITION_INPUTS.iter().flat_map(|w| w.licenses()).collect()
+            }
+        }
+    }
+
+    /// Whether redistributing anything from this origin carries
+    /// share-alike terms onto the work that does so.
+    pub fn share_alike(self) -> bool {
+        self.licenses().iter().any(|l| l.share_alike())
+    }
+
+    /// Whether Scripture stands behind what this origin asserts. Bible
+    /// mode keeps what it grounds and drops the rest, so an origin that
+    /// forgets to answer vanishes from the map. Inherited exactly like
+    /// terms are: the plane partition is cut from the atlas's and our
+    /// own scripture-grounded claims, so its faces are grounded too.
+    pub fn scripture_grounded(self) -> bool {
+        match self {
+            Witness::Atlas | Witness::Authored => true,
+            Witness::Basemap
+            | Witness::NaturalEarth
+            | Witness::OpenBible
+            | Witness::Osm
+            | Witness::Wikimedia => false,
+            Witness::Partition => {
+                Witness::PARTITION_INPUTS.iter().any(|w| w.scripture_grounded())
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -789,7 +877,7 @@ pub struct CensusRow {
     pub tenure: &'static str,
 }
 
-fn layer_name(l: &LayerKind) -> &'static str {
+pub fn layer_name(l: &LayerKind) -> &'static str {
     match l {
         LayerKind::Territory => "territory",
         LayerKind::ScriptureClaims => "scripture-claims",

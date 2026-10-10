@@ -15,12 +15,14 @@
 use std::fmt::Write as _;
 
 mod gpu;
+mod layout;
 pub use gpu::{
-    LabelResource, MarkerResource,
+    EntryTrace, LabelResource, MarkerResource, Placement, View,
     EncodedScene, FeatureInstance, GeometryId, GeometryResource, GpuSceneEncoder, GpuStyle,
     ResourceDescriptor, ResourceId, ResourceKind, SceneManifest, SphericalBounds, StyleKey,
     RESOURCE_MAGIC,
 };
+pub use layout::{layout, verdicts, Laid, Projector, Verdict, Yield, PAGE_PADDING};
 
 use map_types::scene::LabelSubject;
 use map_types::style::{Rgba, StrokePattern};
@@ -88,18 +90,22 @@ pub struct SvgEncoder {
     pub paper: map_types::style::Paint,
     pub chrome: map_types::style::GlobeChrome,
     pub pattern: map_types::style::PatternGeometry,
+    /// How far a land name may spill past its shore, in em: the style's
+    /// own declaration (map_types::style::LabelScale::overflow_em).
+    pub label_overflow_em: f64,
 }
 
 impl Default for SvgEncoder {
     fn default() -> Self {
         SvgEncoder {
             width: 1200.0,
-            padding: 16.0,
+            padding: layout::PAGE_PADDING,
             projection: Projection::Globe { center: None, zoom: None },
             smooth: true,
             paper: map_types::style::Paint { fill: map_types::style::Rgba(246, 241, 228, 255) },
             chrome: Default::default(),
             pattern: Default::default(),
+            label_overflow_em: 0.5,
         }
     }
 }
@@ -293,11 +299,11 @@ fn subpixel(b: &Bounds) -> bool {
     b.2 - b.0 < SUBPIXEL && b.3 - b.1 < SUBPIXEL
 }
 
-/// Emit fills, strokes, and markers through a projector; returns each
-/// region's projected extent for the label pass. `ring_of` returns the
-/// page-space rings of a Ring (empty when fully out of view);
-/// `line_of` the visible runs of a polyline; `point_of` a visible point.
-/// `page` is the padded viewport for culling (None = emit everything).
+/// Emit fills, strokes, and markers through a projector. `ring_of`
+/// returns the page-space rings of a Ring (empty when fully out of
+/// view); `line_of` the visible runs of a polyline; `point_of` a
+/// visible point. `page` is the padded viewport for culling (None =
+/// emit everything).
 fn emit_scene(
     s: &mut String,
     scene: &Snapshot,
@@ -307,8 +313,7 @@ fn emit_scene(
     smooth: bool,
     pattern: &map_types::style::PatternGeometry,
     page: &Option<Bounds>,
-) -> std::collections::BTreeMap<u64, Bounds> {
-    let mut extents: std::collections::BTreeMap<u64, Bounds> = Default::default();
+) {
     for r in &scene.regions {
         let mut chunks: Vec<Vec<(f64, f64)>> = Vec::new();
         for ring in r.outer.iter().chain(&r.holes) {
@@ -330,15 +335,6 @@ fn emit_scene(
         }
         if b.as_ref().is_some_and(subpixel) {
             continue;
-        }
-        if let Some(b) = b {
-            // Later layers of the same region only widen its extent.
-            extents
-                .entry(r.region.0 .0)
-                .and_modify(|e| {
-                    *e = (e.0.min(b.0), e.1.min(b.1), e.2.max(b.2), e.3.max(b.3));
-                })
-                .or_insert(b);
         }
         let _ = write!(
             s,
@@ -419,85 +415,14 @@ fn emit_scene(
             }
         }
     }
-    extents
 }
 
-/// The label pass: a label must FIT what it names and never collide.
-/// Region labels shrink to their territory's projected extent and are
-/// DROPPED when even the minimum readable size will not fit; every
-/// candidate then tries its anchor and small vertical nudges, and
-/// yields rather than overlap an earlier label. Deterministic: scene
-/// order is placement priority.
-fn emit_labels(
-    s: &mut String,
-    scene: &Snapshot,
-    extents: &std::collections::BTreeMap<u64, Bounds>,
-    point_of: &dyn Fn(&UnitVec) -> Option<(f64, f64)>,
-    page_width: f64,
-    page: &Option<Bounds>,
-) {
-    // LEGIBILITY FLOOR: below ~1/260 of the page (never under 4 px)
-    // text is noise, not signal — the label yields instead.
-    let min_size = (page_width / 260.0).max(4.0);
-    let mut placed: Vec<Bounds> = Vec::new();
-    let collides = |b: &Bounds, placed: &[Bounds]| {
-        placed.iter().any(|p| b.0 < p.2 && p.0 < b.2 && b.1 < p.3 && p.1 < b.3)
-    };
-    for l in &scene.labels {
-        let Some((x, y)) = point_of(&l.at) else { continue };
-        if !chunk_matters(&(x, y, x, y), page) {
-            continue; // anchored off the page: unreadable by definition
-        }
-        use map_types::scene::LabelFace;
-        // The typographic dress rides ON the label, resolved by the
-        // provider from the style — the encoder invents nothing and
-        // measures with the voice's own declared advance, so fitting
-        // and collision boxes always match the glyphs they box.
+/// The label pass, written once in `layout`: every settled name is
+/// drawn where the layout put it, at the size it settled on.
+fn emit_labels(s: &mut String, scene: &Snapshot, proj: &Projector, overflow_em: f64) {
+    for laid in layout::layout(scene, proj, overflow_em) {
+        let l = &scene.labels[laid.index];
         let v = l.voice;
-        let text = if v.uppercase { l.text.to_uppercase() } else { l.text.clone() };
-        let char_w = v.advance_em;
-        let chars = text.chars().count().max(1) as f64;
-        let mut size = l.style.size;
-        if let map_types::scene::LabelSubject::Region(rid) = &l.subject {
-            // NOTHING UNSEEN SPEAKS: a name only appears once the
-            // reader can resolve the thing it names — a subject that
-            // never made it onto the page, or spans less than the
-            // legibility floor, has no business being labeled at
-            // this camera. (This is what keeps a world view from
-            // drowning in the name of every pond; each name returns
-            // as its lake resolves.)
-            let Some((x0, y0, x1, y1)) = extents.get(&rid.0 .0) else {
-                continue;
-            };
-            if (x1 - x0).max(y1 - y0) < min_size {
-                continue;
-            }
-            // Water names may overflow their shores — a lake narrower
-            // than its own name still deserves one (cartographic
-            // convention); only land labels shrink to fit their
-            // territory.
-            if l.face != LabelFace::Water {
-                let fit_w = (x1 - x0) * 0.92 / (chars * char_w);
-                let fit_h = (y1 - y0) * 0.8;
-                size = size.min(fit_w).min(fit_h);
-            }
-        }
-        if size < min_size {
-            continue; // the territory cannot hold a readable label
-        }
-        let (w, h) = (chars * char_w * size, size * 1.25);
-        let mut spot = None;
-        for dy in [0.0, -h, h, -2.0 * h, 2.0 * h] {
-            let b = (x - w / 2.0, y + dy - h * 0.75, x + w / 2.0, y + dy + h * 0.35);
-            if !collides(&b, &placed) {
-                spot = Some((y + dy, b));
-                break;
-            }
-        }
-        let Some((y, b)) = spot else { continue };
-        placed.push(b);
-        // A place-subject label is a click target for its place, just
-        // like the marker's hit circle.
         let subject_attr = match &l.subject {
             LabelSubject::Place(p) => format!(" data-place=\"{}\"", esc(&p.0 .0)),
             _ => String::new(),
@@ -505,26 +430,26 @@ fn emit_labels(
         let _ = write!(
             s,
             "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" fill=\"{}\" fill-opacity=\"{:.3}\" stroke=\"{}\" stroke-opacity=\"{:.3}\" stroke-width=\"{:.3}\" paint-order=\"stroke\" text-anchor=\"middle\" font-family=\"{}\" font-weight=\"{}\" letter-spacing=\"{:.2}\"{}{}>{}</text>",
-            x,
-            y,
-            size,
+            laid.x,
+            laid.y,
+            laid.size,
             rgb(l.style.color),
             alpha(l.style.color),
             rgb(l.style.halo),
             alpha(l.style.halo),
-            size * l.style.halo_width_em,
+            laid.size * l.style.halo_width_em,
             v.family,
             v.weight,
-            size * v.tracking_em,
+            laid.size * v.tracking_em,
             if v.italic { " font-style=\"italic\"" } else { "" },
             subject_attr,
-            esc(&text)
+            esc(&laid.text)
         );
     }
 }
 
 fn svg_head(width: f64, height: f64, scene: &Snapshot, paper: map_types::style::Paint) -> String {
-    let sources: Vec<String> = scene.attribution.iter().map(|src| src.0.clone()).collect();
+    let sources: Vec<String> = scene.attribution.iter().map(|c| c.to_string()).collect();
     // THE PAPER IS DRESS DATA: the page carries its own ground, so a
     // dark style stands on a dark page wherever the file lands.
     format!(
@@ -824,8 +749,10 @@ struct Chart<'a> {
     clip_line: Box<dyn Fn(&[UnitVec]) -> Vec<Vec<(f64, f64)>> + 'a>,
     /// a single point, or None when the chart cannot show it.
     place: Box<dyn Fn(&UnitVec) -> Option<(f64, f64)> + 'a>,
-    /// the page bounds used for culling and label placement.
+    /// the page bounds used for culling.
     page: Option<Bounds>,
+    /// the page itself, for the label pass.
+    projector: Projector,
 }
 
 use map_types::covers_sphere;
@@ -847,9 +774,8 @@ fn encode_chart(enc: &SvgEncoder, scene: &Snapshot, chart: Chart) -> String {
     };
     let line_of = |pts: &[UnitVec]| (chart.clip_line)(pts);
     let point_of = |p: &UnitVec| (chart.place)(p);
-    let extents =
-        emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &enc.pattern, &chart.page);
-    emit_labels(&mut s, scene, &extents, &point_of, chart.width, &chart.page);
+    emit_scene(&mut s, scene, &ring_of, &line_of, &point_of, enc.smooth, &enc.pattern, &chart.page);
+    emit_labels(&mut s, scene, &chart.projector, enc.label_overflow_em);
     s.push_str("</svg>");
     s
 }
@@ -982,6 +908,7 @@ fn encode_globe(enc: &SvgEncoder, scene: &Snapshot, center: UnitVec, zoom: Optio
         }),
         place: Box::new(move |p: &UnitVec| g.place(p)),
         page: Some((-pad, -pad, enc.width + pad, enc.width + pad)),
+        projector: Projector::globe(center, r_view, enc.width, enc.padding),
     };
     encode_chart(enc, scene, chart)
 }
@@ -1148,6 +1075,7 @@ fn encode_flat(
         clip_line: Box::new(move |pts: &[UnitVec]| vec![pts.iter().map(place).collect()]),
         place: Box::new(move |p: &UnitVec| Some(place(p))),
         page,
+        projector: Projector::flat(x0, y1, scale_x, scale_y, enc.width, height, enc.padding),
     };
     Ok(encode_chart(enc, scene, chart))
 }
@@ -1253,7 +1181,11 @@ impl SceneEncoder for GeoJsonEncoder {
                 "geometry": { "type": "Point", "coordinates": [lon, lat] }
             }));
         }
-        let sources: Vec<String> = scene.attribution.iter().map(|s| s.0.clone()).collect();
+        let sources: Vec<serde_json::Value> = scene
+            .attribution
+            .iter()
+            .map(|c| serde_json::json!({ "source": c.source.0, "license": c.license.id() }))
+            .collect();
         let doc = serde_json::json!({
             "type": "FeatureCollection",
             "attribution": sources,

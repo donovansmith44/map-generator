@@ -18,6 +18,7 @@ use atlas_graph_types::covenant::SourceId;
 use map_adapters::{load_exports, merged_gazetteer};
 use map_provider::SCRIPTURE_SOURCE;
 use map_encoders::{GeoJsonEncoder, GpuSceneEncoder, JsonTransitionEncoder, SvgEncoder};
+use map_types::camera::{Camera, ChartKind};
 use map_types::style::*;
 use map_types::{
     ChangeKind, Interval, Lod, MapAddressed, MapProvider, Monoid, Piece, PieceSet, RegionId,
@@ -139,6 +140,37 @@ impl ResourceStore {
     }
     fn get(&self, id: u64) -> Option<&Vec<u8>> {
         self.entries.get(&id).map(|(p, _)| p)
+    }
+    /// The payloads for a batch of ids, in order, or the first id the
+    /// store does not hold: a batch is served whole or refused by name,
+    /// never shortened in silence.
+    fn serve(&self, ids: &[u64]) -> Result<Vec<u8>, Refused> {
+        let mut body = Vec::new();
+        for id in ids {
+            match self.get(*id) {
+                Some(bytes) => body.extend_from_slice(bytes),
+                None => return Err(Refused::NotResident(*id)),
+            }
+        }
+        Ok(body)
+    }
+}
+
+/// Why a geometry request is refused. Not resident is not an error
+/// state to hide: the client's acquisition loop re-requests the scene
+/// manifest, which re-publishes what this world can produce.
+#[derive(Debug, PartialEq, Eq)]
+enum Refused {
+    NotResident(u64),
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Refused::NotResident(id) => {
+                write!(f, "no resource {id:016x} is resident - re-request /api/scene")
+            }
+        }
     }
 }
 
@@ -368,27 +400,33 @@ fn scripture_only(scene: &Snapshot) -> Snapshot {
     let scripture = SourceId::new(SCRIPTURE_SOURCE);
     // The physical stage — seas, lakes, relief — is never a claim to
     // filter: the whole world stays part of the map in bible mode.
-    let stage = |srcs: &std::collections::BTreeSet<SourceId>| {
-        srcs.iter().any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth" || s.0 == "etopo1")
+    let stage = |srcs: &std::collections::BTreeSet<map_types::license::Credit>| {
+        srcs.iter().any(|c| {
+            let n = &c.source.0;
+            n == "witness:natural-earth" || n == "natural-earth" || n == "etopo1"
+        })
+    };
+    let grounded = |srcs: &std::collections::BTreeSet<map_types::license::Credit>| {
+        srcs.iter().any(|c| c.source == scripture)
     };
     let regions: Vec<_> = scene
         .regions
         .iter()
-        .filter(|r| r.sources.contains(&scripture) || stage(&r.sources))
+        .filter(|r| grounded(&r.sources) || stage(&r.sources))
         .cloned()
         .collect();
     let boundaries: Vec<_> =
-        scene.boundaries.iter().filter(|b| b.sources.contains(&scripture)).cloned().collect();
+        scene.boundaries.iter().filter(|b| grounded(&b.sources)).cloned().collect();
     let kept_regions: std::collections::BTreeSet<_> = regions.iter().map(|r| r.region).collect();
     let kept_bounds: std::collections::BTreeSet<_> = boundaries.iter().map(|b| b.boundary).collect();
     // Markers select by their own sources — a journey's stations are
     // as scripture-grounded as the way through them.
     let markers: Vec<_> =
-        scene.markers.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+        scene.markers.iter().filter(|m| grounded(&m.sources)).cloned().collect();
     let kept_places: std::collections::BTreeSet<_> =
         markers.iter().filter_map(|m| m.place.clone()).collect();
     let inscriptions: Vec<_> =
-        scene.inscriptions.iter().filter(|m| m.sources.contains(&scripture)).cloned().collect();
+        scene.inscriptions.iter().filter(|m| grounded(&m.sources)).cloned().collect();
     let kept_memories: std::collections::BTreeSet<_> =
         inscriptions.iter().map(|m| m.place.clone()).collect();
     let labels = scene
@@ -591,6 +629,38 @@ fn auto_lod(zoom: Option<f64>, width: f64) -> f64 {
     }
 }
 
+/// The camera the request pins, when it pins one: a center AND a
+/// zoom, on the chart it names, drawn at the width it asks for. Half a
+/// camera is no camera.
+fn parse_camera(p: &Params) -> Option<Camera> {
+    let (lat, lon) = p.get("center")?.split_once(',')?;
+    let (lat, lon) = (lat.parse::<f64>().ok()?, lon.parse::<f64>().ok()?);
+    let zoom = p.get("zoom")?.parse::<f64>().ok()?;
+    let chart = match p.get("projection") {
+        Some("flat") => ChartKind::Flat,
+        _ => ChartKind::Globe,
+    };
+    let width = p.get("width").and_then(|v| v.parse::<f64>().ok()).unwrap_or(1200.0);
+    Some(Camera::new(chart, lat, lon, zoom, width))
+}
+
+/// The detail a request asks for: explicit `lod=`, else the zoom's own
+/// half-pixel rule on the page it names. One law for every route.
+fn lod_of(p: &Params) -> Lod {
+    match p.get("lod").filter(|v| *v != "auto").and_then(|v| v.parse().ok()) {
+        Some(explicit) => Lod(explicit),
+        None => {
+            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
+            let width = p
+                .get("width")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(1200.0)
+                .clamp(320.0, 8000.0);
+            Lod(auto_lod(zoom, width))
+        }
+    }
+}
+
 fn build_query(
     app: &App,
     p: &Params,
@@ -608,18 +678,7 @@ fn build_query(
         }
         _ => TimeSelector::At(at),
     };
-    let lod = match p.get("lod").filter(|v| *v != "auto").and_then(|v| v.parse().ok()) {
-        Some(explicit) => Lod(explicit),
-        None => {
-            let zoom = p.get("zoom").and_then(|v| v.parse::<f64>().ok());
-            let width = p
-                .get("width")
-                .and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(1200.0)
-                .clamp(320.0, 8000.0);
-            Lod(auto_lod(zoom, width))
-        }
-    };
+    let lod = lod_of(p);
     // TODAY'S LEGACY FLAGS, spoken in pieces. Byte-identical behavior:
     // the old GEOMETRY bit meant the three land layers, whose elements
     // are fills, borders, claims and the point markers standing in
@@ -640,19 +699,8 @@ fn build_query(
     if p.get("journeys") != Some("0") {
         pieces = pieces.with(Piece::Journeys); // itineraries, on by default
     }
-    // THE VIEWPORT: when the caller pins a camera, the provider can
-    // cull the world to it — one spherical cap, generous margin, both
-    // charts (the camera law makes the ground span identical).
-    let viewport = p.get("center").and_then(|v| {
-        let (lat, lon) = v.split_once(',')?;
-        let (lat, lon) = (lat.parse::<f64>().ok()?, lon.parse::<f64>().ok()?);
-        let zoom = p.get("zoom").and_then(|z| z.parse::<f64>().ok())?;
-        Some(map_types::Bbox {
-            center: map_types::UnitVec::from_lat_lon_deg(lat.clamp(-89.9, 89.9), lon),
-            radius: (zoom.clamp(0.05, 90.0) * 1.8).to_radians().min(std::f64::consts::PI),
-        })
-    });
-    Some(RenderQuery { subject, time, viewport, lod, pieces, style: parse_style(app, p.get("style"))? })
+    let camera = parse_camera(p);
+    Some(RenderQuery { subject, time, camera, lod, pieces, style: parse_style(app, p.get("style"))? })
 }
 
 fn encode(
@@ -708,6 +756,7 @@ fn encode(
                 enc.paper = st.paper();
                 enc.chrome = st.chrome();
                 enc.pattern = st.pattern_geometry();
+                enc.label_overflow_em = st.labeling().scale.overflow_em;
             }
             enc.encode(scene).map(|s| (s, "image/svg+xml")).map_err(|e| e.0)
         }
@@ -809,7 +858,7 @@ fn composed_scene(
                 let ghost_q = RenderQuery {
                     subject: RenderSubject::World,
                     time: TimeSelector::At(backdrop_at),
-                    viewport: q.viewport.clone(),
+                    camera: q.camera,
                     lod: q.lod,
                     pieces: geometry_pieces(),
                     style,
@@ -839,21 +888,14 @@ pub fn route(
     // Batched geometry payloads: one response, many self-framing MGR1
     // packets in the requested order (each packet's header carries its
     // own vertex/index counts, so the stream needs no envelope). An id
-    // not resident is simply absent — the client notices the gap and
-    // re-requests the scene manifest, same contract as the single route.
+    // not resident refuses the whole batch by name.
     if path == "/api/resources" {
         let p = Params::parse(query);
         let Some(ids) = p.get("ids") else {
             return (400, "text/plain", b"ids required (comma-separated hex)".to_vec(), Vec::new());
         };
-        let store = app.resources.lock().expect("resource store");
-        let mut body = Vec::new();
-        for id in ids.split(',').filter_map(|h| u64::from_str_radix(h, 16).ok()) {
-            if let Some(bytes) = store.get(id) {
-                body.extend_from_slice(bytes);
-            }
-        }
-        return (200, "application/octet-stream", body, Vec::new());
+        let ids: Vec<u64> = ids.split(',').filter_map(|h| u64::from_str_radix(h, 16).ok()).collect();
+        return serve_geometry(app, &ids);
     }
     // Content-addressed geometry payloads: the one binary route.
     if path == "/api/resource" {
@@ -861,21 +903,17 @@ pub fn route(
         let Some(id) = p.get("id").and_then(|h| u64::from_str_radix(h, 16).ok()) else {
             return (400, "text/plain", b"id required (hex)".to_vec(), Vec::new());
         };
-        return match app.resources.lock().expect("resource store").get(id) {
-            Some(bytes) => (200, "application/octet-stream", bytes.clone(), Vec::new()),
-            // Not resident is not an error state to hide: the client's
-            // acquisition loop re-requests the scene manifest, which
-            // re-publishes what this world can produce.
-            None => (
-                404,
-                "text/plain",
-                b"resource not resident - re-request /api/scene".to_vec(),
-                Vec::new(),
-            ),
-        };
+        return serve_geometry(app, &[id]);
     }
     let (status, ctype, body, headers) = route_text(app, path, query);
     (status, ctype, body.into_bytes(), headers)
+}
+
+fn serve_geometry(app: &App, ids: &[u64]) -> (u16, &'static str, Vec<u8>, Vec<(String, String)>) {
+    match app.resources.lock().expect("resource store").serve(ids) {
+        Ok(body) => (200, "application/octet-stream", body, Vec::new()),
+        Err(why) => (404, "text/plain", why.to_string().into_bytes(), Vec::new()),
+    }
 }
 
 /// The house pattern, mirrored from `parse_style` (absent -> silent
@@ -1064,7 +1102,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             let (Some(from), Some(to)) = (p.year("from"), p.year("to")) else {
                 return bad("from and to required");
             };
-            let lod = p.get("lod").and_then(|l| l.parse().ok()).map(Lod).unwrap_or(Lod(6.0));
+            let lod = lod_of(&p);
             match app.provider.transition(from, to, map_types::Bbox::whole_world(), lod) {
                 Ok(script) => match JsonTransitionEncoder.encode_transition(&script) {
                     Ok(body) => (200, "application/json", body, Vec::new()),
@@ -1102,7 +1140,10 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     .filter(|r| {
                         r.sources
                             .iter()
-                            .any(|s| s.0 == "witness:natural-earth" || s.0 == "natural-earth")
+                            .any(|c| {
+                                c.source.0 == "witness:natural-earth"
+                                    || c.source.0 == "natural-earth"
+                            })
                     })
                     .collect(),
                 boundaries: Vec::new(),
@@ -1155,7 +1196,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
             let q = RenderQuery {
                 subject: RenderSubject::World,
                 time: TimeSelector::At(at),
-                viewport: None,
+                camera: None,
                 lod: Lod(0.0),
                 pieces: geometry_pieces()
                     .with(Piece::Labels)
@@ -1179,8 +1220,13 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
-                        scene.attribution.iter().map(|s| s.0.clone()).collect();
+                        scene.attribution.iter().map(|c| c.to_string()).collect();
+                    // The terms come with the bytes: a consumer decides
+                    // what it may redistribute without parsing the body.
+                    let licenses: Vec<&str> =
+                        scene.licenses().iter().map(|l| l.id()).collect();
                     let mut headers = vec![
+                        ("X-License".to_string(), licenses.join(", ")),
                         ("X-Attribution".to_string(), attribution.join(", ")),
                         ("X-Scene-Pid".to_string(), format!("{:016x}", scene.map_pid().hash.0)),
                     ];
@@ -1212,8 +1258,10 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                     Some(st) => GpuSceneEncoder {
                         paper: st.paper(),
                         pattern: st.pattern_geometry(),
+                        label_overflow_em: st.labeling().scale.overflow_em,
+                        camera: parse_camera(&p),
                     },
-                    None => GpuSceneEncoder::default(),
+                    None => GpuSceneEncoder { camera: parse_camera(&p), ..GpuSceneEncoder::default() },
                 };
                 match gpu_enc.encode(&scene) {
                     Err(e) => bad(&e.0),
@@ -1237,10 +1285,18 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                         // ladder needs it) must never leak into it.
                         let (vlat, vlon, vzoom) =
                             map_encoders::resolve_globe_view(&scene, face, None);
-                        let headers = vec![(
-                            "X-Resolved-View".to_string(),
-                            format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),
-                        )];
+                        // The terms ride the response, so a consumer can
+                        // decide what it may redistribute without reading
+                        // the body at all.
+                        let licenses: Vec<&str> =
+                            scene.licenses().iter().map(|l| l.id()).collect();
+                        let headers = vec![
+                            ("X-License".to_string(), licenses.join(", ")),
+                            (
+                                "X-Resolved-View".to_string(),
+                                format!("{vlat:.3},{vlon:.3},{vzoom:.3}"),
+                            ),
+                        ];
                         (200, "application/json", es.manifest_json(), headers)
                     }
                 }
@@ -1296,8 +1352,18 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 Err(e) => bad(&e),
                 Ok((body, ctype)) => {
                     let attribution: Vec<String> =
-                        scene.attribution.iter().map(|s| s.0.clone()).collect();
-                    (200, ctype, body, vec![("X-Attribution".to_string(), attribution.join(", "))])
+                        scene.attribution.iter().map(|c| c.to_string()).collect();
+                    let licenses: Vec<&str> =
+                        scene.licenses().iter().map(|l| l.id()).collect();
+                    (
+                        200,
+                        ctype,
+                        body,
+                        vec![
+                            ("X-License".to_string(), licenses.join(", ")),
+                            ("X-Attribution".to_string(), attribution.join(", ")),
+                        ],
+                    )
                 }
             }
         }
@@ -1452,6 +1518,20 @@ mod tests {
         );
     }
 
+    /// Asking for geometry the store does not hold is refused BY NAME:
+    /// a batch with one unknown id names that id and serves nothing,
+    /// so a caller can never mistake a missing payload for a short one.
+    #[test]
+    fn unknown_geometry_is_refused_by_name() {
+        let mut store = ResourceStore::new();
+        let payload = vec![1u8, 2, 3];
+        store.publish([(0x00ffu64, &payload)].into_iter());
+        assert_eq!(store.serve(&[0x00ff]), Ok(payload.clone()));
+        assert_eq!(store.serve(&[0x00ff, 0x0bad]), Err(Refused::NotResident(0x0bad)));
+        assert_eq!(store.serve(&[0x0bad]), Err(Refused::NotResident(0x0bad)));
+        assert!(Refused::NotResident(0x0bad).to_string().contains("0000000000000bad"));
+    }
+
     /// The regression that shipped: URLSearchParams encodes ':' as
     /// %3A, and an undecoded server rejected every region query.
     #[test]
@@ -1514,12 +1594,13 @@ mod tests {
         use map_types::{RegionId, Ring, StyledRegion, UnitVec};
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64, src: &str, piece: Piece| StyledRegion {
+            trace: None,
             region: RegionId(ContentHash(n)),
             entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(1, 2, 3, 200) },
-            sources: [SourceId::new(src)].into(),
+            sources: [map_types::license::Credit::new(SourceId::new(src), map_types::license::License::Cc0)].into(),
             piece,
         };
         let mut scene = Snapshot::empty();
@@ -1542,9 +1623,18 @@ mod tests {
         use map_types::UnitVec;
         let mut scene = Snapshot::empty();
         let mk = |src: Option<&str>| StyledMarker {
+            trace: None,
             at: UnitVec::from_lat_lon_deg(32.0, 35.0),
             style: MarkerStyle { color: map_types::style::Rgba(0, 0, 0, 255), size: 3.0 },
-            sources: src.map(SourceId::new).into_iter().collect(),
+            sources: src
+                .map(|n| {
+                    map_types::license::Credit::new(
+                        SourceId::new(n),
+                        map_types::license::License::Cc0,
+                    )
+                })
+                .into_iter()
+                .collect(),
             place: None,
             piece: Piece::Markers,
         };
@@ -1553,7 +1643,7 @@ mod tests {
         scene.markers.push(mk(None));
         let kept = scripture_only(&scene);
         assert_eq!(kept.markers.len(), 1, "exactly the scripture-grounded marker survives");
-        assert!(kept.markers[0].sources.contains(&SourceId::new(SCRIPTURE_SOURCE)));
+        assert!(map_types::license::Credited::names(&kept.markers[0].sources, SCRIPTURE_SOURCE));
     }
 
     /// The ghost backdrop must not re-draw what the subject scene
@@ -1567,6 +1657,7 @@ mod tests {
 
         let uv = |lat: f64, lon: f64| UnitVec::from_lat_lon_deg(lat, lon);
         let region = |n: u64| StyledRegion {
+            trace: None,
             region: RegionId(ContentHash(n)),
             entity: None,
             outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
@@ -1576,6 +1667,7 @@ mod tests {
             piece: Piece::Fills,
         };
         let boundary = |n: u64| StyledBoundary {
+            trace: None,
             boundary: BoundaryId(ContentHash(n)),
             pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
             stroke: Stroke {
@@ -1614,9 +1706,10 @@ pub fn serve() {
     eprintln!("loading historical-basemaps…");
     let app = Arc::new(load());
     eprintln!("{} scrub stops, {} styles", app.stops.len(), app.styles.len());
+    let host = std::env::var("MAP_VIEWER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let listener =
-        TcpListener::bind(("127.0.0.1", port)).unwrap_or_else(|e| panic!("port {port}: {e}"));
-    eprintln!("workbench on http://127.0.0.1:{port}/");
+        TcpListener::bind((host.as_str(), port)).unwrap_or_else(|e| panic!("{host}:{port}: {e}"));
+    eprintln!("workbench on http://{host}:{port}/");
     for stream in listener.incoming().flatten() {
         let app = Arc::clone(&app);
         std::thread::spawn(move || handle(&app, stream));

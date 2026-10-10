@@ -25,6 +25,7 @@ import System.FilePath ((</>))
 import Capture
 import Gherkin.Ast (Keyword (..))
 import Pattern
+import Sphere
 import World
 
 -- WHAT A CAMERA IS, on the wire: a center AND a zoom, together. Not two
@@ -366,12 +367,12 @@ allSteps =
                 else Left ("this law compares one reference scene against " <> viewed
                            <> ", but names two: " <> ref <> " and " <> ref2)
           vw <- cameraOf viewed w
-          caps <- featureCaps =<< boundScene ref w
-          seen <- featureIdSet =<< boundScene viewed w
-          let ins  = [ f | (f, c) <- caps, inView vw c ]
-              outs = [ f | (f, c) <- caps, outOfView vw c ]
-              missing = [ f | f <- ins, not (f `Set.member` seen) ]
-              leaked  = [ f | f <- outs, f `Set.member` seen ]
+          caps <- geometryEntryCaps =<< boundScene ref w
+          seen <- geometryEntries =<< boundScene viewed w
+          let ins  = [ e | (e, c) <- caps, visibleFrom vw c ]
+              outs = [ e | (e, c) <- caps, not (visibleFrom vw c) ]
+              missing = [ describeEntry e | e <- ins, not (e `Set.member` seen) ]
+              leaked  = [ describeEntry e | e <- outs, e `Set.member` seen ]
           pure $ case (null ins, null outs) of
             (True, _) -> StepSkipped
               ("no feature of " <> ref <> " is in " <> viewed
@@ -382,10 +383,55 @@ allSteps =
             _ | null missing && null leaked -> StepOk w
               | otherwise -> StepFailed
                   (viewed <> " does not partition " <> ref <> "'s "
-                   <> tshow (length caps) <> " features by the view: "
+                   <> tshow (length caps) <> " geometry entries by the view: "
                    <> tshow (length missing) <> " in view but absent ("
                    <> listSome missing <> "); " <> tshow (length leaked)
                    <> " out of view but sent (" <> listSome leaked <> ")")
+  , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every feature of "
+                                          <*> capUntil @BindName " one pan away from its view, in every direction, at "
+                                          <*> capRest @Zoom)) $
+      \(BindName asked, BindName ref, z) w -> pure $
+        either StepFailed id $ do
+          (c, zAsked) <- maybe (Left (asked <> " was not rendered with a camera")) Right
+                           (Map.lookup asked (cameras w))
+          () <- if zAsked == z then Right ()
+                else Left ("this law is stated at zoom " <> renderCap z <> " but " <> asked
+                           <> " was rendered at zoom " <> renderCap zAsked)
+          caps <- geometryEntryCaps =<< boundScene ref w
+          seen <- geometryEntries =<< boundScene asked w
+          let eye = unitOf c
+              owed = [ (e, n) | n <- neighbourCells c z, let vw = demandCap n z
+                              , (e, cap) <- caps, inView vw cap, not (beyondHorizon eye cap) ]
+              lost = [ describeEntry e <> " toward " <> renderCap n | (e, n) <- owed, not (e `Set.member` seen) ]
+          pure $ if null owed
+            then StepSkipped ("no feature of " <> ref <> " lies within one pan of " <> asked
+                              <> "'s view at this camera; this law has nothing to be owed")
+            else if null lost then StepOk w
+            else StepFailed (tshow (length lost) <> " of " <> tshow (length owed)
+                             <> " geometry entries a neighbouring cell's page can show are missing from "
+                             <> asked <> ": " <> listSome lost)
+  , mkSkippableStep Then (lit "" *> ((,,) <$> capUntil @BindName " keeps every marker of "
+                                          <*> capUntil @BindName " in view and omits every marker of "
+                                          <*> capUntil @BindName " out of view")) $
+      \(BindName viewed, BindName ref, BindName ref2) w -> pure $
+        either StepFailed id $ do
+          () <- sameTwice "reference scene" ref ref2
+          vw <- cameraOf viewed w
+          ms <- markerPoints =<< boundScene ref w
+          seen <- Set.fromList . map fst <$> (markerPoints =<< boundScene viewed w)
+          let ins  = [ i | (i, p) <- ms, pointInView vw p ]
+              outs = [ i | (i, p) <- ms, not (pointInView vw p) ]
+              missing = [ i | i <- ins, not (i `Set.member` seen) ]
+              leaked  = [ i | i <- outs, i `Set.member` seen ]
+          pure $ if null ms
+            then StepSkipped (ref <> " carries no markers at this draw; a law about which markers a view keeps has nothing to examine")
+            else if null missing && null leaked then StepOk w
+            else StepFailed
+                  (viewed <> " does not partition " <> ref <> "'s " <> tshow (length ms)
+                   <> " markers by the view: " <> tshow (length missing)
+                   <> " in view but absent (" <> listSome missing <> "); "
+                   <> tshow (length leaked) <> " out of view but sent ("
+                   <> listSome leaked <> ")")
     -- "moving the camera never redraws what stays visible" -- content
     -- addressing, stated the way it can actually fail: for every id the
     -- two manifests SHARE, the whole published record must agree.
@@ -409,45 +455,42 @@ allSteps =
           else StepFailed (tshow (length differ) <> " of " <> tshow (length shared)
                            <> " shared resource ids serve different records in " <> a
                            <> " and " <> b <> ": " <> listSome differ)
-    -- "zooming out only reveals markers and labels -- it never removes
-    -- them". Stated over the two kinds the camera ACTUALLY culls
-    -- (characterization 1.0: Points and Memories are the only elements
-    -- the viewport removes), by their published ids -- marker place and
-    -- label subject -- which is characterization C1/C2's non-vacuous
-    -- form. Written over feature ids instead it would pass while the
-    -- camera did nothing at all (917 ids at every zoom); that version is
-    -- the @target above.
-  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName "'s markers and labels are a subset of "
+    -- "zooming out only reveals markers -- it never removes them",
+    -- stated over the markers' published place ids. Names are not
+    -- nested this way: a name drawn at one zoom may yield at another
+    -- to a neighbour that grew, and which names a view draws is
+    -- label-placement.feature's business.
+  , mkSkippableStep Then (lit "" *> ((,) <$> capUntil @BindName "'s markers are a subset of "
                                          <*> capUntil @BindName "'s")) $
       \(BindName a, BindName b) w -> pure $ either StepFailed id $ do
-        ia <- Set.fromList . map fst <$> (cameraCulled =<< boundScene a w)
-        ib <- Set.fromList . map fst <$> (cameraCulled =<< boundScene b w)
+        ia <- Set.fromList . map fst <$> (markerPoints =<< boundScene a w)
+        ib <- Set.fromList . map fst <$> (markerPoints =<< boundScene b w)
         let extra = Set.difference ia ib
         pure $ if Set.null ia
-          then StepSkipped (a <> " carries no markers and no labels at this draw; \
+          then StepSkipped (a <> " carries no markers at this draw; \
                             \the empty set is a subset of anything")
           else if Set.null extra then StepOk w
-          else StepFailed (tshow (Set.size extra) <> " marker/label id(s) of " <> a
+          else StepFailed (tshow (Set.size extra) <> " marker(s) of " <> a
                            <> " are absent from " <> b <> ": " <> listSome (Set.toList extra))
-    -- "zooming in never loses a marker or label you are looking at" --
-    -- the converse, and the one that needs the camera: only the things
+    -- "zooming in never loses a marker you are looking at" -- the
+    -- converse, and the one that needs the camera: only the markers
     -- still inside the NARROWER view are owed.
-  , mkSkippableStep Then (lit "every marker and label of " *> ((,,) <$> capUntil @BindName " still in "
-                                                                    <*> capUntil @BindName "'s view is kept by "
-                                                                    <*> capRest @BindName)) $
+  , mkSkippableStep Then (lit "every marker of " *> ((,,) <$> capUntil @BindName " still in "
+                                                          <*> capUntil @BindName "'s view is kept by "
+                                                          <*> capRest @BindName)) $
       \(BindName wide, BindName narrowView, BindName narrow) w -> pure $
         either StepFailed id $ do
           vw <- cameraOf narrowView w
-          ws <- cameraCulled =<< boundScene wide w
-          kept <- Set.fromList . map fst <$> (cameraCulled =<< boundScene narrow w)
+          ws <- markerPoints =<< boundScene wide w
+          kept <- Set.fromList . map fst <$> (markerPoints =<< boundScene narrow w)
           let owed = [ i | (i, p) <- ws, pointInView vw p ]
               lost = [ i | i <- owed, not (i `Set.member` kept) ]
           pure $ if null owed
-            then StepSkipped ("nothing of " <> wide <> " lies inside " <> narrowView
+            then StepSkipped ("no marker of " <> wide <> " lies inside " <> narrowView
                               <> "'s view at this draw; this law has nothing to be owed")
             else if null lost then StepOk w
             else StepFailed (tshow (length lost) <> " of " <> tshow (length owed)
-                             <> " marker/label id(s) of " <> wide <> " inside " <> narrowView
+                             <> " marker(s) of " <> wide <> " inside " <> narrowView
                              <> "'s view are missing from " <> narrow <> ": " <> listSome lost)
     -- "the far side of the globe is never sent" (@target). The horizon
     -- is a property of the CENTER alone -- no zoom term -- so this step
@@ -627,6 +670,42 @@ allSteps =
                            <> " labels of " <> n <> " name nothing " <> n
                            <> " publishes, among its " <> tshow (Set.size named)
                            <> " features, markers and inscriptions: " <> listSome unnamed)
+  , mkSkippableStep Then (lit "every land name of "
+                          *> capUntil @BindName " sits within its own region, give or take the overflow its style declares") $
+      \(BindName n) w -> case landNameSetting n w of
+        Left e -> pure (StepFailed e)
+        Right (g, ov, rings, names)
+          | null names -> pure (StepSkipped (n <> " carries no land names at this draw; a law about \
+                                                  \where every land name sits has nothing to examine"))
+          | otherwise -> do
+              verdicts <- traverse (landNameVerdict w g ov rings) names
+              pure $ case sequence verdicts of
+                Left e -> StepFailed e
+                Right vs ->
+                  let spilled = [ (s, why) | (s, Spills why) <- zip (map lnSubject names) vs ]
+                  in if null spilled then StepOk w
+                     else StepFailed (tshow (length spilled) <> " of " <> tshow (length names)
+                                      <> " land names of " <> n <> " sit outside the land they name by \
+                                         \more than the style's overflow: "
+                                      <> listSome [ s <> " (" <> r <> ")" | (s, r) <- spilled ])
+  , mkSkippableStep Then (lit "every city of "
+                          *> capUntil @BindName " stands in a region it names, or on ground declared unclaimed") $
+      \(BindName n) w -> case citySetting n w of
+        Left e -> pure (StepFailed e)
+        Right (g, ov, land, cities)
+          | null cities -> pure (StepSkipped (n <> " carries no city names at this draw; a law about \
+                                                   \the ground every city stands on has nothing to examine"))
+          | otherwise -> do
+              verdicts <- traverse (cityVerdict w g ov land) cities
+              pure $ case sequence verdicts of
+                Left e -> StepFailed e
+                Right vs ->
+                  let bad = [ (ctSubject c, why) | (c, Just why) <- zip cities vs ]
+                  in if null bad then StepOk w
+                     else StepFailed (tshow (length bad) <> " of " <> tshow (length cities)
+                                      <> " cities of " <> n <> " stand on ground the answer does not \
+                                         \name honestly: "
+                                      <> listSome [ s <> " (" <> r <> ")" | (s, r) <- bad ])
     -- ---------- detail.feature ----------
     -- "detail changes how much is drawn, never what exists" --
     -- characterization D1, which HOLDS exactly (917 ids at all 13 lod
@@ -690,32 +769,6 @@ allSteps =
         if null sts then Right w
         else Left (n <> "'s plan carries " <> tshow (length sts)
                    <> " step(s), not none: " <> bounded (Array (V.fromList (take 3 sts))))
-    -- "the plan and the timeline tell one story, wherever you scrub" --
-    -- characterization T6, a BIJECTION ON IDS, both directions, both
-    -- kinds. T6's own trap is comparing counts: the timeline also
-    -- carries `journey` rows that deliberately produce no step, so
-    -- len(steps) /= len(changes) and a count law would be WRONG as well
-    -- as weak.
-  , mkSkippableStep Then (lit "every fade in " *> ((,,,) <$> capUntil @BindName " is a rise or fall in "
-                                                          <*> capUntil @BindName ", and every rise and fall in "
-                                                          <*> capUntil @BindName " has a fade in "
-                                                          <*> capRest @BindName)) $
-      \(BindName plan, BindName story, BindName story2, BindName plan2) w ->
-        pure $ either StepFailed id $ do
-          () <- sameTwice "plan" plan plan2
-          () <- sameTwice "timeline" story story2
-          sts <- planSteps =<< boundScene plan w
-          ch <- boundScene story w
-          ins <- fadeRegions "fade_in" sts
-          outs <- fadeRegions "fade_out" sts
-          rises <- changeSubjects "rise" "region:" ch
-          falls <- changeSubjects "fall" "region:" ch
-          pure $ if Set.null ins && Set.null outs && Set.null rises && Set.null falls
-            then StepSkipped ("this span carries no fades and no rises or falls; \
-                              \a bijection between empty sets demonstrates nothing")
-            else if ins == rises && outs == falls then StepOk w
-            else StepFailed ("fade_in vs rise: " <> describeSetDiff ins rises
-                             <> " -- fade_out vs fall: " <> describeSetDiff outs falls)
     -- "what fades in arrives, what fades out departs" (@target) --
     -- characterization T8, which is PARTIAL today: 56 region ids named
     -- by fades are never a region feature at any stop. T8's trap is
@@ -852,21 +905,71 @@ allSteps =
                   (Left e, _) -> StepFailed e
                   (_, Left e) -> StepFailed e
                   (Right (code, body), Right b1) -> refusalVerdict w code body b1
-    -- derivability.feature (@target): the manifest publishes no
-    -- disposition and no border attribution per entry, so the scene tier
-    -- cannot today be traced back to the fact tier at all. Computed, not
-    -- stubbed: it really looks for the two fields, and reports which of
-    -- them is missing from how many entries.
+    -- derivability.feature: every drawn entry names the census row
+    -- (layer:entity) that drew it and the borders it is made of; a
+    -- standing buffer names every row standing in it. The rows are
+    -- checked against the live census at the scene's own year.
   , mkStep Then (lit "every entry in " *> capUntil @BindName " traces to a disposition and a border") $
+      \(BindName n) w -> case (boundScene n w, lastRender w) of
+        (Left e, _) -> pure (Left e)
+        (_, Nothing) -> pure (Left "no year recorded for this scene (render a piece set first)")
+        (Right v, Just (Year y, _)) -> do
+          census <- transport w (baseUrl w <> "/api/census?year=" <> tshow y)
+          pure $ do
+            (_, rows) <- census
+            known <- censusKeys rows
+            fs <- arrayOf "features" v
+            verdicts <- traverse (\f -> (,) <$> textField "feature" f <*> pure (entryTrace known f)) fs
+            let bad = [ fid <> " (" <> why <> ")" | (fid, Left why) <- verdicts ]
+            if null fs then Left (n <> " carries no manifest entries to trace")
+            else if null bad then Right w
+            else Left (tshow (length bad) <> " of " <> tshow (length fs)
+                       <> " entries of " <> n <> " do not trace to the fact tier: " <> listSome bad)
+  -- licensing.feature: THE TERMS RIDE THE ANSWER. Law 6 makes
+  -- provenance total; these make the terms total too, and state them so
+  -- a constant cannot pass: the declared set must be exactly the set
+  -- the drawn sources carry, no more and no less.
+  , mkStep Then (lit "" *> capUntil @BindName " credits every source it draws with that source's own terms") $
       \(BindName n) w -> pure $ do
-        fs <- arrayOf "features" =<< boundScene n w
-        let missing k = length [ () | f <- fs, either (const True) (const False) (field k f) ]
-        if null fs then Left (n <> " carries no manifest entries to trace")
-        else if missing "disposition" == 0 && missing "border" == 0 then Right w
-        else Left (tshow (missing "disposition") <> " of " <> tshow (length fs)
-                   <> " entries carry no disposition, and " <> tshow (missing "border")
-                   <> " carry no border: the scene tier cannot be traced to the fact \
-                      \tier (disposition is Stage 2, borders Stage 3)")
+        v <- boundScene n w
+        credits <- arrayOf "attribution" v
+        rows <- traverse creditRow credits
+        declared <- licenseTerms v
+        let unnamed = [ src | (src, lic) <- rows, T.null lic ]
+            carried = Set.fromList (map snd rows)
+            missing = Set.toList (Set.difference carried declared)
+            phantom = Set.toList (Set.difference declared carried)
+        if null credits
+          then Left (n <> " credits no source at all, so nothing it draws says what may be done with it")
+        else if not (null unnamed)
+          then Left (tshow (length unnamed) <> " of " <> tshow (length rows)
+                     <> " sources are credited with no terms: " <> listSome unnamed)
+        else if not (null missing)
+          then Left (n <> " draws sources under terms it does not declare: " <> listSome missing)
+        else if not (null phantom)
+          then Left (n <> " declares terms no source it draws carries: " <> listSome phantom)
+        else Right w
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s terms are exactly "
+                                <*> capRest @LicenseTerms)) $
+      \(BindName n, LicenseTerms want) w -> pure $ do
+        v <- boundScene n w
+        declared <- licenseTerms v
+        let wanted = Set.fromList (filter (not . T.null) (map T.strip (T.splitOn "," want)))
+        if declared == wanted
+          then Right w
+          else Left (n <> " is redistributable under " <> listSome (Set.toList declared)
+                     <> ", not " <> listSome (Set.toList wanted))
+  , mkStep Then (lit "" *> ((,) <$> capUntil @BindName "'s terms include "
+                                <*> capRest @LicenseTerms)) $
+      \(BindName n, LicenseTerms want) w -> pure $ do
+        v <- boundScene n w
+        declared <- licenseTerms v
+        let wanted = Set.fromList (filter (not . T.null) (map T.strip (T.splitOn "," want)))
+            absent = Set.toList (Set.difference wanted declared)
+        if null absent
+          then Right w
+          else Left (n <> " does not carry " <> listSome absent
+                     <> "; it declares " <> listSome (Set.toList declared))
     -- census.feature: a BOUND response against a fixture. The existing
     -- fixture step compares the LAST response; a @property scenario that
     -- binds its response under a name (so the counterexample can report
@@ -1123,6 +1226,28 @@ allSteps =
         if aa == ab then Right w
         else Left (a <> "'s borders/claims/fills features do not equal " <> b
                    <> "'s: " <> describeSetDiff aa ab)
+  , mkStep Then (lit "no two region labels of " *> capUntil @BindName " carry the same name") $
+      \(BindName n) w -> pure $ do
+        v <- boundScene n w
+        ls <- arrayOf "labels" v
+        rows <- traverse (\l -> (,) <$> textField "subject" l <*> textField "text" l) ls
+        let texts = [ t | (s, t) <- rows, "region:" `T.isPrefixOf` s ]
+            dups  = [ (t, c) | (t, c) <- Map.toList (tally texts), c > 1 ]
+        if null dups then Right w
+        else Left (tshow (length dups) <> " region name(s) of " <> n
+                   <> " are drawn more than once: "
+                   <> listSome [ t <> " (x" <> tshow c <> ")" | (t, c) <- take 5 dups ])
+  , mkStep Then (lit "no place of " *> capUntil @BindName " is labeled more than once") $
+      \(BindName n) w -> pure $ do
+        v <- boundScene n w
+        ls <- arrayOf "labels" v
+        subs <- traverse (textField "subject") ls
+        let ids  = [ normPlace s | s <- subs, "place:" `T.isPrefixOf` s ]
+            dups = [ (i, c) | (i, c) <- Map.toList (tally ids), c > 1 ]
+        if null dups then Right w
+        else Left (tshow (length dups) <> " place(s) of " <> n
+                   <> " are labeled more than once: "
+                   <> listSome [ i <> " (x" <> tshow c <> ")" | (i, c) <- take 5 dups ])
   , mkStep Then (lit "no two touching fills of " *> capUntil @BindName " share a style") $
       \(BindName n) w -> case boundScene n w of
         Left e -> pure (Left e)
@@ -1612,11 +1737,6 @@ allSteps =
 -- Every constant below is the SERVER'S, transcribed with its source, not
 -- a number chosen to make anything pass.
 
--- A point on the unit sphere. The manifest publishes bounds centers,
--- label anchors and marker positions as 3-element unit vectors, so this
--- is the wire's own representation, not a re-encoding of it.
-data Vec3 = Vec3 !Double !Double !Double deriving (Eq, Show)
-
 -- A spherical cap: everything within `capRadius` radians of
 -- `capCenter`. Both the view and every resource's `bounds` are one of
 -- these, which is exactly why the visibility predicates are so short --
@@ -1630,35 +1750,43 @@ data Cap = Cap { capCenter :: Vec3, capRadius :: Double } deriving (Eq, Show)
 -- unclamped latitude would disagree with the server about where the
 -- camera IS.
 unitOf :: Center -> Vec3
-unitOf c = Vec3 (cos la * cos lo) (cos la * sin lo) (sin la)
-  where
-    la = radiansOf (latClamp (centerLat c))
-    lo = radiansOf (centerLon c)
+unitOf c = unitOfLatLon (latClamp (centerLat c)) (centerLon c)
 
 radiansOf :: Double -> Double
 radiansOf d = d * pi / 180
 
--- The angle between two unit vectors, in radians. `acos` of a dot
--- product that rounding has pushed a hair outside [-1, 1] is NaN, and a
--- NaN silently makes every comparison below False -- i.e. it would make
--- "is this feature out of view?" answer no for a feature exactly on the
--- boundary. Clamped, so the degenerate case is a real angle (0 or pi)
--- rather than a value that quietly disables the law.
-angleBetween :: Vec3 -> Vec3 -> Double
-angleBetween (Vec3 ax ay az) (Vec3 bx by bz) =
-  acos (max (-1) (min 1 (ax * bx + ay * by + az * bz)))
+-- THE VIEW CAP: the page's demand envelope, as the server declares it
+-- (crates/map-types/src/camera.rs). The page asks at a zoom rounded to
+-- the nearest half-octave, so its true zoom is at most 2^(1/4) times
+-- the asked one, and at a centre rounded onto a grid of 40% of the
+-- zoom, never finer than a tenth of a degree; the cap reaches the true
+-- page's half-diagonal plus half the grid's. Conflating this cap with
+-- the query's nominal zoom is characterization K3's named trap.
+centerGridDeg :: Double -> Double
+centerGridDeg z = max 0.1 (0.4 * z)
 
--- THE MARGIN. `build_query` (lib.rs:646-650):
---
---     radius = min(pi, radians(clamp(zoom, 0.05, 90) * 1.8))
---
--- The 1.8 is the server's own declared margin, and the characterization
--- pinned it empirically to better than 1%: a point at 1.78x the nominal
--- zoom is inside, at 1.82x it is outside. Conflating this cap radius
--- with the query's nominal `zoom` -- they differ by 80% -- is
--- characterization K3's named trap.
+demandReach :: Double -> Double
+demandReach z = (z * 2 ** 0.25 + centerGridDeg z / 2) * sqrt 2
+
+-- YOU CAN PAN AT ANY ZOOM: the served cap reaches the demand envelope
+-- of every neighbouring grid cell too, so one pan step re-demands a
+-- manifest but never geometry.
+servedReach :: Double -> Double
+servedReach z = demandReach z + centerGridDeg z * sqrt 2
+
+-- The demand envelope of one camera: what the page can show at it.
+demandCap :: Center -> Zoom -> Cap
+demandCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (demandReach (zoomClamp z))))
+
+-- The eight grid cells around a centre, at the zoom's own grid pitch.
+neighbourCells :: Center -> Zoom -> [Center]
+neighbourCells (Center la lo) (Zoom z) =
+  [ Center (latClamp (la + dy * g)) (lo + dx * g)
+  | dy <- [-1, 0, 1], dx <- [-1, 0, 1], (dx, dy) /= (0, 0) ]
+  where g = centerGridDeg (zoomClamp z)
+
 viewCap :: Center -> Zoom -> Cap
-viewCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (zoomClamp z * 1.8)))
+viewCap c (Zoom z) = Cap (unitOf c) (min pi (radiansOf (servedReach (zoomClamp z))))
 
 -- The whole-sphere sentinel: a cap that covers the globe. It intersects
 -- every view cap, is disjoint from none, and lies beyond no horizon --
@@ -1676,6 +1804,13 @@ coversSphere cap = capRadius cap >= pi
 -- predicate, and the reason the margin above has to be right.
 inView :: Cap -> Cap -> Bool
 inView view f = angleBetween (capCenter view) (capCenter f) <= capRadius view + capRadius f
+
+-- VISIBLE: in view of the cap and not beyond its centre's horizon. The
+-- served cap may reach past a quarter turn at a wide zoom, and the far
+-- side is never sent, so what an answer owes is the composition of the
+-- two laws; its negation is what an answer must omit.
+visibleFrom :: Cap -> Cap -> Bool
+visibleFrom view f = inView view f && not (beyondHorizon (capCenter view) f)
 
 -- OUT OF VIEW: the two caps are disjoint. Stated as the negation, in one
 -- place, so the two can never drift into overlapping or leaving a gap --
@@ -1697,7 +1832,7 @@ beyondHorizon eye f = angleBetween eye (capCenter f) - capRadius f > pi / 2
 -- when it lies inside the view cap. The degenerate cap of radius zero,
 -- so it is the same predicate as `inView`, not a second one.
 pointInView :: Cap -> Vec3 -> Bool
-pointInView view p = inView view (Cap p 0)
+pointInView view p = visibleFrom view (Cap p 0)
 
 -- ---------- where the words go ----------
 
@@ -1889,6 +2024,20 @@ arrayOf k v = case field k v of
   Right other     -> Left ("field " <> k <> " is not an array: " <> bounded other)
   Left e          -> Left e
 
+-- One row of the answer's attribution: a source and the terms it is
+-- available under, which travel together or the row is not a credit.
+creditRow :: Value -> Either Text (Text, Text)
+creditRow v = (,) <$> textField "source" v <*> textField "license" v
+
+-- The distinct terms the whole picture requires.
+licenseTerms :: Value -> Either Text (Set.Set Text)
+licenseTerms v = do
+  xs <- arrayOf "licenses" v
+  Set.fromList <$> traverse one xs
+  where
+    one (String t) = Right t
+    one other = Left ("a declared license is not a string: " <> bounded other)
+
 textField :: Text -> Value -> Either Text Text
 textField k v = case field k v of
   Right (String s) -> Right s
@@ -1956,6 +2105,37 @@ featureCaps v = do
         Nothing -> Left ("feature " <> fid <> " references resource " <> rid
                          <> ", which the manifest does not publish")
         Just r  -> (,) fid <$> capOf r
+
+-- A GEOMETRY ENTRY: one (feature, resource) pair of a region or a
+-- boundary. The culling law is stated over these, not over feature
+-- ids, because a region's rings share one id and the view may hold
+-- some of them and not others; and not over the markers' buffers,
+-- whose bounds are the buffer's and whose law is their own.
+type GeometryEntry = (Text, Text)
+
+describeEntry :: GeometryEntry -> Text
+describeEntry (fid, rid) = fid <> "/" <> rid
+
+geometryEntryCaps :: Value -> Either Text [(GeometryEntry, Cap)]
+geometryEntryCaps v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,) <$> textField "feature" f <*> textField "resource" f) fs
+  traverse (one byId) [ e | e@(fid, _) <- rows, isGeometry fid ]
+  where
+    one byId e@(fid, rid) = case Map.lookup rid byId of
+      Nothing -> Left ("feature " <> fid <> " references resource " <> rid
+                       <> ", which the manifest does not publish")
+      Just r  -> (,) e <$> capOf r
+
+geometryEntries :: Value -> Either Text (Set GeometryEntry)
+geometryEntries v = do
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,) <$> textField "feature" f <*> textField "resource" f) fs
+  pure (Set.fromList [ e | e@(fid, _) <- rows, isGeometry fid ])
+
+isGeometry :: Text -> Bool
+isGeometry fid = "region:" `T.isPrefixOf` fid || "boundary:" `T.isPrefixOf` fid
 
 -- Labels by their SUBJECT (the feature they name) and markers by their
 -- PLACE, each with the point it is drawn at. Subject and place are the
@@ -2033,6 +2213,12 @@ placementOf l = case field "placement" l of
 labelSubjects :: Value -> Either Text [Text]
 labelSubjects v = traverse (textField "subject") =<< arrayOf "labels" v
 
+tally :: Ord a => [a] -> Map.Map a Int
+tally xs = Map.fromListWith (+) [ (x, 1) | x <- xs ]
+
+normPlace :: Text -> Text
+normPlace t = maybe t ("place:" <>) (T.stripPrefix "place:place:" t)
+
 labelSubjectSet :: Value -> Either Text (Set Text)
 labelSubjectSet v = Set.fromList <$> labelSubjects v
 
@@ -2074,16 +2260,6 @@ namedThings v = do
     , Set.fromList [ "memory:" <> p | p <- is ]
     ])
 
--- The two kinds together, which is how camera.feature states both
--- nesting laws ("markers and labels"). Ids are namespaced by kind so a
--- marker place and a label subject that happen to share a hex id are two
--- different things, as they are on the wire.
-cameraCulled :: Value -> Either Text [(Text, Vec3)]
-cameraCulled v = do
-  ms <- markerPoints v
-  ls <- labelAnchors v
-  pure ([ ("marker:" <> i, p) | (i, p) <- ms ] ++ [ ("label:" <> i, p) | (i, p) <- ls ])
-
 -- ---------- reading a transition plan ----------
 
 planSteps :: Value -> Either Text [Value]
@@ -2094,36 +2270,10 @@ stepsOfKind k = filter (\s -> textField "kind" s == Right k)
 
 -- The region ids a plan's fades name, by kind. `fade_in`/`fade_out`
 -- publish a bare 16-hex `region`; scene manifests publish the same thing
--- as the feature id `region:HEX`, and `/api/changes` as the subject
--- `region:HEX` -- so one of the three has to be translated to compare
--- them, and it is done here, once, rather than at each of the three call
--- sites.
+-- as the feature id `region:HEX`, so one of the two is translated to
+-- compare them, here, once.
 fadeRegions :: Text -> [Value] -> Either Text (Set Text)
 fadeRegions kind sts = Set.fromList <$> traverse (textField "region") (stepsOfKind kind sts)
-
--- `/api/changes` is a flat array of change rows, each with a `kind` and
--- a namespaced `subject`. The subjects of one kind, with the namespace
--- stripped, are directly comparable with `fadeRegions` above.
---
--- Fix round 1, finding 9: a row of the right KIND but the wrong
--- NAMESPACE (a `rise` on a `boundary:`) is dropped, DELIBERATELY and not
--- by oversight -- a fade names a region, so a change about a boundary is
--- not a change this law is quantified over. Saying so here because the
--- drop is silent and this is exactly where the data model is known to be
--- muddy: report section 8 finding 1 and characterization 4.7 both record
--- journey (`Way`) entities whose end is logged as a region Fall. If that
--- muddiness ever moves the other way -- a genuine region change filed
--- under another namespace -- this filter would hide it, and the fix
--- would belong here.
-changeSubjects :: Text -> Text -> Value -> Either Text (Set Text)
-changeSubjects kind ns v = case v of
-  Array rows -> Set.fromList . concat <$> traverse one (V.toList rows)
-  other      -> Left ("the changes timeline is not an array: " <> bounded other)
-  where
-    one r = do
-      k <- textField "kind" r
-      s <- textField "subject" r
-      pure [ T.drop (T.length ns) s | k == kind, ns `T.isPrefixOf` s ]
 
 -- THE STRUCTURAL MIRROR of a plan (characterization T5): reverse the
 -- step order, swap fade_in with fade_out, and swap each morph's `from`
@@ -2233,6 +2383,214 @@ noPlacementYet n consequence total unplaced misplaced =
     firstReason = case misplaced of
       ((_, why) : _) -> why
       []             -> "(no reason recorded)"
+
+-- ---------- where a name stands ----------
+
+-- The page a bound answer placed its names on, read from the answer's
+-- own `view` and held against the camera the scenario asked for: an
+-- answer placed for some other view is a broken answer, not a view.
+pageOf :: Text -> World -> Either Text Page
+pageOf n w = do
+  v <- boundScene n w
+  vw <- field "view" v
+  (Center la lo, Zoom z) <- maybe (Left (n <> " was not rendered with a camera (no center and zoom \
+                                          \recorded for it), so it has no page for this law to be about"))
+                                  Right (Map.lookup n (cameras w))
+  case vw of
+    Null -> Left (n <> " was answered at no view: its names are placed on no page")
+    _ -> do
+      pg <- Page <$> textField "chart" vw <*> numField "lat" vw <*> numField "lon" vw
+                 <*> numField "zoom" vw <*> numField "width" vw <*> numField "height" vw
+      let apart a b = abs (a - b) > 1e-9
+      if apart (pageLat pg) (latClamp la) || apart (pageLon pg) lo || apart (pageZoom pg) z
+        then Left (n <> " placed its names for the view " <> tshow (pageLat pg, pageLon pg, pageZoom pg)
+                   <> ", not the view it was asked for, " <> tshow (latClamp la, lo, z))
+        else Right pg
+
+-- The overflow budget the answer's own dress declares, in em of each
+-- name's size: how far a land name may spill past its shore, and how
+-- far off a region's edge a city may stand and still be counted in it.
+overflowOf :: Value -> Either Text Double
+overflowOf v = numField "labelOverflowEm" =<< field "dress" v
+
+-- Ring resources per feature id, holes and outers alike: a region's
+-- rings share one feature id on the wire, and its interior is their
+-- even-odd composition, so containment is stated over the whole set.
+ringResourcesOf :: Value -> Either Text (Map.Map Text [(Text, Cap)])
+ringResourcesOf v = do
+  byId <- resourceRecords v
+  fs <- arrayOf "features" v
+  rows <- traverse (\f -> (,,) <$> textField "feature" f <*> textField "resource" f <*> textField "piece" f) fs
+  let land = [ (fid, rid, r) | (fid, rid, piece) <- rows, piece == "fills" || piece == "claims"
+                             , Just r <- [Map.lookup rid byId]
+                             , textField "kind" r == Right "ring"
+                             , field "whole" r /= Right (Bool True) ]
+  pairs <- traverse (\(fid, rid, r) -> (\c -> (fid, [(rid, c)])) <$> capOf r) land
+  pure (Map.fromListWith (flip (++)) pairs)
+
+fetchRings :: World -> [Text] -> IO (Either Text [[Vec3]])
+fetchRings w rids = do
+  got <- mapM (\rid -> transportRaw w (baseUrl w <> "/api/resource?id=" <> rid)) rids
+  pure (traverse (>>= decodeRingVertices) got)
+
+data LandName = LandName { lnSubject :: Text, lnBox :: LabelBox, lnSize :: Double }
+
+data Standing = Within | Spills Text
+
+landNameSetting :: Text -> World -> Either Text (Globe, Double, Map.Map Text [(Text, Cap)], [LandName])
+landNameSetting n w = do
+  v <- boundScene n w
+  g <- globeOf =<< pageOf n w
+  ov <- overflowOf v
+  rings <- ringResourcesOf v
+  ls <- arrayOf "labels" v
+  names <- fmap concat $ traverse (\l -> do
+    s <- textField "subject" l
+    face <- textField "face" l
+    if "region:" `T.isPrefixOf` s && face == "territory"
+      then case placementOf l of
+        Placed b -> (\sz -> [LandName s b sz]) <$> numField "size" l
+        Unplaced -> Left (s <> " carries no placement, so where its words sit is not a question \
+                             \this answer can be asked")
+        Misplaced why -> Left (s <> " publishes a placement that is not one: " <> why)
+      else Right []) ls
+  pure (g, ov, rings, names)
+
+-- The four corners of the box, as page pixels.
+boxCornersPx :: Globe -> LabelBox -> [(Double, Double)]
+boxCornersPx g b =
+  [ (x * globeWidth g, y * globeHeight g)
+  | x <- [boxLeft b, boxRight b], y <- [boxTop b, boxBottom b] ]
+
+-- Where a page point stands relative to a region: inside it or not,
+-- and how far from its projected shore either way, in em of the name's
+-- own size.
+data Footing = Footing { ftInside :: Bool, ftShoreEm :: Double }
+
+standingOf :: Globe -> Double -> [[Vec3]] -> (Double, Double) -> Either Text Footing
+standingOf g sizePx rings q = case unprojectPx g q of
+  Nothing -> Left "off the globe"
+  Just p -> Right (Footing (insideRings p rings) (pageDistanceToRings g q rings / sizePx))
+
+spillOf :: Double -> Footing -> Maybe Double
+spillOf ov f
+  | ftInside f = Nothing
+  | ftShoreEm f <= ov = Nothing
+  | otherwise = Just (ftShoreEm f)
+
+landNameVerdict :: World -> Globe -> Double -> Map.Map Text [(Text, Cap)] -> LandName
+                -> IO (Either Text Standing)
+landNameVerdict w g ov byFeature (LandName s b size) =
+  case Map.lookup s byFeature of
+    Nothing -> pure (Left (s <> " is named but the answer publishes no ring of it"))
+    Just rcs -> do
+      rings <- fetchRings w (map fst rcs)
+      pure $ do
+        rs <- rings
+        let sizePx = size * globeWidth g / designWidth
+            corners = boxCornersPx g b
+            spills = [ why | c <- corners
+                     , why <- case standingOf g sizePx rs c of
+                         Left e -> ["a corner is " <> e]
+                         Right f -> [ tshow (roundEm d) <> " em past its shore" | Just d <- [spillOf ov f] ] ]
+        pure (case spills of
+                [] -> Within
+                (why : _) -> Spills why)
+
+roundEm :: Double -> Double
+roundEm d = fromIntegral (round (d * 100) :: Int) / 100
+
+-- The design page every label size is stated against
+-- (crates/map-viewer/src/page.html DESIGN_WIDTH).
+designWidth :: Double
+designWidth = 1200
+
+data City = City { ctSubject :: Text, ctAt :: Vec3, ctSize :: Double, ctGround :: Maybe Text }
+
+citySetting :: Text -> World -> Either Text (Globe, Double, Map.Map Text [(Text, Cap)], [City])
+citySetting n w = do
+  v <- boundScene n w
+  g <- globeOf =<< pageOf n w
+  ov <- overflowOf v
+  land <- ringResourcesOf v
+  ls <- arrayOf "labels" v
+  cities <- fmap concat $ traverse (\l -> do
+    s <- textField "subject" l
+    face <- textField "face" l
+    if face == "place"
+      then do
+        at <- vec3Of =<< field "anchor" l
+        sz <- numField "size" l
+        let ground = either (const Nothing) Just (textField "ground" l)
+        pure [City s at sz ground]
+      else Right []) ls
+  pure (g, ov, land, cities)
+
+-- A city's ground, judged with the same slack both ways: a city named
+-- as standing in a region may stand up to the overflow outside its
+-- shore, and a city declared unclaimed is only a lie when it stands
+-- deeper than the overflow inside some region the answer draws.
+cityVerdict :: World -> Globe -> Double -> Map.Map Text [(Text, Cap)] -> City -> IO (Either Text (Maybe Text))
+cityVerdict w g ov land (City _ at size ground) = case (ground, placePx g at) of
+  (_, Nothing) -> pure (Right (Just "stands behind the globe of the view it was sent for"))
+  (Nothing, _) -> pure (Right (Just "says nothing about the ground it stands on: silently nowhere"))
+  (Just "unclaimed", Just q) -> do
+    let candidates = [ (fid, rcs) | (fid, rcs) <- Map.toList land
+                                  , any (\(_, c) -> pointInView c at) rcs ]
+    found <- mapM (\(fid, rcs) -> fmap (fmap ((,) fid)) (fetchRings w (map fst rcs))) candidates
+    pure $ do
+      fs <- sequence found
+      let deepInside f = ftInside f && ftShoreEm f > ov
+          standingIn = [ fid | (fid, rs) <- fs, either (const False) deepInside (standingOf g sizePx rs q) ]
+      pure (case standingIn of
+              [] -> Nothing
+              (fid : _) -> Just ("declared unclaimed, but stands inside " <> fid))
+  (Just fid, Just q) -> case Map.lookup fid land of
+    Nothing -> pure (Right (Just ("names " <> fid <> " as its ground, which the answer draws no land ring of")))
+    Just rcs -> do
+      rings <- fetchRings w (map fst rcs)
+      pure $ do
+        rs <- rings
+        pure (case standingOf g sizePx rs q of
+                Left why -> Just ("names " <> fid <> " as its ground but is " <> why)
+                Right f -> (\d -> "names " <> fid <> " as its ground but stands "
+                                  <> tshow (roundEm d) <> " em outside it") <$> spillOf ov f)
+  where
+    sizePx = size * globeWidth g / designWidth
+
+-- The census rows a scene may trace to, as layer:entity keys.
+censusKeys :: Value -> Either Text (Set Text)
+censusKeys v = case v of
+  Array rows -> Set.fromList <$> traverse (\r -> (\l e -> l <> ":" <> e) <$> textField "layer" r <*> textField "entity" r) (V.toList rows)
+  other -> Left ("the census is not an array: " <> bounded other)
+
+-- One manifest entry's trace, judged: a drawn entry (a region or a
+-- boundary) names one known disposition and at least one border; a
+-- standing buffer names known dispositions; anything else is unknown.
+entryTrace :: Set Text -> Value -> Either Text ()
+entryTrace known f = do
+  fid <- textField "feature" f
+  if "region:" `T.isPrefixOf` fid || "boundary:" `T.isPrefixOf` fid
+    then do
+      d <- either (const (Left "carries no disposition")) Right (textField "disposition" f)
+      bs <- either (const (Left "carries no borders")) Right (arrayOf "borders" f)
+      hexes <- traverse (textField "border") [ object [("border", b)] | b <- bs ]
+      if not (d `Set.member` known) then Left ("names a disposition the census does not hold: " <> d)
+      else if null hexes then Left "names no border"
+      else if any (not . isHex16) hexes then Left "names a border that is not a sixteen-hex id"
+      else Right ()
+    else if "markers:" `T.isPrefixOf` fid
+    then do
+      ds <- either (const (Left "carries no dispositions")) Right (arrayOf "dispositions" f)
+      names <- traverse (\d -> textField "d" (object [("d", d)])) ds
+      if null names then Left "names no disposition"
+      else case filter (not . (`Set.member` known)) names of
+        [] -> Right ()
+        (bad : _) -> Left ("names a disposition the census does not hold: " <> bad)
+    else Left "is an entry kind this law does not know"
+
+isHex16 :: Text -> Bool
+isHex16 t = T.length t == 16 && T.all (`elem` ("0123456789abcdef" :: String)) t
 
 -- A handful of ids in a failure message, the same way `describeSetDiff`
 -- bounds its own: five is enough to recognize a pattern, and a scene
@@ -2478,6 +2836,13 @@ tooFew n have want =
 -- there) and exactly wrong for a URL (fix 7: it silently swallowed
 -- " as first" as part of a GET path, making an undefined "as"-binding
 -- step invisible to the totality check).
+newtype LicenseTerms = LicenseTerms Text deriving (Eq, Show)
+instance FromCapture LicenseTerms where
+  capName _ = "terms"
+  universe _ = Described "one or more licence identifiers, comma-separated (e.g. public-domain, GPL-3.0-only)"
+  renderCap (LicenseTerms t) = t
+  parseCap = Right . LicenseTerms . T.strip
+
 newtype FixtureRefFreeText = FixtureRefFreeText Text deriving (Eq, Show)
 instance FromCapture FixtureRefFreeText where
   capName _ = "text"

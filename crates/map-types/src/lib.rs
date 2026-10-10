@@ -27,11 +27,13 @@
 
 pub mod algebra;
 pub mod boundary;
+pub mod camera;
 pub mod contracts;
 pub mod encode;
 pub mod geom;
 pub mod ident;
 pub mod laws;
+pub mod license;
 pub mod piece;
 pub mod provider;
 pub mod query;
@@ -57,13 +59,13 @@ pub use boundary::{
 };
 pub use contracts::{ChronoSpan, ChronologyExport, GazetteerEntry, GazetteerExport};
 pub use encode::{EncodeError, SceneEncoder, TransitionEncoder};
-pub use geom::{covers_sphere, inside_ring, morph_rings, simplify_polyline, slerp, Bbox, GeomError, Lod, Ring, UnitVec, Winding};
+pub use geom::{covers_sphere, densify_edges, inside_ring, morph_rings, simplify_polyline, slerp, stand_in, Bbox, GeomError, Lod, Ring, UnitVec, Winding, MAX_EDGE_STEP};
 pub use ident::{BoundaryId, ChangeEventId, MapAddressed, MapKind, MapPid, RegionId, StyleId};
 pub use laws::{validate_all, Violation};
 pub use piece::{Piece, PieceSet};
 pub use provider::{MapError, MapProvider, SubjectListing};
 pub use query::{RenderQuery, RenderSubject, TimeSelector};
-pub use scene::{accumulate, sample_times, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
+pub use scene::{accumulate, sample_times, Ground, PlacedLabel, Snapshot, StyledBoundary, StyledRegion};
 pub use style::{Style, StyleError};
 pub use timeline::{
     Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,

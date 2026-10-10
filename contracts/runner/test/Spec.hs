@@ -10,6 +10,7 @@ import Gherkin.Render
 import Capture
 import Pattern
 import World
+import Sphere
 import Steps
 import Run
 import qualified Check
@@ -29,6 +30,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import GHC.Float (castFloatToWord32)
 import Control.Monad (when)
 import System.Directory
   (doesFileExist, getTemporaryDirectory, createDirectoryIfMissing,
@@ -1568,8 +1570,13 @@ main = hspec $ do
             , (When, "I render pieces fills at year -1405 in no style")
             , (Then, "viewed keeps every feature of world in view and omits every feature of world out of view")
             , (Then, "every resource here and there share is byte-identical in both")
-            , (Then, "narrow's markers and labels are a subset of wide's")
-            , (Then, "every marker and label of wide still in narrow's view is kept by narrow")
+            , (Then, "viewed keeps every marker of world in view and omits every marker of world out of view")
+            , (Then, "asked keeps every feature of world one pan away from its view, in every direction, at 2")
+            , (Then, "sampled credits every source it draws with that source's own terms")
+            , (Then, "ocean's terms are exactly public-domain")
+            , (Then, "world's terms include GPL-3.0-only")
+            , (Then, "narrow's markers are a subset of wide's")
+            , (Then, "every marker of wide still in narrow's view is kept by narrow")
             , (Then, "no feature of viewed is beyond the horizon of 31.5,35.0")
             , (Then, "every label of viewed anchors in view")
               -- label-placement.feature's four, in the corpus's own
@@ -1580,12 +1587,13 @@ main = hspec $ do
             , (Then, "every label of viewed carries a placement")
             , (Then, "no two labels of viewed overlap")
             , (Then, "every label of viewed is legible at the view it was asked for")
+            , (Then, "every land name of viewed sits within its own region, give or take the overflow its style declares")
+            , (Then, "every city of viewed stands in a region it names, or on ground declared unclaimed")
             , (Then, "every label of viewed names something viewed publishes")
             , (Then, "one and other draw the same features")
             , (Then, "every shared resource has at least as many vertices in fine as in coarse, and in ultra as in fine")
             , (Then, "no shared resource of glance carries more vertices than it does in corner")
             , (Then, "still's steps are the empty list")
-            , (Then, "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan")
             , (Then, "every fade-in region of plan is in after and not before, and every fade-out region is in before and not after")
             , (Then, "back is there with every morph reversed and every fade inverted")
             , (Then, "every morph of plan carries at least as many points as its border carries vertices in after")
@@ -1623,6 +1631,8 @@ main = hspec $ do
             , (Then, "world's first region draws the whole map's borders, claims and fills")
             , (Then, "world's first region draws no water, ground or journeys features")
             , (Then, "no two touching fills of world share a style")
+            , (Then, "no two region labels of world carry the same name")
+            , (Then, "no place of world is labeled more than once")
             , (Then, "every fill whose touching neighbors are the same in first and second wears the same style in both")
             ]
           steps = [ Step k b Nothing | (k, b) <- exemplars ]
@@ -4140,40 +4150,30 @@ main = hspec $ do
       -- and the clamp does not flatten everything: two legal latitudes
       -- inside the frame stay distinct
       unitOf (Center 89.9 0) `shouldNotBe` unitOf (Center 89.8 0)
-    it "the view cap's radius is 1.8x the nominal zoom -- the margin \
-       \pinned at the characterization's own 1.78-in / 1.82-out boundary" $ do
-      -- Characterization 1.3, measured live: with zoom 2, a point at
-      -- 1.78x the nominal zoom is IN the view and one at 1.82x is OUT.
+    it "the view cap is the page's demand envelope: the true page's \
+       \half-diagonal at the ladder's top plus half the centre grid's, and \
+       \both terms are load-bearing" $ do
       -- Both sides, because a law asserting only "far things are out" is
       -- satisfied by culling everything (characterization C5's trap).
       let vw = viewCap origin (Zoom 2)
-      pointInView vw (east (1.78 * 2)) `shouldBe` True
-      pointInView vw (east (1.82 * 2)) `shouldBe` False
-    it "the 1.8 margin is load-bearing: a point at 1.5x the nominal zoom \
-       \is in view ONLY because of it, and one at 2.0x is out" $ do
-      -- The discriminating pair for the CONSTANT. Drop the margin to 1.0
-      -- and the first line flips; raise it to 2.0 and the second does.
-      -- Conflating the cap radius with the query's nominal zoom is
-      -- characterization K3's named trap, and this is what catches it.
-      let vw = viewCap origin (Zoom 2)
-      pointInView vw (east 3.0) `shouldBe` True
-      pointInView vw (east 4.0) `shouldBe` False
-    it "at the widest legal zoom the cap is 162 degrees -- not the whole \
-       \sphere, and the difference is exactly what makes the antipodal \
-       \case a statement about the FEATURE's extent" $ do
+          reach = (2 * 2 ** 0.25 + 0.8 / 2) * sqrt 2 + 0.8 * sqrt 2
+      pointInView vw (east (reach - 0.01)) `shouldBe` True
+      pointInView vw (east (reach + 0.01)) `shouldBe` False
+      -- the grid's floor is what keeps a deep zoom's corners: at zoom
+      -- 0.05 the page's centre may still be a twentieth of a degree off
+      let deep = viewCap origin (Zoom 0.05)
+      pointInView deep (east (0.05 * sqrt 2 * 1.1)) `shouldBe` True
+      capRadius deep `shouldSatisfy` \r -> r > degrees (0.05 * 2)
+    it "at the widest legal zoom the cap is the whole sphere: the envelope \
+       \of a hemisphere page reaches past the antipode" $ do
       let widest = viewCap origin (Zoom 90)
-      capRadius widest `shouldSatisfy` \r -> abs (r - degrees 162) < 1e-9
-      -- Characterization 1.3's degenerate end says that at zoom 90 the
-      -- camera is a no-op FOR THIS CANON -- and this is the precise
-      -- reason, which is easy to state wrongly. A bare POINT at 179
-      -- degrees is genuinely outside a 162-degree cap:
+      capRadius widest `shouldSatisfy` \r -> abs (r - pi) < 1e-9
+      inView widest (Cap (east 179) 0) `shouldBe` True
+      inView widest (Cap (east 179) (degrees 5)) `shouldBe` True
+      -- the cap reaches the far side; the horizon still hides it, so a
+      -- point there is in the cap and yet not visible
       pointInView widest (east 179) `shouldBe` False
-      pointInView widest (east 161) `shouldBe` True
-      -- What reaches everything is a FEATURE, because its own bounding
-      -- cap is added to the view's. An almost-antipodal feature with any
-      -- appreciable extent still intersects:
-      inView widest (Cap (east 179) (degrees 20)) `shouldBe` True
-      inView widest (Cap (east 179) (degrees 5)) `shouldBe` False
+      pointInView widest (east 89) `shouldBe` True
     it "inView counts the FEATURE's own extent, not only the view's -- \
        \the discriminating case a view-radius-only mutation fails" $ do
       let vw = Cap (east 0) 0.4
@@ -4586,6 +4586,58 @@ main = hspec $ do
                            [] []
         camAt0 = (Center 0 0, Zoom 2)
 
+    it "the pan law owes a neighbouring cell's whole page: a feature just past the \
+       \asked view but inside the next cell's envelope must be sent" $ do
+      -- at zoom 2 the grid pitch is 0.8 degrees; a feature 4 degrees east
+      -- is inside the eastern neighbour's envelope (0.8 + 3.7) and owed
+      let world = manifest [feat "region:near" "rn", feat "region:next" "rx", feat "region:far" "rf"]
+                           [res "rn" 10 (east 0) 0.001, res "rx" 10 (east 4) 0.001, res "rf" 10 (east 40) 0.001] [] []
+          full = manifest [feat "region:near" "rn", feat "region:next" "rx"]
+                          [res "rn" 10 (east 0) 0.001, res "rx" 10 (east 4) 0.001] [] []
+          tight = manifest [feat "region:near" "rn"] [res "rn" 10 (east 0) 0.001] [] []
+          law = "asked keeps every feature of world one pan away from its view, in every direction, at 2"
+      shouldPass =<< runThen law [("asked", full), ("world", world)] [("asked", camAt0)]
+      o <- runThen law [("asked", tight), ("world", world)] [("asked", camAt0)]
+      shouldFailWith "region:next" o
+      shouldFailWith "neighbouring cell" o
+    it "the two-sided marker law partitions markers by the view cap, both halves" $ do
+      let world = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+          honest = manifest [] [] [] [mrk "place:near" (east 0)]
+          leaky = world
+          hollow = manifest [] [] [] []
+      shouldPass =<< runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+                       [("viewed", honest), ("world", world)] [("viewed", camAt0)]
+      shouldFailWith "out of view but sent" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", leaky), ("world", world)] [("viewed", camAt0)]
+      shouldFailWith "in view but absent" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", hollow), ("world", world)] [("viewed", camAt0)]
+      shouldPass =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", honest), ("world", honest)] [("viewed", camAt0)]
+      shouldSkipWith "carries no markers" =<<
+        runThen "viewed keeps every marker of world in view and omits every marker of world out of view"
+          [("viewed", hollow), ("world", hollow)] [("viewed", camAt0)]
+    it "... and a marker beyond the horizon is OUT of view however wide the camera, \
+       \the same composition the feature law uses: the served cap may reach past a \
+       \quarter turn, and a point on the far side is never owed" $ do
+      let world = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+          honest = manifest [] [] [] [mrk "place:near" (east 0)]
+          law = "viewed keeps every marker of world in view and omits every marker of world out of view"
+      shouldPass =<< runThen law [("viewed", honest), ("world", world)] [("viewed", (Center 0 0, Zoom 90))]
+      o <- runThen law [("viewed", world), ("world", world)] [("viewed", (Center 0 0, Zoom 90))]
+      shouldFailWith "out of view but sent" o
+      shouldFailWith "place:far" o
+    it "the two-sided culling law is stated over geometry ENTRIES: a region whose \
+       \rings straddle the view keeps the ring in view and drops the one beyond" $ do
+      let world = manifest [feat "region:r" "rn", feat "region:r" "rf", feat "markers:markers" "pm"]
+                           [res "rn" 10 (east 0) 0.001, res "rf" 10 (east 100) 0.001, res "pm" 1 (east 50) 1.0]
+                           [] []
+          honest = manifest [feat "region:r" "rn", feat "markers:markers" "pm2"]
+                            [res "rn" 10 (east 0) 0.001, res "pm2" 1 (east 0) 0.0] [] []
+      shouldPass =<< runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+                       [("viewed", honest), ("world", world)] [("viewed", camAt0)]
     it "the two-sided culling law computes BOTH halves and reports the \
        \real violation -- an honest @target, never a stub" $ do
       -- `viewed` sent both features; the far one is out of view, so the
@@ -4604,9 +4656,18 @@ main = hspec $ do
       shouldPass o
     it "... and it SKIPS rather than passes when the camera leaves \
        \nothing out of view: a green earned by the draw is not a green" $ do
+      let nearHemisphere = manifest [feat "region:near" "rn", feat "region:wide" "rw"]
+                                    [res "rn" 10 (east 0) 0.001, res "rw" 10 (east 60) 0.001] [] []
+      o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
+             [("viewed", nearHemisphere), ("world", nearHemisphere)] [("viewed", (Center 0 0, Zoom 90))]
+      shouldSkipWith "cannot exercise the \"omits\" half" o
+    it "... and the far side counts as OUT of view however wide the camera: \
+       \the served cap may reach past a quarter turn, and the answer owes \
+       \nothing beyond the horizon" $ do
       o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
              [("viewed", nearFar), ("world", nearFar)] [("viewed", (Center 0 0, Zoom 90))]
-      shouldSkipWith "cannot exercise the \"omits\" half" o
+      shouldFailWith "out of view but sent" o
+      shouldFailWith "region:far" o
     it "... and a scene rendered with NO camera is an error, not a pass: \
        \a law about a view cannot be checked against a scene with none" $ do
       o <- runThen "viewed keeps every feature of world in view and omits every feature of world out of view"
@@ -4846,26 +4907,26 @@ main = hspec $ do
       -- from the far side, it is the NEAR feature that is over the edge
       o2 <- runThen "no feature of viewed is beyond the horizon of 0,100" [("viewed", nearFar)] []
       shouldFailWith "region:near" o2
-    it "the marker/label subset law compares the two kinds by their \
-       \published ids, and names what is missing" $ do
-      let narrow = manifest [] [] [lbl "region:a" (east 0)] [mrk "place:x" (east 0)]
+    it "the marker subset law compares markers by their published place ids, \
+       \names what is missing, and leaves names out of it" $ do
+      let narrow = manifest [] [] [lbl "region:a" (east 0), lbl "region:b" (east 1)] [mrk "place:x" (east 0)]
           wide   = manifest [] [] [lbl "region:a" (east 0)]
                                   [mrk "place:x" (east 0), mrk "place:y" (east 1)]
-      shouldPass =<< runThen "narrow's markers and labels are a subset of wide's"
+      shouldPass =<< runThen "narrow's markers are a subset of wide's"
                        [("narrow", narrow), ("wide", wide)] []
-      shouldFailWith "marker:place:y" =<<
-        runThen "wide's markers and labels are a subset of narrow's"
+      shouldFailWith "place:y" =<<
+        runThen "wide's markers are a subset of narrow's"
           [("narrow", narrow), ("wide", wide)] []
-    it "the zoom-in law owes only what is still inside the narrower \
-       \view, and skips when nothing is" $ do
-      let wide = manifest [] [] [] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
+    it "the zoom-in law owes only the markers still inside the narrower \
+       \view, and skips when none is" $ do
+      let wide = manifest [] [] [lbl "region:a" (east 0)] [mrk "place:near" (east 0), mrk "place:far" (east 100)]
           narrow = manifest [] [] [] []
-      shouldFailWith "marker:place:near" =<<
-        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+      shouldFailWith "place:near" =<<
+        runThen "every marker of wide still in narrow's view is kept by narrow"
           [("wide", wide), ("narrow", narrow)] [("narrow", camAt0)]
       -- with the camera pointed away, nothing of `wide` is owed at all
       shouldSkipWith "nothing to be owed" =<<
-        runThen "every marker and label of wide still in narrow's view is kept by narrow"
+        runThen "every marker of wide still in narrow's view is kept by narrow"
           [("wide", manifest [] [] [] [mrk "place:far" (east 100)]), ("narrow", narrow)]
           [("narrow", camAt0)]
     it "byte-identity across two cameras compares the WHOLE shared \
@@ -4929,22 +4990,6 @@ main = hspec $ do
       shouldPass =<< runThen "still's steps are the empty list" [("still", plan [])] []
       shouldFailWith "carries 1 step(s), not none" =<<
         runThen "still's steps are the empty list" [("still", plan [fadeIn "a"])] []
-    it "the plan-vs-timeline law is a BIJECTION ON IDS, both kinds, both \
-       \directions -- not a count (the timeline also carries journey \
-       \rows that deliberately produce no step)" $ do
-      let p = plan [fadeIn "aa", fadeOut "bb"]
-          story = A.toJSON [change "rise" "region:aa", change "fall" "region:bb",
-                            change "journey" "boundary:cc"]
-          storyShort = A.toJSON [change "rise" "region:aa"]
-      shouldPass =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", p), ("story", story)] []
-      shouldFailWith "fade_out vs fall" =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", p), ("story", storyShort)] []
-      shouldSkipWith "bijection between empty sets" =<<
-        runThen "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-          [("plan", plan []), ("story", A.toJSON ([] :: [A.Value]))] []
     it "the endpoint-fade law checks BOTH directions: a region that \
        \exists in NEITHER scene is absent from the other endpoint too, \
        \and would pass a one-sided check" $ do
@@ -4995,24 +5040,33 @@ main = hspec $ do
                        [("span", a), ("instant", b)] []
       shouldFailWith "was ignored, not refused" =<<
         runThen "span is refused or differs from instant" [("span", a), ("instant", a)] []
-    it "the derivability @target really looks for the two fields, and \
-       \counts how many entries lack each" $ do
-      let bare = manifest [feat "region:a" "r1"] [res "r1" 1 (east 0) 0.1] [] []
-          traced = A.object
-            [ "features" A..= [A.object [ "feature" A..= ("region:a" :: T.Text)
-                                        , "resource" A..= ("r1" :: T.Text)
-                                        , "disposition" A..= ("held" :: T.Text)
-                                        , "border" A..= ("b1" :: T.Text) ]]
-            , "resources" A..= ([] :: [A.Value]) ]
-      shouldFailWith "1 of 1 entries carry no disposition" =<<
-        runThen "every entry in sampled traces to a disposition and a border" [("sampled", bare)] []
-      shouldPass =<< runThen "every entry in sampled traces to a disposition and a border"
-                       [("sampled", traced)] []
-    it "an empty manifest is a FAILURE for the derivability law, not a \
-       \vacuous pass -- `all` over an empty list is trivially true" $
-      shouldFailWith "carries no manifest entries" =<<
-        runThen "every entry in sampled traces to a disposition and a border"
-          [("sampled", manifest [] [] [] [])] []
+    it "the derivability law checks every entry against the live census: a drawn \
+       \entry names a known disposition and a border, a standing buffer names known \
+       \dispositions, and an untraced entry is named" $ do
+      let censusRows = A.toJSON [ A.object [ "entity" A..= ("egypt" :: T.Text), "layer" A..= ("territory" :: T.Text) ]
+                                , A.object [ "entity" A..= ("place:gaza" :: T.Text), "layer" A..= ("scripture-claims" :: T.Text) ] ]
+          fake url | "/api/census?year=-1405" `T.isSuffixOf` url = pure (Right ("", censusRows))
+                   | otherwise = pure (Left ("no such route: " <> url))
+          run v = case firstOutcome Then "every entry in sampled traces to a disposition and a border" of
+            Nothing -> pure (StepFailed "NO DEFINITION MATCHED THIS BODY")
+            Just f -> f (mkWorld "http://x" fake "")
+                          { bound = Map.fromList [("sampled", ("", v))]
+                          , lastRender = Just (Year (-1405), StyleName "canaan") }
+          entry fid extra = A.object ([ "feature" A..= (fid :: T.Text), "resource" A..= ("r1" :: T.Text) ] ++ extra)
+          body es = A.object [ "features" A..= es, "resources" A..= ([] :: [A.Value]) ]
+          traced = entry "region:a" [ "disposition" A..= ("territory:egypt" :: T.Text)
+                                    , "borders" A..= [("0123456789abcdef" :: T.Text)] ]
+          standing = entry "markers:markers" [ "dispositions" A..= [("scripture-claims:place:gaza" :: T.Text)] ]
+      shouldPass =<< run (body [traced, standing])
+      shouldFailWith "carries no disposition" =<< run (body [entry "region:a" []])
+      shouldFailWith "the census does not hold" =<<
+        run (body [entry "region:a" [ "disposition" A..= ("territory:atlantis" :: T.Text)
+                                   , "borders" A..= [("0123456789abcdef" :: T.Text)] ]])
+      shouldFailWith "not a sixteen-hex" =<<
+        run (body [entry "boundary:b" [ "disposition" A..= ("territory:egypt" :: T.Text)
+                                     , "borders" A..= [("nope" :: T.Text)] ]])
+      shouldFailWith "carries no dispositions" =<< run (body [entry "markers:journeys" []])
+      shouldFailWith "carries no manifest entries" =<< run (body ([] :: [A.Value]))
 
     -- ---------- fix round 1: the discriminating cases ----------
 
@@ -5078,25 +5132,6 @@ main = hspec $ do
     -- implementation considers correct for this input. Only the two
     -- assertions above it encode today's forward convention, and those
     -- are the ones R83 may legitimately flip.
-    it "the plan-vs-timeline law DISTINGUISHES the fade kinds: two \
-       \stories with the identical union of ids, differing only in which \
-       \id rose and which fell, cannot both be accepted (the union \
-       \reading accepts both)" $ do
-      let p = plan [fadeIn "aa", fadeOut "bb"]
-          matched = A.toJSON [change "rise" "region:aa", change "fall" "region:bb"]
-          swapped = A.toJSON [change "fall" "region:aa", change "rise" "region:bb"]
-          law = "every fade in plan is a rise or fall in story, and every rise and fall in story has a fade in plan"
-      -- today's forward convention: fade_in <-> rise, fade_out <-> fall
-      shouldPass =<< runThen law [("plan", p), ("story", matched)] []
-      swappedOutcome <- runThen law [("plan", p), ("story", swapped)] []
-      shouldFailWith "fade_in vs rise" swappedOutcome
-      shouldFailWith "fade_out vs fall" swappedOutcome
-      -- THE INVARIANT, independent of which pairing is the right one:
-      -- an implementation blind to the kinds answers these two
-      -- identically, because their unions are equal.
-      matchedOutcome <- runThen law [("plan", p), ("story", matched)] []
-      outcomeTag matchedOutcome `shouldNotBe` outcomeTag swappedOutcome
-
     -- Finding 5 (Minor). The ladder's SECOND rung was clean in both the
     -- failing and the passing fixtures, so deleting it left the suite
     -- green -- while the step's comment calls the repeated names "what
@@ -5181,6 +5216,119 @@ main = hspec $ do
   -- computed "by name" at all, and was the only new definition with no
   -- behavioural test. `refusalVerdict` is now a pure exported core, and
   -- these are its four answers.
+  describe "where a name stands: the sphere and the page, mirrored from the server" $ do
+    let sq :: Double -> [Vec3]
+        sq d = [ unitOfLatLon (-d) (-d), unitOfLatLon (-d) d, unitOfLatLon d d, unitOfLatLon d (-d) ]
+        pg = Page "globe" 0 0 10 1200 1200
+        Right g = globeOf pg
+    it "a point in the middle of a small square ring is inside it, a far point is not, \
+       \and the ring read backwards says the same" $ do
+      insideRing (unitOfLatLon 0 0) (sq 3) `shouldBe` True
+      insideRing (unitOfLatLon 0 20) (sq 3) `shouldBe` False
+      insideRing (unitOfLatLon 0 0) (reverse (sq 3)) `shouldBe` True
+      insideRing (unitOfLatLon 0 20) (reverse (sq 3)) `shouldBe` False
+    it "even-odd over a ring and a hole inside it: the hole is outside" $ do
+      insideRings (unitOfLatLon 0 0) [sq 3, sq 1] `shouldBe` False
+      insideRings (unitOfLatLon 2 2) [sq 3, sq 1] `shouldBe` True
+    it "the page projects and unprojects the same point, and hides the far side" $ do
+      let p = unitOfLatLon 2 3
+      case placePx g p >>= unprojectPx g of
+        Nothing -> expectationFailure "a front point vanished"
+        Just (Vec3 x y z) -> do
+          let Vec3 px py pz = p
+          abs (x - px) + abs (y - py) + abs (z - pz) < 1e-9 `shouldBe` True
+      placePx g (unitOfLatLon 0 170) `shouldBe` Nothing
+      placePx g (unitOfLatLon 0 0) `shouldBe` Just (600, 600)
+    it "refuses a chart it does not mirror" $
+      either (const True) (const False) (globeOf pg { pageChart = "flat" }) `shouldBe` True
+
+  describe "the step phase: where a name stands, judged against the rings the answer draws" $ do
+    let le32b :: Int -> BS.ByteString
+        le32b n = BS.pack [ fromIntegral (n `div` (256 ^ k) `mod` 256) | k <- [0 .. 3 :: Int] ]
+        f32b :: Double -> BS.ByteString
+        f32b d = le32b (fromIntegral (castFloatToWord32 (realToFrac d)))
+        mgr1 :: [Vec3] -> BS.ByteString
+        mgr1 pts = BS.concat
+          [ BS.pack [0x4D, 0x47, 0x52, 0x31], le32b 1, BS.replicate 32 0
+          , le32b (length pts), le32b 0
+          , BS.concat [ BS.concat [f32b x, f32b y, f32b z] | Vec3 x y z <- pts ] ]
+        sq :: Double -> [Vec3]
+        sq d = [ unitOfLatLon (-d) (-d), unitOfLatLon (-d) d, unitOfLatLon d d, unitOfLatLon d (-d) ]
+        square = mgr1 (sq 3)
+        rawGet url | "id=r1" `T.isSuffixOf` url = pure (Right square)
+                   | otherwise = pure (Left ("no such resource: " <> url))
+        vec :: Vec3 -> A.Value
+        vec (Vec3 x y z) = A.toJSON [x, y, z]
+        body :: [A.Value] -> A.Value -> A.Value
+        body labels view = A.object
+          [ "features" A..= [A.object [ "feature" A..= ("region:sq" :: T.Text), "resource" A..= ("r1" :: T.Text)
+                                      , "piece" A..= ("fills" :: T.Text) ]]
+          , "resources" A..= [A.object [ "id" A..= ("r1" :: T.Text), "kind" A..= ("ring" :: T.Text)
+                                       , "bytes" A..= (0 :: Int), "vertices" A..= (4 :: Int)
+                                       , "bounds" A..= A.object [ "center" A..= vec (unitOfLatLon 0 0), "radius" A..= (0.1 :: Double) ] ]]
+          , "labels" A..= labels, "markers" A..= ([] :: [A.Value]), "inscriptions" A..= ([] :: [A.Value])
+          , "view" A..= view
+          , "dress" A..= A.object [ "labelOverflowEm" A..= (0.5 :: Double) ] ]
+        theView = A.object [ "chart" A..= ("globe" :: T.Text), "lat" A..= (0 :: Double), "lon" A..= (0 :: Double)
+                           , "zoom" A..= (10 :: Double), "width" A..= (1200 :: Double), "height" A..= (1200 :: Double) ]
+        landName :: (Double, Double, Double, Double) -> A.Value
+        landName (l, t, r, b) = A.object
+          [ "subject" A..= ("region:sq" :: T.Text), "text" A..= ("SQUARE" :: T.Text), "face" A..= ("territory" :: T.Text)
+          , "size" A..= (14 :: Double), "anchor" A..= vec (unitOfLatLon 0 0)
+          , "placement" A..= A.object [ "left" A..= l, "top" A..= t, "right" A..= r, "bottom" A..= b ] ]
+        city :: Vec3 -> Maybe T.Text -> A.Value
+        city at ground = A.object $
+          [ "subject" A..= ("place:x" :: T.Text), "text" A..= ("X" :: T.Text), "face" A..= ("place" :: T.Text)
+          , "size" A..= (12 :: Double), "anchor" A..= vec at ]
+          ++ [ "ground" A..= gr | Just gr <- [ground] ]
+        run :: T.Text -> A.Value -> IO StepOutcome
+        run sentence v = case firstOutcome Then sentence of
+          Nothing -> pure (StepFailed "NO DEFINITION MATCHED THIS BODY")
+          Just f -> f (mkWorld "http://x" (\_ -> pure (Left "no")) "")
+                        { bound = Map.fromList [("view", ("", v))]
+                        , cameras = Map.fromList [("view", (Center 0 0, Zoom 10))]
+                        , transportRaw = rawGet }
+        landLaw = "every land name of view sits within its own region, give or take the overflow its style declares"
+        cityLaw = "every city of view stands in a region it names, or on ground declared unclaimed"
+        pass o = case o of
+          StepOk _ -> pure ()
+          StepFailed e -> expectationFailure ("expected a pass, got failure: " <> T.unpack e)
+          StepSkipped e -> expectationFailure ("expected a pass, got skip: " <> T.unpack e)
+        failsWith needle o = case o of
+          StepFailed e -> e `shouldSatisfy` T.isInfixOf needle
+          StepOk _ -> expectationFailure "expected a failure, got a pass"
+          StepSkipped e -> expectationFailure ("expected a failure, got skip: " <> T.unpack e)
+    it "an answer at no view has no page for a name to sit on, and says so" $ do
+      o <- run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] A.Null)
+      failsWith "answered at no view" o
+    it "an answer placed for some other view than the one asked is a broken answer" $ do
+      let elsewhere = A.object [ "chart" A..= ("globe" :: T.Text), "lat" A..= (5 :: Double), "lon" A..= (0 :: Double)
+                               , "zoom" A..= (10 :: Double), "width" A..= (1200 :: Double), "height" A..= (1200 :: Double) ]
+      o <- run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] elsewhere)
+      failsWith "not the view it was asked for" o
+    it "a land name whose box sits inside its own ring passes" $
+      pass =<< run landLaw (body [landName (0.45, 0.48, 0.55, 0.52)] theView)
+    it "a land name whose box spills far past its shore fails, naming it and how far" $ do
+      o <- run landLaw (body [landName (0.2, 0.48, 0.8, 0.52)] theView)
+      failsWith "1 of 1 land names" o
+      failsWith "region:sq" o
+      failsWith "em past its shore" o
+    it "a spill within the declared overflow is forgiven: the shore is at 424 px and a \
+       \corner 4 px outside it is 0.29 em at size 14" $
+      pass =<< run landLaw (body [landName (0.35, 0.48, 0.55, 0.52)] theView)
+    it "a city that names the region it stands in passes; one that names it from \
+       \outside fails" $ do
+      pass =<< run cityLaw (body [city (unitOfLatLon 0 0) (Just "region:sq")] theView)
+      o <- run cityLaw (body [city (unitOfLatLon 0 20) (Just "region:sq")] theView)
+      failsWith "em outside it" o
+    it "a city declared unclaimed passes on open ground and fails deep inside a region" $ do
+      pass =<< run cityLaw (body [city (unitOfLatLon 0 20) (Just "unclaimed")] theView)
+      o <- run cityLaw (body [city (unitOfLatLon 0 0) (Just "unclaimed")] theView)
+      failsWith "declared unclaimed, but stands inside region:sq" o
+    it "a city that says nothing about its ground is silently nowhere, which is the failure" $ do
+      o <- run cityLaw (body [city (unitOfLatLon 0 0) Nothing] theView)
+      failsWith "silently nowhere" o
+
   describe "the step phase: \"refused by name\" is computed, and a \
            \crashed server is not a refusal" $ do
     let w0 = mkWorld "http://x" (\_ -> pure (Left "no")) ""

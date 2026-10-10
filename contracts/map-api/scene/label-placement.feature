@@ -1,19 +1,18 @@
 Feature: label placement — the map says where every name sits, not the viewer
-  Where each name sits on the page is part of the map. A label arrives
-  with the position it is drawn at, already settled, already clear of
-  its neighbours: two viewers given the same answer draw the same
-  names in the same places, because there is nothing left to decide
-  between the answer and the ink.
+  Where each name sits on the page is part of the map. An answer asked
+  at a view says which view it placed its names for, and every name it
+  sends arrives with the box its words are drawn in, already settled,
+  already clear of its neighbours and inside the page: two viewers
+  given the same answer draw the same names in the same places,
+  because there is nothing left to decide between the answer and the
+  ink. A name that cannot be drawn at that view is not sent.
 
-  Today a label arrives with an anchor — where the named thing is —
-  and the viewer works out where the words go, remembering each offset
-  so the text does not jitter, and forgetting it when the name is
-  culled. That memory makes the drawn map a function of its own
-  history: the same year, at the same camera, on an unchanged server,
-  draws a different set of names depending on whether you had been out
-  to the globe and come back. The three scenarios that fail here are
-  the specification for moving that decision into the answer; the
-  two that pass are the door closing behind it.
+  A name also stands where the thing it names is. A land's name sits
+  within its own region, give or take the overflow its style declares
+  in em of the name's size, because the schematic hulls of a promised
+  allotment are narrower than the words that name them. A city's name
+  says which region it stands in, or that it stands on ground nothing
+  claims; a city standing silently nowhere is the failure.
 
   Vocabulary:
     | pieces | any of: borders, chrome, claims, fills, ground, journeys, labels, markers, veil, water |
@@ -23,17 +22,25 @@ Feature: label placement — the map says where every name sits, not the viewer
   Background:
     When I render pieces all at year <someYear> in style <someStyle> looking at <someCenter> zoom <someZoom> as view
 
-  @target @property
+  @property
   Scenario: every name on the map says where it sits
     Then every label of view carries a placement
 
-  @target @property
+  @property
   Scenario: no two names are printed on top of each other
     Then no two labels of view overlap
 
-  @target @property
+  @property
   Scenario: every name that is sent is a name that is drawn
     Then every label of view is legible at the view it was asked for
+
+  @property
+  Scenario: a land's name sits on the land it names
+    Then every land name of view sits within its own region, give or take the overflow its style declares
+
+  @property
+  Scenario: a city stands on ground the map names
+    Then every city of view stands in a region it names, or on ground declared unclaimed
 
   @property
   Scenario: asking for other maps in between changes nothing

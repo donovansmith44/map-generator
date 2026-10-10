@@ -36,10 +36,16 @@ fn the_compiler_that_built_this_test_is_the_pinned_version() {
 
 #[test]
 fn rustup_resolves_the_pin_from_the_repo_root() {
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).expect("a home dir");
-    let proxy = Path::new(&home).join(".cargo").join("bin")
+    let cargo_home = std::env::var("CARGO_HOME").map(PathBuf::from).or_else(|_| {
+        std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .map(|home| Path::new(&home).join(".cargo"))
+    }).expect("CARGO_HOME or a home dir");
+    let proxy = cargo_home.join("bin")
         .join(if cfg!(windows) { "rustc.exe" } else { "rustc" });
-    let out = Command::new(&proxy).arg("--version").current_dir(repo_root()).output()
+    let out = Command::new(&proxy).arg("--version").current_dir(repo_root())
+        .env_remove("RUSTUP_TOOLCHAIN")
+        .output()
         .unwrap_or_else(|e| panic!("could not run the rustup proxy {}: {e}", proxy.display()));
     let v = String::from_utf8_lossy(&out.stdout);
     assert!(v.starts_with(&format!("rustc {PINNED} ")), "resolved {v:?} from the repo root; expected {PINNED}");

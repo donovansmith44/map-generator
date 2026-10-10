@@ -36,30 +36,30 @@ Feature: the scene — a picture composed from pieces
     And I render pieces <somePieces> at year <someYear> in style <someStyle> as some
     Then combining some and empty equals some
 
-  @target @property
+  @property
   Scenario: turning pieces off only removes things — nothing new appears
     When I render pieces <someSubset> at year <someYear> in style <someStyle> as fewer
     And I render pieces <someSuperset> at year <someYear> in style <someStyle> as more
     Then fewer's resources are a subset of more's resources
 
-  @target @property
+  @property
   Scenario: building a map in two parts gives the same map as building it in one
     When I render pieces <someA> at year <someYear> in style <someStyle> as sceneA
     And I render pieces <someB> at year <someYear> in style <someStyle> as sceneB
     Then combining sceneA and sceneB equals rendering <someA> plus <someB>
 
-  @target @property
+  @property
   Scenario: drawing each piece alone and stacking them rebuilds the whole map
     When I render pieces <somePieces> at year <someYear> in style <someStyle> as whole
     Then rendering each piece of <somePieces> alone and combining them equals whole
 
-  @target @property
+  @property
   Scenario: switching styles repaints the map without moving anything on it
     When I render pieces <somePieces> at year <someYear> in style <someStyle> as dressed
     And I render pieces <somePieces> at year <someYear> in style <someOtherStyle> as redressed
     Then dressed and redressed differ only in dress, never in geometry
 
-  @target @property
+  @property
   Scenario: everything on the map says which piece put it there
     When I render pieces <somePieces> at year <someYear> in style <someStyle>
     Then every feature entry carries a piece field

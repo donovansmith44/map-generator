@@ -50,6 +50,169 @@ rule even though the change is a correction.
   stability both, against the live wire. The same four fixtures move
   with it (4–5 features restyled at 1405 BC).
 
+- Breaking, wire: placement moves into the answer. `/api/scene` asked
+  with a camera answers `view` (the chart, camera and page it placed
+  for) and every label it sends carries `placement` (its box as page
+  fractions) and, for a city, `ground` (`region:HEX` or `unclaimed`);
+  labels that cannot be drawn at that view are not sent. Asked with no
+  camera it answers `view: null` and places nothing. `dress` gains
+  `labelOverflowEm`, the style's declared budget for a land name to
+  spill past its shore. `label-placement.feature`'s three placement
+  laws go green and lose their `@target`; two new laws, a land's name
+  sits on its land and a city names its ground, are stated and met.
+  The layout law is written once (map-encoders `layout`) and both the
+  SVG frame and the manifest draw from it. The four `scene-1405-*`
+  fixtures and `contract.json` (stale at 0.2.0) are re-blessed.
+  Breaking, corpus: `camera.feature`'s two nesting laws are restated
+  over markers alone (zooming out only reveals markers; zooming in
+  never loses a marker you are looking at). Names are not nested this
+  way once the answer draws them: a name drawn at one zoom may yield
+  at another to a neighbour that grew. `camera.feature`'s "a label is
+  only sent when the thing it names is in view" is met by the same
+  change and loses its `@target`.
+
+- Behavioral, wire: `/api/resource` and `/api/resources` refuse an id
+  the store does not hold BY NAME (404, the body naming the hex id),
+  and a batch with one unknown id is refused whole rather than
+  shortened in silence. `resources.feature`'s refusal law goes green
+  and loses its `@target`.
+
+- Breaking, wire: a scene asked at a camera is cut to the view. A
+  geometry entry whose published bounds miss the view cap, or lie
+  wholly beyond the horizon, is not sent, nor is a resource nothing
+  references; markers and inscriptions are cut per point at the view
+  cap clipped to the horizon. The provider drops borders whose own cap
+  cannot reach the view under a margin derived from the encoder's
+  bounds and ships the rest at the query's detail (the hemisphere
+  detail floor is retired: the far world no longer travels at all).
+  `camera.feature`'s two-sided culling law and its far-side law go
+  green and lose `@target`; the two-sided law is stated over geometry
+  entries (feature, resource) since a region's rings may straddle the
+  view. Two marker laws are added, one at the Levant camera where this
+  canon's markers stand and one anywhere on the globe, so both halves
+  of the partition are exercised; the marker nesting laws move to the
+  Levant camera for the same reason. `scene-1405-levant-cam` is
+  re-blessed.
+
+- Breaking, wire and canon: one thing, one name. Every bridge now
+  resolves the id it mints through the entity registry
+  (`data/authored/registry.json`, the written unifications the
+  registry module was built for; the compile refuses a chain, a
+  self-unification or an unknown kind by name), and within one era
+  every bundle that resolves to one entity is one area, the held
+  witness's layer kept. Phoenicia, Judea and Canaan each become one
+  entity where two witnesses drew them. The provider names each region
+  entity once per scene however many layers draw it, and each place
+  once however many roads pass through it; a settlement's place id is
+  spoken without the canon's `place:` namespace (`place:gaza`, marker
+  `gaza`, never `place:place:gaza`). `naming.feature`'s two laws go
+  green and lose `@target`. Every fixture that carries a region id or
+  a place id is re-blessed.
+
+- Behavioral, wire: detail is monotone. A ring below the resolvable
+  limit that must still ship for its feature's identity ships as its
+  three-point stand-in (the chord's ends and the point farthest from
+  it, the first shape simplification itself would draw), never its
+  unsimplified ring, so leaning out never carries more vertices than
+  leaning in. `detail.feature`'s two monotonicity laws go green and
+  lose `@target`; its implicit-detail law now looks through zoom 8,
+  the fine tier's own zoom, and goes green. Scene fixtures re-blessed.
+
+- Breaking, wire and corpus: the animation is the scene delta (R84).
+  `/api/transition` fades in the regions the destination draws and the
+  origin does not, fades out the converse, and morphs a border both
+  moments draw differently along its real path: the ring simplified at
+  the request's own detail (the zoom's half-pixel rule, the same law
+  scenes use, replacing the route's `Lod(6.0)` default) and densified
+  by the wire's edge-step law, resampled to no fewer points than the
+  border is drawn with. `transition.feature`'s delta law and its
+  real-shape law go green and lose `@target`; the plan-versus-timeline
+  scenario is removed, as R84 said the delta law replaces it, and the
+  runner's step for it goes with it. The conquest and exile plans are
+  re-blessed.
+
+- Breaking, wire: the scene tier is a composition of the fact tier.
+  Every styled element the provider draws carries its trace (the canon
+  layer and entity whose disposition drew it, and the borders it is
+  made of); every drawn manifest entry publishes `disposition`
+  (`layer:entity`, a live census row) and `borders` (the canon border
+  ids), and every standing marker buffer publishes `dispositions`.
+  `derivability.feature` loses its `@target`s, checks each disposition
+  against the census at the scene's year, and gains a marker
+  scenario. Scene fixtures re-blessed.
+
+- Internal, no wire change: the day's additions folded into the
+  structures they belong to. `RenderQuery` carries the `Camera` (the
+  view cap is derived from it where it is needed, and the camera is in
+  the query's content address); what a point stands on is
+  `Snapshot::ground_at`; one thing, one name is a law in `laws.rs`
+  (`validate_scene_names`, `Violation::NamedTwice`); every bridge
+  observes its witness into the registry and the compile validates the
+  whole book before writing the canon (a dangling canonical, a chain
+  or a kind conflict refuses it by name); the transition's delta needs
+  no style, since an area's rings are assembled by one function the
+  scene and the delta share.
+
+- Breaking, wire: you can pan at any zoom. The view cap a scene is
+  cut to is derived from the page's own demand envelope, as the
+  server declares it (`camera.rs`: the zoom rounded to the nearest
+  half-octave, the centre rounded onto a grid of 40% of the zoom and
+  never finer than a tenth of a degree), and reaches one grid cell
+  further in every direction, so a step to a neighbouring cell
+  re-demands a manifest but never geometry. Before this the cap was
+  the page's nominal half-diagonal, so a deep zoom drew nothing at
+  its corners and every pan step waited on geometry. `camera.feature`
+  restates the cap in its prose and gains the law, stated over the
+  eight neighbouring cells' envelopes; in view is now composed with
+  the horizon wherever the runner judges a two-sided culling law,
+  feature or marker, since the served cap may reach past a quarter
+  turn.
+  `scene-1405-levant-cam` is re-blessed.
+
+- Breaking, wire and canon: a source travels with its terms. Law 6 made
+  provenance total, which answered where a drawn thing came from but not
+  what may be done with it, and the consuming atlas has a hard
+  free-and-open-source requirement it cannot check against a name. There
+  is now a closed `License` type, a `Credit` pairing a source with its
+  terms, and a total `Witness::licenses` the compiler refuses to let a
+  new origin skip. `/api/scene` answers `attribution` (source and licence
+  per row) and `licenses` (the distinct terms the picture requires), and
+  carries `X-License`; the GeoJSON encoder's `attribution` rows gain the
+  same shape. `fact/licensing.feature` states three laws, two of them
+  stated so a constant cannot pass them: relief alone is public domain
+  and the world's political ground is not.
+
+  Two misattributions are corrected by the same change, both of which
+  had been publishing a false claim. River courses are OpenStreetMap
+  under ODbL 1.0 and the twelve-tribes allotments are Wikimedia under CC
+  BY-SA 3.0; both were recorded as our own authored work under CC0. Four
+  origins are added for what was already being ingested (`OpenBible`,
+  `Osm`, `Wikimedia`, and `Partition`), and everything cut from the
+  plane partition now names the partition as its origin, which carries
+  the terms of all six datasets feeding it at once. Identity is
+  untouched: a cohort's face is still witnessed by the atlas or by us,
+  and only what it is MADE OF follows the partition.
+
+  Giving the partition its own origin cost the map its bible mode for
+  one round, and the golden gate is what caught it. Bible mode keeps
+  what Scripture grounds, and grounding had been a hand-written list of
+  two witnesses; partition faces used to be on it by being `Authored`
+  and fell off it by becoming `Partition`, so every fill, claim and
+  river vanished under bare relief at both beloved stops. Grounding is
+  now a property the origin answers for itself and inherits exactly as
+  it inherits terms, and the provider asks the witness instead of
+  matching names, so a new origin cannot silently fall out of the map.
+  No law in this suite covers bible mode; it was green throughout.
+
+  Two readings are deliberately conservative and want the owner's eye.
+  Atlas-sourced facts are carried under CC BY-SA 4.0, because the
+  atlas's exports mix its CC0 curated rows with Theographic-derived ones
+  and do not distinguish them per row. Partition-derived geometry
+  carries every input's terms rather than only those its own face used,
+  which over-credits and never under-credits. The honest consequence,
+  visible on the wire for the first time: a full scene at the Levant
+  declares all seven licences, GPL-3.0 included.
+
 - Additive: `scene/wire-flags.feature` and `scene/region-scope.feature`
   characterize what the wire actually does today — four working piece
   switches out of ten named, and `subject=` narrowing only labels.

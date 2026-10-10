@@ -17,6 +17,7 @@ use atlas_graph_types::covenant::{ContentHash, PlaceId, SourceId, TimePoint};
 use map_canon::{
     Area, CanonStore, EntityId, Feature, FeatureId, LayerKind, Route, Timestamp, Witness,
 };
+use map_types::license::{Credit, License};
 use map_types::scene::{LabelSubject, StyledMarker};
 use map_types::style::Paint;
 use map_types::Monoid;
@@ -67,6 +68,33 @@ pub fn rid_of(entity: &EntityId) -> RegionId {
     RegionId(ContentHash(hash64(&format!("entity:{}", entity.0))))
 }
 
+/// WHAT A SCENE HAS ALREADY NAMED: one name per region entity and one
+/// per place, however many layers draw the entity or roads pass
+/// through the place.
+#[derive(Default)]
+struct Named {
+    regions: BTreeSet<RegionId>,
+    places: BTreeSet<PlaceId>,
+}
+
+/// An area's rings as assembled for a scene, each with its border.
+struct AreaRings {
+    outer: Vec<Ring>,
+    outer_ids: Vec<map_canon::BorderId>,
+    holes: Vec<Ring>,
+    hole_ids: Vec<map_canon::BorderId>,
+}
+
+/// The pieces whose regions a transition's delta is a difference of.
+fn delta_pieces() -> PieceSet {
+    PieceSet::empty()
+        .with(Piece::Fills)
+        .with(Piece::Borders)
+        .with(Piece::Claims)
+        .with(Piece::Water)
+        .with(Piece::Ground)
+}
+
 /// The verdict of fidelity on one ring — the two outcomes an LOD
 /// tolerance can hand it, as a type, so no call site can confuse
 /// "thinned" with "unresolvable". A below-limit ring carries its
@@ -74,6 +102,23 @@ pub fn rid_of(entity: &EntityId) -> RegionId {
 enum RingFidelity {
     Survives(Ring),
     BelowLimit(Ring),
+}
+
+/// A settlement's place id as the wire speaks it: the minted `place:`
+/// namespace is the canon's, not the place's, so a road's station
+/// and the gazetteer's dot name one place by one id.
+fn place_of(entity: &EntityId) -> PlaceId {
+    PlaceId::new(entity.0.strip_prefix("place:").unwrap_or(&entity.0).to_string())
+}
+
+/// The fact-tier trace of a drawn thing: the layer and entity whose
+/// disposition drew it, and the borders it is made of.
+fn trace_of(layer: LayerKind, entity: &EntityId, borders: &[map_canon::BorderId]) -> Option<map_types::scene::Trace> {
+    Some(map_types::scene::Trace {
+        layer: map_canon::layer_name(&layer).to_string(),
+        entity: entity.0.clone(),
+        borders: borders.iter().map(|b| b.0).collect(),
+    })
 }
 
 fn bid_of(entity: &EntityId) -> BoundaryId {
@@ -199,13 +244,21 @@ fn layers_wanted(pieces: PieceSet) -> Vec<LayerKind> {
     .collect()
 }
 
-fn witness_source(w: Witness) -> SourceId {
-    SourceId::new(match w {
+/// An origin and what it permits, together. The terms are read off the
+/// witness itself, so a feature can never be credited without them. A
+/// composite origin carries one credit per set of terms it inherits.
+fn witness_credits(w: Witness) -> BTreeSet<Credit> {
+    let name = match w {
         Witness::Atlas => "witness:atlas",
         Witness::Authored => "witness:authored",
         Witness::Basemap => "witness:basemap",
         Witness::NaturalEarth => "witness:natural-earth",
-    })
+        Witness::OpenBible => "witness:openbible",
+        Witness::Osm => "witness:osm",
+        Witness::Wikimedia => "witness:wikimedia",
+        Witness::Partition => "witness:partition",
+    };
+    w.licenses().into_iter().map(|l| Credit::new(SourceId::new(name), l)).collect()
 }
 
 impl CanonProvider {
@@ -309,12 +362,14 @@ impl CanonProvider {
         self.styles.get(&id).ok_or(MapError::UnknownStyle(id))
     }
 
-    fn sources_of(&self, fid: FeatureId) -> BTreeSet<SourceId> {
+    fn sources_of(&self, fid: FeatureId) -> BTreeSet<Credit> {
         let mut out = BTreeSet::new();
         if let Some(p) = self.store.provenance().get(&fid) {
-            out.insert(witness_source(p.witness));
-            if matches!(p.witness, Witness::Atlas | Witness::Authored) {
-                out.insert(SourceId::new(SCRIPTURE_SOURCE));
+            out.extend(witness_credits(p.witness));
+            if p.witness.scripture_grounded() {
+                // The Word itself is under no one's terms; the atlas's
+                // reading of it is credited separately, by its witness.
+                out.insert(Credit::new(SourceId::new(SCRIPTURE_SOURCE), License::PublicDomain));
             }
         }
         out
@@ -324,47 +379,98 @@ impl CanonProvider {
     /// dropped: geometry leaves here at the query's level of detail,
     /// and a border whose cap misses the viewport never leaves at all.
     /// The verdict is TYPED: a ring either SURVIVES the tolerance or
-    /// falls BELOW the resolvable limit. A below-limit ring still
-    /// carries its unsimplified geometry — whether it ships is the
-    /// FEATURE's question (identity is kept, detail is not), answered
-    /// where the feature is assembled, never here per-ring.
-    fn ring_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<RingFidelity> {
-        let lod = self.lod_at(id, q);
+    /// falls BELOW the resolvable limit. A below-limit ring carries its
+    /// three-point stand-in — whether it ships is the FEATURE's
+    /// question (identity is kept, detail is not), answered where the
+    /// feature is assembled, never here per-ring.
+    fn ring_points(&self, id: map_canon::BorderId, lod: Lod) -> Option<RingFidelity> {
         let b = self.store.borders().get(&id)?;
         match Ring::new(map_types::simplify_polyline(&b.0, lod)) {
             Ok(r) => Some(RingFidelity::Survives(r)),
-            Err(_) => Ring::new(b.0.clone()).ok().map(RingFidelity::BelowLimit),
+            Err(_) => map_types::stand_in(&b.0)
+                .and_then(|t| Ring::new(t.to_vec()).ok())
+                .map(RingFidelity::BelowLimit),
         }
     }
 
-    /// THE CAMERA'S DETAIL BELONGS TO THE CAMERA'S GROUND. Inside the
-    /// view cap a border refines at the query's own tolerance; beyond
-    /// the cap's reach it ships at the HEMISPHERE'S detail — whole,
-    /// never culled, never sliced. The floor is DERIVED, not tuned:
-    /// the query's lod is (half-extent / page width), the viewport's
-    /// half-extent is radius/1.8 (the provider margin the query
-    /// declared), so the same page at the hemisphere's 90° would ask
-    /// lod × (π/2)/(radius/1.8) — clamped by the same 0.01 ceiling
-    /// the auto law keeps. Content addressing makes the far world's
-    /// coarse rings IDENTICAL to the hemisphere scene's, so a zoom
-    /// refines only the ground it actually looks at. (The old cull
-    /// punched holes in the retained world; the old uniform fine lod
-    /// refined every antipodal island for zero pixels.)
-    fn lod_at(&self, id: map_canon::BorderId, q: &RenderQuery) -> Lod {
-        let Some(view) = &q.viewport else { return q.lod };
-        let Some((center, radius)) = self.border_cap.get(&id) else { return q.lod };
-        if center.angle_to(&view.center) <= view.radius + radius {
-            return q.lod;
+    /// WHAT THE VIEW CAN REACH. A border whose cap lies beyond the
+    /// view cap, or entirely beyond the horizon, never leaves the
+    /// provider. The margin is the encoder's: it measures the bounds it
+    /// publishes on the simplified, densified, antimeridian-split
+    /// pieces of the ring, and every such cap lies within three radii
+    /// of the border's own, so a border refused here is refused by any
+    /// bound the wire could publish, and the exact cut is the
+    /// encoder's, on the bounds it sends.
+    fn reaches_view(&self, id: map_canon::BorderId, view: Option<&Bbox>) -> bool {
+        let Some(view) = view else { return true };
+        let Some((center, radius)) = self.border_cap.get(&id) else { return true };
+        let reach = 3.0 * radius;
+        if reach >= std::f64::consts::PI {
+            return true;
         }
-        let half_extent = (view.radius / 1.8).max(1e-9);
-        let floor = q.lod.0 * (std::f64::consts::FRAC_PI_2 / half_extent);
-        Lod(q.lod.0.max(floor.min(0.01)))
+        let angle = center.angle_to(&view.center);
+        angle <= view.radius + reach && angle - reach <= std::f64::consts::FRAC_PI_2
     }
 
-    fn line_points(&self, id: map_canon::BorderId, q: &RenderQuery) -> Option<Vec<UnitVec>> {
-        let lod = self.lod_at(id, q);
+    fn line_points(&self, id: map_canon::BorderId, lod: Lod) -> Option<Vec<UnitVec>> {
         let b = self.store.borders().get(&id)?;
         Some(map_types::simplify_polyline(&b.0, lod))
+    }
+
+    /// An area's rings at a detail, cut to a view: the outer rings that
+    /// survive or stand in (the identity law) and the holes that
+    /// survive, each with the border it came from.
+    fn assemble_rings(&self, a: &Area, lod: Lod, view: Option<&Bbox>) -> Option<AreaRings> {
+        let mut outer = Vec::new();
+        let mut outer_ids: Vec<map_canon::BorderId> = Vec::new();
+        let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
+        for r in a.rings.iter().filter(|r| self.reaches_view(**r, view)) {
+            match self.ring_points(*r, lod) {
+                Some(RingFidelity::Survives(ring)) => {
+                    outer.push(ring);
+                    outer_ids.push(*r);
+                }
+                Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
+                None => {}
+            }
+        }
+        if outer.is_empty() {
+            let widest = below.into_iter().max_by(|(a_id, _), (b_id, _)| {
+                let ra = self.border_cap.get(a_id).map(|c| c.1).unwrap_or(0.0);
+                let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
+                ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if let Some((id, ring)) = widest {
+                outer.push(ring);
+                outer_ids.push(id);
+            }
+        }
+        let mut holes = Vec::new();
+        let mut hole_ids: Vec<map_canon::BorderId> = Vec::new();
+        for h in a.holes.iter().filter(|h| self.reaches_view(**h, view)) {
+            if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, lod) {
+                holes.push(ring);
+                hole_ids.push(*h);
+            }
+        }
+        if outer.is_empty() {
+            return None;
+        }
+        Some(AreaRings { outer, outer_ids, holes, hole_ids })
+    }
+
+    /// The outer rings the world draws at a moment, by region, with no
+    /// dress: what the transition's delta is a difference of.
+    fn drawn_at(&self, t: &Timestamp, lod: Lod) -> BTreeMap<RegionId, Vec<Vec<UnitVec>>> {
+        let mut out: BTreeMap<RegionId, Vec<Vec<UnitVec>>> = BTreeMap::new();
+        for layer in layers_wanted(delta_pieces()) {
+            for (_, f) in self.active(layer, t) {
+                let Feature::Area(a) = f else { continue };
+                let Some(rings) = self.assemble_rings(a, lod, None) else { continue };
+                out.entry(rid_of(&a.entity)).or_default().extend(rings.outer.iter().map(|r| r.points().to_vec()));
+            }
+        }
+        out
     }
 
     /// The features active at `t` in one layer, in deterministic order.
@@ -442,6 +548,7 @@ impl CanonProvider {
         q: &RenderQuery,
         style: &Style,
         entity_slots: &BTreeMap<EntityId, usize>,
+        named: &mut Named,
     ) {
         let _ = t;
         // Nothing this area could contribute is wanted: leave before
@@ -456,45 +563,10 @@ impl CanonProvider {
             return;
         }
         let sources = self.sources_of(fid);
-        // THE IDENTITY LAW, sharpened: fidelity may thin a feature,
-        // never erase it — but only the feature's IDENTITY holds that
-        // protection. If every outer ring falls below the resolvable
-        // limit, the widest one (by its measured cap) ships
-        // unsimplified: a small territory is present at every level
-        // of detail. When any outer ring survives, the collapsed rest
-        // are sub-resolution DETAIL — an ocean's thousands of speck
-        // islands once shipped unsimplified at the coarsest zoom this
-        // way — and the half-pixel law governs them: they do not ship.
-        let mut outer = Vec::new();
-        let mut below: Vec<(map_canon::BorderId, Ring)> = Vec::new();
-        for r in &a.rings {
-            match self.ring_points(*r, q) {
-                Some(RingFidelity::Survives(ring)) => outer.push(ring),
-                Some(RingFidelity::BelowLimit(ring)) => below.push((*r, ring)),
-                None => {}
-            }
-        }
-        if outer.is_empty() {
-            let widest = below.into_iter().max_by(|(a_id, _), (b_id, _)| {
-                let ra = self.border_cap.get(a_id).map(|c| c.1).unwrap_or(0.0);
-                let rb = self.border_cap.get(b_id).map(|c| c.1).unwrap_or(0.0);
-                ra.partial_cmp(&rb).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            if let Some((_, ring)) = widest {
-                outer.push(ring);
-            }
-        }
-        // A hole can never carry identity — its parent ring is the
-        // feature's presence — so a below-limit hole is always detail.
-        let mut holes = Vec::new();
-        for h in &a.holes {
-            if let Some(RingFidelity::Survives(ring)) = self.ring_points(*h, q) {
-                holes.push(ring);
-            }
-        }
-        if outer.is_empty() {
+        let view = q.camera.as_ref().map(|c| c.cap());
+        let Some(AreaRings { outer, outer_ids, holes, hole_ids }) = self.assemble_rings(a, q.lod, view.as_ref()) else {
             return;
-        }
+        };
         // The area's outline rides as a stroke too — atlas/authored
         // territory in the Line dress, background scholarship dashed,
         // and a CLAIM always in the Unknown dress: its hull is a
@@ -511,18 +583,19 @@ impl CanonProvider {
         // fill and its border are separable for the first time.
         if let Some(piece) = piece_of_boundary(layer).filter(|p| q.pieces.contains(*p)) {
             if area_draws_outline(layer) {
-                for ring in &outer {
+                for (ring, id) in outer.iter().zip(&outer_ids) {
                     scene.boundaries.push(StyledBoundary {
                         boundary: bid_of(&a.entity),
                         pts: ring.points().to_vec(),
                         stroke: *style.stroke_for(&character),
                         sources: sources.clone(),
                         piece,
+                        trace: trace_of(layer, &a.entity, std::slice::from_ref(id)),
                     });
                 }
             }
         }
-        if wants_name {
+        if wants_name && named.regions.insert(rid_of(&a.entity)) {
             if let Some(at) =
                 self.label_anchor.get(&fid).copied().or_else(|| centroid(&outer)) {
                 let labeling = style.labeling();
@@ -571,6 +644,7 @@ impl CanonProvider {
         // Likewise the face: `piece_of_region` says None only for
         // Journeys, which never reaches here (a way is a line).
         let Some(piece) = piece_of_region(layer).filter(|p| q.pieces.contains(*p)) else { return };
+        let ring_ids: Vec<map_canon::BorderId> = outer_ids.into_iter().chain(hole_ids).collect();
         scene.regions.push(StyledRegion {
             region: rid_of(&a.entity),
             entity: Some(a.entity.0.clone()),
@@ -579,6 +653,7 @@ impl CanonProvider {
             paint,
             sources,
             piece,
+            trace: trace_of(layer, &a.entity, &ring_ids),
         });
     }
 
@@ -630,6 +705,7 @@ impl CanonProvider {
         t: &Timestamp,
         q: &RenderQuery,
         style: &Style,
+        named: &mut Named,
     ) {
         let (pts, reached) = self.walked(route, t);
         if pts.len() < 2 {
@@ -645,12 +721,15 @@ impl CanonProvider {
         if !q.pieces.contains(Piece::Journeys) {
             return;
         }
+        let walked_borders: Vec<map_canon::BorderId> =
+            route.legs.iter().filter(|leg| *t >= leg.span.0).map(|leg| leg.border).collect();
         scene.boundaries.push(StyledBoundary {
             boundary: bid_of(&route.entity),
             pts,
             stroke: *style.stroke_for(&map_types::EdgeCharacter::Way),
             sources: sources.clone(),
             piece: Piece::Journeys,
+            trace: trace_of(LayerKind::Journeys, &route.entity, &walked_borders),
         });
         let mut station_places: Vec<&atlas_graph_types::covenant::PlaceId> = Vec::new();
         if let Some(first) = route.legs.first() {
@@ -668,8 +747,9 @@ impl CanonProvider {
                 sources: sources.clone(),
                 place: Some(map_types::AtlasPlaceRef(pid.clone())),
                 piece: Piece::Journeys,
+                trace: trace_of(LayerKind::Journeys, &route.entity, &[]),
             });
-            if q.pieces.contains(Piece::Labels) {
+            if q.pieces.contains(Piece::Labels) && named.places.insert(pid.clone()) {
                 let mut label = style.label_style();
                 label.size *= style.labeling().scale.station_scale;
                 scene.labels.push(PlacedLabel {
@@ -693,6 +773,7 @@ impl CanonProvider {
     ) -> Result<Snapshot, MapError> {
         let style = self.style(q.style)?;
         let mut scene = Snapshot::empty();
+        let mut named = Named::default();
         let entity_slots = self.repaired_slots_at(t);
         let subject_only: Option<BTreeSet<EntityId>> = match &q.subject {
             RenderSubject::Region(rid) => Some(BTreeSet::from([self
@@ -735,9 +816,9 @@ impl CanonProvider {
                 match f {
                     Feature::Area(a) => {
                         paint_rank.insert(rid_of(&a.entity), rank);
-                        self.push_area(&mut scene, layer, fid, a, t, q, style, &entity_slots)
+                        self.push_area(&mut scene, layer, fid, a, t, q, style, &entity_slots, &mut named)
                     }
-                    Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style),
+                    Feature::Way(r) => self.push_way(&mut scene, fid, r, t, q, style, &mut named),
                     // A Line (a river): the border geometry stroked in
                     // the water color — never a filled area, so it can
                     // neither gap nor balloon.
@@ -752,10 +833,11 @@ impl CanonProvider {
                         else {
                             continue;
                         };
-                        // read the border directly: a line is an OPEN
-                        // path and may be as short as two points —
-                        // simplified and viewport-culled like any ring.
-                        if let Some(pts) = self.line_points(l.border, q) {
+                        let view = q.camera.as_ref().map(|c| c.cap());
+                        if !self.reaches_view(l.border, view.as_ref()) {
+                            continue;
+                        }
+                        if let Some(pts) = self.line_points(l.border, q.lod) {
                             let sources = self.sources_of(fid);
                             scene.attribution.extend(sources.iter().cloned());
                             scene.boundaries.push(map_types::StyledBoundary {
@@ -776,28 +858,27 @@ impl CanonProvider {
                                 },
                                 sources,
                                 piece: line_piece,
+                                trace: trace_of(layer, &l.entity, std::slice::from_ref(&l.border)),
                             });
                         }
                     }
                     Feature::Memory(m) => {
-                        if let Some(view) = &q.viewport {
-                            if m.at.angle_to(&view.center) > view.radius {
-                                continue;
-                            }
-                        }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
-                        let place =
-                            map_types::AtlasPlaceRef(PlaceId::new(m.entity.0.clone()));
+                        let place = map_types::AtlasPlaceRef(place_of(&m.entity));
                         if q.pieces.contains(Piece::Labels) {
                             scene.inscriptions.push(map_types::scene::StyledInscription {
                                 at: m.at,
                                 place: place.clone(),
                                 sources: sources.iter().cloned().collect(),
                                 piece: Piece::Labels,
+                                trace: trace_of(layer, &m.entity, &[]),
                             });
                             let mut label = style.label_style();
                             label.size *= style.labeling().scale.memory_scale;
+                            if !named.places.insert(place.0.clone()) {
+                                continue;
+                            }
                             scene.labels.push(PlacedLabel {
                                 text: m.name.clone(),
                                 at: m.at,
@@ -810,35 +891,28 @@ impl CanonProvider {
                         }
                     }
                     Feature::Point(p) => {
-                        if let Some(view) = &q.viewport {
-                            if p.at.angle_to(&view.center) > view.radius {
-                                continue;
-                            }
-                        }
                         let sources = self.sources_of(fid);
                         scene.attribution.extend(sources.iter().cloned());
                         // A standing place is the Markers piece,
                         // whatever layer carries it.
+                        let place = place_of(&p.entity);
                         if q.pieces.contains(Piece::Markers) {
                             scene.markers.push(StyledMarker {
                                 at: p.at,
                                 style: style.marker_style(),
                                 sources,
-                                place: Some(map_types::AtlasPlaceRef(PlaceId::new(
-                                    p.entity.0.clone(),
-                                ))),
+                                place: Some(map_types::AtlasPlaceRef(place.clone())),
                                 piece: Piece::Markers,
+                                trace: trace_of(layer, &p.entity, &[]),
                             });
                         }
-                        if q.pieces.contains(Piece::Labels) {
+                        if q.pieces.contains(Piece::Labels) && named.places.insert(place.clone()) {
                             let mut label = style.label_style();
-                            label.size *= style.labeling().scale.city_scale; // a note, not a shout
+                            label.size *= style.labeling().scale.city_scale;
                             scene.labels.push(PlacedLabel {
                                 text: p.name.clone(),
                                 at: p.at,
-                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(
-                                    PlaceId::new(p.entity.0.clone()),
-                                )),
+                                subject: LabelSubject::Place(map_types::AtlasPlaceRef(place)),
                                 style: label,
                                 face: map_types::scene::LabelFace::Place,
                                 voice: style.labeling().place,
@@ -868,7 +942,11 @@ impl CanonProvider {
                 .places
                 .get(&place.0)
                 .ok_or_else(|| MapError::UnknownPlace(place.0 .0.clone()))?;
-            let sources = BTreeSet::from([SourceId::new(SCRIPTURE_SOURCE)]);
+            // The name is Scripture's; the coordinate is the atlas
+            // gazetteer's, and carries the gazetteer's own terms.
+            let mut sources =
+                BTreeSet::from([Credit::new(SourceId::new(SCRIPTURE_SOURCE), License::PublicDomain)]);
+            sources.extend(witness_credits(Witness::Atlas));
             scene.attribution.extend(sources.iter().cloned());
             if q.pieces.contains(Piece::Markers) {
                 scene.markers.push(StyledMarker {
@@ -877,9 +955,10 @@ impl CanonProvider {
                     sources,
                     place: Some(map_types::AtlasPlaceRef(place.0.clone())),
                     piece: Piece::Markers,
+                    trace: None,
                 });
             }
-            if q.pieces.contains(Piece::Labels) {
+            if q.pieces.contains(Piece::Labels) && named.places.insert(place.0.clone()) {
                 scene.labels.push(PlacedLabel {
                     text: entry.canonical_name.clone(),
                     at: entry.position,
@@ -944,6 +1023,10 @@ impl CanonProvider {
                         Witness::Authored => "authored",
                         Witness::Basemap => "basemap",
                         Witness::NaturalEarth => "natural-earth",
+                        Witness::OpenBible => "openbible",
+                        Witness::Osm => "osm",
+                        Witness::Wikimedia => "wikimedia",
+                        Witness::Partition => "partition",
                     })
                     .unwrap_or("unknown");
                 out.push((f.entity().clone(), f.name().to_string(), kind_name, witness));
@@ -1049,7 +1132,7 @@ impl MapProvider for CanonProvider {
                                     // below the resolvable limit says
                                     // nothing: detail, not identity
                                     if let Some(RingFidelity::Survives(ring)) =
-                                        self.ring_points(*r, q)
+                                        self.ring_points(*r, q.lod)
                                     {
                                         scene.boundaries.push(StyledBoundary {
                                             boundary: bid_of(&a.entity),
@@ -1063,6 +1146,7 @@ impl MapProvider for CanonProvider {
                                             },
                                             sources: self.sources_of(fid),
                                             piece: age_piece,
+                                            trace: trace_of(layer, &a.entity, std::slice::from_ref(r)),
                                         });
                                     }
                                 }
@@ -1075,6 +1159,11 @@ impl MapProvider for CanonProvider {
         }
     }
 
+    /// THE ANIMATION IS THE SCENE DELTA. Regions the destination has
+    /// and the origin lacks fade in; regions the origin has and the
+    /// destination lacks fade out; a region both moments draw with
+    /// different rings morphs along its real path. Swapping the moments
+    /// swaps the difference, so direction needs no special case.
     fn transition(
         &self,
         from: TimePoint,
@@ -1083,64 +1172,37 @@ impl MapProvider for CanonProvider {
         lod: Lod,
     ) -> Result<TransitionScript, MapError> {
         if from == to {
-            return Ok(TransitionScript::empty()); // the identity (law 8)
+            return Ok(TransitionScript::empty());
         }
         if from > to {
             return Ok(invert(self.transition(to, from, viewport, lod)?));
         }
-        let mut events: Vec<&ChangeEvent> = self.changes_between(from, to);
-        events.sort_by_key(|e| e.at);
+        let before = self.drawn_at(&from, lod);
+        let after = self.drawn_at(&to, lod);
         let mut script = TransitionScript::empty();
-        for e in events {
-            match &e.kind {
-                ChangeKind::Rise { region } => {
-                    script.steps.push(TransitionStep::FadeIn { region: *region })
-                }
-                ChangeKind::Fall { region } => {
-                    script.steps.push(TransitionStep::FadeOut { region: *region })
-                }
-                ChangeKind::Shift { boundary } => {
-                    // a same-entity reshape MORPHS: slerp pairs with
-                    // equal counts by resampling; if either side's
-                    // geometry cannot be found, crossfade honestly
-                    match self.shift_geometries(boundary, &e.at) {
-                        Some((before, after)) => {
-                            let a = map_types::simplify_polyline(&before, lod);
-                            let b = map_types::simplify_polyline(&after, lod);
-                            let n = a.len().max(b.len()).max(2);
-                            script.steps.push(TransitionStep::Morph {
-                                boundary: *boundary,
-                                from_pts: resample(&a, n),
-                                to_pts: resample(&b, n),
-                            });
-                        }
-                        None => {
-                            if let Some(ent) = self.entity_by_bid.get(boundary) {
-                                let rid = rid_of(ent);
-                                script.steps.push(TransitionStep::FadeOut { region: rid });
-                                script.steps.push(TransitionStep::FadeIn { region: rid });
-                            }
-                        }
-                    }
-                }
-                // a journey's progress is time-parameterized rendering,
-                // not a topology change
-                ChangeKind::Journey { .. } => {}
-                ChangeKind::Rename { .. } => {}
-                ChangeKind::Split { parent, children, seam } => {
-                    script.steps.push(TransitionStep::SplitAlong {
-                        parent: *parent,
-                        seam: seam.clone(),
-                        children: children.clone(),
-                    })
-                }
-                ChangeKind::Merge { parents, child } => {
-                    script.steps.push(TransitionStep::MergeAcross {
-                        parents: parents.clone(),
-                        child: *child,
-                    })
-                }
+        for (rid, _) in before.iter().filter(|(rid, _)| !after.contains_key(rid)) {
+            script.steps.push(TransitionStep::FadeOut { region: *rid });
+        }
+        for (rid, was) in &before {
+            let Some(now) = after.get(rid) else { continue };
+            if was == now {
+                continue;
             }
+            let (Some(a), Some(b)) = (longest(was), longest(now)) else { continue };
+            let a = map_types::densify_edges(a, true);
+            let b = map_types::densify_edges(b, true);
+            let drawn = |rings: &[Vec<UnitVec>]| {
+                rings.iter().map(|r| map_types::densify_edges(r, true).len()).sum::<usize>()
+            };
+            let n = a.len().max(b.len()).max(drawn(was)).max(drawn(now)).max(2);
+            script.steps.push(TransitionStep::Morph {
+                boundary: BoundaryId(rid.0),
+                from_pts: resample(&a, n),
+                to_pts: resample(&b, n),
+            });
+        }
+        for (rid, _) in after.iter().filter(|(rid, _)| !before.contains_key(rid)) {
+            script.steps.push(TransitionStep::FadeIn { region: *rid });
         }
         Ok(script)
     }
@@ -1178,6 +1240,10 @@ fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
         out.push(p);
     }
     out
+}
+
+fn longest(rings: &[Vec<UnitVec>]) -> Option<&Vec<UnitVec>> {
+    rings.iter().max_by_key(|r| r.len())
 }
 
 fn invert(script: TransitionScript) -> TransitionScript {

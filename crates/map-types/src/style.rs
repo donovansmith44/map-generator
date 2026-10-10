@@ -127,6 +127,10 @@ pub struct LabelScale {
     /// extra factor applied to settlement names — a city is a note,
     /// not a shout
     pub city_scale: f64,
+    /// how far a land name may spill past its own shore, and how far
+    /// off a region's edge a city may stand and still be counted in
+    /// it, in em of the name's own size
+    pub overflow_em: f64,
 }
 
 /// The complete labeling dress: base ink plus the three voices plus
@@ -378,6 +382,9 @@ impl Style {
         positive(labeling.scale.memory_scale, "labeling.scale.memory_scale")?;
         positive(labeling.scale.station_scale, "labeling.scale.station_scale")?;
         positive(labeling.scale.city_scale, "labeling.scale.city_scale")?;
+        if !(labeling.scale.overflow_em.is_finite() && labeling.scale.overflow_em >= 0.0) {
+            return Err(StyleError::DressOutOfRange("labeling.scale.overflow_em"));
+        }
         Ok(Style {
             boundaries,
             region,
@@ -498,7 +505,7 @@ impl Style {
         }
         let sc = &self.labeling.scale;
         c.f64_(sc.unit_area_sr).f64_(sc.min).f64_(sc.max).f64_(sc.water_shrink).f64_(sc.water_ink);
-        c.f64_(sc.memory_scale).f64_(sc.station_scale).f64_(sc.city_scale);
+        c.f64_(sc.memory_scale).f64_(sc.station_scale).f64_(sc.city_scale).f64_(sc.overflow_em);
         let Rgba(r, g, b, a) = self.marker.color;
         c.u8_(r).u8_(g).u8_(b).u8_(a).f64_(self.marker.size);
         self.delta.before.canon(c);

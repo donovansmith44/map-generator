@@ -1,0 +1,424 @@
+{
+  "scope": "History preservation and source/export inventory; no graph rebuild, runtime registry validation or served-id successor gate.",
+  "local": "089a4bf899f9bd4da08061d710618e7efb2f7c90",
+  "remote": "63bb038897a036a75a9dce050676cc79c7d690aa",
+  "merge": "4d3200774a34c91cb4da1c708ec2415047559a09",
+  "merge_parents": [
+    "089a4bf899f9bd4da08061d710618e7efb2f7c90",
+    "63bb038897a036a75a9dce050676cc79c7d690aa"
+  ],
+  "merge_changed_paths": [
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "all_inherited_commit_ancestor_statuses": {
+    "089a4bf899f9bd4da08061d710618e7efb2f7c90": 0,
+    "91d089ced78431ad3accc98f9c2fa18ea5d1cdc3": 0,
+    "a8d9f9bb713a071904525e15924d5e3e7f498b3c": 0,
+    "65dce5d9e37dcb186c8502486b4116ae5597eb3e": 0,
+    "ed7ed9122f3221f79ad4be9017031180f13a44f4": 0,
+    "36f0f7468a8aa790ce5309783e76fb607fa92953": 0,
+    "356ec896698b8fd977084220b1ddafb1f54be0e5": 0,
+    "ea78a125880b3cc268d25a6f26202b82329275c9": 0,
+    "ba9029be4ef37629e7f77dfdabbf6433ccb77750": 0,
+    "cc7c5199375509702849b6708300e8f85d77677b": 0,
+    "c03e9695a848af55ae6f745590b925ce2155c15d": 0,
+    "6cfb18210b50e265f454bf03cb24c8e4a74f7a74": 0,
+    "00587f9ddcc02c2c56ab84eb61d1591d33c230c3": 0,
+    "2cd4f08ad0656928b104be411c4b379e9dbdec13": 0,
+    "86642965735858b6a874a9c96256b3289069b607": 0,
+    "3d6a3c6be0ce4a9b1a46692b936920a30a7ee5a9": 0,
+    "de8520f308782aeff98801d8e9f74ba5deef21bf": 0,
+    "6d706df686b0ac28d483ed49fb7ea851ee69d3e3": 0,
+    "7d96be75215c40cc5f1bf2fa40b415e8587aa24a": 0,
+    "7c0bfd942259b9abd5421e3f1c585a4e857214db": 0,
+    "ca9478e143f732e7c8961883fc677ad762a07efa": 0,
+    "99a5d600bb7cbba58581e54d3d2fd47e1b1a2a7c": 0,
+    "f34297eb462c0a0a38b807b6838720086861551f": 0,
+    "cc81aea02cba66ff1a6094465f5e594749b48a01": 0,
+    "044836ba856d2448c30e493e05f2a131d092425d": 0,
+    "30de029a6341ea1d27c05a00fc2b4cc06413d055": 0,
+    "77d6c869452c4da2ff676b4de96b16204886aedc": 0,
+    "617ec796fe8b3bd73d3894e9f205052cb1aa5cb7": 0,
+    "79c576dd2e87b3a90bdf9cb29c57d57f1f76e99e": 0,
+    "b7a5ebd93dd576dc8015aa42d110ec1040ba8c08": 0,
+    "a9294b4a6be44c5a42a33b84c01f2ee72ac9d2c9": 0,
+    "3d6730f71de7293f3c7ce31de7fd21788aa5f8bd": 0,
+    "bda17d5ab5edf294806495ab8cef37c40cab8ec7": 0,
+    "544bf479b639b11bd9949b310305459fd2179d07": 0,
+    "ad9b1126fffb89f5846e982f094a92b770f43546": 0,
+    "c737e6ff41d9528a2d99edbaed91d727e4164ed4": 0,
+    "037123ca5c679432b00103f789142d03f63fa3de": 0,
+    "31f46e8366d54b2b9a40fe4574f119cf0e040e39": 0,
+    "b27525dc4c3151e15a858b4934bcfe0d31cb4671": 0,
+    "2674ab1b20dfe1e9c9f7ea9006ef98532b9a0de8": 0,
+    "b02fcd43bbb25839c6209ce7481babc3943a8ae6": 0,
+    "608eaf7c00165eb5a383fabd69fab1af1fa157c4": 0,
+    "5609ecd41d4f67536d95c142b82aff046ae70a1a": 0,
+    "63bb038897a036a75a9dce050676cc79c7d690aa": 0,
+    "cf4a44c08bfd4047a7471efca153d636d29651c5": 0
+  },
+  "local_only_count": 43,
+  "remote_only_count": 2,
+  "registry_unifications": [
+    {
+      "canonical": "phoenicia",
+      "minted": "partition:phoenicia",
+      "kind": "Polity",
+      "reason": "The atlas polity 'phoenicia' and the partitioned scripture-claims face 'partition:phoenicia' are the same coast, witnessed twice."
+    },
+    {
+      "canonical": "basemap:judea",
+      "minted": "authored:judea",
+      "kind": "District",
+      "reason": "The basemap's Judea and the authored scripture survey of Judea are the same Roman district, witnessed twice."
+    },
+    {
+      "canonical": "partition:canaan",
+      "minted": "basemap:canaan",
+      "kind": "Polity",
+      "reason": "The basemap's Canaan and the partitioned scripture frame's Canaan are the same land, witnessed twice; the frame stands the whole way from the dawn to the monarchy."
+    }
+  ],
+  "registry_sanity": {
+    "declared_aliases": 3,
+    "unique_minted_aliases": 3,
+    "self_aliases": [],
+    "chained_declared_homes": [],
+    "atlas_place_aliases": [],
+    "atlas_polity_aliases": []
+  },
+  "exports": {
+    "old_root": "a1b93a3b049a1fe0",
+    "current_root": "fa95e31a4c84a41ac12339853cefc795",
+    "old_place_count": 1373,
+    "current_place_count": 1358,
+    "added_place_keys": [],
+    "removed_place_keys": [
+      "ai_36",
+      "antioch_69",
+      "antipatris_70",
+      "appii_forum_427",
+      "bethlehem_218",
+      "bethsaida_231",
+      "calneh_269",
+      "ephraim_401",
+      "lydda_741",
+      "moreh_817",
+      "olivet_907",
+      "phenice_945",
+      "rehoboth-ir_992",
+      "solomons_portico_1109",
+      "ur_1189"
+    ]
+  },
+  "place_moves": [
+    {
+      "absorbed": "ai_36",
+      "survivor": "ai-1",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "ai_36",
+        "canonical": "Ai",
+        "aliases": [],
+        "lat": 31.9166759,
+        "lon": 35.2615767,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "antioch_69",
+      "survivor": "antioch-2",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "antioch_69",
+        "canonical": "Antioch (Pisidia)",
+        "aliases": [],
+        "lat": 38.30466,
+        "lon": 31.19049,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "antipatris_70",
+      "survivor": "aphek-2",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "antipatris_70",
+        "canonical": "Antipatris",
+        "aliases": [],
+        "lat": 32.10478,
+        "lon": 34.93078,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "appii_forum_427",
+      "survivor": "forum-of-appius",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "appii_forum_427",
+        "canonical": "Appii Forum",
+        "aliases": [],
+        "lat": 41.46801,
+        "lon": 12.99372,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "bethlehem_218",
+      "survivor": "bethlehem-1",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "bethlehem_218",
+        "canonical": "Bethlehem",
+        "aliases": [],
+        "lat": 31.70431,
+        "lon": 35.20746,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "bethsaida_231",
+      "survivor": "bethsaida-2",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "bethsaida_231",
+        "canonical": "Bethsaida",
+        "aliases": [],
+        "lat": 32.91031,
+        "lon": 35.63067,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "calneh_269",
+      "survivor": "calneh-1",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "calneh_269",
+        "canonical": "Calneh",
+        "aliases": [],
+        "lat": 32.127213,
+        "lon": 45.229995,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "ephraim_401",
+      "survivor": "ephraim-2",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "ephraim_401",
+        "canonical": "Ephraim",
+        "aliases": [],
+        "lat": 31.95378956,
+        "lon": 35.29913578,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "lydda_741",
+      "survivor": "lod",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "lydda_741",
+        "canonical": "Lydda",
+        "aliases": [],
+        "lat": 31.950908,
+        "lon": 34.893068,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "moreh_817",
+      "survivor": "moreh-1",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "moreh_817",
+        "canonical": "Moreh (Shechem)",
+        "aliases": [],
+        "lat": 32.21369123124062,
+        "lon": 35.2817986718367,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "olivet_907",
+      "survivor": "mount-of-olives",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "olivet_907",
+        "canonical": "Olivet",
+        "aliases": [],
+        "lat": 31.77809503,
+        "lon": 35.24719761,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "phenice_945",
+      "survivor": "phoenix",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "phenice_945",
+        "canonical": "Phenice",
+        "aliases": [],
+        "lat": 35.19888577,
+        "lon": 24.08098202,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "rehoboth-ir_992",
+      "survivor": "rehoboth-ir",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "rehoboth-ir_992",
+        "canonical": "Rehoboth",
+        "aliases": [],
+        "lat": 36.35941,
+        "lon": 43.152887,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "solomons_portico_1109",
+      "survivor": "solomon-s-portico",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "solomons_portico_1109",
+        "canonical": "Solomon's Portico",
+        "aliases": [],
+        "lat": 31.777444,
+        "lon": 35.234935,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    },
+    {
+      "absorbed": "ur_1189",
+      "survivor": "ur-1",
+      "kind": "Place",
+      "proposed_move": "AbsorbedInto",
+      "old_export_row": {
+        "id": "ur_1189",
+        "canonical": "Ur of the Chaldees",
+        "aliases": [],
+        "lat": 30.9625,
+        "lon": 46.103056,
+        "provenance": "curated-places"
+      },
+      "survivor_in_current_export": true,
+      "reason_source": {
+        "commit": "0b29bf129786a43f78ce62cf40aee7dd7a845635",
+        "current_revision": "9da8a6c51eeef1319124b2178ff218a49b8097d9",
+        "path": "server/atlas-core/src/merge.rs"
+      }
+    }
+  ],
+  "hashes": {
+    "merged_registry": "726a07fb0676b61b2bd38105729802963403fb522866ee9f7e379fec2138da45",
+    "merged_old_export": "be04b6a443327f4932dc1d8a7000986bdb06723bdbc7e8291c66b288581e8b12",
+    "current_atlas_export": "b24efb23fee9bf72d53c5e011b916186502757a29ee44094c925bd1fee02acca",
+    "pinned_atlas_merge_source": "5971056ccbf789d4b9a91c907326dd53dbd1ab8f99574f4d71605f8dcc7923ed",
+    "merged_vendor_polities": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14"
+  }
+}

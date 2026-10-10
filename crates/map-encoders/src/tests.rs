@@ -3,6 +3,7 @@
 //! upstream — is enforced inside map-types by its grep test.)
 
 use std::collections::BTreeSet;
+use map_types::license::{Credit, Credited, License};
 
 use atlas_graph_types::covenant::SourceId;
 use map_types::scene::{LabelSubject, StyledMarker};
@@ -30,8 +31,10 @@ fn uv(lat: f64, lon: f64) -> UnitVec {
 
 fn sample_scene() -> Snapshot {
     let mut s = Snapshot::empty();
-    let sources: BTreeSet<SourceId> = [SourceId::new("historical-basemaps")].into();
+    let sources: BTreeSet<Credit> =
+        [Credit::new(SourceId::new("historical-basemaps"), License::Gpl3)].into();
     s.regions.push(StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(1)),
         entity: None,
         outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
@@ -41,6 +44,7 @@ fn sample_scene() -> Snapshot {
         piece: map_types::Piece::Fills,
     });
     s.boundaries.push(StyledBoundary {
+            trace: None,
         boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(2)),
         pts: vec![uv(0.0, 0.0), uv(0.0, 10.0)],
         stroke: Stroke { color: Rgba(90, 60, 40, 255), width: 1.5, pattern: StrokePattern::Dashed },
@@ -48,6 +52,7 @@ fn sample_scene() -> Snapshot {
         piece: map_types::Piece::Borders,
     });
     s.markers.push(StyledMarker {
+            trace: None,
         at: uv(4.0, 5.0),
         style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
         sources: Default::default(),
@@ -124,6 +129,7 @@ fn nothing_unseen_speaks() {
         ])
         .unwrap();
         StyledRegion {
+            trace: None,
             region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(id)),
             entity: None,
             outer: vec![ring],
@@ -228,6 +234,7 @@ fn flat_zooms_to_a_window() {
     use atlas_graph_types::covenant::ContentHash;
     use map_types::RegionId;
     let region = |n: u64, lat: f64, lon: f64| StyledRegion {
+            trace: None,
         region: RegionId(ContentHash(n)),
         entity: None,
         outer: vec![Ring::new(vec![
@@ -238,7 +245,7 @@ fn flat_zooms_to_a_window() {
         .unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(210, 190, 150, 255) },
-        sources: [SourceId::new("test")].into(),
+        sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
         piece: map_types::Piece::Fills,
     };
     let scene = Snapshot {
@@ -247,7 +254,7 @@ fn flat_zooms_to_a_window() {
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let windowed = SvgEncoder {
         projection: Projection::Flat { center: Some((32.0, 36.0)), zoom: Some(5.0) },
@@ -276,7 +283,8 @@ fn geojson_is_deterministic_and_parses() {
     let v: serde_json::Value = serde_json::from_str(&a).unwrap();
     assert_eq!(v["type"], "FeatureCollection");
     assert_eq!(v["features"].as_array().unwrap().len(), 4);
-    assert_eq!(v["attribution"][0], "historical-basemaps");
+    assert_eq!(v["attribution"][0]["source"], "historical-basemaps");
+    assert_eq!(v["attribution"][0]["license"], "GPL-3.0-only");
 }
 
 #[test]
@@ -285,6 +293,7 @@ fn geodesics_curve_not_chord() {
     // one straight chord across the globe.
     let mut scene = Snapshot::empty();
     scene.boundaries.push(StyledBoundary {
+            trace: None,
         boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(9)),
         pts: vec![uv(10.0, 0.0), uv(10.0, 60.0)],
         stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
@@ -313,6 +322,7 @@ fn labels_fit_their_territory_and_never_collide() {
     let mut scene = sample_scene();
     let tiny = map_types::RegionId(atlas_graph_types::covenant::ContentHash(7));
     scene.regions.push(StyledRegion {
+            trace: None,
         region: tiny,
         entity: None,
         outer: vec![Ring::new(vec![uv(20.0, 20.0), uv(20.0, 20.1), uv(20.1, 20.05)]).unwrap()],
@@ -421,12 +431,13 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
     use map_types::RegionId;
 
     let region = |n: u64, ring: Vec<UnitVec>| StyledRegion {
+            trace: None,
         region: RegionId(ContentHash(n)),
         entity: None,
         outer: vec![Ring::new(ring).unwrap()],
         holes: vec![],
         paint: Paint { fill: Rgba(10 + n as u8, 20, 30, 200) },
-        sources: [SourceId::new("test")].into(),
+        sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
         piece: map_types::Piece::Fills,
     };
     let square = |lat0: f64, lon0: f64, d: f64| {
@@ -447,7 +458,7 @@ fn globe_culls_offscreen_but_keeps_swallowing_fills() {
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let enc = SvgEncoder {
         width: 800.0,
@@ -496,25 +507,27 @@ fn swallowing_geometry_ships_thin() {
         .collect();
     let scene = Snapshot {
         regions: vec![StyledRegion {
+            trace: None,
             region: RegionId(ContentHash(1)),
             entity: None,
             outer: vec![Ring::new(circle.clone()).unwrap()],
             holes: vec![],
             paint: Paint { fill: Rgba(10, 20, 30, 200) },
-            sources: [SourceId::new("test")].into(),
+            sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
             piece: map_types::Piece::Fills,
         }],
         boundaries: vec![StyledBoundary {
+            trace: None,
             boundary: map_types::BoundaryId(ContentHash(2)),
             pts: circle,
             stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
-            sources: [SourceId::new("test")].into(),
+            sources: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
             piece: map_types::Piece::Borders,
         }],
         markers: vec![],
         inscriptions: vec![],
         labels: vec![],
-        attribution: [SourceId::new("test")].into(),
+        attribution: [Credit::new(SourceId::new("test"), License::Cc0)].into(),
     };
     let enc = SvgEncoder {
         width: 800.0,
@@ -538,6 +551,7 @@ fn markers_with_places_are_clickable() {
     use map_types::scene::StyledMarker;
     let mut scene = Snapshot::empty();
     scene.markers.push(StyledMarker {
+            trace: None,
         at: uv(37.94, 27.34),
         style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
         sources: Default::default(),
@@ -546,7 +560,7 @@ fn markers_with_places_are_clickable() {
         )),
         piece: map_types::Piece::Markers,
     });
-    scene.attribution.insert(SourceId::new("test"));
+    scene.attribution.insert(Credit::new(SourceId::new("test"), License::Cc0));
     let svg = SvgEncoder {
         projection: Projection::Globe { center: Some((37.94, 27.34)), zoom: Some(5.0) },
         ..SvgEncoder::default()
@@ -601,6 +615,7 @@ fn fixed_camera_frames_identically_and_pieces_stay_addressable() {
     let camera = Projection::Globe { center: Some((32.0, 35.3)), zoom: Some(1.5) };
     let enc = || SvgEncoder { projection: camera, width: 900.0, ..SvgEncoder::default() };
     let region = |name: &str, lat: f64| StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(lat as u64 + 7)),
         entity: Some(name.to_string()),
         outer: vec![Ring::new(vec![
@@ -657,6 +672,7 @@ fn flat_window_keeps_holes_of_oversized_rings() {
     let island = ring(vec![(31.0, 34.0), (31.0, 36.0), (33.0, 36.0), (33.0, 34.0)]);
     let mut scene = Snapshot::empty();
     scene.regions.push(StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(9)),
         entity: Some("sea".into()),
         outer: vec![ocean],
@@ -687,6 +703,7 @@ fn flat_window_keeps_holes_of_oversized_rings() {
 fn flat_projection_holds_its_standard_parallel() {
     let mut scene = Snapshot::empty();
     scene.markers.push(map_types::scene::StyledMarker {
+            trace: None,
         at: UnitVec::from_lat_lon_deg(32.0, 35.0),
         style: map_types::style::MarkerStyle {
             color: map_types::style::Rgba(0, 0, 0, 255),
@@ -715,6 +732,7 @@ fn flat_projection_holds_its_standard_parallel() {
     let mut probe = Snapshot::empty();
     for (la, lo) in [(32.0, 35.0), (33.0, 35.0), (32.0, 35.0 + 1.0 / 32f64.to_radians().cos())] {
         probe.markers.push(map_types::scene::StyledMarker {
+            trace: None,
             at: UnitVec::from_lat_lon_deg(la, lo),
             style: map_types::style::MarkerStyle {
                 color: map_types::style::Rgba(0, 0, 0, 255),
@@ -757,6 +775,7 @@ fn flat_and_globe_correspond_under_one_camera()  {
         let kx = 32f64.to_radians().cos();
         for (la, lo) in [(32.0, 35.0), (32.0, 35.0 + 1.0 / kx)] {
             scene.markers.push(map_types::scene::StyledMarker {
+            trace: None,
                 at: UnitVec::from_lat_lon_deg(la, lo),
                 style: map_types::style::MarkerStyle {
                     color: map_types::style::Rgba(0, 0, 0, 255),
@@ -821,6 +840,7 @@ fn the_sentinel_keeps_its_holes_on_both_charts() {
     ] {
         let mut scene = Snapshot::empty();
         scene.regions.push(StyledRegion {
+            trace: None,
             region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(11)),
             entity: Some("sea".into()),
             outer: vec![sentinel.clone()],
@@ -887,6 +907,7 @@ fn equal_content_shares_one_resource() {
     let pts = vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(5.0, 12.0)];
     for n in [7u64, 8u64] {
         scene.boundaries.push(StyledBoundary {
+            trace: None,
             boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(n)),
             pts: pts.clone(),
             stroke: Stroke {
@@ -920,6 +941,7 @@ fn identity_is_independent_of_style() {
     let scene_with = |color: Rgba| {
         let mut s = Snapshot::empty();
         s.boundaries.push(StyledBoundary {
+            trace: None,
             boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(3)),
             pts: pts.clone(),
             stroke: Stroke { color, width: 2.0, pattern: StrokePattern::Solid },
@@ -992,6 +1014,7 @@ fn scene_elements_map_to_kinds() {
 fn region_rings_share_one_fill_feature() {
     let mut scene = Snapshot::empty();
     scene.regions.push(StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(21)),
         entity: None,
         outer: vec![Ring::new(vec![uv(0.0, 0.0), uv(0.0, 10.0), uv(8.0, 5.0)]).unwrap()],
@@ -1028,6 +1051,7 @@ fn sentinel_ring_is_marked_whole() {
     assert!(map_types::covers_sphere(sentinel.points()), "test ring must trip the sentinel law");
     let mut scene = Snapshot::empty();
     scene.regions.push(StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(22)),
         entity: None,
         outer: vec![sentinel],
@@ -1109,6 +1133,7 @@ fn antimeridian_split_is_seam_safe() {
     .unwrap();
     let mut scene = Snapshot::empty();
     scene.regions.push(StyledRegion {
+            trace: None,
         region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(31)),
         entity: None,
         outer: vec![ring],
@@ -1118,6 +1143,7 @@ fn antimeridian_split_is_seam_safe() {
         piece: map_types::Piece::Fills,
     });
     scene.boundaries.push(StyledBoundary {
+            trace: None,
         boundary: map_types::BoundaryId(atlas_graph_types::covenant::ContentHash(32)),
         pts: vec![uv(60.0, 170.0), uv(60.0, -170.0), uv(55.0, -160.0)],
         stroke: Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid },
@@ -1539,7 +1565,7 @@ fn limb_fixtures_match_rust() {
 // ------------------------------- Stage 1 Task 10: the buffer, split
 
 fn marker_of(lat: f64, lon: f64, paint: MarkerStyle, piece: map_types::Piece) -> StyledMarker {
-    StyledMarker { at: uv(lat, lon), style: paint, sources: Default::default(), place: None, piece }
+    StyledMarker { at: uv(lat, lon), style: paint, sources: Default::default(), place: None, piece, trace: None }
 }
 
 /// TASK 10 (Stage 1): the inversion of Task 1's pin. Two markers of
@@ -1704,5 +1730,235 @@ fn splitting_the_points_buffer_conserves_every_marker_vertex() {
     assert!(
         style_seq.windows(2).all(|w| w[0] <= w[1]),
         "marker entries must stay style-major, preserving the pre-split paint order"
+    );
+}
+
+// ================================================== placement in the answer
+
+use map_types::camera::{Camera, ChartKind};
+
+fn viewed(scene: &Snapshot, lat: f64, lon: f64, zoom: f64) -> EncodedScene {
+    GpuSceneEncoder {
+        camera: Some(Camera::new(ChartKind::Globe, lat, lon, zoom, 1200.0)),
+        ..GpuSceneEncoder::default()
+    }
+    .encode(scene)
+    .unwrap()
+}
+
+fn territory_name(text: &str, at: UnitVec, region: map_types::RegionId) -> PlacedLabel {
+    PlacedLabel {
+        text: text.to_string(),
+        at,
+        subject: LabelSubject::Region(region),
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 14.0, halo_width_em: 0.24 },
+        face: map_types::scene::LabelFace::Territory,
+        voice: test_voice(),
+        piece: map_types::Piece::Labels,
+    }
+}
+
+fn city_name(text: &str, at: UnitVec) -> PlacedLabel {
+    PlacedLabel {
+        text: text.to_string(),
+        at,
+        subject: LabelSubject::Place(map_types::AtlasPlaceRef(
+            atlas_graph_types::covenant::PlaceId::new(text.to_lowercase()),
+        )),
+        style: LabelStyle { color: Rgba(0, 0, 0, 255), halo: Rgba(255, 255, 255, 200), size: 12.0, halo_width_em: 0.24 },
+        face: map_types::scene::LabelFace::Place,
+        voice: test_voice(),
+        piece: map_types::Piece::Labels,
+    }
+}
+
+#[test]
+fn a_viewed_answer_places_every_name_it_sends_on_the_page_it_names() {
+    let enc = viewed(&sample_scene(), 3.0, 5.0, 10.0);
+    let view = enc.manifest.view.expect("a viewed answer says which view it placed for");
+    assert_eq!((view.lat, view.lon, view.zoom, view.width, view.height), (3.0, 5.0, 10.0, 1200.0, 1200.0));
+    assert!(!enc.manifest.labels.is_empty(), "the sample's own name is on the page");
+    for l in &enc.manifest.labels {
+        let p = l.placement.expect("a sent name is a placed name");
+        assert!(p.left >= 0.0 && p.top >= 0.0 && p.right <= 1.0 && p.bottom <= 1.0, "{p:?} fits the page");
+        assert!(p.left < p.right && p.top < p.bottom, "{p:?} encloses area");
+    }
+    let json = enc.manifest_json();
+    assert!(json.contains("\"view\":{\"chart\":\"globe\",\"height\":1200.0,\"lat\":3.0,\"lon\":5.0,\"width\":1200.0,\"zoom\":10.0}"), "{json}");
+    assert!(json.contains("\"placement\":{\"bottom\":"), "{json}");
+    assert!(json.contains("\"labelOverflowEm\":"), "{json}");
+}
+
+#[test]
+fn an_unviewed_answer_places_nothing_and_says_so() {
+    let enc = gpu_encode(&sample_scene());
+    assert!(enc.manifest.view.is_none());
+    assert!(enc.manifest.labels.iter().all(|l| l.placement.is_none()));
+    assert!(enc.manifest_json().contains("\"view\":null"));
+    assert!(!enc.manifest_json().contains("\"placement\""));
+}
+
+#[test]
+fn placed_names_never_overlap_and_a_name_with_nowhere_to_go_is_not_sent() {
+    let mut scene = sample_scene();
+    for _ in 0..12 {
+        scene.labels.push(scene.labels[0].clone());
+    }
+    let enc = viewed(&scene, 3.0, 5.0, 10.0);
+    let boxes: Vec<_> = enc.manifest.labels.iter().map(|l| l.placement.unwrap()).collect();
+    assert!(!boxes.is_empty() && boxes.len() < 13, "thirteen names at one anchor cannot all be drawn: {}", boxes.len());
+    for (i, a) in boxes.iter().enumerate() {
+        for b in &boxes[i + 1..] {
+            assert!(!(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom), "{a:?} over {b:?}");
+        }
+    }
+}
+
+#[test]
+fn a_name_behind_the_globe_or_off_the_page_is_not_sent() {
+    let mut scene = sample_scene();
+    scene.labels.push(city_name("ANTIPODEAN", uv(-3.0, -175.0)));
+    scene.labels.push(city_name("EDGEWISE", uv(3.0, 5.0 + 9.9)));
+    let enc = viewed(&scene, 3.0, 5.0, 10.0);
+    let texts: Vec<&str> = enc.manifest.labels.iter().map(|l| l.text.as_str()).collect();
+    assert!(!texts.contains(&"ANTIPODEAN"), "{texts:?}");
+    assert!(!texts.contains(&"EDGEWISE"), "{texts:?}");
+    assert!(texts.contains(&"Judah & <friends>"), "{texts:?}");
+}
+
+/// An L-shaped land: a name centred on its corner block would run
+/// out over the empty quadrant. The answer shrinks the name until its
+/// box stands within the land, give or take the declared overflow.
+#[test]
+fn a_land_name_keeps_within_its_land_by_the_declared_overflow() {
+    let ell = map_types::RegionId(atlas_graph_types::covenant::ContentHash(77));
+    let mut scene = Snapshot::empty();
+    scene.regions.push(StyledRegion {
+            trace: None,
+        region: ell,
+        entity: None,
+        outer: vec![Ring::new(vec![
+            uv(0.0, 0.0), uv(0.0, 5.0), uv(1.0, 5.0), uv(1.0, 1.0), uv(5.0, 1.0), uv(5.0, 0.0),
+        ]).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: Default::default(),
+        piece: map_types::Piece::Fills,
+    });
+    scene.labels.push(territory_name("WIDE NAME", uv(0.5, 0.5), ell));
+    let enc = GpuSceneEncoder {
+        camera: Some(Camera::new(ChartKind::Globe, 0.5, 0.5, 10.0, 1200.0)),
+        label_overflow_em: 0.5,
+        ..GpuSceneEncoder::default()
+    }
+    .encode(&scene)
+    .unwrap();
+    let l = enc.manifest.labels.first().expect("a shrunk name is still sent");
+    let p = l.placement.unwrap();
+    let scale = (1200.0 - 32.0) / 2.0 / (10.0_f64).to_radians().sin();
+    let shore_x = 600.0 - (0.5_f64).to_radians().sin() * scale;
+    assert!(l.size < 14.0, "the name shrank from 14 to {}", l.size);
+    assert!(p.left * 1200.0 >= shore_x - 0.5 * l.size - 1e-6, "left edge {} stays within 0.5 em of the shore at {shore_x}", p.left * 1200.0);
+}
+
+#[test]
+fn a_viewed_answer_sends_what_the_view_reaches_and_nothing_beyond() {
+    let region = |n: u64, lat: f64, lon: f64, r: f64| StyledRegion {
+            trace: None,
+        region: map_types::RegionId(atlas_graph_types::covenant::ContentHash(n)),
+        entity: None,
+        outer: vec![Ring::new(vec![uv(lat - r, lon - r), uv(lat - r, lon + r), uv(lat + r, lon + r), uv(lat + r, lon - r)]).unwrap()],
+        holes: vec![],
+        paint: Paint { fill: Rgba(210, 190, 150, 255) },
+        sources: Default::default(),
+        piece: map_types::Piece::Fills,
+    };
+    let marker = |lat: f64, lon: f64| StyledMarker {
+            trace: None,
+        at: uv(lat, lon),
+        style: MarkerStyle { color: Rgba(20, 20, 20, 255), size: 3.0 },
+        sources: Default::default(),
+        place: Some(map_types::AtlasPlaceRef(atlas_graph_types::covenant::PlaceId::new(format!("p{lat}_{lon}")))),
+        piece: map_types::Piece::Markers,
+    };
+    let mut scene = Snapshot::empty();
+    scene.regions.push(region(1, 0.0, 0.0, 1.0));
+    scene.regions.push(region(2, 0.0, 20.0, 18.0));
+    scene.regions.push(region(3, 0.0, 120.0, 5.0));
+    scene.markers.push(marker(0.5, 0.5));
+    scene.markers.push(marker(0.0, 30.0));
+    let world = gpu_encode(&scene);
+    assert_eq!(world.manifest.features.iter().filter(|f| f.feature.starts_with("region:")).count(), 3);
+    assert_eq!(world.manifest.markers.len(), 2);
+    let enc = viewed(&scene, 0.0, 0.0, 2.0);
+    let ids: Vec<&str> = enc.manifest.features.iter().map(|f| f.feature.as_str()).collect();
+    assert!(ids.contains(&"region:0000000000000001"), "the near region is sent: {ids:?}");
+    assert!(ids.contains(&"region:0000000000000002"), "a region whose cap reaches the view is sent: {ids:?}");
+    assert!(!ids.contains(&"region:0000000000000003"), "a region beyond the view's reach is not sent: {ids:?}");
+    let shipped: std::collections::BTreeSet<_> = enc.resources.iter().map(|r| r.descriptor.id).collect();
+    let referenced: std::collections::BTreeSet<_> = enc.manifest.features.iter().map(|f| f.resource).collect();
+    assert_eq!(shipped, referenced, "no resource ships that nothing references");
+    assert_eq!(enc.manifest.markers.len(), 1, "the far marker is not sent");
+    let points = enc.resources.iter().find(|r| r.descriptor.kind == ResourceKind::Points).expect("a points buffer");
+    assert_eq!(points.descriptor.vertex_count, 1, "the points buffer holds only the marker in view");
+}
+
+/// Every drawn entry says which disposition of the fact tier drew it
+/// and which borders it is made of; a standing buffer says which
+/// dispositions stand in it.
+#[test]
+fn every_entry_traces_to_the_fact_tier() {
+    use map_types::scene::Trace;
+    let hash = |n: u64| atlas_graph_types::covenant::ContentHash(n);
+    let mut scene = sample_scene();
+    scene.regions[0].trace = Some(Trace { layer: "territory".into(), entity: "egypt".into(), borders: vec![hash(0x11)] });
+    scene.boundaries[0].trace = Some(Trace { layer: "territory".into(), entity: "egypt".into(), borders: vec![hash(0x11)] });
+    scene.markers[0].trace = Some(Trace { layer: "scripture-claims".into(), entity: "place:gaza".into(), borders: vec![] });
+    let enc = gpu_encode(&scene);
+    let json = enc.manifest_json();
+    assert!(json.contains("\"disposition\":\"territory:egypt\""), "{json}");
+    assert!(json.contains("\"borders\":[\"0000000000000011\"]"), "{json}");
+    assert!(json.contains("\"dispositions\":[\"scripture-claims:place:gaza\"]"), "{json}");
+    let untraced = gpu_encode(&sample_scene()).manifest_json();
+    assert!(!untraced.contains("\"disposition"), "an untraced element publishes no trace: {untraced}");
+}
+
+#[test]
+fn a_city_says_which_ground_it_stands_on_whatever_the_camera() {
+    let mut scene = sample_scene();
+    scene.labels.push(city_name("Inside", uv(3.0, 5.0)));
+    scene.labels.push(city_name("Outside", uv(-5.0, 5.0)));
+    for enc in [gpu_encode(&scene), viewed(&scene, 3.0, 5.0, 20.0)] {
+        let ground = |text: &str| {
+            enc.manifest.labels.iter().find(|l| l.text == text).map(|l| l.ground.clone())
+        };
+        assert_eq!(ground("Inside"), Some(Some("region:0000000000000001".to_string())));
+        assert_eq!(ground("Outside"), Some(Some("unclaimed".to_string())));
+        assert_eq!(ground("Judah & <friends>"), Some(None), "a free name stands on no ground the law asks about");
+    }
+    assert!(gpu_encode(&scene).manifest_json().contains("\"ground\":\"unclaimed\""));
+}
+
+/// LAW 6 ON THE WIRE THAT IS ACTUALLY USED. Attribution was a field on
+/// the semantic scene that the retained renderer's manifest never
+/// published, so the answer a consumer really reads carried no sources
+/// and no terms at all. A consumer with a licensing requirement cannot
+/// meet it against a picture that will not say what it is made of.
+#[test]
+fn the_manifest_publishes_every_source_it_draws_and_that_source_s_terms() {
+    let scene = sample_scene();
+    let enc = GpuSceneEncoder::default();
+    let out = enc.encode(&scene).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&out.manifest_json()).unwrap();
+
+    assert_eq!(
+        v["attribution"],
+        serde_json::json!([{ "source": "historical-basemaps", "license": "GPL-3.0-only" }]),
+        "the manifest names its sources with their terms, whole"
+    );
+    assert_eq!(
+        v["licenses"],
+        serde_json::json!(["GPL-3.0-only"]),
+        "and the distinct terms redistributing it requires"
     );
 }

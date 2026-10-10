@@ -629,3 +629,72 @@ fn a_cohort_enters_time_at_its_moment() {
     assert!(at2(-1050).contains(&old2), "what always stood still stands");
     assert!(!at2(-900).contains(&tribe2), "and after");
 }
+
+// ------------------------------------------------------- identity
+
+/// The registry file is the one place two minted ids become one real
+/// thing, and the loader reads exactly its written rows.
+#[test]
+fn the_registry_file_declares_every_unification_and_nothing_else() {
+    use map_canon::{EntityId, Unification};
+    let text = r#"{"unifications":[{"canonical":"phoenicia","minted":"partition:phoenicia","kind":"Polity","reason":"one coast"}]}"#;
+    let reg = crate::identity::load_registry(text, "test.json").unwrap();
+    let e = |s: &str| EntityId(s.to_string());
+    assert_eq!(reg.resolve(&e("partition:phoenicia")), &e("phoenicia"));
+    assert_eq!(reg.resolve(&e("phoenicia")), &e("phoenicia"));
+    assert_eq!(reg.resolve(&e("judea")), &e("judea"));
+    assert!(matches!(reg.registry().why(&e("partition:phoenicia")), Some(Unification::Declared { .. })));
+    assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"a","minted":"a","kind":"Polity","reason":"x"}]}"#, "t").is_err(), "self-unification is refused");
+    assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"a","minted":"b","kind":"Nonsense","reason":"x"}]}"#, "t").is_err(), "an unknown kind is refused");
+    assert!(crate::identity::load_registry(r#"{"unifications":[{"canonical":"b","minted":"c","kind":"Polity","reason":"x"},{"canonical":"a","minted":"b","kind":"Polity","reason":"x"}]}"#, "t").is_err(), "a chain is refused");
+}
+
+/// The compile validates the registry it observed every witness into:
+/// a canonical id no witness ever minted is a typo the compile refuses
+/// by name, and a witness that has been observed clears it.
+#[test]
+fn the_compile_refuses_a_registry_no_witness_backs() {
+    use map_canon::{EntityId, LayerKind, Witness};
+    let text = r#"{"unifications":[{"canonical":"x","minted":"y","kind":"Polity","reason":"one"}]}"#;
+    let mut id = crate::identity::load_registry(text, "t").unwrap();
+    id.witness(&EntityId("y".into()), "Y", LayerKind::Territory, Witness::Atlas, "area");
+    let err = id.check().unwrap_err();
+    assert!(err.contains("x"), "{err}");
+    id.witness(&EntityId("x".into()), "X", LayerKind::Territory, Witness::Atlas, "area");
+    assert!(id.check().is_ok());
+    assert_eq!(id.resolve(&EntityId("y".into())), &EntityId("x".into()));
+}
+
+/// Within one era, every bundle that resolves to one entity is one
+/// area: rings and holes unioned, the held witness's layer kept, and
+/// the whole era's other entities untouched.
+#[test]
+fn one_entity_per_era_however_many_witnesses_claimed_it() {
+    use crate::partition_bridge::{unify_era_areas, EraArea};
+    use map_canon::{BorderId, EntityId, LayerKind, Witness};
+    let bid = |n: u64| BorderId(atlas_graph_types::covenant::ContentHash(n));
+    let row = |entity: &str, layer, witness, rings: &[u64]| EraArea {
+        witnessed: vec![EntityId(entity.into())],
+        entity: EntityId(entity.into()),
+        name: "Phoenicia".into(),
+        layer,
+        witness,
+        verses: vec![],
+        note: format!("{entity}"),
+        rings: rings.iter().map(|n| bid(*n)).collect(),
+        holes: Default::default(),
+    };
+    let rows = vec![
+        row("phoenicia", LayerKind::ScriptureClaims, Witness::Authored, &[1, 2]),
+        row("egypt", LayerKind::Territory, Witness::Atlas, &[9]),
+        row("phoenicia", LayerKind::Territory, Witness::Atlas, &[3]),
+    ];
+    let out = unify_era_areas(rows);
+    assert_eq!(out.len(), 2, "two entities, two areas");
+    let ph = out.iter().find(|a| a.entity.0 == "phoenicia").unwrap();
+    assert_eq!(ph.rings, [bid(1), bid(2), bid(3)].into());
+    assert_eq!(ph.layer, LayerKind::Territory, "the held witness's layer");
+    assert_eq!(ph.witness, Witness::Atlas);
+    assert!(ph.note.contains("partition") || ph.note.contains("phoenicia"), "both witnesses' notes survive");
+    assert_eq!(out.iter().find(|a| a.entity.0 == "egypt").unwrap().rings, [bid(9)].into());
+}
