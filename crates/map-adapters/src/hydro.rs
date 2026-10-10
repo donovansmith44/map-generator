@@ -26,6 +26,121 @@ use crate::quantize::clean_ring;
 
 const HYDRO_PROVENANCE: &str = "natural-earth (public domain; modern coastline shapes)";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RiverCourse {
+    River,
+    LakeCenterline,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RiverNumber(pub i64);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RiverSource {
+    pub number: RiverNumber,
+    pub name: Option<String>,
+    pub course: RiverCourse,
+    pub shape: RiverShape,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RiverShape {
+    Course(Vec<Vec<UnitVec>>),
+    Unlocated,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RiverError {
+    Json(String),
+    Collection,
+    Feature,
+    Number,
+    Name,
+    Course,
+    Geometry,
+    Path,
+    Position,
+}
+
+pub fn read_rivers(text: &str) -> Result<Vec<RiverSource>, RiverError> {
+    let root: serde_json::Value =
+        serde_json::from_str(text).map_err(|error| RiverError::Json(error.to_string()))?;
+    if root["type"].as_str() != Some("FeatureCollection") {
+        return Err(RiverError::Collection);
+    }
+    root["features"]
+        .as_array()
+        .ok_or(RiverError::Collection)?
+        .iter()
+        .map(read_river)
+        .collect()
+}
+
+fn read_river(feature: &serde_json::Value) -> Result<RiverSource, RiverError> {
+    if feature["type"].as_str() != Some("Feature") {
+        return Err(RiverError::Feature);
+    }
+    let properties = &feature["properties"];
+    let number = RiverNumber(properties["rivernum"].as_i64().ok_or(RiverError::Number)?);
+    let name = match properties.get("name") {
+        Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(name)) => Some(name.clone()),
+        _ => return Err(RiverError::Name),
+    };
+    let course = match properties["featurecla"].as_str() {
+        Some("River") => RiverCourse::River,
+        Some("Lake Centerline") => RiverCourse::LakeCenterline,
+        _ => return Err(RiverError::Course),
+    };
+    let geometry = &feature["geometry"];
+    let paths = match geometry["type"].as_str() {
+        Some("LineString") => vec![read_river_path(&geometry["coordinates"])?],
+        Some("MultiLineString") => geometry["coordinates"]
+            .as_array()
+            .ok_or(RiverError::Geometry)?
+            .iter()
+            .map(read_river_path)
+            .collect::<Result<Vec<_>, _>>()?,
+        _ => return Err(RiverError::Geometry),
+    };
+    let shape = if paths.is_empty() {
+        RiverShape::Unlocated
+    } else {
+        RiverShape::Course(paths)
+    };
+    Ok(RiverSource {
+        number,
+        name,
+        course,
+        shape,
+    })
+}
+
+fn read_river_path(coordinates: &serde_json::Value) -> Result<Vec<UnitVec>, RiverError> {
+    let coordinates = coordinates.as_array().ok_or(RiverError::Path)?;
+    if coordinates.len() < 2 {
+        return Err(RiverError::Path);
+    }
+    coordinates
+        .iter()
+        .map(|position| {
+            let position = position.as_array().ok_or(RiverError::Position)?;
+            let longitude = position
+                .first()
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(RiverError::Position)?;
+            let latitude = position
+                .get(1)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(RiverError::Position)?;
+            if !(-180.0..=180.0).contains(&longitude) || !(-90.0..=90.0).contains(&latitude) {
+                return Err(RiverError::Position);
+            }
+            Ok(UnitVec::from_lat_lon_deg(latitude, longitude))
+        })
+        .collect()
+}
+
 fn hash_id(tag: &str) -> ContentHash {
     let mut h = DefaultHasher::new();
     tag.hash(&mut h);
