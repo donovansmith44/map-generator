@@ -1,0 +1,11 @@
+{
+  "assertion-audit.json": "629c0e4c22f0c524b6d6cd210012703faad61f8560329b11fd82a427f609c5d0",
+  "assertion-audit.log": "1228f4e9eb6783dee87d400eacb75ee29a921d709007f8a8de40c08c7603a450",
+  "assertion_audit.py": "a19c1122ba67b6970ef3419f66edd70909e389662b3f6e388a7792d7ed0f2312",
+  "audit-requirements.txt": "690e58701b195760d4abad9a42af740bdaeb881fdbdb399263405a1ee0d13e68",
+  "gate.log": "80ee4879470c7e3e45f215e1b81c729ec72d2e92ed482c40bd9686a2b3f21835",
+  "green-content.log": "771d97836036bf2ce67de057fc79b1cad0b5e4151580403f12d169cd5f7182ed",
+  "green-independent-outcomes.log": "9631e292ee1d79a8a32ed8ddd242e9dad68d3d951e8ddc002073cd534587318f",
+  "red-polity.log": "35b13ec0772e88e34bd1b64410bdedbdf6412b0dd84caf9b741f799c403a106e",
+  "red-restoration.log": "8fd00a74dcafd8f780b6ba255ec35292b52cd85cc60913bcb42a6d2dd7ceb22b"
+}
