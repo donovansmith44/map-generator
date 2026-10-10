@@ -71,14 +71,33 @@ geometries from6ac32bfbf67e26b9cfe94560806fda293db05801 with source family,
 original path and source SHA-256. The shapes themselves remain removed.
 `tools/quarantine_fingerprints.py --check` reproduces that catalogue.
 Compiler admission checks every supplied polity and timeline boundary,
-all repository GeoJSON inputs, and all compiled border outputs. Content
-matching uses the partition's existing quantized Cartesian point keys
-hashed with SHA-256; unions preserve excluded vertex sets across renamed,
-reordered, nested and split inputs/outputs.
+all repository GeoJSON inputs, and all compiled border outputs. Controller
+ruling (2026-10-09): exclusion is an ordered vertex-run law, not whole-ring
+identity. Three consecutive vertices from one excluded ring are refused in
+either direction, including runs across that ring's starting point. The
+refusal records the source, original path/checksum, input start, source-ring
+start, direction and three-vertex span. Separate coordinate sequences retain
+their boundaries; concatenating unrelated features never establishes lineage.
+
+`map-partition::PointKey` owns both established partition byte identity
+(Cartesian components rounded at1e9 units) and lineage keys (latitude and
+longitude rounded to1e-6 degrees). The catalogue producer calls the Rust
+owner, stores each ordered vertex's nine neighboring cell fingerprints,
+and the compiler indexes them. This admits sub-microdegree perturbations
+across rounding-cell boundaries without storing excluded coordinates.
+The neighborhood comparison is conservative: rounded components differing
+by at most one cell match, so some differences above1e-6 degrees can match.
+The compiler hashes each observed vertex once. Closed-ring duplicate endpoints
+are normalized by the same producer; cyclic matching preserves start-point
+independence. Catalogue generation/checking requires the built Rust
+`quarantine_keys` example and the configured shared `CARGO_TARGET_DIR`.
 
 This replaces the former biblical-ID ban. A permitted future Judah or Canaan
 geometry can be admitted under its biblical identity. The guard records
-actual matching content with all excluded-source provenance; it does not
-assert missing geography is unclaimed, grant a licence, or infer the ancestry
-of arbitrarily changed coordinates without retained derivation records.
-The general permissive-lineage policy remains C4's responsibility.
+actual retained ordered content; it does not assert missing geography is
+unclaimed, grant a licence, or infer arbitrary ancestry after derivation
+records have been destroyed. One or two vertices, nonconsecutive subsets,
+and descendants retaining no three-vertex source run do not meet this
+controller-approved law. Three historical two-vertex paths remain recorded
+in the catalogue, rather than silently disappearing. The general permissive
+source/derivation-lineage policy remains C4's responsibility.

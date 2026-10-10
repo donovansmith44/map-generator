@@ -1,0 +1,7 @@
+{
+  "base": "7bcbabab132443e535fa7b18c2cdb4500457e3c8",
+  "source_head": "6ecddb00f0693af540ac9d8e3a83fdd14ca1eca9",
+  "review": "08166d8",
+  "assertion_audit": "docs/reports/evidence/2026-10-09-maps-x0-repair/assertion_audit.py",
+  "audit_requirements": "docs/reports/evidence/2026-10-09-maps-x0-repair/audit-requirements.txt"
+}

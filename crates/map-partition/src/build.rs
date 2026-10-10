@@ -70,16 +70,6 @@ fn norm3(x: f64, y: f64, z: f64) -> Option<UnitVec> {
     UnitVec::normalize(x, y, z).ok()
 }
 
-/// Deterministic byte key for a point (used to fix all orderings).
-fn key_of(v: &UnitVec) -> [u8; 24] {
-    let q = |x: f64| ((x * 1e9).round() as i64).to_be_bytes();
-    let mut k = [0u8; 24];
-    k[..8].copy_from_slice(&q(v.x()));
-    k[8..16].copy_from_slice(&q(v.y()));
-    k[16..].copy_from_slice(&q(v.z()));
-    k
-}
-
 struct Seg {
     a: UnitVec,
     b: UnitVec,
@@ -214,7 +204,11 @@ pub fn build_with(
     };
 
     // deterministic processing order regardless of caller order
-    segs.sort_by(|s, t| key_of(&s.a).cmp(&key_of(&t.a)).then(key_of(&s.b).cmp(&key_of(&t.b))));
+    segs.sort_by(|s, t| {
+        crate::PointKey::partition(&s.a)
+            .cmp(&crate::PointKey::partition(&t.a))
+            .then(crate::PointKey::partition(&s.b).cmp(&crate::PointKey::partition(&t.b)))
+    });
 
     let mut cands: Vec<UnitVec> = Vec::new();
     for s in &segs {
@@ -228,8 +222,8 @@ pub fn build_with(
             }
         }
     }
-    cands.sort_by(|a, b| key_of(a).cmp(&key_of(b)));
-    cands.dedup_by(|a, b| key_of(a) == key_of(b));
+    cands.sort_by(|a, b| crate::PointKey::partition(a).cmp(&crate::PointKey::partition(b)));
+    cands.dedup_by(|a, b| crate::PointKey::partition(a) == crate::PointKey::partition(b));
 
     let mut uf = Uf::new(cands.len());
     for i in 0..cands.len() {
@@ -262,8 +256,10 @@ pub fn build_with(
         }
     }
     let rep_index = |p: &UnitVec, cands: &[UnitVec], rep_of: &[usize]| -> usize {
-        let k = key_of(p);
-        let i = cands.binary_search_by(|c| key_of(c).cmp(&k)).expect("endpoint is a candidate");
+        let k = crate::PointKey::partition(p);
+        let i = cands
+            .binary_search_by(|c| crate::PointKey::partition(c).cmp(&k))
+            .expect("endpoint is a candidate");
         rep_of[i]
     };
 

@@ -1,8 +1,7 @@
 import argparse
 import hashlib
 import json
-import math
-import struct
+import os
 import subprocess
 from pathlib import Path
 
@@ -23,13 +22,6 @@ def text(node, source):
     return source[node.start_byte:node.end_byte].decode()
 
 
-def fingerprint(lat, lon):
-    lat, lon = math.radians(lat), math.radians(lon)
-    values = [math.cos(lat) * math.cos(lon), math.cos(lat) * math.sin(lon), math.sin(lat)]
-    keys = [math.floor(v * 1e9 + 0.5) if v >= 0 else math.ceil(v * 1e9 - 0.5) for v in values]
-    return hashlib.sha256(struct.pack('>qqq', *keys)).hexdigest()
-
-
 def historical(path):
     return subprocess.check_output(['git', 'show', BASE + ':' + path])
 
@@ -41,7 +33,7 @@ def source_rows(path, source, geometries):
             'geometry': name,
             'origin': path,
             'source_sha256': hashlib.sha256(historical(path)).hexdigest(),
-            'vertices': sorted({fingerprint(lat, lon) for lat, lon in points}),
+            'vertices': points,
         }
 
 
@@ -92,7 +84,8 @@ def catalogue():
         ('crates/map-adapters/src/plate_water.rs', 'KnowingTheBible', rust_geometries('crates/map-adapters/src/plate_water.rs', True)),
     ]:
         rows.extend(source_rows(path, source, geometries))
-    return {'base': BASE, 'decision': 'docs/errata/quarantine.md', 'geometries': rows}
+    output = subprocess.check_output([str(Path(os.environ['CARGO_TARGET_DIR']) / 'debug/examples/quarantine_keys')], input=json.dumps(rows).encode())
+    return {'base': BASE, 'decision': 'docs/errata/quarantine.md', 'geometries': json.loads(output)}
 
 
 def main():
