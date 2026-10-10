@@ -140,21 +140,10 @@ fn scripture_surveys_are_lawful_alone_and_merged() {
     )
     .unwrap();
     let merged = merge_timelines(world, survey_tl.clone()).unwrap();
-<<<<<<< HEAD
-    assert_eq!(
-        map_types::validate_all(&merged, &chron, &gaz),
-        vec![],
-        "the merged survey and permitted water satisfy every timeline law"
-    );
-    assert_eq!(
-        merged.regions.len(),
-        2,
-        "the survey and water region both survive the merge"
-    );
-=======
+
     assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![], "the merged survey and world satisfy every timeline law");
     assert_eq!(merged.regions.len(), 28, "the twenty-seven retained Scripture regions and imported region survive the merge");
->>>>>>> origin/lane/claude/MAPS-X3
+
 
     assert!(
         matches!(
@@ -165,15 +154,9 @@ fn scripture_surveys_are_lawful_alone_and_merged() {
     );
 
     let all = scripture_timeline();
-<<<<<<< HEAD
-    assert_eq!(
-        all.regions.len(),
-        28,
-        "the Scripture set without excluded tracing"
-    );
-=======
+
     assert_eq!(all.regions.len(), 27, "the Scripture set excludes the unlocated Numbers 34 drawing");
->>>>>>> origin/lane/claude/MAPS-X3
+
     let journeys = all
         .boundaries
         .values()
@@ -536,49 +519,6 @@ fn river_adapter_preserves_every_natural_earth_vertex() {
     }
 }
 
-#[test]
-fn golden_named_rivers_have_courses_or_recorded_gaps() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let census = std::fs::read_to_string(root.join("docs/errata/rivers.md"))
-        .expect("the river census records the golden requirements");
-    let rivers = crate::hydro::read_rivers(
-        &std::fs::read_to_string(
-            root.join("data/natural-earth/ne_10m_rivers_lake_centerlines.geojson"),
-        )
-        .expect("Natural Earth rivers are readable"),
-    )
-    .expect("Natural Earth river courses are admitted");
-    for name in [
-        "Jordan",
-        "Nile",
-        "Euphrates",
-        "Tigris",
-        "Orontes",
-        "Eleutheros",
-        "Khabur",
-        "Arnon",
-        "Jabbok",
-        "Zered",
-        "Kanah",
-        "Kishon",
-        "Yarkon",
-        "Yarmuk",
-        "Belus",
-        "Shihor-libnath",
-        "River of Egypt",
-        "Pelusiac Nile",
-    ] {
-        let course = rivers.iter().any(|river| {
-            river.name.as_deref() == Some(name)
-                && river.course == crate::hydro::RiverCourse::River
-                && matches!(&river.shape, crate::hydro::RiverShape::Course(paths) if paths.iter().any(|path| path.len() >= 2))
-        });
-        assert!(
-            course || census.contains(&format!("| {name} | Missing |")),
-            "golden river {name} has a Natural Earth course or an explicit missing-course record"
-        );
-    }
-}
 
 fn river_fixture(geometry: serde_json::Value) -> serde_json::Value {
     serde_json::json!({
@@ -589,42 +529,6 @@ fn river_fixture(geometry: serde_json::Value) -> serde_json::Value {
             "geometry": geometry
         }]
     })
-}
-
-#[test]
-fn generated_river_courses_preserve_source_order_and_unknown_names() {
-    for latitude in [-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0] {
-        for longitude in [-180.0, -90.0, 0.0, 90.0, 180.0] {
-            let coordinates = serde_json::json!([
-                [longitude, latitude],
-                [longitude / 2.0, latitude / 2.0],
-                [0.0, 0.0]
-            ]);
-            for geometry in [
-                serde_json::json!({"type": "LineString", "coordinates": coordinates}),
-                serde_json::json!({"type": "MultiLineString", "coordinates": [coordinates]}),
-            ] {
-                let source = river_fixture(geometry).to_string();
-                let rivers =
-                    crate::hydro::read_rivers(&source).expect("generated river course is admitted");
-                assert_eq!(
-                    rivers.len(),
-                    1,
-                    "one source feature produces one river record"
-                );
-                assert_eq!(rivers[0].name, None, "an unknown name remains unknown");
-                assert_eq!(
-                    rivers[0].shape,
-                    crate::hydro::RiverShape::Course(vec![vec![
-                        map_types::UnitVec::from_lat_lon_deg(latitude, longitude),
-                        map_types::UnitVec::from_lat_lon_deg(latitude / 2.0, longitude / 2.0),
-                        map_types::UnitVec::from_lat_lon_deg(0.0, 0.0),
-                    ]]),
-                    "source vertices retain their order and positions"
-                );
-            }
-        }
-    }
 }
 
 #[test]

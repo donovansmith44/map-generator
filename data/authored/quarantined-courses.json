@@ -1,0 +1,1035 @@
+{
+  "decision": "docs/errata/quarantine.md#retained-corpus-courses",
+  "policy": "Unexplained overlap under the unchanged geometric exclusion law is quarantined, not a claim of historical copying. Scripture grounds, dates, waypoint identities, provenance and alternatives remain; no course is invented. Empty region parts mean unlocated, never the whole sphere.",
+  "polities": [
+    {
+      "entity": "assyria",
+      "from": -911,
+      "to": -609,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "KnowingTheBible",
+          "geometry": "PLATE_CANAAN_CONTOUR"
+        }
+      ]
+    },
+    {
+      "entity": "israel",
+      "from": -1050,
+      "to": -931,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "KnowingTheBible",
+          "geometry": "PLATE_CANAAN_CONTOUR"
+        }
+      ]
+    },
+    {
+      "entity": "judah",
+      "from": -930,
+      "to": -587,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "Tribes12",
+          "geometry": "judah/0/0"
+        }
+      ]
+    },
+    {
+      "entity": "judah",
+      "from": -164,
+      "to": -63,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "KnowingTheBible",
+          "geometry": "PLATE_JORDAN_1"
+        }
+      ]
+    },
+    {
+      "entity": "judah",
+      "from": -39,
+      "to": -4,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "KnowingTheBible",
+          "geometry": "PLATE_CANAAN_CONTOUR"
+        }
+      ]
+    },
+    {
+      "entity": "phoenicia",
+      "from": -1200,
+      "to": -539,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "SplicedRegions",
+          "geometry": "Phoenicia/0/0"
+        }
+      ]
+    },
+    {
+      "entity": "roman-empire",
+      "from": -30,
+      "to": 100,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The unchanged geometric law finds excluded overlap beyond threshold after all native Natural Earth lines are registered; this input records no equally explanatory permitted course. Preserve the holding and verse evidence; quarantine the complete unsupported ring.",
+      "excluded_lineage": [
+        {
+          "source": "KnowingTheBible",
+          "geometry": "PLATE_CANAAN_CONTOUR"
+        }
+      ]
+    },
+    {
+      "entity": "alexander-empire",
+      "from": -335,
+      "to": -323,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "OsmRivers",
+          "geometry": "Nahr ez Zahrani/1288/0"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "babylon",
+      "from": -2100,
+      "to": -1156,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Roman Empire/150/21/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "babylon",
+      "from": -626,
+      "to": -539,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "OsmRivers",
+          "geometry": "Valley of Gaza (Wadi Ghazza)/70/0"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "egypt",
+      "from": -1549,
+      "to": -1069,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "OsmRivers",
+          "geometry": "Litani River/78/0"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "egypt",
+      "from": -331,
+      "to": -30,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Achaemenid Empire/16/0/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "elam",
+      "from": -4004,
+      "to": -539,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Parthian Empire/149/0/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "hittites",
+      "from": -1600,
+      "to": -1180,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Hittites/104/0/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "israel",
+      "from": -930,
+      "to": -722,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "OsmRivers",
+          "geometry": "Nahal Sorek/1006/0"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "parthian-empire",
+      "from": -140,
+      "to": 100,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Parthian Empire/149/0/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "persia",
+      "from": -539,
+      "to": -331,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "OsmRivers",
+          "geometry": "Nahr ez Zahrani/1288/0"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "roman-empire",
+      "from": -200,
+      "to": -31,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Roman Empire/150/5/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "seleucid-empire",
+      "from": -301,
+      "to": -150,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Suren Kingdom/130/0/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "seleucid-empire",
+      "from": -149,
+      "to": -64,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Roman Empire/150/21/0/raw"
+        }
+      ],
+      "reason": "Ordered OSM/GPL registration exposes unexplained overlap beyond the unchanged geometric threshold; no equally explanatory permitted course is recorded. Preserve holding, dates and verse evidence; quarantine the complete unsupported ring."
+    },
+    {
+      "entity": "egypt",
+      "from": -4004,
+      "to": -1550,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The two retained Egypt intervals contribute 2303.83 m to the actual composed GPL-line refusal, beyond the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the holding, dates and verse evidence; quarantine the unsupported ring.",
+      "unexplained_meters": 1151.9162994407902,
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Roman Empire/150/22/0/raw"
+        }
+      ]
+    },
+    {
+      "entity": "egypt",
+      "from": -1068,
+      "to": -332,
+      "origin": "data/atlas-vendor/polities.json",
+      "source_sha256": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+      "outcome": "Unlocated",
+      "reason": "The two retained Egypt intervals contribute 2303.83 m to the actual composed GPL-line refusal, beyond the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the holding, dates and verse evidence; quarantine the unsupported ring.",
+      "unexplained_meters": 1151.9162994407902,
+      "excluded_lineage": [
+        {
+          "source": "HistoricalBasemaps",
+          "geometry": "Roman Empire/150/22/0/raw"
+        }
+      ]
+    }
+  ],
+  "courses": [
+    {
+      "key": "scripture-survey:NT-JUDAEA",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "1KI.4.21",
+        "1KI.4.25"
+      ],
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_AREA_GREAT_SEA_0"
+      }
+    },
+    {
+      "key": "scripture-route/R-JACOB",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "GEN.28.10",
+        "GEN.35.27"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "gad/0/0"
+      }
+    },
+    {
+      "key": "scripture-era/ISRAEL-UNITED/phase0",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "1SA.11.14",
+        "1SA.11.15"
+      ],
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_AREA_GREAT_SEA_0"
+      }
+    },
+    {
+      "key": "scripture-route/R-PAUL3",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "ACT.18.23",
+        "ACT.21.17"
+      ],
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_AREA_GREAT_SEA_0"
+      }
+    },
+    {
+      "key": "scripture-route/R-EXILE",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "2KI.25.1",
+        "2KI.25.21"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "manasseh-east/0/0"
+      }
+    },
+    {
+      "key": "scripture-survey:EZK47",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "EZK.47.13",
+        "EZK.47.20"
+      ],
+      "excluded_lineage": {
+        "source": "SplicedRegions",
+        "geometry": "Phoenicia/0/0"
+      }
+    },
+    {
+      "key": "scripture-survey:EZK48",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "EZK.48.8",
+        "EZK.48.20"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "ephraim/0/0"
+      }
+    },
+    {
+      "key": "scripture-era/JUDAH-KINGDOM/phase0",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "1KI.12.20",
+        "1KI.12.24"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "judah/0/0"
+      }
+    },
+    {
+      "key": "scripture-era/ISRAEL-NORTH/phase1",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "2KI.14.25",
+        "2KI.14.27"
+      ],
+      "excluded_lineage": {
+        "source": "SplicedRegions",
+        "geometry": "Phoenicia/0/0"
+      }
+    },
+    {
+      "key": "scripture-survey:N-CANAAN",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "GEN.10.15",
+        "GEN.10.19"
+      ],
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_CANAAN_CONTOUR"
+      }
+    },
+    {
+      "key": "scripture-survey:NT-PEREA",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "LUK.3.1",
+        "LUK.3.1"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "manasseh-east/0/0"
+      }
+    },
+    {
+      "key": "scripture-route/R-RETURN",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "EZR.1.1",
+        "EZR.2.70"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "manasseh-east/0/0"
+      }
+    },
+    {
+      "key": "scripture-route/R-ROME",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "outcome": "Unlocated",
+      "reason": "The cited span records the subject or itinerary, but supplies no located course equally explaining this excluded overlap. Preserve all source and event evidence; draw no stand-in course.",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "verses": [
+        "ACT.27.1",
+        "ACT.28.16"
+      ],
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_AREA_GREAT_SEA_0"
+      }
+    },
+    {
+      "key": "scripture-survey:N-TIRAS",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "1aeafa2bad719072",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Empire of Alexander/40/3/0/raw"
+      },
+      "verses": [
+        "GEN.10.2",
+        "GEN.10.2"
+      ]
+    },
+    {
+      "key": "scripture-route/R-NATIVITY",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "2b08efce7adae62c",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Nahal Shikma/320/0"
+      },
+      "verses": [
+        "MAT.2.1",
+        "MAT.2.23"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-LUD",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "2c609ebad800de60",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Greek city-states/119/1/0/raw"
+      },
+      "verses": [
+        "GEN.10.22",
+        "GEN.10.22"
+      ]
+    },
+    {
+      "key": "scripture-survey:NT-GALILEE",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "3fd5f7cb289290a8",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Nahal Kishon/269/0"
+      },
+      "verses": [
+        "LUK.3.1",
+        "LUK.3.1"
+      ]
+    },
+    {
+      "key": "scripture-route/R-PAUL2",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "602bbf03e91fb6d5",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/5/0/raw"
+      },
+      "verses": [
+        "ACT.15.36",
+        "ACT.18.22"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-PHUT",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "68579b512d06f22a",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Ptolemaic Kingdom/36/0/0/raw"
+      },
+      "verses": [
+        "GEN.10.6",
+        "GEN.10.6"
+      ]
+    },
+    {
+      "key": "scripture-route/R-ARK",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "6c23c0784bc5a3fe",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Nahal Sorek/215/0"
+      },
+      "verses": [
+        "1SA.4.1",
+        "1SA.7.2"
+      ]
+    },
+    {
+      "key": "scripture-era/ISRAEL-UNITED/phase1",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "7048725df77193d2",
+      "excluded_lineage": {
+        "source": "KnowingTheBible",
+        "geometry": "PLATE_AREA_GREAT_SEA_0"
+      },
+      "verses": [
+        "1KI.4.21",
+        "1KI.4.25"
+      ]
+    },
+    {
+      "key": "scripture-route/R-JOSEPH",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "7e72b19aed447f3d",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Ayalon River/1273/0"
+      },
+      "verses": [
+        "GEN.37.12",
+        "GEN.37.36"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-JAVAN",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "9b7b8d9f7e3e6428",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "verses": [
+        "GEN.10.2",
+        "GEN.10.5"
+      ]
+    },
+    {
+      "key": "scripture-route/R-EXODUS",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "b75e4965da2945d5",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Nabatean Kingdom/439/0/0/raw"
+      },
+      "verses": [
+        "NUM.33.5",
+        "NUM.33.49"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-CUSH",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "b7bdd78da32fb80e",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Meroe/11/0/0/raw"
+      },
+      "verses": [
+        "GEN.10.6",
+        "GEN.10.7"
+      ]
+    },
+    {
+      "key": "scripture-era/ISRAEL-NORTH/phase0",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "bd567e2eae83cdf4",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Zarqa River/126/0"
+      },
+      "verses": [
+        "1KI.12.16",
+        "1KI.12.20"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-MIZRAIM",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "db6ce325606b690a",
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/22/0/raw"
+      },
+      "verses": [
+        "GEN.10.6",
+        "GEN.10.6"
+      ]
+    },
+    {
+      "key": "scripture-route/R-ABRAHAM",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "dfdd318c98d0fa1a",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Barada River/302/0"
+      },
+      "verses": [
+        "GEN.11.31",
+        "GEN.13.18"
+      ]
+    },
+    {
+      "key": "scripture-survey:NT-ITUREA",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "f0bc80e3ff295923",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "/162/0"
+      },
+      "verses": [
+        "LUK.3.1",
+        "LUK.3.1"
+      ]
+    },
+    {
+      "key": "scripture-survey:N-ARAM",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "reason": "The cited span retains the subject and waypoint evidence; this stand-in has no permitted source course equally explaining its excluded overlap. Preserve the complete non-geometric evidence; draw no course.",
+      "boundary_id": "f196f5d0e82924db",
+      "excluded_lineage": {
+        "source": "OsmRivers",
+        "geometry": "Barada River/68/0"
+      },
+      "verses": [
+        "GEN.10.22",
+        "GEN.10.23"
+      ]
+    },
+    {
+      "key": "scripture-era/YEHUD/phase0",
+      "boundary_id": "0b9ff4a61cf4dccf",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "EZR.1.1",
+        "EZR.1.3"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "judah/0/0"
+      },
+      "unexplained_meters": 754.9403160656839,
+      "reason": "This course contributes to the actual composed Judah-line refusal. The four measured contributions sum to more than 2 km, although each passes separately. No equally explanatory permitted source line is recorded; quarantine the drawing and retain all non-geometric evidence."
+    },
+    {
+      "key": "scripture-route/R-SPIES",
+      "boundary_id": "5bb331d32060b450",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "NUM.13.17",
+        "NUM.13.26"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "judah/0/0"
+      },
+      "unexplained_meters": 434.3758995701198,
+      "reason": "This course contributes to the actual composed Judah-line refusal. The four measured contributions sum to more than 2 km, although each passes separately. No equally explanatory permitted source line is recorded; quarantine the drawing and retain all non-geometric evidence."
+    },
+    {
+      "key": "scripture-route/R-PHILIP",
+      "boundary_id": "6e3916d04f60ad4c",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "ACT.8.26",
+        "ACT.8.40"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "judah/0/0"
+      },
+      "unexplained_meters": 1054.0551635687611,
+      "reason": "This course contributes to the actual composed Judah-line refusal. The four measured contributions sum to more than 2 km, although each passes separately. No equally explanatory permitted source line is recorded; quarantine the drawing and retain all non-geometric evidence."
+    },
+    {
+      "key": "scripture-route/R-ELIJAH",
+      "boundary_id": "9937e658dd621f1f",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "1KI.19.1",
+        "1KI.19.8"
+      ],
+      "excluded_lineage": {
+        "source": "Tribes12",
+        "geometry": "judah/0/0"
+      },
+      "unexplained_meters": 914.1807423789708,
+      "reason": "This course contributes to the actual composed Judah-line refusal. The four measured contributions sum to more than 2 km, although each passes separately. No equally explanatory permitted source line is recorded; quarantine the drawing and retain all non-geometric evidence."
+    },
+    {
+      "key": "scripture-route/R-PAUL1",
+      "boundary_id": "119e2b902b119b20",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "ACT.13.1",
+        "ACT.14.28"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 471.8752089950118,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-survey:N-SHINAR",
+      "boundary_id": "359454879137218c",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "GEN.10.8",
+        "GEN.10.10"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 689.8372630547617,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-route/R-JONAH",
+      "boundary_id": "4cbffc850f28bf4b",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "JON.1.3",
+        "JON.3.3"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 633.5234896282959,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-survey:N-GOMER",
+      "boundary_id": "6c643b38ca3b8b33",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "GEN.10.2",
+        "GEN.10.3"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 478.96950049498093,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-survey:N-ELAM",
+      "boundary_id": "b1de7fba9230cb78",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "GEN.10.22",
+        "GEN.10.22"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 505.8939113441913,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-survey:N-ASSHUR",
+      "boundary_id": "c78f40d4aa5c8ea7",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "GEN.10.11",
+        "GEN.10.12"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 414.0311194467937,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    },
+    {
+      "key": "scripture-survey:N-MESHECH",
+      "boundary_id": "f5f9032d19890780",
+      "origin": "crates/map-adapters/src/surveys.rs",
+      "source_revision": "cc00298",
+      "source_sha256": "2b90b68c417d9ffaadb6588b9a8762a7b909dd7e79d49e6e430b38a651bc12f9",
+      "outcome": "Unlocated",
+      "verses": [
+        "GEN.10.2",
+        "GEN.10.2"
+      ],
+      "excluded_lineage": {
+        "source": "HistoricalBasemaps",
+        "geometry": "Roman Empire/150/21/0/raw"
+      },
+      "unexplained_meters": 837.8556439507291,
+      "reason": "This source contributes to the actual composed GPL-line refusal; the seven measured contributions exceed the unchanged 2 km ceiling. No equally explanatory permitted course is recorded. Preserve the cited subject, stations, dates and provenance; draw no unsupported hull or itinerary."
+    }
+  ]
+}

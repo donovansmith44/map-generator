@@ -911,7 +911,7 @@ fn every_witness_names_the_terms_its_data_is_available_under() {
             (Witness::Wikimedia, vec!["CC-BY-SA-3.0"]),
             (
                 Witness::Partition,
-                vec!["public-domain", "CC-BY-SA-4.0", "ODbL-1.0"],
+                vec!["public-domain", "CC-BY-SA-4.0"],
             ),
         ],
         "each origin's terms, whole: the vendored LICENSE file of each dataset"

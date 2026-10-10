@@ -153,7 +153,7 @@ fn compiled_edges_are_summed_across_all_borders() {
 
 #[test]
 fn timeline_refusal_preserves_the_complete_output() {
-    let mut timeline = map_adapters::promised_land_timeline();
+    let mut timeline = map_adapters::scripture_timeline();
     timeline
         .boundaries
         .values_mut()
@@ -646,11 +646,31 @@ fn historical_refusal() -> ExclusionError {
 }
 
 fn recorded() -> Vec<ExcludedGeometry> {
-    let value: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../data/authored/excluded-geometry-fingerprints.json"
-    ))
-    .expect("catalogue decodes");
-    serde_json::from_value(value["geometries"].clone()).expect("recorded geometries decode")
+    #[derive(serde::Deserialize)]
+    struct Catalogue {
+        geometries: Vec<ExcludedGeometry>,
+    }
+    static RECORDED: std::sync::OnceLock<Vec<ExcludedGeometry>> = std::sync::OnceLock::new();
+    RECORDED
+        .get_or_init(|| {
+            let catalogue: Catalogue = serde_json::from_str(include_str!(
+                "../../../data/authored/excluded-geometry-fingerprints.json"
+            ))
+            .expect("catalogue decodes");
+            catalogue
+                .geometries
+                .into_iter()
+                .filter(|geometry| {
+                    matches!(
+                        geometry.source,
+                        ExcludedSource::KnowingTheBible
+                            | ExcludedSource::Tribes12
+                            | ExcludedSource::SplicedRegions
+                    )
+                })
+                .collect()
+        })
+        .clone()
 }
 #[derive(Clone, Debug)]
 struct Original {

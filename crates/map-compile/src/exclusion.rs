@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -17,6 +18,7 @@ pub enum ExcludedSource {
     Tribes12,
     SplicedRegions,
     HistoricalBasemaps,
+    OsmRivers,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -92,6 +94,7 @@ pub struct ExcludedStretch {
 pub enum ExclusionError {
     CatalogueDecode(String),
     EmptyCatalogue,
+    UnregisteredGeometry,
     InputRead { path: PathBuf, message: String },
     InputDecode { path: PathBuf, message: String },
     Excluded(ExcludedStretch),
@@ -100,12 +103,17 @@ pub enum ExclusionError {
 pub struct LineageIndex {
     geometries: Vec<BufferedExclusion>,
     policy: GeometricPolicy,
+    permitted: RTree<geo::Line>,
+    permitted_segments: HashSet<SourceSegment>,
 }
 
 struct BufferedExclusion {
     geometry: ExcludedGeometry,
     frame: MeterFrame,
-    unexplained: MultiPolygon,
+    line: LineString,
+    segments: RTree<geo::Line>,
+    buffer: OnceLock<MultiPolygon>,
+    permitted: OnceLock<RTree<LineString>>,
     envelope: AABB<Point>,
     threshold: f64,
 }
@@ -132,7 +140,6 @@ impl LineageIndex {
                 let threshold = policy
                     .maximum_unexplained_meters
                     .min(Haversine.length(&coordinates) * policy.short_line_fraction);
-                let mut unexplained = line.buffer(policy.tolerance_meters);
                 let geographic_bounds = Haversine
                     .densify(&coordinates, MAXIMUM_GEODESIC_SEGMENT_METERS)
                     .bounding_rect()?;
@@ -147,22 +154,25 @@ impl LineageIndex {
                     policy.tolerance_meters * 2.0_f64.sqrt(),
                 );
                 let envelope = AABB::from_corners(southwest, northeast);
-                let explained = permitted
-                    .locate_in_envelope_intersecting(&envelope)
-                    .map(|segment| frame.line(&LineString::from(vec![segment.start, segment.end])))
-                    .map(|line| line.buffer(policy.tolerance_meters))
-                    .collect::<Vec<_>>();
-                unexplained = unexplained.difference(&unary_union(&explained));
                 Some(BufferedExclusion {
                     geometry,
                     frame,
-                    unexplained,
+                    segments: RTree::bulk_load(line.lines().collect()),
+                    line,
+                    buffer: OnceLock::new(),
+                    permitted: OnceLock::new(),
                     envelope,
                     threshold,
                 })
             })
             .collect();
-        Self { geometries, policy }
+        let permitted_segments = permitted.iter().map(SourceSegment::of).collect();
+        Self {
+            geometries,
+            policy,
+            permitted,
+            permitted_segments,
+        }
     }
 
     pub fn check_points<'a>(
@@ -185,27 +195,147 @@ impl LineageIndex {
     }
 
     fn check_lines(&self, lines: &[LineString]) -> Result<(), ExclusionError> {
-        let segments = segment_index(lines);
+        let segments = self.unexplained_segments(lines);
         for excluded in &self.geometries {
-            let mut length = 0.0;
-            for segment in segments.locate_in_envelope_intersecting(&excluded.envelope) {
-                let line = excluded
-                    .frame
-                    .line(&LineString::from(vec![segment.start, segment.end]));
-                let clipped = excluded
-                    .unexplained
-                    .clip(&MultiLineString(vec![line]), false);
-                length += Euclidean.length(&clipped);
-                if length > excluded.threshold {
-                    return Err(ExclusionError::Excluded(ExcludedStretch {
-                        geometry: excluded.geometry.clone(),
-                        policy: self.policy,
-                    }));
-                }
+            if self.unexplained_length(excluded, &segments) > excluded.threshold {
+                return Err(ExclusionError::Excluded(ExcludedStretch {
+                    geometry: excluded.geometry.clone(),
+                    policy: self.policy,
+                }));
             }
         }
         Ok(())
     }
+
+    fn unexplained_segments(&self, lines: &[LineString]) -> RTree<geo::Line> {
+        let input = segment_index(lines);
+        RTree::bulk_load(
+            input
+                .iter()
+                .filter(|segment| {
+                    !self
+                        .permitted_segments
+                        .contains(&SourceSegment::of(segment))
+                })
+                .copied()
+                .collect(),
+        )
+    }
+
+    fn unexplained_length(&self, excluded: &BufferedExclusion, segments: &RTree<geo::Line>) -> f64 {
+        let mut candidates = segments
+            .locate_in_envelope_intersecting(&excluded.envelope)
+            .peekable();
+        if candidates.peek().is_none() {
+            return 0.0;
+        }
+        let lines: Vec<_> = candidates
+            .map(|segment| {
+                excluded
+                    .frame
+                    .line(&LineString::from(vec![segment.start, segment.end]))
+            })
+            .filter(|line| {
+                line.bounding_rect().is_some_and(|bounds| {
+                    excluded
+                        .segments
+                        .locate_in_envelope_intersecting(&expanded_envelope(
+                            bounds,
+                            self.policy.tolerance_meters,
+                        ))
+                        .next()
+                        .is_some()
+                })
+            })
+            .collect();
+        if lines.is_empty() {
+            return 0.0;
+        }
+        let buffer = excluded
+            .buffer
+            .get_or_init(|| excluded.line.buffer(self.policy.tolerance_meters));
+        let clipped: Vec<_> = lines
+            .iter()
+            .map(|line| buffer.clip(&MultiLineString(vec![line.clone()]), false))
+            .collect();
+        let potential: f64 = clipped.iter().map(|line| Euclidean.length(line)).sum();
+        if potential == 0.0 {
+            return 0.0;
+        }
+        let permitted = excluded.permitted.get_or_init(|| {
+            RTree::bulk_load(
+                self.permitted
+                    .locate_in_envelope_intersecting(&excluded.envelope)
+                    .map(|segment| {
+                        excluded
+                            .frame
+                            .line(&LineString::from(vec![segment.start, segment.end]))
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        });
+        let Some(bounds) = MultiLineString(clipped.into_iter().flat_map(|lines| lines.0).collect())
+            .bounding_rect()
+        else {
+            return 0.0;
+        };
+        let tolerance = self.policy.tolerance_meters;
+        let envelope = expanded_envelope(bounds, tolerance);
+        let explained = permitted
+            .locate_in_envelope_intersecting(&envelope)
+            .map(|line| line.buffer(tolerance))
+            .collect::<Vec<_>>();
+        let unexplained = buffer.difference(&unary_union(&explained));
+        lines
+            .into_iter()
+            .map(|line| unexplained.clip(&MultiLineString(vec![line]), false))
+            .map(|clipped| Euclidean.length(&clipped))
+            .sum()
+    }
+}
+
+fn expanded_envelope(bounds: geo::Rect, meters: f64) -> AABB<Point> {
+    AABB::from_corners(
+        Point::new(bounds.min().x - meters, bounds.min().y - meters),
+        Point::new(bounds.max().x + meters, bounds.max().y + meters),
+    )
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct SourceSegment {
+    start: [u64; 2],
+    end: [u64; 2],
+}
+
+impl SourceSegment {
+    fn of(line: &geo::Line) -> Self {
+        let start = [line.start.x.to_bits(), line.start.y.to_bits()];
+        let end = [line.end.x.to_bits(), line.end.y.to_bits()];
+        if start <= end {
+            Self { start, end }
+        } else {
+            Self {
+                start: end,
+                end: start,
+            }
+        }
+    }
+}
+
+pub fn unexplained_meters(
+    geometry: &ExcludedGeometry,
+    points: &[UnitVec],
+) -> Result<f64, ExclusionError> {
+    let index = catalogue()?;
+    let excluded = index
+        .geometries
+        .iter()
+        .find(|excluded| excluded.geometry == *geometry)
+        .ok_or(ExclusionError::UnregisteredGeometry)?;
+    Ok(index.unexplained_length(
+        excluded,
+        &index.unexplained_segments(&[unit_line(points.iter())]),
+    ))
 }
 
 pub fn check_points<'a>(
@@ -256,7 +386,12 @@ pub fn check_compiled(store: &CanonStore) -> Result<(), ExclusionError> {
 }
 
 pub fn check_geojson(value: &serde_json::Value) -> Result<(), ExclusionError> {
-    catalogue()?.check_lines(&geojson_lines(value))
+    catalogue()?.check_lines(
+        &geojson_lines(value)
+            .into_iter()
+            .map(canonical_line)
+            .collect::<Vec<_>>(),
+    )
 }
 
 pub fn check_build_inputs(root: &Path) -> Result<(), ExclusionError> {
@@ -322,9 +457,11 @@ fn collect_inputs(root: &Path, lines: &mut Vec<LineString>) -> Result<(), Exclus
                     .iter()
                     .flat_map(|polity| &polity.rings)
                     .map(|ring| {
-                        ring.iter()
-                            .map(|(lat, lon)| Coord { x: *lon, y: *lat })
-                            .collect::<LineString>()
+                        canonical_line(
+                            ring.iter()
+                                .map(|(lat, lon)| Coord { x: *lon, y: *lat })
+                                .collect::<LineString>(),
+                        )
                     }),
             );
         } else if path
@@ -340,7 +477,7 @@ fn collect_inputs(root: &Path, lines: &mut Vec<LineString>) -> Result<(), Exclus
                     path: path.clone(),
                     message: error.to_string(),
                 })?;
-            collect_geojson(&value, lines);
+            lines.extend(geojson_lines(&value).into_iter().map(canonical_line));
         }
     }
     Ok(())
@@ -433,6 +570,16 @@ fn unit_line<'a>(points: impl IntoIterator<Item = &'a UnitVec>) -> LineString {
         .into_iter()
         .map(|point| {
             let (lat, lon) = point.to_lat_lon_deg();
+            Coord { x: lon, y: lat }
+        })
+        .collect()
+}
+
+fn canonical_line(line: LineString) -> LineString {
+    line.0
+        .into_iter()
+        .map(|point| {
+            let (lat, lon) = UnitVec::from_lat_lon_deg(point.y, point.x).to_lat_lon_deg();
             Coord { x: lon, y: lat }
         })
         .collect()

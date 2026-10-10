@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 from tree_sitter import Language, Parser
@@ -22,6 +23,7 @@ def text(node, source):
     return source[node.start_byte:node.end_byte].decode()
 
 
+@lru_cache(maxsize=None)
 def historical(path):
     return subprocess.check_output(['git', 'show', BASE + ':' + path])
 
@@ -38,13 +40,40 @@ def source_rows(path, source, geometries):
 
 
 def geojson_geometries(path):
-    for feature in json.loads(historical(path))['features']:
-        name = feature['properties'].get('tribe', feature['properties'].get('id', feature['properties'].get('name', 'unnamed')))
+    for index, feature in enumerate(json.loads(historical(path))['features']):
+        name = feature['properties'].get('tribe', feature['properties'].get('id', feature['properties'].get('name', feature['properties'].get('NAME', 'unnamed'))))
         geometry = feature['geometry']
+        if geometry['type'] == 'LineString':
+            yield f'{name}/{index}/0', [(lat, lon) for lon, lat, *rest in geometry['coordinates']]
+            continue
         polygons = geometry['coordinates'] if geometry['type'] == 'MultiPolygon' else [geometry['coordinates']]
         for p, polygon in enumerate(polygons):
             for r, ring in enumerate(polygon):
-                yield f'{name}/{p}/{r}', [(lat, lon) for lon, lat, *rest in ring]
+                key = f'{name}/{index}/{p}/{r}' if 'historical-basemaps' in path else f'{name}/{p}/{r}'
+                yield key, [(lat, lon) for lon, lat, *rest in ring]
+
+
+def basemap_geometries(path):
+    for name, points in geojson_geometries(path):
+        yield name + '/raw', points
+        for method, scale in [('quantized', 1e-7), ('snap-0.02', 0.02)]:
+            rounded = [(round_away(lat, scale), round_away(lon, scale)) for lat, lon in points]
+            cleaned = [point for i, point in enumerate(rounded) if i == 0 or point != rounded[i - 1]]
+            while len(cleaned) > 1 and cleaned[0] == cleaned[-1]:
+                cleaned.pop()
+            if len(cleaned) >= 3:
+                yield name + '/' + method, cleaned + cleaned[:1]
+
+
+def round_away(value, scale):
+    import math
+    value /= scale
+    return (math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)) * scale
+
+
+def basemap_paths():
+    paths = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', BASE, '--', 'data/historical-basemaps']).decode().splitlines()
+    return [path for path in paths if path.endswith('.geojson')]
 
 
 def rust_geometries(path, plate):
@@ -82,8 +111,11 @@ def catalogue():
         ('data/openbible/regions.geojson', 'SplicedRegions', geojson_geometries('data/openbible/regions.geojson')),
         ('crates/map-adapters/src/surveys.rs', 'KnowingTheBible', rust_geometries('crates/map-adapters/src/surveys.rs', False)),
         ('crates/map-adapters/src/plate_water.rs', 'KnowingTheBible', rust_geometries('crates/map-adapters/src/plate_water.rs', True)),
+        ('data/osm/rivers.geojson', 'OsmRivers', geojson_geometries('data/osm/rivers.geojson')),
     ]:
         rows.extend(source_rows(path, source, geometries))
+    for path in basemap_paths():
+        rows.extend(source_rows(path, 'HistoricalBasemaps', basemap_geometries(path)))
     permitted = []
     for path in [
         'data/natural-earth/ne_10m_land.geojson',
@@ -110,7 +142,7 @@ def main():
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     path = Path('data/authored/excluded-geometry-fingerprints.json')
-    expected = json.dumps(catalogue(), indent=2) + '\n'
+    expected = json.dumps(catalogue(), separators=(',', ':')) + '\n'
     if args.check:
         if path.read_text() != expected:
             raise SystemExit('quarantine fingerprints differ from their recorded source geometries')

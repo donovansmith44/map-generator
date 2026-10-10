@@ -5,7 +5,6 @@ fn excluded_lineage_is_removed_from_partition_provenance() {
         [
             map_canon::Witness::Atlas,
             map_canon::Witness::NaturalEarth,
-            map_canon::Witness::Osm,
         ],
         "partition provenance lists exactly its retained source families"
     );

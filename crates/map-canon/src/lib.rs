@@ -321,10 +321,9 @@ impl Witness {
         Witness::Partition,
     ];
 
-    pub const PARTITION_INPUTS: [Witness; 3] = [
+    pub const PARTITION_INPUTS: [Witness; 2] = [
         Witness::Atlas,
         Witness::NaturalEarth,
-        Witness::Osm,
     ];
 
     /// The terms this origin's data is available under, from its own

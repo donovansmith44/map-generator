@@ -24,6 +24,8 @@ use atlas_graph_types::covenant::{ContentHash, PlaceId};
 use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use crate::exports::AtlasExports;
+use serde::Deserialize;
+use std::sync::OnceLock;
 use map_types::{
     AtlasEventRef, AtlasPlaceRef, BorderSurvey, Boundary, BoundaryHistory, BoundaryId, BoundarySource,
     ChangeEvent, ChangeKind, EdgeCharacter, GazetteerEntry, GazetteerExport, Interval,
@@ -785,7 +787,9 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
     let year_after = if arrival == -1 { 1 } else { arrival + 1 };
     let (pts, waypoints, bound) = resolve_circuit(r.stations, atlas);
     let provenance = circuit_provenance(atlas, bound, r.stations.len());
-    let bid = BoundaryId(hash_id(&format!("scripture-route/{}", r.tag)));
+    let key = format!("scripture-route/{}", r.tag);
+    let bid = BoundaryId(hash_id(&key));
+    let pts = course_geometry(&key, pts).into_points();
     tl.boundaries.insert(
         bid,
         BoundaryHistory {
@@ -908,8 +912,12 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
         interpolation: InterpolationMethod::Geodesic,
         provenance: provenance.clone(),
     };
+    let key = format!("scripture-survey:{}", s.tag);
+    let boundary_id = BoundaryId(hash_id(&key));
+    let geometry = course_geometry(&key, pts);
+    let parts = geometry.parts(boundary_id);
     let boundary = Boundary {
-        pts,
+        pts: geometry.into_points(),
         // Honesty renders: a walked border is a Line; a city-derived
         // hull is Unknown and the styles draw it distinctly (law 6).
         character: match s.grade {
@@ -921,7 +929,6 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
         provenance: provenance.clone(),
     };
 
-    let boundary_id = BoundaryId(hash_id(&format!("scripture-survey:{}", s.tag)));
     let region_id = RegionId(hash_id(&format!("scripture-region:{}", s.tag)));
     let valid = match s.stands {
         Stands::Until(u) => Interval { from: tp(year), to: Some(tp(u)) },
@@ -948,10 +955,7 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
             geom_history: vec![(
                 valid,
                 RegionGeom {
-                    parts: vec![RegionPart {
-                        cycle: vec![(boundary_id, Orientation::Forward)],
-                        holes: vec![],
-                    }],
+                    parts,
                 },
             )],
         },
@@ -1034,7 +1038,10 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         let mut pts: Vec<UnitVec> =
             ph.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
         pts.push(pts[0]);
-        let bid = BoundaryId(hash_id(&format!("scripture-era/{}/phase{}", e.tag, i)));
+        let key = format!("scripture-era/{}/phase{}", e.tag, i);
+        let bid = BoundaryId(hash_id(&key));
+        let geometry = course_geometry(&key, pts);
+        let parts = geometry.parts(bid);
         let until = years.get(i + 1).map(|(y, _)| tp(*y)).or(end);
         let interval = Interval { from: tp(years[i].0), to: until };
         tl.boundaries.insert(
@@ -1043,7 +1050,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
                 versions: vec![(
                     interval,
                     Boundary {
-                        pts,
+                        pts: geometry.into_points(),
                         character: EdgeCharacter::Unknown, // extents, not walked lines
                         source: BoundarySource::Survey(BorderSurvey {
                             verses,
@@ -1064,10 +1071,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         geom_history.push((
             interval,
             RegionGeom {
-                parts: vec![RegionPart {
-                    cycle: vec![(bid, Orientation::Forward)],
-                    holes: vec![],
-                }],
+                parts,
             },
         ));
         tl.events.push(ChangeEvent {
@@ -1221,6 +1225,54 @@ pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     }
     tl.events.sort_by_key(|e| e.at);
     tl
+}
+
+enum CourseGeometry {
+    Located(Vec<UnitVec>),
+    Unlocated,
+}
+
+fn course_geometry(key: &str, points: Vec<UnitVec>) -> CourseGeometry {
+    static QUARANTINE: OnceLock<CourseQuarantine> = OnceLock::new();
+    let quarantine = QUARANTINE.get_or_init(|| {
+        serde_json::from_str(include_str!(
+            "../../../data/authored/quarantined-courses.json"
+        ))
+        .expect("the recorded course quarantine is typed data")
+    });
+    match quarantine.courses.iter().find(|course| course.key == key) {
+        Some(_) => CourseGeometry::Unlocated,
+        None => CourseGeometry::Located(points),
+    }
+}
+
+impl CourseGeometry {
+    fn parts(&self, boundary: BoundaryId) -> Vec<RegionPart> {
+        match self {
+            Self::Located(_) => vec![RegionPart {
+                cycle: vec![(boundary, Orientation::Forward)],
+                holes: vec![],
+            }],
+            Self::Unlocated => vec![],
+        }
+    }
+
+    fn into_points(self) -> Vec<UnitVec> {
+        match self {
+            Self::Located(points) => points,
+            Self::Unlocated => vec![],
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct CourseQuarantine {
+    courses: Vec<QuarantinedCourse>,
+}
+
+#[derive(Deserialize)]
+struct QuarantinedCourse {
+    key: String,
 }
 
 /// Merge two timelines from different sources into one world. Ids are

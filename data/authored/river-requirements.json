@@ -1,0 +1,374 @@
+{
+  "authority": {
+    "atlas_revision": "2ef82759ba9b40926a798830cfb2529267754975",
+    "goldens": [
+      "docs/superpowers/specs/2026-10-07-golden-map-1446bc.md",
+      "docs/superpowers/specs/2026-10-07-golden-map-1399bc.md"
+    ],
+    "inventory": "data/curated/maps/witnesses/1446bc.toml",
+    "inventory_role": "Named courses Jordan, Arnon, upper Jabbok, Zered, Kanah and River of Egypt remain sector observations; Unrecorded does not authorize drawing."
+  },
+  "policy": "Modern NE lines are physical proxies, never proof of ancient courses or territorial edges. Alternatives are capped at Medium. Partial or missing courses stay recorded and undrawn; no frame expansion.",
+  "requirements": [
+    {
+      "name": "Jordan",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 229,
+          "name": "Jordan"
+        }
+      ],
+      "role": "Both; Num 13:29; Deut 3:17; Josh 13:23, 27; 19:34. NE 229, 138 river vertices and 23 lake-centerline vertices in five source parts. Upper-Jordan reading primary at Josh 19:34; Havoth-jair and town-Judah readings remain golden-spec alternatives.",
+      "alternatives": []
+    },
+    {
+      "name": "Nile",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 4,
+          "name": "Nile"
+        },
+        {
+          "number": 19,
+          "name": "Rosetta Branch"
+        },
+        {
+          "number": 20,
+          "name": "Damietta Branch"
+        }
+      ],
+      "role": "Both, Egypt/Kush physical anchor; Exod 1\u201314; Gen 47:11. NE 4, with Rosetta 19 and Damietta 20. Modern branches do not locate the ancient Pelusiac branch. Outside the Canaan admission window.",
+      "alternatives": []
+    },
+    {
+      "name": "Euphrates",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 62,
+          "name": "Euphrates"
+        },
+        {
+          "number": 65,
+          "name": "Firat"
+        },
+        {
+          "number": 69,
+          "name": "Al Furat"
+        }
+      ],
+      "role": "1446, Egyptian campaign/upper Mesopotamia; golden 1446 \u00a74. NE 62 (Euphrates), 65 (Firat), 69 (Al Furat). Outside the Canaan admission window.",
+      "alternatives": []
+    },
+    {
+      "name": "Tigris",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 120,
+          "name": "Dicle"
+        },
+        {
+          "number": 135,
+          "name": "Tigris"
+        }
+      ],
+      "role": "1446, Assyria/upper Mesopotamia; golden 1446 \u00a74. NE 135 (Tigris), 120 (Dicle). Outside the Canaan admission window.",
+      "alternatives": []
+    },
+    {
+      "name": "Orontes",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "Both, Kadesh/Asian sphere; golden 1446 \u00a74, 1399 \u00a74.8. No Orontes course in the vendored NE file.",
+      "alternatives": []
+    },
+    {
+      "name": "Eleutheros",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1446, Asian sphere's changing northern reach; golden 1446 \u00a74. Nahr el-Kabir identification; no NE course. This campaign limit never justifies a fixed state boundary.",
+      "alternatives": []
+    },
+    {
+      "name": "Khabur",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1446, Mitanni's Khabur triangle; golden 1446 \u00a74. No NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Arnon",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "Both; Num 21:13, 26; Judg 11:18. Wadi Mujib identification. No NE course; the 1399 border remains a recorded geometry gap, not a straight chord.",
+      "alternatives": []
+    },
+    {
+      "name": "Jabbok",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "Both; Num 21:24; Deut 3:16; Josh 12:2. Upper Wadi Zarqa identification. No NE course; Gad reaching into Ammon itself remains the golden-spec alternative.",
+      "alternatives": []
+    },
+    {
+      "name": "Zered",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "Both; Num 21:11\u201312; Deut 2:8\u201314. Wadi el-Hasa identification; border role interpreted, Low. No NE course; Scripture does not call it Moab's boundary.",
+      "alternatives": []
+    },
+    {
+      "name": "Kanah",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399; Josh 16:8; 17:9\u201310. Wadi Qana identification for the brook, not the separate city Qana of Josh 19:28. No NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Kishon",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399; Josh 19:11's river before Jokneam is a tributary; Shihor-libnath chosen at its mouth, golden 1399 \u00a75.4. No NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Yarkon",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399; Josh 19:46 Me-jarkon, golden 1399 \u00a75.4. No NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Yarmuk",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399 identification discussion for Zaphon, golden 1399 \u00a75.4; the PEF's conflation of Amathus and el-Hammeh is recorded, not a new chosen river boundary. No NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Belus",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399 alternative Shihor-libnath identification: PEF Nahr Na'amein (Handbook pp. 267\u2013268), golden 1399 \u00a75.4. Alternative remains recorded, capped below High; no NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Shihor-libnath",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399; Josh 19:26. Kishon mouth primary, Belus alternative (\u00a75.4); no separately located NE course. A name match is not scriptural site derivation.",
+      "alternatives": [
+        "Belus: retained identification alternative, capped at Medium."
+      ]
+    },
+    {
+      "name": "River of Egypt",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399; Josh 15:4, 47. Wadi el-Arish primary; Pelusiac Nile/Sihor alternative (Josh 13:3; 1 Chr 13:5), golden \u00a76. No NE Wadi el-Arish course.",
+      "alternatives": [
+        "Pelusiac Nile/Sihor: retained alternative, no ancient branch course."
+      ]
+    },
+    {
+      "name": "Pelusiac Nile",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1399 River-of-Egypt alternative; golden \u00a76. No permitted ancient branch course in the modern NE file; Rosetta/Damietta are not substitutions.",
+      "alternatives": []
+    },
+    {
+      "name": "Diyala",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1446 \u00a74.5, lines 214/217: Kassite alluvial reach and Qutian-Lullubian headwaters; no vendored NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Yellow River",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 66,
+          "name": "Huang"
+        },
+        {
+          "number": 95,
+          "name": "Huang"
+        }
+      ],
+      "role": "1446 \u00a74.7, line 236: Shang core in central Henan. Selected NE Huang main drainage; modern proxy, not a Shang border.",
+      "alternatives": []
+    },
+    {
+      "name": "Gan",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 278,
+          "name": "Gan"
+        }
+      ],
+      "role": "1446 \u00a74.7, line 238 and evidence row 63: Wucheng/Jiangxi setting; modern NE Gan proxy, no cultural perimeter.",
+      "alternatives": []
+    },
+    {
+      "name": "Gadar",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1446 evidence row 73, line 496: Hasanlu valley context; no vendored NE course.",
+      "alternatives": []
+    },
+    {
+      "name": "Nam",
+      "outcome": "Missing",
+      "sources": [],
+      "role": "1446 evidence row 76, line 499: Daepyeong/Jinju setting; NE Namhan 555 lies in a different Korean drainage and is not selected.",
+      "alternatives": [
+        "Namhan NE 555 rejected: source lies at 36.95\u201337.58 N, unlike the Jinju/Daepyeong requirement."
+      ]
+    },
+    {
+      "name": "Sangha",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 364,
+          "name": "Sangha"
+        }
+      ],
+      "role": "1446 evidence row 82, line 508: later rainforest migration context, not a border or a presence ground at 1446; modern proxy only.",
+      "alternatives": []
+    },
+    {
+      "name": "Volga",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 68,
+          "name": "Volga"
+        }
+      ],
+      "role": "1446 \u00a74.9, line 244 and evidence row 78: Srubnaya/Samara valley distribution context, not sovereignty.",
+      "alternatives": []
+    },
+    {
+      "name": "Dnieper",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 121,
+          "name": "Dnepre"
+        }
+      ],
+      "role": "1446 \u00a74.9, line 244 and \u00a74.11, line 272: Srubnaya and Sabatinovka context. NE Dnepre 121 preserves only a headwater reach; lower reaches remain Unlocated.",
+      "alternatives": []
+    },
+    {
+      "name": "Southern Buh",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 670,
+          "name": "Southern Bug"
+        }
+      ],
+      "role": "1446 \u00a74.11, line 272 and evidence row 85: Sabatinovka context. Selected NE Southern Bug 670 in Ukraine; NE Buh 491 in China and Bug 732 on the Polish border are rejected identities.",
+      "alternatives": [
+        "Buh NE 491 rejected: Chinese drainage.",
+        "Bug NE 732 rejected: Polish-border drainage."
+      ]
+    },
+    {
+      "name": "Yangtze",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 1,
+          "name": "Yangtze"
+        }
+      ],
+      "role": "1446 evidence row 63, line 481: source-title context for lower Yangtze/Wucheng discussion, not a territorial course.",
+      "alternatives": []
+    },
+    {
+      "name": "Indus",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 56,
+          "name": "Indus"
+        }
+      ],
+      "role": "1446 evidence rows 64\u201366, lines 482/484/485: Late Harappan regional sequence context, not a culture-area perimeter.",
+      "alternatives": []
+    },
+    {
+      "name": "Coatzacoalcos",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 687,
+          "name": "Coatzacoalcos"
+        }
+      ],
+      "role": "1446 evidence row 90, line 519: San Lorenzo basin context, not an Olmec border.",
+      "alternatives": []
+    },
+    {
+      "name": "Mississippi",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 3,
+          "name": "Mississippi"
+        },
+        {
+          "number": 156,
+          "name": "Mississippi"
+        }
+      ],
+      "role": "1446 \u00a74.13, line 287 and evidence row 91: Poverty Point lower-valley context, not a polity border.",
+      "alternatives": []
+    },
+    {
+      "name": "Tungabhadra",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 672,
+          "name": "Tungabhadra"
+        }
+      ],
+      "role": "1446 evidence row 72, line 492: Hallur setting in the upper drainage; no cultural perimeter.",
+      "alternatives": []
+    },
+    {
+      "name": "Cagayan",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 895,
+          "name": "Cagayan"
+        }
+      ],
+      "role": "1446 evidence row 79, line 502: Nagsabaran valley context; modern NE proxy only.",
+      "alternatives": []
+    },
+    {
+      "name": "Po",
+      "outcome": "Course",
+      "sources": [
+        {
+          "number": 219,
+          "name": "Po"
+        }
+      ],
+      "role": "1446 \u00a74.11, line 274: Terramare central-plain context; no cultural perimeter.",
+      "alternatives": []
+    }
+  ]
+}

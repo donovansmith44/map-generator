@@ -1,0 +1,21 @@
+{
+  "catalogue-final.log.gz": "a43eedf3624317cc2839ce6dc977b250c312c73bc9f0aed80d841bff2def23b7",
+  "census-red.log.gz": "00de41c4c69c04329cfb5773ff12c6ea00838aaeb0a82ccea327212cc0e6a255",
+  "compiler-repair-red.log.gz": "d2c79fd44088806fd919762ff8277a3e903cb5556b85468155c7965b14d3dbd6",
+  "composition-green.log.gz": "d537b53b93dde8c2a0308b131d919e8f3b7a743478cf93cf98c88779b0332144",
+  "contract-gates.log.gz": "e1be8e93b2b7f04d2a8dd451090682c0547d21cf2d37bd9d576b6289b11c6139",
+  "credits-red.log.gz": "a7062d8705fa9117241bf39ce8af568b8e44f49572eafa0771401ebcd6ab187d",
+  "golden.log.gz": "ef9e2e28842bad86f579a2ec619178da32905f61475c0f889d73426ed3f055b1",
+  "gpl-composition-red.log.gz": "362df3b72acaa9a5fd63aa0ba93c35304a8bdcc5f309d3d686a25a40b05f2c2d",
+  "input-composition-green.log.gz": "29988e266fef7d397f2a9bda3ce520c2f19b99473e02076f242e7c51db165071",
+  "input-composition-red.log.gz": "1c9df5c53d20f9b6d8ee4bbebe30693e534b17224c62966f8d1dff6634ce0849",
+  "judah-composition-red.log.gz": "f96383f3f30cee44ce24e37ea8e281156cf88de2c0a9bc4daa4243969c1fad3e",
+  "narrative-red.log.gz": "a97e07ce425034e2b2d7c65de09c791daef5b9ea0b71fdb62a8e7ea27cf13e7a",
+  "producer-final.log.gz": "eac9c8dde1ec7569875a50f9c6529c614f8a189d97a504ed8569b4cfa9a7ed28",
+  "red.log.gz": "2d51d31a05dd0b56e596b9443919defc98353f8a68966974d55486dfef271469",
+  "retained-corpus-green.log.gz": "afd09a2f92cb8c1ef3ae8e4fe8bb537c82af59dcac6a91e269e0792dca4a5fbf",
+  "river-green.log.gz": "b76f5d123ddbd924b8c7e7b806477ecf639c321e23adf52c5ad2858d8417e692",
+  "river-red.log.gz": "4079d0c8d246b39cbc1d73a344d74bc4347a0f1f4e7832167f08adefbf827824",
+  "semver-final.log.gz": "e5020620427e40a6d75289b4eb5d52916909a0f5cbb1a81929c50057edf73302",
+  "source-sha256.txt": "b15bfe89508edc93a7e85dc33e9ef6419afd571d17369e6eb9f687f895fe7b3a"
+}

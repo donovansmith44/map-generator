@@ -98,7 +98,7 @@ fn vendor_writes_are_deterministic_and_pinned() {
 
 mod compile_laws {
     use crate::compile::*;
-    use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    use crate::vendor::{EventRow, NarrativeRow};
     use atlas_graph_types::covenant::{TimePoint, Year};
     use map_canon::{Feature, LayerKind};
 
@@ -167,22 +167,36 @@ mod compile_laws {
         assert_eq!(store.validate(), vec![], "lawful, including no-overlap");
     }
 
-    /// A narrative's dated leg events become a Route whose legs span the
-    /// gaps between events, walked place to place.
     #[test]
-    fn narratives_become_routes_with_dated_legs() {
+    fn unsupported_abraham_stand_in_is_refused() {
         let narrative = NarrativeRow {
-            id: "abraham-migration".into(), name: "Abraham's Migration".into(),
+            id: "abraham-migration".into(),
+            name: "Abraham's Migration".into(),
             color: "#D97706".into(),
             legs: vec!["ab_ur".into(), "ab_haran".into(), "ab_shechem".into()],
         };
         let events = vec![
-            EventRow { id: "ab_ur".into(), label: "Ur".into(), when: Some((-2095, -2093)),
-                       places: vec!["ur-1".into()], verses: vec!["GEN.11.28".into()] },
-            EventRow { id: "ab_haran".into(), label: "Haran".into(), when: Some((-2092, -2091)),
-                       places: vec!["haran".into()], verses: vec!["GEN.12.1".into()] },
-            EventRow { id: "ab_shechem".into(), label: "Shechem".into(), when: Some((-2090, -2090)),
-                       places: vec!["shechem".into()], verses: vec!["GEN.12.6".into()] },
+            EventRow {
+                id: "ab_ur".into(),
+                label: "Ur".into(),
+                when: Some((-2095, -2093)),
+                places: vec!["ur-1".into()],
+                verses: vec!["GEN.11.28".into()],
+            },
+            EventRow {
+                id: "ab_haran".into(),
+                label: "Haran".into(),
+                when: Some((-2092, -2091)),
+                places: vec!["haran".into()],
+                verses: vec!["GEN.12.1".into()],
+            },
+            EventRow {
+                id: "ab_shechem".into(),
+                label: "Shechem".into(),
+                when: Some((-2090, -2090)),
+                places: vec!["shechem".into()],
+                verses: vec!["GEN.12.6".into()],
+            },
         ];
         let places: std::collections::BTreeMap<String, (f64, f64)> = [
             ("ur-1".to_string(), (30.96, 46.10)),
@@ -191,12 +205,80 @@ mod compile_laws {
         ]
         .into_iter()
         .collect();
+        let points: Vec<_> = ["ur-1", "haran", "shechem"]
+            .iter()
+            .map(|id| {
+                let (lat, lon) = places[*id];
+                map_types::UnitVec::from_lat_lon_deg(lat, lon)
+            })
+            .collect();
+        let expected = crate::exclusion::check_points(&points)
+            .expect_err("the unsupported historical stand-in has excluded lineage");
         let mut store = map_canon::CanonStore::default();
-        let report = compile_narratives(&mut store, &[narrative], &events, &places)
-            .expect("compiles");
-        assert_eq!(report.routes, 1);
+        let actual = compile_narratives(&mut store, &[narrative], &events, &places)
+            .expect_err("the unsupported route is refused");
+        assert_eq!(
+            actual,
+            format!("excluded output: {expected:?}"),
+            "the narrative compiler returns the complete refusal from the sole geometric owner"
+        );
+    }
+
+    #[test]
+    fn permitted_source_lines_preserve_narrative_leg_intervals() {
+        let narrative = NarrativeRow {
+            id: "synthetic-native-source".into(),
+            name: "Source interval law".into(),
+            color: "#D97706".into(),
+            legs: vec!["source-0".into(), "source-1".into(), "source-2".into()],
+        };
+        let events = vec![
+            EventRow {
+                id: "source-0".into(),
+                label: "Source 0".into(),
+                when: Some((-2095, -2093)),
+                places: vec!["source-0".into()],
+                verses: vec![],
+            },
+            EventRow {
+                id: "source-1".into(),
+                label: "Source 1".into(),
+                when: Some((-2092, -2091)),
+                places: vec!["source-1".into()],
+                verses: vec![],
+            },
+            EventRow {
+                id: "source-2".into(),
+                label: "Source 2".into(),
+                when: Some((-2090, -2090)),
+                places: vec!["source-2".into()],
+                verses: vec![],
+            },
+        ];
+        let source: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../data/natural-earth/ne_10m_rivers_lake_centerlines.geojson"
+        ))
+        .unwrap();
+        let line = crate::exclusion::geojson_lines(&source)
+            .into_iter()
+            .find(|line| line.0.len() >= 3)
+            .unwrap();
+        let places = line
+            .0
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(index, point)| (format!("source-{index}"), (point.y, point.x)))
+            .collect();
+        let mut store = map_canon::CanonStore::default();
+        let report =
+            compile_narratives(&mut store, &[narrative], &events, &places).expect("compiles");
+        assert_eq!(report.routes, 1, "one input route produces one route");
         let world = &store.layers()[&LayerKind::Journeys];
-        assert!(!world.moments().is_empty());
+        assert!(
+            !world.moments().is_empty(),
+            "dated legs produce exploration moments"
+        );
         let route = store
             .features()
             .values()
@@ -205,11 +287,26 @@ mod compile_laws {
                 _ => None,
             })
             .expect("a way was compiled");
-        assert_eq!(route.entity.0, "abraham-migration");
+        assert_eq!(
+            route.entity.0, "synthetic-native-source",
+            "the synthetic source identity is preserved"
+        );
         assert_eq!(route.legs.len(), 2, "three stations, two walks");
-        assert_eq!(route.legs[0].span, (ts(-2093), ts(-2092)), "depart when Ur ends, arrive when Haran begins");
-        assert_eq!(route.legs[1].span, (ts(-2091), ts(-2090)));
-        assert_eq!(store.validate(), vec![]);
+        assert_eq!(
+            route.legs[0].span,
+            (ts(-2093), ts(-2092)),
+            "depart when the first interval ends, arrive when the second starts"
+        );
+        assert_eq!(
+            route.legs[1].span,
+            (ts(-2091), ts(-2090)),
+            "the second leg preserves its departure and arrival intervals"
+        );
+        assert_eq!(
+            store.validate(),
+            vec![],
+            "the permitted route and dated layers are lawful"
+        );
     }
 
     /// A narrative leg whose place the gazetteer cannot resolve is a

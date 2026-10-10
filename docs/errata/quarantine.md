@@ -159,3 +159,95 @@ verified producer image when generating/checking the catalogue and running the
 producer law. Otherwise the standard shared-target example path is used. A
 build's executable may be captured outside the target tree; this avoids consuming
 a different worktree's producer after it overwrites the common example pathname.
+
+## Retained corpus courses (MG-X0-3)
+
+The five retained-corpus failures at the end of the X0 report are resolved by
+registering exact native Natural Earth coast, ocean, lake and river lines, and
+quarantining unsupported courses below. No cited survey supplies an equally
+explanatory course for these overlaps. The geometric policy remains 100 m
+with a 2,000 m maximum and the original short-line fraction of 0.1.
+Overlap is exclusion-law evidence, not a claim of historical copying.
+The machine-readable decisions are `data/authored/quarantined-courses.json`.
+Polity holding evidence and all Scripture references, dates, waypoint identities,
+provenance and alternatives remain; empty region parts mean Unlocated.
+Four courses compose approximately 3,157.55 m of unexplained Judah overlap;
+seven compose approximately 4,031.99 m of GPL Roman Empire overlap. Their
+individual contributions are recorded even where each alone is below threshold.
+The two remaining Egypt intervals compose 2,303.83 m of unexplained GPL overlap
+and are likewise retained as Unlocated, with their holding evidence unchanged.
+
+The former Abraham narrative fixture is independently refused against the same
+OSM Barada line recorded for `scripture-route/R-ABRAHAM`. Its timing law now
+uses explicitly synthetic identities on three unmodified native Natural Earth
+source points; the unsupported fixture stays solely as a refusal control.
+Raw GeoJSON admission uses the same `UnitVec` representation as typed input.
+
+| Polity interval | Outcome | Excluded overlap |
+|---|---|---|
+| assyria -911..-609 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| israel -1050..-931 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| judah -930..-587 | Unlocated; evidence retained | Tribes12: judah/0/0 |
+| judah -164..-63 | Unlocated; evidence retained | KnowingTheBible: PLATE_JORDAN_1 |
+| judah -39..-4 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| phoenicia -1200..-539 | Unlocated; evidence retained | SplicedRegions: Phoenicia/0/0 |
+| roman-empire -30..100 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| alexander-empire -335..-323 | Unlocated; evidence retained | OsmRivers: Nahr ez Zahrani/1288/0 |
+| babylon -2100..-1156 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| babylon -626..-539 | Unlocated; evidence retained | OsmRivers: Valley of Gaza (Wadi Ghazza)/70/0 |
+| egypt -1549..-1069 | Unlocated; evidence retained | OsmRivers: Litani River/78/0 |
+| egypt -331..-30 | Unlocated; evidence retained | HistoricalBasemaps: Achaemenid Empire/16/0/0/raw |
+| elam -4004..-539 | Unlocated; evidence retained | HistoricalBasemaps: Parthian Empire/149/0/0/raw |
+| hittites -1600..-1180 | Unlocated; evidence retained | HistoricalBasemaps: Hittites/104/0/0/raw |
+| israel -930..-722 | Unlocated; evidence retained | OsmRivers: Nahal Sorek/1006/0 |
+| parthian-empire -140..100 | Unlocated; evidence retained | HistoricalBasemaps: Parthian Empire/149/0/0/raw |
+| persia -539..-331 | Unlocated; evidence retained | OsmRivers: Nahr ez Zahrani/1288/0 |
+| roman-empire -200..-31 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/5/0/raw |
+| seleucid-empire -301..-150 | Unlocated; evidence retained | HistoricalBasemaps: Suren Kingdom/130/0/0/raw |
+| seleucid-empire -149..-64 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| egypt -4004..-1550 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/22/0/raw |
+| egypt -1068..-332 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/22/0/raw |
+
+| Scripture course | Cited span endpoints | Outcome / excluded overlap |
+|---|---|---|
+| `scripture-survey:NT-JUDAEA` | 1KI.4.21–1KI.4.25 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-JACOB` | GEN.28.10–GEN.35.27 | Unlocated; Tribes12: gad/0/0 |
+| `scripture-era/ISRAEL-UNITED/phase0` | 1SA.11.14–1SA.11.15 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-PAUL3` | ACT.18.23–ACT.21.17 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-EXILE` | 2KI.25.1–2KI.25.21 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-survey:EZK47` | EZK.47.13–EZK.47.20 | Unlocated; SplicedRegions: Phoenicia/0/0 |
+| `scripture-survey:EZK48` | EZK.48.8–EZK.48.20 | Unlocated; Tribes12: ephraim/0/0 |
+| `scripture-era/JUDAH-KINGDOM/phase0` | 1KI.12.20–1KI.12.24 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-era/ISRAEL-NORTH/phase1` | 2KI.14.25–2KI.14.27 | Unlocated; SplicedRegions: Phoenicia/0/0 |
+| `scripture-survey:N-CANAAN` | GEN.10.15–GEN.10.19 | Unlocated; KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| `scripture-survey:NT-PEREA` | LUK.3.1–LUK.3.1 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-route/R-RETURN` | EZR.1.1–EZR.2.70 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-route/R-ROME` | ACT.27.1–ACT.28.16 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-survey:N-TIRAS` | GEN.10.2–GEN.10.2 | Unlocated; HistoricalBasemaps: Empire of Alexander/40/3/0/raw |
+| `scripture-route/R-NATIVITY` | MAT.2.1–MAT.2.23 | Unlocated; OsmRivers: Nahal Shikma/320/0 |
+| `scripture-survey:N-LUD` | GEN.10.22–GEN.10.22 | Unlocated; HistoricalBasemaps: Greek city-states/119/1/0/raw |
+| `scripture-survey:NT-GALILEE` | LUK.3.1–LUK.3.1 | Unlocated; OsmRivers: Nahal Kishon/269/0 |
+| `scripture-route/R-PAUL2` | ACT.15.36–ACT.18.22 | Unlocated; HistoricalBasemaps: Roman Empire/150/5/0/raw |
+| `scripture-survey:N-PHUT` | GEN.10.6–GEN.10.6 | Unlocated; HistoricalBasemaps: Ptolemaic Kingdom/36/0/0/raw |
+| `scripture-route/R-ARK` | 1SA.4.1–1SA.7.2 | Unlocated; OsmRivers: Nahal Sorek/215/0 |
+| `scripture-era/ISRAEL-UNITED/phase1` | 1KI.4.21–1KI.4.25 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-JOSEPH` | GEN.37.12–GEN.37.36 | Unlocated; OsmRivers: Ayalon River/1273/0 |
+| `scripture-survey:N-JAVAN` | GEN.10.2–GEN.10.5 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-route/R-EXODUS` | NUM.33.5–NUM.33.49 | Unlocated; HistoricalBasemaps: Nabatean Kingdom/439/0/0/raw |
+| `scripture-survey:N-CUSH` | GEN.10.6–GEN.10.7 | Unlocated; HistoricalBasemaps: Meroe/11/0/0/raw |
+| `scripture-era/ISRAEL-NORTH/phase0` | 1KI.12.16–1KI.12.20 | Unlocated; OsmRivers: Zarqa River/126/0 |
+| `scripture-survey:N-MIZRAIM` | GEN.10.6–GEN.10.6 | Unlocated; HistoricalBasemaps: Roman Empire/150/22/0/raw |
+| `scripture-route/R-ABRAHAM` | GEN.11.31–GEN.13.18 | Unlocated; OsmRivers: Barada River/302/0 |
+| `scripture-survey:NT-ITUREA` | LUK.3.1–LUK.3.1 | Unlocated; OsmRivers: /162/0 |
+| `scripture-survey:N-ARAM` | GEN.10.22–GEN.10.23 | Unlocated; OsmRivers: Barada River/68/0 |
+| `scripture-era/YEHUD/phase0` | EZR.1.1–EZR.1.3 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-SPIES` | NUM.13.17–NUM.13.26 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-PHILIP` | ACT.8.26–ACT.8.40 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-ELIJAH` | 1KI.19.1–1KI.19.8 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-PAUL1` | ACT.13.1–ACT.14.28 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-SHINAR` | GEN.10.8–GEN.10.10 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-route/R-JONAH` | JON.1.3–JON.3.3 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-GOMER` | GEN.10.2–GEN.10.3 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-ELAM` | GEN.10.22–GEN.10.22 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-ASSHUR` | GEN.10.11–GEN.10.12 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-MESHECH` | GEN.10.2–GEN.10.2 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |

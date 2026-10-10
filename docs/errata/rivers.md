@@ -5,6 +5,9 @@
 Scripture grounds river identities and boundary roles, never the precision of
 modern vertices. The golden specifications are atlas C12's
 `docs/superpowers/specs/2026-10-07-golden-map-{1446bc,1399bc}.md`.
+The sole census inventory is `data/authored/river-requirements.json`, including
+the atlas WORLD-1446 witness inventory at its recorded revision.
+`tools/river_census.py --check` verifies the generated table below.
 The source is the already-vendored
 `data/natural-earth/ne_10m_rivers_lake_centerlines.geojson`, SHA256
 `bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a`.
@@ -50,10 +53,10 @@ last column retains the chosen identification, grounds and relevant alternatives
 
 | River | Outcome | Stop / grounds / source identification and alternatives |
 |---|---|---|
-| Jordan | Course | Both; Num 13:29; Deut 3:17; Josh 13:23, 27; 19:34. NE 229, 138 river vertices and 23 lake-centerline vertices in five source parts. Upper-Jordan reading primary at Josh 19:34; Havoth-jair and town-Judah readings remain golden-spec alternatives. |
-| Nile | Course | Both, Egypt/Kush physical anchor; Exod 1–14; Gen 47:11. NE 4, with Rosetta 19 and Damietta 20. Modern branches do not locate the ancient Pelusiac branch. Outside the Canaan admission window. |
-| Euphrates | Course | 1446, Egyptian campaign/upper Mesopotamia; golden 1446 §4. NE 62 (Euphrates), 65 (Firat), 69 (Al Furat). Outside the Canaan admission window. |
-| Tigris | Course | 1446, Assyria/upper Mesopotamia; golden 1446 §4. NE 135 (Tigris), 120 (Dicle). Outside the Canaan admission window. |
+| Jordan | Course | Both; Num 13:29; Deut 3:17; Josh 13:23, 27; 19:34. NE 229, 138 river vertices and 23 lake-centerline vertices in five source parts. Upper-Jordan reading primary at Josh 19:34; Havoth-jair and town-Judah readings remain golden-spec alternatives. Jordan NE 229 |
+| Nile | Course | Both, Egypt/Kush physical anchor; Exod 1–14; Gen 47:11. NE 4, with Rosetta 19 and Damietta 20. Modern branches do not locate the ancient Pelusiac branch. Outside the Canaan admission window. Nile NE 4, Rosetta Branch NE 19, Damietta Branch NE 20 |
+| Euphrates | Course | 1446, Egyptian campaign/upper Mesopotamia; golden 1446 §4. NE 62 (Euphrates), 65 (Firat), 69 (Al Furat). Outside the Canaan admission window. Euphrates NE 62, Firat NE 65, Al Furat NE 69 |
+| Tigris | Course | 1446, Assyria/upper Mesopotamia; golden 1446 §4. NE 135 (Tigris), 120 (Dicle). Outside the Canaan admission window. Dicle NE 120, Tigris NE 135 |
 | Orontes | Missing | Both, Kadesh/Asian sphere; golden 1446 §4, 1399 §4.8. No Orontes course in the vendored NE file. |
 | Eleutheros | Missing | 1446, Asian sphere's changing northern reach; golden 1446 §4. Nahr el-Kabir identification; no NE course. This campaign limit never justifies a fixed state boundary. |
 | Khabur | Missing | 1446, Mitanni's Khabur triangle; golden 1446 §4. No NE course. |
@@ -65,9 +68,25 @@ last column retains the chosen identification, grounds and relevant alternatives
 | Yarkon | Missing | 1399; Josh 19:46 Me-jarkon, golden 1399 §5.4. No NE course. |
 | Yarmuk | Missing | 1399 identification discussion for Zaphon, golden 1399 §5.4; the PEF's conflation of Amathus and el-Hammeh is recorded, not a new chosen river boundary. No NE course. |
 | Belus | Missing | 1399 alternative Shihor-libnath identification: PEF Nahr Na'amein (Handbook pp. 267–268), golden 1399 §5.4. Alternative remains recorded, capped below High; no NE course. |
-| Shihor-libnath | Missing | 1399; Josh 19:26. Kishon mouth primary, Belus alternative (§5.4); no separately located NE course. A name match is not scriptural site derivation. |
-| River of Egypt | Missing | 1399; Josh 15:4, 47. Wadi el-Arish primary; Pelusiac Nile/Sihor alternative (Josh 13:3; 1 Chr 13:5), golden §6. No NE Wadi el-Arish course. |
+| Shihor-libnath | Missing | 1399; Josh 19:26. Kishon mouth primary, Belus alternative (§5.4); no separately located NE course. A name match is not scriptural site derivation.  Belus: retained identification alternative, capped at Medium. |
+| River of Egypt | Missing | 1399; Josh 15:4, 47. Wadi el-Arish primary; Pelusiac Nile/Sihor alternative (Josh 13:3; 1 Chr 13:5), golden §6. No NE Wadi el-Arish course.  Pelusiac Nile/Sihor: retained alternative, no ancient branch course. |
 | Pelusiac Nile | Missing | 1399 River-of-Egypt alternative; golden §6. No permitted ancient branch course in the modern NE file; Rosetta/Damietta are not substitutions. |
+| Diyala | Missing | 1446 §4.5, lines 214/217: Kassite alluvial reach and Qutian-Lullubian headwaters; no vendored NE course. |
+| Yellow River | Course | 1446 §4.7, line 236: Shang core in central Henan. Selected NE Huang main drainage; modern proxy, not a Shang border. Huang NE 66, Huang NE 95 |
+| Gan | Course | 1446 §4.7, line 238 and evidence row 63: Wucheng/Jiangxi setting; modern NE Gan proxy, no cultural perimeter. Gan NE 278 |
+| Gadar | Missing | 1446 evidence row 73, line 496: Hasanlu valley context; no vendored NE course. |
+| Nam | Missing | 1446 evidence row 76, line 499: Daepyeong/Jinju setting; NE Namhan 555 lies in a different Korean drainage and is not selected.  Namhan NE 555 rejected: source lies at 36.95–37.58 N, unlike the Jinju/Daepyeong requirement. |
+| Sangha | Course | 1446 evidence row 82, line 508: later rainforest migration context, not a border or a presence ground at 1446; modern proxy only. Sangha NE 364 |
+| Volga | Course | 1446 §4.9, line 244 and evidence row 78: Srubnaya/Samara valley distribution context, not sovereignty. Volga NE 68 |
+| Dnieper | Course | 1446 §4.9, line 244 and §4.11, line 272: Srubnaya and Sabatinovka context. NE Dnepre 121 preserves only a headwater reach; lower reaches remain Unlocated. Dnepre NE 121 |
+| Southern Buh | Course | 1446 §4.11, line 272 and evidence row 85: Sabatinovka context. Selected NE Southern Bug 670 in Ukraine; NE Buh 491 in China and Bug 732 on the Polish border are rejected identities. Southern Bug NE 670 Buh NE 491 rejected: Chinese drainage. Bug NE 732 rejected: Polish-border drainage. |
+| Yangtze | Course | 1446 evidence row 63, line 481: source-title context for lower Yangtze/Wucheng discussion, not a territorial course. Yangtze NE 1 |
+| Indus | Course | 1446 evidence rows 64–66, lines 482/484/485: Late Harappan regional sequence context, not a culture-area perimeter. Indus NE 56 |
+| Coatzacoalcos | Course | 1446 evidence row 90, line 519: San Lorenzo basin context, not an Olmec border. Coatzacoalcos NE 687 |
+| Mississippi | Course | 1446 §4.13, line 287 and evidence row 91: Poverty Point lower-valley context, not a polity border. Mississippi NE 3, Mississippi NE 156 |
+| Tungabhadra | Course | 1446 evidence row 72, line 492: Hallur setting in the upper drainage; no cultural perimeter. Tungabhadra NE 672 |
+| Cagayan | Course | 1446 evidence row 79, line 502: Nagsabaran valley context; modern NE proxy only. Cagayan NE 895 |
+| Po | Course | 1446 §4.11, line 274: Terramare central-plain context; no cultural perimeter. Po NE 219 |
 
 ## Kept, lost detail and removed
 
