@@ -1,0 +1,37 @@
+{
+  "range": {
+    "base": "7bcbabab132443e535fa7b18c2cdb4500457e3c8",
+    "head": "cf3c348d92068a921dac2b8c6c1d61573f3ee3a2"
+  },
+  "cargo_invocations": 1,
+  "cargo_command": "CARGO_TARGET_DIR=$HOME/mut/target CARGO_PROFILE_DEV_DEBUG=1 CARGO_PROFILE_TEST_DEBUG=1 CARGO_INCREMENTAL=0 nice -n 10 cargo test -j 4 -p map-adapters -p map-compile --lib --tests -- --nocapture",
+  "cargo_exit": 101,
+  "existing_runtime_tests_passed": 50,
+  "existing_runtime_tests_failed": 0,
+  "existing_ignored_child": 1,
+  "review_probes": {
+    "passed": 1,
+    "failed": 2,
+    "ignored_child": 1,
+    "renamed_osm_real_loader_vertices": 96,
+    "permitted_real_loader_paths": 5
+  },
+  "heavy_lock": "Atomic take refused (stale info); foreign codex-maps-land2 MAPS-C12 landing lock preserved. No workspace or make-contract gate invoked.",
+  "golden_command": "node crates/map-viewer/tests/golden.js --check",
+  "golden_exit": 1,
+  "golden_result": "MODULE_NOT_FOUND playwright-core before browser launch; no listener on 8090; no pixels measured",
+  "contract": "Worker reports 381/0 and semver 6/0; not repeated independently.",
+  "red_first": "Worker rivers.md narrates no-OSM, census and 0/1455 adapter reds. No separate X1 raw red logs committed; author order not independently replayed. Review probes are fresh diagnostic reds.",
+  "source_restore": "Temporary test target removed; git diff against cf3c348 contains report/evidence only.",
+  "comments": {
+    "added_application": 0,
+    "added_test": 0
+  },
+  "assertion_audit": {
+    "touched_bodies": 6,
+    "assertions": 18,
+    "missing_messages": 0,
+    "tuple_boolean_vector_candidates": 0
+  },
+  "warnings": "Inherited unused Area/PolityRow imports only; no new warning category."
+}

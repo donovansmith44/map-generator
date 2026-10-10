@@ -1,0 +1,69 @@
+{
+  "base": "7bcbabab132443e535fa7b18c2cdb4500457e3c8",
+  "head": "cf3c348d92068a921dac2b8c6c1d61573f3ee3a2",
+  "mg_base": "6ac32bfbf67e26b9cfe94560806fda293db05801",
+  "removed_inventory": {
+    "lines": 1752,
+    "networks": 125,
+    "labels": 231,
+    "census_labels": 231,
+    "census_matches_source": true,
+    "Jordan_lines": 38,
+    "Jordan_vertices": 452
+  },
+  "natural_earth": {
+    "features": 1455,
+    "classes": {
+      "River": 1202,
+      "Lake Centerline": 253
+    },
+    "sha256": "bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a"
+  },
+  "world_census_omissions": {
+    "Yellow River": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": [
+        "Huang"
+      ]
+    },
+    "Gadar": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": []
+    },
+    "Nam": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": []
+    },
+    "Sangha": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": [
+        "Sangha"
+      ]
+    },
+    "Diyala": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": []
+    },
+    "Gan": {
+      "census_has_outcome_row": false,
+      "ne_candidate_names": [
+        "Gan"
+      ]
+    }
+  },
+  "changed_files": [
+    "crates/map-adapters/src/hydro.rs",
+    "crates/map-adapters/src/tests.rs",
+    "crates/map-compile/src/main.rs",
+    "crates/map-compile/src/partition_bridge.rs",
+    "data/osm/LICENSE.md",
+    "data/osm/rivers.geojson",
+    "docs/errata/rivers.md"
+  ],
+  "changed_golden_files": [],
+  "content_catalogue_sources": {
+    "Tribes12": 13,
+    "SplicedRegions": 6,
+    "KnowingTheBible": 88
+  }
+}

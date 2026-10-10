@@ -1,0 +1,13 @@
+{
+  "added-comments.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "assertion_audit.py": "c7a08deb346d9521dd94561559a11ca205ff851e46c9c695edb92d24c11656e0",
+  "audit-requirements.txt": "690e58701b195760d4abad9a42af740bdaeb881fdbdb399263405a1ee0d13e68",
+  "golden-1399bc-named-river-context.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+  "golden-1446bc-named-river-context.txt": "63a30b2f3c4a59be0503235ab184e41964b3bfcca3c8f38ef53388a8171160db",
+  "golden-check.log.gz": "05c7ad3671c333b53d717828c40e64c477dd150f64616bdef5439e745e75c2e9",
+  "inventory.json": "791f5744c11abe7024f47a0fbfa61ceb7fec70fcb1d2d0c574496f85ce41c654",
+  "reviewer_x1_probe.rs": "f8c43e9251ceb63e877b29fd1b1c3071e9217f0defac15bb0391984b87ba8e2e",
+  "rust-assertion-audit.json": "cce7416e1caec8ad2d898a401acba860e0e15aa1919b570e6ce831871d87815e",
+  "scoped-gate.log.gz": "edad803388e43b2e3e6f2b0076b7ebe38499974b71f89f38728afa4aa53ef733",
+  "verification.json": "b92f2a684470965c6f115d7b27b66bf7fe12129b1896d760ae687e02c9581084"
+}
