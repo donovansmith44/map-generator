@@ -321,11 +321,11 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     let survey_tl = promised_land_timeline();
     let gaz = stand_in_gazetteer();
     let (chron, _) = empty_exports();
-    assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![]);
+    assert_eq!(map_types::validate_all(&survey_tl, &chron, &gaz), vec![], "the NUM 34 survey alone satisfies every timeline law");
 
     let (_, hist) = survey_tl.boundaries.iter().next().unwrap();
     let b = &hist.versions[0].1;
-    assert!(matches!(b.source, BoundarySource::Survey(_)));
+    assert!(matches!(b.source, BoundarySource::Survey(_)), "the NUM 34 boundary records its survey source");
     assert_eq!(b.pts.first(), b.pts.last(), "the circuit closes");
     assert!(!b.justification.grounds.is_empty(), "the text is the ground");
 
@@ -336,15 +336,13 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
     };
     let world = ingest(&config(), &[e1]).unwrap().timeline;
     let merged = merge_timelines(world, survey_tl.clone()).unwrap();
-    assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![]);
-    assert_eq!(merged.regions.len(), 2);
+    assert_eq!(map_types::validate_all(&merged, &chron, &gaz), vec![], "the merged survey and world satisfy every timeline law");
+    assert_eq!(merged.regions.len(), 2, "the survey and imported region both survive the merge");
 
-    // Merging the same source twice is a loud duplicate, never a
-    // silent preference.
     assert!(matches!(
         merge_timelines(merged, survey_tl),
         Err(MergeError::DuplicateBoundary(_))
-    ));
+    ), "merging the same survey twice refuses its duplicate boundary");
 
     let all = scripture_timeline();
     assert_eq!(all.regions.len(), 28, "the Scripture set without excluded tracing");
@@ -354,28 +352,23 @@ fn promised_land_survey_is_lawful_alone_and_merged() {
         .filter(|h| h.versions[0].1.character == map_types::EdgeCharacter::Way)
         .count();
     assert_eq!(journeys, 19, "the whole-Bible route book, patriarchs to Paul");
-    assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![]);
+    assert_eq!(map_types::validate_all(&all, &chron, &gaz), vec![], "the complete Scripture timeline satisfies every timeline law");
 
-    // The kingdom arc has real BORDER CHANGES: Shifts grounded in
-    // Scripture (2KI 14:25's restoration, 1KI 4's dominion), plus
-    // Falls (Samaria, Jerusalem) and the return.
     use map_types::ChangeKind as K;
     let shifts = all.events.iter().filter(|e| matches!(e.kind, K::Shift { .. })).count();
     let falls = all.events.iter().filter(|e| matches!(e.kind, K::Fall { .. })).count();
     assert_eq!(shifts, 2, "the Solomonic dominion and Jeroboam II's restoration");
     assert_eq!(falls, 3, "the division ends the united kingdom; Samaria; Jerusalem");
-    assert!(all.events.iter().all(|e| !e.justification.grounds.is_empty()));
+    assert!(all.events.iter().all(|e| !e.justification.grounds.is_empty()), "every Scripture event carries its grounds");
 
-    // The honesty grades render differently by construction: walked
-    // borders are Lines, city-derived hulls are Unknown.
     use map_types::EdgeCharacter;
     let characters: Vec<_> = all
         .boundaries
         .values()
         .map(|h| h.versions[0].1.character.clone())
         .collect();
-    assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Line)));
-    assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Unknown)));
+    assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Line)), "the Scripture timeline retains attested border lines");
+    assert!(characters.iter().any(|c| matches!(c, EdgeCharacter::Unknown)), "the Scripture timeline retains uncertain hull boundaries");
 }
 
 // --------------------------- C2/C3: the great stand-in replacement

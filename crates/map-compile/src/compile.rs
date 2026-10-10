@@ -155,6 +155,8 @@ pub fn compile_narratives(
             .map_err(|_| format!("journeys: contradiction at {edge}"))?;
     }
     store.set_layer(LayerKind::Journeys, world);
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(CompileReport { routes, ..Default::default() })
 }
 
@@ -193,5 +195,7 @@ pub fn append_ways(
         world.insert(edge, sid).map_err(|_| "journeys: contradiction on append".to_string())?;
     }
     store.set_layer(LayerKind::Journeys, world);
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(())
 }

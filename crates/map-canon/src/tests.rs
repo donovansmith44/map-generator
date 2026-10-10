@@ -933,7 +933,8 @@ fn the_share_alike_origins_are_named_not_inferred() {
             Witness::Osm,
             Witness::Wikimedia,
             Witness::Partition,
-        ]
+        ],
+        "the complete share-alike origin inventory follows the recorded source terms"
     );
 }
 
