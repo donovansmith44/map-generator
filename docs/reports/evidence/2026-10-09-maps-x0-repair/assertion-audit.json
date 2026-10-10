@@ -1,0 +1,17 @@
+[
+  {
+    "revision": "d43be4f",
+    "test_functions_changed": 22,
+    "assertions": 47,
+    "missing_message": [],
+    "tuple_or_boolean_vector": [
+      {
+        "file": "crates/map-canon/src/tests.rs",
+        "function": "every_witness_names_the_terms_its_data_is_available_under",
+        "line": 902,
+        "assertion": "assert_eq!(\n        table,\n        vec![\n            (Witness::Atlas, vec![\"CC-BY-SA-4.0\"]),\n            (Witness::Authored, vec![\"CC0-1.0\"]),\n            (Witness::Basemap, vec![\"GPL-3.0-only\"]),\n            (Witness::NaturalEarth, vec![\"public-domain\"]),\n            (Witness::OpenBible, vec![\"CC-BY-4.0\"]),\n            (Witness::Osm, vec![\"ODbL-1.0\"]),\n            (Witness::Wikimedia, vec![\"CC-BY-SA-3.0\"]),\n            (\n                Witness::Partition,\n                vec![\"public-domain\", \"CC-BY-SA-4.0\", \"ODbL-1.0\"],\n            ),\n        ],\n        \"each origin's terms, whole: the vendored LICENSE file of each dataset\"\n    )",
+        "candidate": "tuple-vector"
+      }
+    ]
+  }
+]

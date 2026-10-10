@@ -105,6 +105,16 @@ fn number(expression: &syn::Expr) -> f64 {
     }
 }
 
+fn expected(index: usize) -> ExclusionError {
+    let catalogue: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../data/authored/excluded-geometry-fingerprints.json"
+    ))
+    .expect("the checked quarantine catalogue decodes");
+    let geometry = serde_json::from_value(catalogue["geometries"][index].clone())
+        .expect("the independently catalogued complete geometry decodes");
+    ExclusionError::Excluded(vec![geometry])
+}
+
 fn polity(points: &[UnitVec], name: String) -> PolityRow {
     PolityRow {
         id: name.clone(),
@@ -133,7 +143,7 @@ fn restored_judah_is_refused_through_another_polity_input() {
         156,
         "the reviewer seed restores every Judah vertex"
     );
-    let expected = exclusion::check_points(&original.points).expect_err("Judah is fingerprinted");
+    let expected = expected(0);
     let result = map_compile::partition_bridge::gather_witnesses(&[polity(
         &original.points,
         "renamed-control".into(),
@@ -152,14 +162,14 @@ fn every_excluded_original_is_bound_to_its_content() {
         107,
         "every quarantined geometry has an executable content control"
     );
-    for original in originals() {
-        let result = exclusion::check_points(&original.points);
-        assert!(
-            matches!(result, Err(ExclusionError::Excluded(_))),
-            "{} is refused by content",
+    for (index, original) in originals().iter().enumerate() {
+        let expected = expected(index);
+        assert_eq!(
+            exclusion::check_points(&original.points),
+            Err(expected.clone()),
+            "{} reports its complete independently catalogued origin",
             original.name
         );
-        let expected = result.expect_err("original geometry is excluded");
         let admitted = map_compile::partition_bridge::gather_witnesses(&[polity(
             &original.points,
             "renamed".into(),
@@ -178,15 +188,10 @@ fn restored_med_input_is_refused() {
     let root = std::env::temp_dir().join(format!("maps-x0-restoration-{}", std::process::id()));
     let directory = root.join("data/natural-earth");
     std::fs::create_dir_all(&directory).expect("temporary probe directory");
-    let positions: Vec<_> = originals()[0]
-        .points
-        .iter()
-        .map(|point| {
-            let (lat, lon) = point.to_lat_lon_deg();
-            serde_json::json!([lon, lat])
-        })
-        .collect();
-    let data = serde_json::json!({"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Polygon","coordinates":[positions]},"properties":{"name":"permitted-looking-water"}}]});
+    let source: serde_json::Value =
+        serde_json::from_str(&historical("data/wikimedia/tribes12.geojson"))
+            .expect("the original Judah source parses");
+    let data = serde_json::json!({"type":"FeatureCollection","features":[{"type":"Feature","geometry":source["features"][0]["geometry"],"properties":{"name":"permitted-looking-water"}}]});
     std::fs::write(
         directory.join("med_clip.geojson"),
         serde_json::to_vec(&data).expect("probe GeoJSON serializes"),
@@ -214,8 +219,7 @@ fn restored_med_input_is_refused() {
 #[test]
 #[ignore]
 fn restoration_probe_child() {
-    let expected =
-        exclusion::check_points(&originals()[0].points).expect_err("Judah is fingerprinted");
+    let expected = expected(0);
     let result = map_compile::partition_bridge::gather_witnesses(&[]);
     assert_eq!(
         result.err(),
@@ -232,7 +236,7 @@ proptest! {
         reverse in any::<bool>(), split in 1usize..9, name in "[a-z]{1,24}",
     ) {
         let original = &originals()[index];
-        let expected = exclusion::check_points(&original.points).expect_err("original geometry is excluded");
+        let expected = expected(index);
         let mut points = original.points.clone();
         for rotation in rotations {
             let length = points.len();
@@ -308,7 +312,7 @@ fn excluded_content_split_across_input_files_is_refused() {
     let root = std::env::temp_dir().join(format!("maps-x0-multiple-inputs-{}", std::process::id()));
     std::fs::create_dir_all(&root).expect("temporary input directory");
     let original = &originals()[0];
-    let expected = exclusion::check_points(&original.points).expect_err("Judah is fingerprinted");
+    let expected = expected(0);
     for (index, part) in original.points.chunks(50).enumerate() {
         let coordinates: Vec<_> = part
             .iter()
