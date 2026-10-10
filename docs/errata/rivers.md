@@ -418,7 +418,47 @@ reserved owner, and consume X4's stale-Canaan repair before fresh canon/goldens.
 Do not re-bless. No type mismatch, graph-types/map-types change, raw-data copy,
 port/process from another worker, secret or published history was touched.
 
-Final checkpoint: X0 remains `9cb7e9a`; no forward merge is available yet.
-All owned test/build/trace processes have ended, no host was started, and
-no lock is held by this worker. X1 main.rs reservation is released on this
-published source packet; integrate later shared-file changes serially.
+Forward-base checkpoint: X0 published `e3b20f4` during final publication, so
+X1 merged it forward as `a535e71` after source commit `8381636`. The merge is
+clean and retains X0's actual-input/output geometry fingerprint refusals and
+assertion-message repairs. The scoped gate is rerun because the base changed;
+its outcome will be recorded below. The final source packet's isolated base
+is now `e3b20f4`, while the original task base remains `9cb7e9a`.
+No host was started and no lock is held by this worker.
+
+Post-merge scoped run: **50 runtime tests passed, 0 failed, 1 ignored**
+(the ignored X0 restoration child is invoked separately by its controls).
+The aggregate exits 1 at compiler doctests: rustdoc reports E0463 for the
+existing shared-target map-canon/map-partition artifacts. There are no doc
+test examples in this crate. Build-only and a focused doc retry follow;
+this runtime count alone is not an all-green aggregate claim.
+
+The initial post-merge build/audit result is invalidated: another worker
+overlaid the shared `target/debug/map-compile` executable between commands
+(the audit printed X0's old 329/563 census). The focused nonincremental doc
+retry also loaded an older adapter and reported the new RiverShape/read_rivers
+as missing. No source repair or type change is made for these cache failures.
+The final rebuild uses Cargo's standard debug-level-1 dev/test profile within
+the same shared target, then copies its executable to `/tmp/maps-x1-map-compile`
+for a stable audit. Default-profile outputs from other workers are preserved.
+
+Stable-profile recovery: compiler build passes and the focused compiler doc
+gate passes (**0 examples, 0 failures**). The copied exact-X1 executable
+again builds **314 faces / 5 river paths / zero residual** through X0's input
+and compiled-output checks, logs the unlocated Loire, and then stops at the
+same X4-owned stale Canaan declaration. Its final input trace contains no
+`data/osm` read. No committed canon or golden was regenerated.
+
+X0 subsequently published final assertion-outcome/evidence commits through
+`7bcbaba`; X1 merged those forward as `d847a81`. Production source is identical
+to `e3b20f4`; only its strengthened exclusion test is rerun. The final isolated
+X1 review base is `7bcbaba`, with source commit `8381636` retained.
+
+Final base-control retry: **7 passed, 0 failed, 1 intentionally ignored child**.
+All 50 runtime laws are green across the affected packets; the doc gate is
+recovered. Contract 381/0, totality/vocabulary and semver 6/0 remain unchanged
+by the X0 forward merges. Full workspace/make and actual golden sampling stay
+pending the disclosed foreign lock, X4 registry and harness/workbench blockers.
+The ODbL composite-credit coordination gap stays open; no out-of-scope inventory
+edit was made. All owned jobs have ended; no lock or host remains. X1 main.rs
+reservation is released for controller-serialized integration.
