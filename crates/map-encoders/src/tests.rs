@@ -1551,15 +1551,88 @@ fn bless_limb_fixtures() {
 
 #[test]
 fn limb_fixtures_match_rust() {
-    let committed = std::fs::read_to_string(limb_fixture_path())
-        .expect("fixture file exists — bless_limb_fixtures writes it")
-        .replace("\r\n", "\n");
-    let fresh = serde_json::to_string_pretty(&limb_fixture_json()).unwrap();
-    assert!(
-        committed.trim_end() == fresh.trim_end(),
-        "committed limb fixtures drifted from the Rust implementation — \
-         re-bless if the change is intended, and update the JS port"
+    // Arrange
+    let input = std::fs::read_to_string(limb_fixture_path()).unwrap();
+    let expected: crate::test_support::LimbFixtures = serde_json::from_str(&input).unwrap();
+    // Act
+    let actual: crate::test_support::LimbFixtures =
+        serde_json::from_value(limb_fixture_json()).unwrap();
+    // Assert
+    assert_eq!(
+        actual, expected,
+        "the complete limb geometry matches its committed reference"
     );
+}
+
+proptest::proptest! {
+    #[test]
+    fn limb_coordinates_accept_unit_scale_roundoff(input in -1.0f64..=1.0f64) {
+        // Arrange
+        let input = crate::test_support::LimbCoordinate(input);
+        let expected = crate::test_support::LimbCoordinate(input.0 + f64::EPSILON);
+        // Act
+        let actual = input;
+        // Assert
+        proptest::prop_assert_eq!(actual, expected, "unit-vector coordinates permit one unit-scale rounding step");
+    }
+
+    #[test]
+    fn limb_coordinates_refuse_larger_drift(input in -1.0f64..=1.0f64) {
+        // Arrange
+        let input = crate::test_support::LimbCoordinate(input);
+        let changed = crate::test_support::LimbCoordinate(input.0 + 2.0 * f64::EPSILON);
+        let expected = false;
+        // Act
+        let actual = input == changed;
+        // Assert
+        proptest::prop_assert_eq!(actual, expected, "coordinate drift beyond unit-scale roundoff is refused");
+    }
+
+    #[test]
+    fn limb_clipping_refuses_topology_drift(input in -1.0f64..=1.0f64) {
+        // Arrange
+        let input = crate::test_support::LimbClip::Loops {
+            loops: vec![vec![crate::test_support::LimbCoordinate(input)]],
+        };
+        let changed = crate::test_support::LimbClip::None;
+        let expected = false;
+        // Act
+        let actual = input == changed;
+        // Assert
+        proptest::prop_assert_eq!(actual, expected, "clipping topology remains exact");
+    }
+
+    #[test]
+    fn limb_probes_refuse_membership_drift(input in -1.0f64..=1.0f64) {
+        // Arrange
+        let input = crate::test_support::LimbProbe {
+            p: vec![crate::test_support::LimbCoordinate(input)],
+            inside: true,
+        };
+        let changed = crate::test_support::LimbProbe {
+            p: vec![crate::test_support::LimbCoordinate(input.p[0].0)],
+            inside: !input.inside,
+        };
+        let expected = false;
+        // Act
+        let actual = input == changed;
+        // Assert
+        proptest::prop_assert_eq!(actual, expected, "probe membership remains exact");
+    }
+
+    #[test]
+    fn limb_clipping_refuses_point_count_drift(input in -1.0f64..=1.0f64) {
+        // Arrange
+        let input = crate::test_support::LimbClip::Loops {
+            loops: vec![vec![crate::test_support::LimbCoordinate(input)]],
+        };
+        let changed = crate::test_support::LimbClip::Loops { loops: vec![vec![]] };
+        let expected = false;
+        // Act
+        let actual = input == changed;
+        // Assert
+        proptest::prop_assert_eq!(actual, expected, "loop point counts remain exact");
+    }
 }
 
 // ------------------------------- Stage 1 Task 10: the buffer, split

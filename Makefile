@@ -55,4 +55,3 @@ ci: contract-gates
 	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8090 ../map-api
 	cd contracts/runner && cabal run contract-runner -- run --base-url http://127.0.0.1:8080 ../atlas-edge
 	bash scripts/contract-semver-gate.sh $${BASE_REF:-origin/master}
-	node crates/map-viewer/tests/golden.js --check

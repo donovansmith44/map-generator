@@ -12,3 +12,6 @@ Natural Earth source attribution and its public-domain declaration remain in
 quarantine catalogue records original source hashes and paths as negative
 admission evidence; it does not supply map witnesses or confer a licence on
 any excluded source. See [the quarantine decision](docs/errata/quarantine.md).
+# Test comparison
+
+The retained limb-geometry fixture uses [approx 0.5.1](https://github.com/brendanzab/approx), licensed under Apache-2.0, for floating-point comparison. Its upstream notices remain intact.

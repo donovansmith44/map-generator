@@ -308,8 +308,11 @@ dependencies = [
 name = "map-encoders"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "atlas-graph-types",
  "map-types",
+ "proptest",
+ "serde",
  "serde_json",
 ]
 

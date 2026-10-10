@@ -1259,3 +1259,6 @@ impl TransitionEncoder for JsonTransitionEncoder {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod test_support;

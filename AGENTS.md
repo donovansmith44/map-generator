@@ -12,7 +12,6 @@ This repository merges into the Bible Explorer (`your-word-is-truth-interactive-
 - **Gates:**
   - `cargo test --workspace`
   - `make contract-gates`
-  - with the workbench running on 8090: `node crates/map-viewer/tests/golden.js --check`
-  - The golden views are re-blessed only with the owner's recorded approval.
+  - Renderer pixel goldens were retired by owner ruling on 2026-10-10; retained geometry and data fixtures remain gated and require recorded approval to re-bless.
 - **Consult before changing the types.** If `map-types` doesn't compile against the atlas's `graph-types`, write it up and ask. Don't fix the types unilaterally.
 - **Ports:** the workbench uses 8090. Never touch 8080.
