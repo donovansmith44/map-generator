@@ -195,3 +195,141 @@ Claude owns repair and landing; re-review the next exact head on this same revie
 branch. Review changes are documentation/evidence only.
 No own lock, server or running job remains. Tracked application LOC delta is
 zero; all review additions are this report and its evidence.
+
+## Repair re-review — 2026-10-09
+
+**CHANGES REQUESTED** at `53591b5de91733c2e3706823480a7b3fe02980bb`.
+Repair range `62d5a951bfb8b090e27d0912cda6d3c124f16f24..53591b5de91733c2e3706823480a7b3fe02980bb`;
+whole item `6ac32bfbf67e26b9cfe94560806fda293db05801..53591b5de91733c2e3706823480a7b3fe02980bb`.
+MG-BASE exists, so no CX-M0 fallback. The author and review remote heads were
+fetched again before recording this verdict and remained unchanged. This
+appendix supersedes the earlier verdict's repair status, not its retained
+historical evidence. Only Important/Critical findings were considered.
+
+### Accepted repairs and C2 input
+
+F-279's duplicate-field information loss is closed at the tool's original load
+door: Serde admits explicit map-only document/row types directly, with duplicate
+semantic and metadata fields refused before conversion to a Value. Empty objects,
+explicit empty collections and the declared metadata field retain support.
+Both exact decoder probes from b319166 were rerun unchanged: each passes all
+32 cases, and the unambiguous control passes all 32 cases. The submitted decoder
+target's eight tests also pass, including generated field orders, all semantic
+fields, metadata duplication and strict kind-string representation.
+
+F-281's touched refusal and geometry interfaces are closed types. EntityKind
+owns Serde decoding and finite iteration; GeometryKind is derived from Feature;
+declare, load and check return typed refusals. Library errors are classified at
+one decode boundary and diagnostics rendered at the compiler boundary. Existing
+witness callers were migrated mechanically; no map-types/graph-types or contract
+change occurred. The original MG-LOCAL observation/resolution wiring is retained.
+The reserved producer bypasses remain X2/X5-owned, as recorded above.
+
+F-280's fixed runtime examples and duplicated kind-spelling list have been
+replaced by 33 maintained Proptest properties and type-derived enumeration.
+Generated duplicate declarations, immutable refused state, dangling live homes,
+chains, names colliding across distinct ids and complete kind conflicts are
+covered. Registry has no coordinate input, so proximity has no identity authority
+there. The new law/oracle defects below prevent acceptance of this test packet;
+these properties do not claim closure over X2/X5's source minting and emitters.
+
+Read the preserved author red evidence: exact decoder probes 1 pass/3 fail,
+generated decoder packet 2 pass/4 fail, strict kind representation 0 pass/1 fail,
+and missing DeclarationRefusal compile failure. The stored and decoded evidence
+digests match the author's manifest. These are inspected historical author runs,
+not independently repeated historical builds.
+
+The Canaan retirement is justified by Gen 10:19 plus X0's excluded-source
+quarantine, with its exact original alias/reason and alternatives retained in
+the report. It retires a drawing-dependent live declaration without inferring
+absence or inventing a successor. Both surviving declarations and their reasons
+are exactly unchanged: **2 active map aliases, 0 pinned atlas moves**. Replayed
+the existing MG-LOCAL inventory tool against the atlas export: roots
+`a1b93a3b049a1fe0` to `21d9db9b4c4a9e188a95aa442f7e6b59`, **1373 to 1358**,
+exactly the fifteen PLACE-1a removals, no added/unmatched key, every written
+survivor present. All fifteen report pairs match. Original decision provenance
+and reason-source revision remain available for C2's AbsorbedInto rows. The
+appendix explicitly supersedes the earlier three-active-alias inventory. C2's
+ten legacy era Map moves and successor serving remain C2-owned.
+
+### F-287 — Important: generated laws do not have sound, independent oracles
+
+`crates/map-compile/src/identity.rs:242–247` generates
+`"unification{token}"` as an allegedly unknown field. `token = "s"` produces the
+valid document `{"unifications":[]}`, which the property requires the decoder to
+refuse. The independent gate actually shrank to this input after 179 successful
+trials: actual `None`, expected `Some(InvalidDocument)`. This is a false negative
+law and a randomly failing core gate, not a decoder defect. The author's passing
+run does not prove the property true.
+
+The same generated-law ownership/category pass found
+`identity.rs:642–656`'s `expected_kind`: it repeats the complete production
+`implied_kind` match at lines 195–210, including the nested layer match.
+`generated_geometry_kinds_have_total_entity_kind_inference` computes its expected
+Entity using that copy. This restates the rule instead of documenting independent
+expected behavior; copying a mistaken branch into both matches preserves green.
+It fails PRINCIPLES 14b's D.R.Y. pass even though the closed type vocabulary itself
+is now sound.
+
+**Closure:** the X4 law owner partitions genuinely unknown fields from supported
+fields, retaining the saved `"s"` counterexample as a valid control. Use generated
+inputs with independent, complete expected entities for geometry/layer behavior;
+remove the copied decision match. Do not replace it with a call to the production
+inference function to compute its own expected answer. The type-derived universe
+must still fence every case, and each assertion keeps one fact/plain message.
+No production decoder rejection of the valid collection is requested.
+
+### F-288 — Important: assertions inside touched registry tests lack plain messages
+
+The mechanical GeometryKind migration changes seven test bodies in
+`crates/map-canon/src/tests.rs`. Eleven assertions in those touched bodies still
+lack their plain behavior message: lines **696, 697, 698, 702, 706, 707, 714,
+728, 735** in `the_registry_resolves_totally_in_one_hop_and_refuses_chains`, and
+**749, 750** in `slug_equality_alone_never_unifies_anything`. These are readily
+visible whole-body sites, not generated macro internals or untouched tests.
+Inherited assertions inside touched bodies retain the same bar as F-284's X0
+review and the main reviewer. The new property assertions and the mechanically
+changed compiler refusal assertions do have plain messages.
+
+**Closure:** the X4 test owner supplies a plain behavior message for every
+assertion in the touched test bodies, retaining one fact per assertion and the
+complete outcomes. Audit the whole touched bodies, not only added assertion
+lines. This does not authorize repair of unrelated test files or a second
+registry rule owner.
+
+### One independent gate and handoff
+
+Exactly one invocation, at the reviewed author head, with the original three
+review-only decoder diagnostics temporarily restored:
+
+```text
+. ~/.bible-atlas-env
+CARGO_TARGET_DIR=/home/donovan/mut/target nice -n 10 cargo test -j 4 -p map-canon -p map-compile --no-fail-fast
+```
+
+| Target | Passed | Failed |
+|---|---:|---:|
+| map-canon | 39 | 0 |
+| map-compile library | 36 | 1 |
+| submitted decoder target | 8 | 0 |
+| exact original reviewer probes and control | 3 | 0 |
+| Total | 86 | 1 |
+
+Exit **101**, solely the invalid unknown-field property in F-287; build 5.24s.
+No retry, mutation run, workspace gate or aggregate contract run. The foreign
+atlas heavy lock remains `codex-maps-land2 / MAPS-C12`; this was a permitted
+scoped run. Full workspace/contract gates and browser goldens remain unrun in
+this review. No fresh canon/workbench, excluded-source compile, golden blessing
+or port-8080 action was performed. Range whitespace and added-comment checks
+pass; no new application dead member was identified. Inherited dead code and
+producer closure remain with their recorded owners; integrated X4 completion
+still requires those coordinated producers and whole-map gates.
+
+The gate log and Proptest-generated regression seed are retained under
+`docs/reports/evidence/2026-10-09-maps-x4-rereview/`. Temporary diagnostics and the
+generated source-tree regression directory were removed after the run; the
+author source was clean before returning to the existing review branch tip.
+Review additions are report/evidence only, application LOC delta **0**. No own
+lock, server or running build remains. Repair through the sole X4 law/test owner,
+then re-review its next exact head on `lane/codex/MAPS-X4-review`; no side repair,
+source admission, contract change or landing was made.
