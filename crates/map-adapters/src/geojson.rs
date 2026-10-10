@@ -15,9 +15,6 @@ pub struct SourcePolygon {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceFeature {
     pub name: Option<String>,
-    /// The source's own honesty signal (BORDERPRECISION), carried
-    /// through to justifications verbatim — never reinterpreted.
-    pub precision: Option<i64>,
     pub polygons: Vec<SourcePolygon>,
 }
 
@@ -67,7 +64,6 @@ pub fn parse_features(text: &str) -> Result<Vec<SourceFeature>, ParseError> {
             .or_else(|| props.get("name"))
             .and_then(Value::as_str)
             .map(str::to_string);
-        let precision = props.get("BORDERPRECISION").and_then(Value::as_i64);
         let geom = f.get("geometry").ok_or(ParseError::BadShape("feature has no geometry"))?;
         let coords = geom.get("coordinates").ok_or(ParseError::BadShape("no coordinates"))?;
         let polygons = match geom.get("type").and_then(Value::as_str) {
@@ -80,7 +76,7 @@ pub fn parse_features(text: &str) -> Result<Vec<SourceFeature>, ParseError> {
                 .collect::<Result<Vec<_>, _>>()?,
             _ => return Err(ParseError::BadShape("geometry is not polygonal")),
         };
-        out.push(SourceFeature { name, precision, polygons });
+        out.push(SourceFeature { name, polygons });
     }
     Ok(out)
 }

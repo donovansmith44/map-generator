@@ -20,9 +20,13 @@ use map_types::{
     RegionClass, RegionGeom, RegionHistory, RegionId, RegionPart, UnitVec, WorldTimeline,
 };
 
-use crate::basemaps::IngestError;
 use crate::geojson::parse_features;
 use crate::quantize::clean_ring;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum WaterError {
+    Parse(String, crate::geojson::ParseError),
+}
 
 const HYDRO_PROVENANCE: &str = "natural-earth (public domain; modern coastline shapes)";
 
@@ -167,7 +171,7 @@ pub fn ingest_water(
     source: &SourceId,
     from: TimePoint,
     waters: &[WaterSource],
-) -> Result<WorldTimeline, IngestError> {
+) -> Result<WorldTimeline, WaterError> {
     let gen_1_9_10 = || {
         let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
@@ -188,7 +192,7 @@ pub fn ingest_water(
 
     for w in waters {
         let mut features = parse_features(&w.text)
-            .map_err(|e| IngestError::Parse(w.label_for_unnamed.to_string(), e))?;
+            .map_err(|e| WaterError::Parse(w.label_for_unnamed.to_string(), e))?;
         if w.skip_largest_feature {
             let vertex_count = |f: &crate::geojson::SourceFeature| -> usize {
                 f.polygons
@@ -209,7 +213,7 @@ pub fn ingest_water(
                 for ring in std::iter::once(&poly.outer).chain(&poly.holes) {
                     // Water keeps its full precision: no snap — the
                     // coastline IS the detail we came for.
-                    let Some(pts) = clean_ring(ring, None) else { continue };
+                    let Some(pts) = clean_ring(ring) else { continue };
                     let mut closed: Vec<UnitVec> =
                         pts.iter().map(|q| q.to_unit_vec()).collect();
                     closed.push(closed[0]);
@@ -274,7 +278,7 @@ pub fn ingest_ocean(
     source: &SourceId,
     from: TimePoint,
     land_text: &str,
-) -> Result<WorldTimeline, IngestError> {
+) -> Result<WorldTimeline, WaterError> {
     let gen_1_9_10 = || {
         let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
@@ -291,13 +295,13 @@ pub fn ingest_ocean(
 
     let mut tl = WorldTimeline::default();
     let features =
-        parse_features(land_text).map_err(|e| IngestError::Parse("land".to_string(), e))?;
+        parse_features(land_text).map_err(|e| WaterError::Parse("land".to_string(), e))?;
     let mut holes: Vec<Vec<(BoundaryId, Orientation)>> = Vec::new();
     for f in &features {
         for poly in &f.polygons {
             // Only the land's outer rings shape the sea; land's own
             // holes are inland matters.
-            let Some(pts) = clean_ring(&poly.outer, None) else { continue };
+            let Some(pts) = clean_ring(&poly.outer) else { continue };
             let mut closed: Vec<UnitVec> = pts.iter().map(|q| q.to_unit_vec()).collect();
             closed.push(closed[0]);
             let bid = BoundaryId({
