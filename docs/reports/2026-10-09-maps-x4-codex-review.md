@@ -333,3 +333,108 @@ Review additions are report/evidence only, application LOC delta **0**. No own
 lock, server or running build remains. Repair through the sole X4 law/test owner,
 then re-review its next exact head on `lane/codex/MAPS-X4-review`; no side repair,
 source admission, contract change or landing was made.
+
+## Second Codex final law/assertion re-review (2026-10-09)
+
+**APPROVED at `709122f90b4f63029ed2cfdc804e00826dccf968`. F-288 and F-289 CLOSED.**
+Reviewed repair `53591b5de91733c2e3706823480a7b3fe02980bb..709122f90b4f63029ed2cfdc804e00826dccf968`
+and whole item `6ac32bfbf67e26b9cfe94560806fda293db05801..709122f90b4f63029ed2cfdc804e00826dccf968`.
+MG-BASE exists, so no CX-M0 fallback was used. Read the X4 queue row, migration
+plan X4/C2 requirements, both previous review sections and the archived main
+A-EMPHASIS/A-WIRE-LOCAL-IDS review reports. No new Important/Critical finding;
+no new F-number. Next free at queue readback is F-295, left unallocated.
+
+### F-288/F-289 closure and red evidence
+
+The unknown-field property retains its original suffix family and excludes
+exactly `s`: that is the sole suffix producing supported `unifications`;
+`_comment` cannot be produced by this family. The named valid control admits
+that saved input and compares the entire registry with `Registry::default()`.
+The author retained the original seed's pre-repair red result, 0/1 at token `s`;
+all nine entries in its law-repair checksum list independently verify. This
+historical red run was inspected, not rerun. The independent final gate restored
+the same seed temporarily and passes both the repaired property and valid control.
+
+The copied `expected_kind` match is deleted. Explicit expectation data supplies
+complete expected Entities: Ways are Route, Points/Memories Place, Lines
+Waterbody, and Areas have the separately written Water/Relief/ScriptureClaims
+and Territory/Background/Journeys expectations. The oracle neither calls nor
+copies the production inference function. A separate law counts each pair
+against GeometryKind/LayerKind from their existing typed owners, requiring one
+example per pair; missing or overlapping cases fail. Every generated identity
+still exercises every typed geometry/layer combination.
+
+All eleven reported canon assertions now carry plain behavior messages, with
+observations unchanged. Replayed the maintained tree-sitter body audit over the
+whole item: **57 changed test bodies / 82 assertions / zero missing messages /
+zero tuple or Boolean-vector observations**. Read the changed bodies as well as
+the audit output; each assertion states one fact. The initial system-Python
+module lookup failed; the replay then reused already installed pinned grammar
+modules, without changing dependencies or adding a parser.
+
+### Whole-item identity, C2 and review passes
+
+F-279/F-281 decoder and interface closures remain accepted. F-280's maintained
+generated Registry/Identity/decoder laws now pass with sound expectations:
+duplicate aliases and semantic JSON fields refuse, rejected declarations preserve
+the complete Registry, dangling homes/chains report complete typed outcomes,
+and distinct generated identities with colliding names remain distinct. Registry
+accepts no coordinates, so proximity cannot remint an identity at this door.
+This guarantee does not recover source identities lost before the door.
+
+MG-LOCAL observation/resolution wiring is retained. Whole-item bridge edits are
+only the previously reviewed typed witness arguments; main edits render typed
+refusals. `compile.rs` is unchanged. The new repair itself changes tests and
+evidence only: production Identity bytes before cfg(test) and registry JSON
+bytes exactly match 53591b5, application LOC delta **0**, Rust test LOC **+64**.
+No map-types/graph-types, contract, source, geometry, fixture or version change.
+No application comment added and no new dead member identified. Source/data/report
+whitespace checks and owned identity rustfmt check pass; literal captured author
+logs retain trailing whitespace/EOF blanks, so a whole-evidence diff-check is
+not claimed clean.
+
+Independently replayed the existing MG-LOCAL inventory tool and matched the
+report table: **15/15 PLACE-1a AbsorbedInto pairs**, **1373 to 1358**, no added
+keys or unmatched removal, all survivors present. Both active alias rows and
+written reasons are unchanged; **2 map aliases / 0 pinned atlas moves**. The
+retired Canaan declaration, original justification, Scripture grounds and
+alternatives remain recorded. C2 has complete local keys, kinds, moves and
+original provenance to consume; its ten legacy era Map moves and served
+successors remain C2-owned.
+
+PRINCIPLES 14b accepts one declaration door, library-owned decoding and typed
+vocabulary, and independent declarative expectations rather than a duplicate
+inference rule. The 24a/24b pass accepts closure of the reported document,
+law-oracle and assertion categories. Existing bg_shadows/name suppression,
+timeline label-based minting and unobserved Route emitters retain the already
+recorded X2/X5 producer owner. Existing warnings/dead-code sites retain their
+recorded owners; this approval does not close or duplicate those findings.
+
+### Exactly one independent gate and handoff
+
+```text
+. ~/.bible-atlas-env
+CARGO_TARGET_DIR=/home/donovan/mut/target nice -n 10 cargo test -j 4 -p map-canon -p map-compile --no-fail-fast
+```
+
+**39 canon + 39 compiler library + 8 submitted decoder + 3 exact original
+reviewer probes = 89 passed / 0 failed**, exit 0, build 6.93 seconds. Original
+reviewer probes retain their 32-case duplicate-root/duplicate-minted refusals
+and valid control. The final run included the saved regression seed; no retry
+or second Cargo invocation. Only inherited CITY_NOTE, Area/PolityRow imports
+and Bundle.biggest warnings remain.
+
+The foreign heavy lock `e0ef86a1` belongs to codex-maps-land2 / MAPS-C12 and is
+not a mutation lock. This scoped gate used the shared target; no own lock was
+acquired. Workspace/aggregate contract and browser goldens remain unrun here:
+full gates require the foreign heavy reservation to end and integrated permitted
+producers/fresh canon/workbench. No excluded-source compile, golden blessing,
+mutation, port action or landing was performed.
+
+Evidence is retained with stored/decoded SHA-256 values under
+`docs/reports/evidence/2026-10-09-maps-x4-final-review/`. Temporary probes and
+regression directory were removed, and the exact reviewed source was clean
+before returning to the sole review branch. Review additions are report/evidence
+only. No own lock/server/build remains. Controller may integrate this approved
+X4 packet with its reserved producer work and run the outstanding whole-map gates;
+whole migration completion and rendered approval are not claimed.

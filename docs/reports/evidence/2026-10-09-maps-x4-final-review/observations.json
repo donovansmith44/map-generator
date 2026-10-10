@@ -1,0 +1,54 @@
+{
+  "head": "709122f90b4f63029ed2cfdc804e00826dccf968",
+  "base": "6ac32bfbf67e26b9cfe94560806fda293db05801",
+  "exports": {
+    "old_root": "a1b93a3b049a1fe0",
+    "current_root": "21d9db9b4c4a9e188a95aa442f7e6b59",
+    "old_place_count": 1373,
+    "current_place_count": 1358,
+    "added_place_keys": [],
+    "removed_place_keys": [
+      "ai_36",
+      "antioch_69",
+      "antipatris_70",
+      "appii_forum_427",
+      "bethlehem_218",
+      "bethsaida_231",
+      "calneh_269",
+      "ephraim_401",
+      "lydda_741",
+      "moreh_817",
+      "olivet_907",
+      "phenice_945",
+      "rehoboth-ir_992",
+      "solomons_portico_1109",
+      "ur_1189"
+    ]
+  },
+  "matched_place_pairs": 15,
+  "all_survivors_present": true,
+  "active_aliases": [
+    {
+      "canonical": "phoenicia",
+      "minted": "partition:phoenicia",
+      "kind": "Polity",
+      "reason": "The atlas polity 'phoenicia' and the partitioned scripture-claims face 'partition:phoenicia' are the same coast, witnessed twice."
+    },
+    {
+      "canonical": "basemap:judea",
+      "minted": "authored:judea",
+      "kind": "District",
+      "reason": "The basemap's Judea and the authored scripture survey of Judea are the same Roman district, witnessed twice."
+    }
+  ],
+  "retired_aliases": [
+    {
+      "canonical": "partition:canaan",
+      "minted": "basemap:canaan",
+      "kind": "Polity",
+      "reason": "The basemap's Canaan and the partitioned scripture frame's Canaan are the same land, witnessed twice; the frame stands the whole way from the dawn to the monarchy."
+    }
+  ],
+  "repair_production_identity_unchanged": true,
+  "repair_registry_bytes_unchanged": true
+}

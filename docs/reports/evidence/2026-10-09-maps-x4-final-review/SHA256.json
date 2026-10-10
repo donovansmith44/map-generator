@@ -1,0 +1,36 @@
+{
+  "assertion-audit.py": {
+    "stored_sha256": "4131ab98c31676fff84eeb58a74023c1acd2c9fed7c3af4e0533d773e4cb6616"
+  },
+  "assertions.json": {
+    "stored_sha256": "3e6dcb8dac45e7b9f81bbd28327fd297fb927f96eeb6b021e46cca61b10b8ca5"
+  },
+  "gate.log.gz": {
+    "stored_sha256": "2453e6035bbabd8833197f574ef571d1bb5c6934882c7af60d2302febd75a53e",
+    "decoded_sha256": "56332e5b9d670dda0047dfd0953f6db3efaa67ec146d52d15e7b9d695f7125cc"
+  },
+  "identity-regression.txt": {
+    "stored_sha256": "e88fcc9dd492a0b521f123bcd39da5bb0164a8dc7ab6dc5efb333c00facc41c0"
+  },
+  "inventory.json.gz": {
+    "stored_sha256": "2c9213c9185cbb046a88a2ee4901a0715db04d5aeec357383b657aecefcfd30b",
+    "decoded_sha256": "7e1ed09335c74745e823269d679958bdc378d7b46cc4cd8b9c4385d29941a9d5"
+  },
+  "observations.json": {
+    "stored_sha256": "969479aa8b63e64a40cd00a440af124e28b7a974695aac229f8645dcbabc954b"
+  },
+  "repair.diff.gz": {
+    "stored_sha256": "76e3cf58d2c22906a8649f00f473a3a87634232d6d898d2bebda040aadeba596",
+    "decoded_sha256": "7db02ed2ee9f1850f4f85f40e3c4d050024cb5efcd78faffb5efd24877395982"
+  },
+  "review_registry_decode.rs": {
+    "stored_sha256": "f6a275045344576f0fb255d27f58494cd1699d3015188291e150a2858fc9a8ee"
+  },
+  "verification.json": {
+    "stored_sha256": "5a5fa39d45760e22eebd9d7271b3ff6014c50e3bf59da3778fe80c67a3f228d0"
+  },
+  "whole-item.diff.gz": {
+    "stored_sha256": "51704b8504f2cc9e220cdfad4f79fc5c4ee64de09ca607103d15938042f3f9d1",
+    "decoded_sha256": "d648816e2f6ab9208dee3929cfb27ffd9981e39df35361c45b4cae9a5c01ffa8"
+  }
+}

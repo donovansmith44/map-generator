@@ -1,0 +1,26 @@
+{
+  "reviewed_head": "709122f90b4f63029ed2cfdc804e00826dccf968",
+  "repair_base": "53591b5de91733c2e3706823480a7b3fe02980bb",
+  "whole_item_base": "6ac32bfbf67e26b9cfe94560806fda293db05801",
+  "MG_BASE_exists": true,
+  "fallback_used": false,
+  "review_parent": "1f255c1045367f64b7da84e644b6f205337d9d2d",
+  "gate_invocations": 1,
+  "command": ". ~/.bible-atlas-env; CARGO_TARGET_DIR=/home/donovan/mut/target nice -n 10 cargo test -j 4 -p map-canon -p map-compile --no-fail-fast",
+  "results": {
+    "canon": 39,
+    "compile_library": 39,
+    "submitted_decoder": 8,
+    "original_reviewer_probes": 3,
+    "failures": 0,
+    "exit_code": 0
+  },
+  "foreign_heavy_lock": "e0ef86a182554543161f74e6469e61f01f7c7c3d",
+  "unrun": [
+    "workspace",
+    "make contract-gates",
+    "8090 rendered goldens",
+    "mutation"
+  ],
+  "initial_audit_missing_module": "System Python lacks tree_sitter; reused installed pinned tree-sitter modules from existing codex-f3-d62-review environment, without installation or dependency edits."
+}
