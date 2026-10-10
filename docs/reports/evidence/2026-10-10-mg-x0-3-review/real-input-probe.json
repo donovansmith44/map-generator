@@ -1,0 +1,14 @@
+[
+  {
+    "case": "permitted-decoys",
+    "exit": 1,
+    "stage": "vendor-read",
+    "produced_canon": false
+  },
+  {
+    "case": "reversed-split-excluded-with-decoys",
+    "exit": 1,
+    "stage": "excluded-input",
+    "produced_canon": false
+  }
+]

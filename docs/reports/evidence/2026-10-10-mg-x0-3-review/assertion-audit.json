@@ -1,0 +1,31 @@
+[
+  {
+    "revision": "030ff6c",
+    "test_functions_changed": 129,
+    "assertions": 147,
+    "missing_message": [],
+    "tuple_or_boolean_vector": [
+      {
+        "file": "crates/map-canon/src/tests.rs",
+        "function": "every_witness_names_the_terms_its_data_is_available_under",
+        "line": 902,
+        "assertion": "assert_eq!(\n        table,\n        vec![\n            (Witness::Atlas, vec![\"CC-BY-SA-4.0\"]),\n            (Witness::Authored, vec![\"CC0-1.0\"]),\n            (Witness::Basemap, vec![\"GPL-3.0-only\"]),\n            (Witness::NaturalEarth, vec![\"public-domain\"]),\n            (Witness::OpenBible, vec![\"CC-BY-4.0\"]),\n            (Witness::Osm, vec![\"ODbL-1.0\"]),\n            (Witness::Wikimedia, vec![\"CC-BY-SA-3.0\"]),\n            (\n                Witness::Partition,\n                vec![\"public-domain\", \"CC-BY-SA-4.0\"],\n            ),\n        ],\n        \"each origin's terms, whole: the vendored LICENSE file of each dataset\"\n    )",
+        "candidate": "tuple-vector"
+      },
+      {
+        "file": "crates/map-compile/src/tests.rs",
+        "function": "compile_laws::permitted_source_lines_preserve_narrative_leg_intervals",
+        "line": 295,
+        "assertion": "assert_eq!(\n            route.legs[0].span,\n            (ts(-2093), ts(-2092)),\n            \"depart when the first interval ends, arrive when the second starts\"\n        )",
+        "candidate": "tuple"
+      },
+      {
+        "file": "crates/map-compile/src/tests.rs",
+        "function": "compile_laws::permitted_source_lines_preserve_narrative_leg_intervals",
+        "line": 300,
+        "assertion": "assert_eq!(\n            route.legs[1].span,\n            (ts(-2091), ts(-2090)),\n            \"the second leg preserves its departure and arrival intervals\"\n        )",
+        "candidate": "tuple"
+      }
+    ]
+  }
+]
