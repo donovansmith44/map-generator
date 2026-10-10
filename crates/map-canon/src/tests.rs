@@ -693,25 +693,25 @@ fn the_registry_resolves_totally_in_one_hop_and_refuses_chains() {
                                       source: "data/authored/registry.json".into() }).unwrap();
 
     // TOTALITY: resolve never panics and never returns None.
-    assert_eq!(r.resolve(&e("partition:phoenicia")), &e("phoenicia"));
-    assert_eq!(r.resolve(&e("phoenicia")), &e("phoenicia"));
-    assert_eq!(r.resolve(&e("never-heard-of-it")), &e("never-heard-of-it"));
+    assert_eq!(r.resolve(&e("partition:phoenicia")), &e("phoenicia"), "a declared alias resolves to its written home");
+    assert_eq!(r.resolve(&e("phoenicia")), &e("phoenicia"), "a canonical identity resolves to itself");
+    assert_eq!(r.resolve(&e("never-heard-of-it")), &e("never-heard-of-it"), "an unknown identity resolves to itself");
 
     // IDEMPOTENCE: resolving a resolved id is a fixed point.
     let once = r.resolve(&e("partition:phoenicia")).clone();
-    assert_eq!(r.resolve(&once), &once);
+    assert_eq!(r.resolve(&once), &once, "resolving a written home again preserves that home");
 
     // The entity has BOTH witnesses and one name.
     let ent = r.get(&e("phoenicia")).expect("canonical entity");
-    assert_eq!(ent.names, vec!["Phoenicia".to_string()]);
-    assert_eq!(ent.witnesses.len(), 2);
+    assert_eq!(ent.names, vec!["Phoenicia".to_string()], "unified witnesses retain their one shared name");
+    assert_eq!(ent.witnesses.len(), 2, "unification retains both source witnesses");
     assert!(r.why(&e("partition:phoenicia")).is_some(), "the reason is recorded, not implied");
 
     // DISCRIMINATION: a chain is refused, by name.
     r.observe(e("third:phoenicia"), "Phoenicia", EntityKind::Polity, w("third:phoenicia", Witness::Basemap));
     r.declare(e("partition:phoenicia"), e("third:phoenicia"),
               Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
-    assert!(r.validate().iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })));
+    assert!(r.validate().iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })), "validation reports a declaration targeting another alias");
 
     // ONE HOP, not chased: third:phoenicia's alias is the RAW declared
     // target (partition:phoenicia) — resolve never follows a second hop
@@ -725,14 +725,14 @@ fn the_registry_resolves_totally_in_one_hop_and_refuses_chains() {
     // partition:phoenicia key.
     let phoenicia_entity = r.get(&e("phoenicia")).expect("still the one merged entity");
     assert_eq!(phoenicia_entity.witnesses.len(), 3, "third:phoenicia's witness landed here too");
-    assert!(phoenicia_entity.witnesses.iter().any(|wr| wr.minted_as == e("third:phoenicia")));
+    assert!(phoenicia_entity.witnesses.iter().any(|wr| wr.minted_as == e("third:phoenicia")), "the merged witness keeps its original minted identity");
     assert!(r.get(&e("partition:phoenicia")).is_none(), "no orphaned entity left at the vacated intermediate key");
 
     // DISCRIMINATION: a canonical id nobody minted is a typo, and is caught.
     let mut r2 = Registry::default();
     r2.observe(e("a"), "A", EntityKind::Polity, w("a", Witness::Atlas));
     r2.declare(e("typo"), e("a"), Unification::Declared { reason: "x".into(), source: "t".into() }).unwrap();
-    assert!(r2.validate().iter().any(|v| matches!(v, RegistryViolation::DanglingCanonical(_))));
+    assert!(r2.validate().iter().any(|v| matches!(v, RegistryViolation::DanglingCanonical(_))), "validation reports a declared home with no witness");
 }
 
 #[test]
@@ -746,8 +746,8 @@ fn slug_equality_alone_never_unifies_anything() {
     let w = |s: &str| WitnessRef { minted_as: e(s), witness: Witness::Atlas, layer: LayerKind::Territory, kind: GeometryKind::Area };
     r.observe(e("basemap:judea"), "Judea", EntityKind::Polity, w("basemap:judea"));
     r.observe(e("authored:judea"), "Judea", EntityKind::Polity, w("authored:judea"));
-    assert_ne!(r.resolve(&e("basemap:judea")), r.resolve(&e("authored:judea")));
-    assert_eq!(r.entities().count(), 2);
+    assert_ne!(r.resolve(&e("basemap:judea")), r.resolve(&e("authored:judea")), "a shared name does not unify distinct source identities");
+    assert_eq!(r.entities().count(), 2, "distinct undeclared source identities remain two entities");
 }
 
 /// Two witnesses of one declared-unified entity disagreeing about its

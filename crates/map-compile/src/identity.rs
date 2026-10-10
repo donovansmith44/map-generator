@@ -239,7 +239,12 @@ mod laws {
         }
 
         #[test]
-        fn generated_unknown_document_fields_are_refused(token in "[a-z0-9]{0,24}") {
+        fn generated_unknown_document_fields_are_refused(
+            token in "[a-z0-9]{0,24}".prop_filter(
+                "the supported collection field belongs to the valid controls",
+                |token| token != "s",
+            ),
+        ) {
             let text = json!({format!("unification{token}"):[]}).to_string();
             prop_assert_eq!(
                 load_registry(&text, "source").err(),
@@ -522,15 +527,17 @@ mod laws {
 
         #[test]
         fn generated_geometry_kinds_have_total_entity_kind_inference(token in "[a-z0-9]{1,24}") {
-            for layer in LayerKind::iter() {
-                for geometry in GeometryKind::iter() {
+            for (kind, geometries, layers) in geometry_identity_examples() {
+                for (layer, geometry) in layers.iter().flat_map(|layer| {
+                    geometries.iter().map(move |geometry| (*layer, *geometry))
+                }) {
                     let minted = EntityId(format!("id:{token}"));
                     let mut identity = load_registry("{}", "source").expect("empty registry");
                     identity.witness(&minted, "Witness", layer, Witness::Atlas, geometry);
                     let expected = map_canon::Entity {
                         id: minted.clone(),
                         names: vec!["Witness".into()],
-                        kind: expected_kind(layer, geometry),
+                        kind,
                         witnesses: vec![WitnessRef {
                             minted_as: minted.clone(),
                             witness: Witness::Atlas,
@@ -639,20 +646,77 @@ mod laws {
         format!("{{{}}}", ordered.join(","))
     }
 
-    fn expected_kind(layer: LayerKind, geometry: GeometryKind) -> EntityKind {
-        match geometry {
-            GeometryKind::Way => EntityKind::Route,
-            GeometryKind::Point | GeometryKind::Memory => EntityKind::Place,
-            GeometryKind::Line => EntityKind::Waterbody,
-            GeometryKind::Area => match layer {
-                LayerKind::Water => EntityKind::Waterbody,
-                LayerKind::Relief => EntityKind::Terrain,
-                LayerKind::ScriptureClaims => EntityKind::Allotment,
-                LayerKind::Territory | LayerKind::Background | LayerKind::Journeys => {
-                    EntityKind::Polity
-                }
-            },
+    #[test]
+    fn geometry_identity_examples_cover_every_typed_geometry_and_layer_once() {
+        let examples = geometry_identity_examples();
+        for layer in LayerKind::iter() {
+            for geometry in GeometryKind::iter() {
+                assert_eq!(
+                    examples.iter().map(|(_, geometries, layers)| {
+                        geometries.iter().filter(|kind| **kind == geometry).count()
+                            * layers.iter().filter(|kind| **kind == layer).count()
+                    }).sum::<usize>(),
+                    1,
+                    "every typed geometry and layer has exactly one independent identity example: {geometry:?} in {layer:?}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn the_saved_unknown_field_counterexample_is_a_valid_empty_collection() {
+        let token = "s";
+        let text = json!({format!("unification{token}"):[]}).to_string();
+        let identity = load_registry(&text, "source").expect("the saved input is a valid document");
+        assert_eq!(
+            identity.registry(),
+            &Registry::default(),
+            "the saved suffix s names the supported empty declaration collection"
+        );
+    }
+
+    fn geometry_identity_examples() -> Vec<(EntityKind, Vec<GeometryKind>, Vec<LayerKind>)> {
+        vec![
+            (
+                EntityKind::Route,
+                vec![GeometryKind::Way],
+                LayerKind::iter().collect(),
+            ),
+            (
+                EntityKind::Place,
+                vec![GeometryKind::Point, GeometryKind::Memory],
+                LayerKind::iter().collect(),
+            ),
+            (
+                EntityKind::Waterbody,
+                vec![GeometryKind::Line],
+                LayerKind::iter().collect(),
+            ),
+            (
+                EntityKind::Waterbody,
+                vec![GeometryKind::Area],
+                vec![LayerKind::Water],
+            ),
+            (
+                EntityKind::Terrain,
+                vec![GeometryKind::Area],
+                vec![LayerKind::Relief],
+            ),
+            (
+                EntityKind::Allotment,
+                vec![GeometryKind::Area],
+                vec![LayerKind::ScriptureClaims],
+            ),
+            (
+                EntityKind::Polity,
+                vec![GeometryKind::Area],
+                vec![
+                    LayerKind::Territory,
+                    LayerKind::Background,
+                    LayerKind::Journeys,
+                ],
+            ),
+        ]
     }
 
     #[test]

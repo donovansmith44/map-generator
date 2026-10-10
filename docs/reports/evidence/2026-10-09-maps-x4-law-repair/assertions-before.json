@@ -1,0 +1,74 @@
+{
+  "revision": "HEAD",
+  "test_functions_changed": 55,
+  "assertions": 80,
+  "missing_message": [
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 696,
+      "assertion": "assert_eq!(r.resolve(&e(\"partition:phoenicia\")), &e(\"phoenicia\"))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 697,
+      "assertion": "assert_eq!(r.resolve(&e(\"phoenicia\")), &e(\"phoenicia\"))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 698,
+      "assertion": "assert_eq!(r.resolve(&e(\"never-heard-of-it\")), &e(\"never-heard-of-it\"))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 702,
+      "assertion": "assert_eq!(r.resolve(&once), &once)"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 706,
+      "assertion": "assert_eq!(ent.names, vec![\"Phoenicia\".to_string()])"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 707,
+      "assertion": "assert_eq!(ent.witnesses.len(), 2)"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 714,
+      "assertion": "assert!(r.validate().iter().any(|v| matches!(v, RegistryViolation::ChainedUnification { .. })))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 728,
+      "assertion": "assert!(phoenicia_entity.witnesses.iter().any(|wr| wr.minted_as == e(\"third:phoenicia\")))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "the_registry_resolves_totally_in_one_hop_and_refuses_chains",
+      "line": 735,
+      "assertion": "assert!(r2.validate().iter().any(|v| matches!(v, RegistryViolation::DanglingCanonical(_))))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "slug_equality_alone_never_unifies_anything",
+      "line": 749,
+      "assertion": "assert_ne!(r.resolve(&e(\"basemap:judea\")), r.resolve(&e(\"authored:judea\")))"
+    },
+    {
+      "file": "crates/map-canon/src/tests.rs",
+      "function": "slug_equality_alone_never_unifies_anything",
+      "line": 750,
+      "assertion": "assert_eq!(r.entities().count(), 2)"
+    }
+  ],
+  "tuple_or_boolean_vector": []
+}

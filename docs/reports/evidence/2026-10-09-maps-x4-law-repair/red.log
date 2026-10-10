@@ -1,0 +1,74 @@
+   Compiling map-types v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-types)
+   Compiling map-adapters v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-adapters)
+warning: constant `CITY_NOTE` is never used
+   --> crates/map-adapters/src/surveys.rs:833:7
+    |
+833 | const CITY_NOTE: &str = city_note!();
+    |       ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling map-canon v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-canon)
+warning: `map-adapters` (lib) generated 1 warning
+   Compiling map-partition v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-partition)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-compile)
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: unused import: `PolityRow`
+   --> crates/map-compile/src/tests.rs:101:49
+    |
+101 |     use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    |                                                 ^^^^^^^^^
+
+warning: field `biggest` is never read
+   --> crates/map-compile/src/partition_bridge.rs:232:5
+    |
+230 | struct Bundle {
+    |        ------ field in this struct
+231 |     kind: FaceKind,
+232 |     biggest: f64,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `map-compile` (lib test) generated 4 warnings (run `cargo fix --lib -p map-compile --tests` to apply 3 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.56s
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_compile-ecda1d8dceb24fbe)
+
+running 1 test
+test identity::laws::generated_unknown_document_fields_are_refused ... FAILED
+
+failures:
+
+---- identity::laws::generated_unknown_document_fields_are_refused stdout ----
+
+thread 'identity::laws::generated_unknown_document_fields_are_refused' (1182552) panicked at crates/map-compile/src/identity.rs:221:5:
+Test failed: assertion failed: `(left == right)` 
+  left: `None`, 
+ right: `Some(InvalidDocument)`: misspelled fields cannot hide declarations at crates/map-compile/src/identity.rs:244.
+minimal failing input: token = "s"
+	successes: 0
+	local rejects: 0
+	global rejects: 0
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    identity::laws::generated_unknown_document_fields_are_refused
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 36 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p map-compile --lib`

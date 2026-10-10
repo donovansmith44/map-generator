@@ -1,0 +1,167 @@
+warning: constant `CITY_NOTE` is never used
+   --> crates/map-adapters/src/surveys.rs:833:7
+    |
+833 | const CITY_NOTE: &str = city_note!();
+    |       ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `map-adapters` (lib) generated 1 warning
+   Compiling map-canon v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-canon)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-w-x4c/crates/map-compile)
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: field `biggest` is never read
+   --> crates/map-compile/src/partition_bridge.rs:232:5
+    |
+230 | struct Bundle {
+    |        ------ field in this struct
+231 |     kind: FaceKind,
+232 |     biggest: f64,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `map-compile` (lib) generated 3 warnings (run `cargo fix --lib -p map-compile` to apply 2 suggestions)
+warning: unused import: `PolityRow`
+   --> crates/map-compile/src/tests.rs:101:49
+    |
+101 |     use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    |                                                 ^^^^^^^^^
+
+warning: `map-compile` (lib test) generated 4 warnings (3 duplicates) (run `cargo fix --lib -p map-compile --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.44s
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_canon-2e50187221566a5d)
+
+running 39 tests
+test persist::round_trip_tests::layer_name_and_layer_from_round_trip_every_kind ... ok
+test tests::borders_are_content_addressed_and_deduped ... ok
+test tests::census_diff_is_empty_against_itself_and_names_every_real_change ... ok
+test tests::dangling_borders_are_named ... ok
+test tests::every_witness_names_the_terms_its_data_is_available_under ... ok
+test tests::frame_edge_refuses_undeclared_endurance ... ok
+test tests::kind_conflict_between_two_witnesses_is_reported ... ok
+test tests::declare_refuses_self_unification_and_silent_redeclaration ... ok
+test tests::every_witness_says_whether_scripture_stands_behind_it ... ok
+test tests::canon_roundtrips_deterministically ... ok
+test tests::moments_are_timestamp_granular_and_derive_order ... ok
+test tests::one_world_state_per_instant ... ok
+test tests::observing_the_same_minted_id_twice_records_same_id ... ok
+test tests::presence_defaults_to_always_standing ... ok
+test tests::overlap_is_only_a_crime_within_territory_at_one_moment ... ok
+test tests::overlapping_territories_fail_loud ... ok
+test tests::presence_is_constant_within_every_derived_era ... ok
+test tests::presence_refuses_overlapping_standings ... ok
+test tests::presence_spans_are_right_open_and_derive_eras ... ok
+test tests::route_legs_carry_ordered_spans ... ok
+test tests::references_are_closed_or_named ... ok
+test tests::snapshots_are_sets_with_stable_identity ... ok
+test tests::the_census_is_total_and_sorted ... ok
+test tests::slivers_are_tolerated_deep_overlaps_are_not ... ok
+test tests::slug_equality_alone_never_unifies_anything ... ok
+test tests::the_registry_resolves_totally_in_one_hop_and_refuses_chains ... ok
+test tests::the_share_alike_origins_are_named_not_inferred ... ok
+test tests::validate_reports_every_violation_not_just_the_first ... ok
+test tests::touching_is_not_overlap_but_containment_is ... ok
+test tests::witnesses_sort_by_witness_then_layer_then_minted_id_and_names_sort_deduped ... ok
+test registry::laws::generated_self_unifications_have_a_typed_refusal ... ok
+test registry::laws::generated_blank_ids_never_change_the_registry ... ok
+test registry::laws::generated_conflicting_homes_preserve_the_entire_registry ... ok
+test registry::laws::generated_missing_provenance_never_changes_the_registry ... ok
+test registry::laws::generated_alias_witnesses_cannot_prove_a_live_home ... ok
+test registry::laws::generated_duplicate_aliases_preserve_the_entire_registry ... ok
+test registry::laws::generated_identities_stay_distinct_when_names_collide ... ok
+test registry::laws::generated_witness_kind_conflicts_keep_both_votes ... ok
+test registry::laws::generated_aliases_share_one_written_live_home ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_compile-ecda1d8dceb24fbe)
+
+running 39 tests
+test identity::laws::generated_invalid_syntax_has_a_typed_refusal ... ok
+test identity::laws::generated_incomplete_rows_are_refused ... ok
+test identity::laws::geometry_identity_examples_cover_every_typed_geometry_and_layer_once ... ok
+test identity::laws::generated_unknown_document_fields_are_refused ... ok
+test identity::laws::the_authored_registry_keeps_every_active_alias_and_reason ... ok
+test identity::laws::the_saved_unknown_field_counterexample_is_a_valid_empty_collection ... ok
+test tests::a_cohort_enters_time_at_its_moment ... ok
+test tests::bridge_laws::old_regions_become_layer_areas_with_moments ... ok
+test tests::compile_laws::narratives_become_routes_with_dated_legs ... ok
+test tests::compile_laws::polity_eras_become_territory_moments ... ok
+test tests::compile_laws::unresolvable_places_fail_loud ... ok
+test tests::eras_landmarks_landmask_parse ... ok
+test tests::events_parse_with_time_places_verses ... ok
+test tests::narratives_parse_with_ordered_legs ... ok
+test tests::one_entity_per_era_however_many_witnesses_claimed_it ... ok
+test identity::laws::generated_geometry_kinds_have_total_entity_kind_inference ... ok
+test identity::laws::generated_metadata_requires_a_declaration_collection ... ok
+test tests::reconcile_laws::authored_routes_require_reconciliation_rows ... ok
+test tests::reconcile_laws::supersessions_must_resolve ... ok
+test tests::polities_parse_typed_and_sane ... ok
+test tests::shape_drift_is_a_named_error ... ok
+test tests::the_compile_refuses_a_registry_no_witness_backs ... ok
+test tests::the_registry_file_declares_every_unification_and_nothing_else ... ok
+test identity::laws::generated_truncated_documents_have_a_typed_refusal ... ok
+test tests::waiver_laws::territory_waivers_parse_and_match ... ok
+test identity::laws::generated_non_object_documents_are_refused ... ok
+test tests::vendor_writes_are_deterministic_and_pinned ... ok
+test identity::laws::generated_blank_reasons_or_sources_are_refused ... ok
+test identity::laws::generated_empty_collections_and_metadata_are_supported ... ok
+test identity::laws::generated_blank_identity_fields_are_refused ... ok
+test identity::laws::generated_alias_duplicates_have_a_typed_refusal ... ok
+test identity::laws::generated_non_array_collections_are_refused ... ok
+test identity::laws::generated_chains_are_refused_in_every_declaration_order ... ok
+test identity::laws::generated_non_string_row_fields_are_refused ... ok
+test identity::laws::generated_unknown_kind_spellings_are_refused ... ok
+test identity::laws::the_pinned_atlas_identity_inventory_has_no_registry_moves ... ok
+test identity::laws::generated_alias_sets_preserve_kinds_ids_and_provenance ... ok
+test identity::laws::generated_shared_homes_refuse_every_conflicting_kind ... ok
+test tests::plate_partition_face_census ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.09s
+
+     Running unittests src/main.rs (/home/donovan/mut/target/debug/deps/map_compile-436450c7f12fb211)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/registry_decode.rs (/home/donovan/mut/target/debug/deps/registry_decode-e60de95b755c7dcd)
+
+running 8 tests
+test quarantined_canaan_frame_cannot_be_a_required_live_home ... ok
+test entity_kinds_require_their_authored_string_spelling ... ok
+test duplicate_collection_fields_cannot_erase_authored_identity_decisions ... ok
+test duplicate_row_fields_cannot_replace_an_authored_source_identity ... ok
+test an_unambiguous_declaration_keeps_its_authored_source_identity ... ok
+test declaration_rows_must_be_objects ... ok
+test every_semantic_row_field_refuses_duplicate_values ... ok
+test duplicate_metadata_fields_are_refused ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests map_canon
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests map_compile
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

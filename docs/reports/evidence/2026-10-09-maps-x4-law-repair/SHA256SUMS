@@ -1,0 +1,9 @@
+4131ab98c31676fff84eeb58a74023c1acd2c9fed7c3af4e0533d773e4cb6616  docs/reports/evidence/2026-10-09-maps-x4-law-repair/assertion-audit.py
+ef4f9e57be3e9d7dc24cfba60f1755723486fc7afe18651d8b8bc625dbdd1683  docs/reports/evidence/2026-10-09-maps-x4-law-repair/assertions-after.json
+95bdc85013ce7e77150fc2ad7a8e06a230cb0ef2c6e65c33c5500d6890daedc4  docs/reports/evidence/2026-10-09-maps-x4-law-repair/assertions-before.json
+312e3a8d062930fb66b1a0f6a43974e0983cae81509f912ad4f33ed40fcbb338  docs/reports/evidence/2026-10-09-maps-x4-law-repair/audit-versions.txt
+e0731623fe9f1647ad6619d55ec9683424f4b588fcb60858a35c590130a0a2e8  docs/reports/evidence/2026-10-09-maps-x4-law-repair/gate.log
+8d193a1c61cb2e1294d1aca085829eaddce796609b73a74000119d11c1c9b333  docs/reports/evidence/2026-10-09-maps-x4-law-repair/red.log
+e88fcc9dd492a0b521f123bcd39da5bb0164a8dc7ab6dc5efb333c00facc41c0  docs/reports/evidence/2026-10-09-maps-x4-law-repair/reviewer-regression.txt
+73a2822f93e4aeed3c6e12af39575d346f4e082d13d2c75eebcca17ec5f3a578  crates/map-compile/src/identity.rs
+078289b0da1fc80e6bc46a8edb4d24b995a92e94f9cec9da3fa542f7a405e71d  crates/map-canon/src/tests.rs
