@@ -1,0 +1,10 @@
+territory: 25 polity eras
+journeys: 13 atlas narratives
+journeys: +9 authored routes kept
+Natural Earth river input: 1455 source records; unlocated courses: ["Loire (NE 178000)"]
+water: Natural Earth; river courses and recorded gaps: docs/errata/rivers.md
+partition: 314 faces, 5 river paths, 4π residual 0.00e0 sr;          26 cities stand, 1 remembered beneath the waters (Sodom)
+relief: bridged
+frame-edge law: ScriptureClaims clean at the frame's last year
+warnings: 5 acknowledged territorial conflicts (see report)
+map-compile FAILED: registry: canonical id 'basemap:judea' was never minted by any witness; canonical id 'partition:canaan' was never minted by any witness

@@ -1,0 +1,36 @@
+{
+  "compiler_sha256": "0d8320d1eb61381b876d3fc9c40a9edccb1fab020d569bd108d8da352d07dd8b",
+  "source": "cf3c348:data/historical-basemaps/world_bc1500.geojson",
+  "feature": 13,
+  "source_ring_vertices": 35,
+  "partial_vertices": 3,
+  "outcomes": [
+    {
+      "case": "full GPL feature",
+      "expected_content_refusal": true,
+      "actual_content_refusal": true,
+      "expectation_met": true,
+      "exit_code": 1,
+      "output_directory_exists": false,
+      "stderr": "map-compile FAILED: excluded input: Excluded([ExcludedGeometry { source: HistoricalBasemaps, geometry: \"Egypt/12/raw\", origin: \"data/historical-basemaps/world_bc1000.geojson\", source_sha256: \"c3ba4242712ee55c99669f3f0493def883b1424ee6b5666840a49b30b71bcecc\", [fingerprint set omitted]"
+    },
+    {
+      "case": "three consecutive GPL vertices",
+      "expected_content_refusal": true,
+      "actual_content_refusal": false,
+      "expectation_met": false,
+      "exit_code": 1,
+      "output_directory_exists": false,
+      "stderr": "map-compile FAILED: read polities.json: No such file or directory (os error 2) (run refresh first)\n"
+    },
+    {
+      "case": "permitted geometry",
+      "expected_content_refusal": false,
+      "actual_content_refusal": false,
+      "expectation_met": true,
+      "exit_code": 1,
+      "output_directory_exists": false,
+      "stderr": "map-compile FAILED: read polities.json: No such file or directory (os error 2) (run refresh first)\n"
+    }
+  ]
+}

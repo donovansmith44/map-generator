@@ -1,0 +1,43 @@
+   Compiling map-types v0.1.0 (/home/donovan/w/CX2-w-x2/crates/map-types)
+   Compiling map-partition v0.1.0 (/home/donovan/w/CX2-w-x2/crates/map-partition)
+   Compiling map-canon v0.1.0 (/home/donovan/w/CX2-w-x2/crates/map-canon)
+   Compiling map-adapters v0.1.0 (/home/donovan/w/CX2-w-x2/crates/map-adapters)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-w-x2/crates/map-compile)
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: `map-compile` (lib) generated 2 warnings (run `cargo fix --lib -p map-compile` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.08s
+     Running tests/basemap_lineage.rs (/home/donovan/mut/target/debug/deps/basemap_lineage-f05e10058b349c3c)
+
+running 2 tests
+
+thread 'the_gpl_vendor_and_ingest_are_removed' (1177466) panicked at crates/map-compile/tests/basemap_lineage.rs:28:9:
+the excluded source and its ingest are removed: data/historical-basemaps
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test the_gpl_vendor_and_ingest_are_removed ... FAILED
+
+thread 'every_gpl_epoch_is_refused_by_content_before_admission' (1177465) panicked at crates/map-compile/tests/basemap_lineage.rs:17:9:
+every original GPL epoch is refused before filtering, snapping or renaming: world_bc4000
+test every_gpl_epoch_is_refused_by_content_before_admission ... FAILED
+
+failures:
+
+failures:
+    every_gpl_epoch_is_refused_by_content_before_admission
+    the_gpl_vendor_and_ingest_are_removed
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+error: test failed, to rerun pass `-p map-compile --test basemap_lineage`

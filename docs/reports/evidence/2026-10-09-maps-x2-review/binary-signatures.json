@@ -1,0 +1,16 @@
+[
+  {
+    "path": "/home/donovan/mut/target/debug/map-compile",
+    "sha256": "b2bef6b6970c17fdb2284c0201698f3c9b6d3282b27358fd26be72880e15d47c",
+    "modified": 1791594358.716947,
+    "x2_report_string": false,
+    "background_ingest_string": true
+  },
+  {
+    "path": "/tmp/maps-x2-current-build.sgNs2P/map-compile",
+    "sha256": "0d8320d1eb61381b876d3fc9c40a9edccb1fab020d569bd108d8da352d07dd8b",
+    "modified": 1791593850.728139,
+    "x2_report_string": true,
+    "background_ingest_string": true
+  }
+]

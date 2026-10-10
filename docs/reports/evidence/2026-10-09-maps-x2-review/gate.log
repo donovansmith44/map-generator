@@ -1,0 +1,248 @@
+   Compiling map-types v0.1.0 (/home/donovan/w/CX2-rev-x2/crates/map-types)
+   Compiling map-canon v0.1.0 (/home/donovan/w/CX2-rev-x2/crates/map-canon)
+   Compiling map-adapters v0.1.0 (/home/donovan/w/CX2-rev-x2/crates/map-adapters)
+   Compiling map-partition v0.1.0 (/home/donovan/w/CX2-rev-x2/crates/map-partition)
+   Compiling map-compile v0.1.0 (/home/donovan/w/CX2-rev-x2/crates/map-compile)
+warning: unused import: `Area`
+ --> crates/map-compile/src/compile.rs:9:5
+  |
+9 |     Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+  |     ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `PolityRow`
+  --> crates/map-compile/src/compile.rs:14:45
+   |
+14 | use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+   |                                             ^^^^^^^^^
+
+warning: unused import: `PolityRow`
+   --> crates/map-compile/src/tests.rs:101:49
+    |
+101 |     use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    |                                                 ^^^^^^^^^
+
+warning: `map-compile` (lib) generated 2 warnings (run `cargo fix --lib -p map-compile` to apply 2 suggestions)
+warning: `map-compile` (lib test) generated 3 warnings (2 duplicates) (run `cargo fix --lib -p map-compile --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.60s
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_adapters-b6db3853f3707421)
+
+running 14 tests
+test tests::ring_cleaning_normalizes ... ok
+test tests::malformed_river_courses_refuse_without_dropping_vertices ... ok
+test tests::river_build_inputs_exclude_osm ... ok
+test tests::generated_river_courses_preserve_source_order_and_unknown_names ... ok
+test tests::promised_land_survey_is_lawful_alone_and_merged ... ok
+test tests::journeys_cover_the_whole_bible ... ok
+test tests::routes_wear_the_way_character ... ok
+test tests::terrain_contours_close_and_ingest_lawfully ... ok
+test tests::waters_are_explorable_regions ... ok
+test tests::chronology_audit_reports_disagreements ... ok
+test tests::atlas_exports_bind_the_scripture_set ... ok
+test tests::golden_named_rivers_have_courses_or_recorded_gaps ... ok
+test tests::terrain_real_grid_smoke ... ok
+test tests::river_adapter_preserves_every_natural_earth_vertex ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_canon-37f3fad146451850)
+
+running 30 tests
+test persist::round_trip_tests::layer_name_and_layer_from_round_trip_every_kind ... ok
+test tests::borders_are_content_addressed_and_deduped ... ok
+test tests::census_diff_is_empty_against_itself_and_names_every_real_change ... ok
+test tests::declare_refuses_self_unification_and_silent_redeclaration ... ok
+test tests::every_witness_names_the_terms_its_data_is_available_under ... ok
+test tests::dangling_borders_are_named ... ok
+test tests::canon_roundtrips_deterministically ... ok
+test tests::every_witness_says_whether_scripture_stands_behind_it ... ok
+test tests::frame_edge_refuses_undeclared_endurance ... ok
+test tests::kind_conflict_between_two_witnesses_is_reported ... ok
+test tests::moments_are_timestamp_granular_and_derive_order ... ok
+test tests::observing_the_same_minted_id_twice_records_same_id ... ok
+test tests::one_world_state_per_instant ... ok
+test tests::overlap_is_only_a_crime_within_territory_at_one_moment ... ok
+test tests::presence_defaults_to_always_standing ... ok
+test tests::overlapping_territories_fail_loud ... ok
+test tests::presence_is_constant_within_every_derived_era ... ok
+test tests::presence_refuses_overlapping_standings ... ok
+test tests::presence_spans_are_right_open_and_derive_eras ... ok
+test tests::references_are_closed_or_named ... ok
+test tests::route_legs_carry_ordered_spans ... ok
+test tests::slug_equality_alone_never_unifies_anything ... ok
+test tests::slivers_are_tolerated_deep_overlaps_are_not ... ok
+test tests::snapshots_are_sets_with_stable_identity ... ok
+test tests::the_census_is_total_and_sorted ... ok
+test tests::the_registry_resolves_totally_in_one_hop_and_refuses_chains ... ok
+test tests::the_share_alike_origins_are_named_not_inferred ... ok
+test tests::validate_reports_every_violation_not_just_the_first ... ok
+test tests::touching_is_not_overlap_but_containment_is ... ok
+test tests::witnesses_sort_by_witness_then_layer_then_minted_id_and_names_sort_deduped ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/donovan/mut/target/debug/deps/map_compile-4ea3c9b8927de82a)
+
+running 18 tests
+test tests::a_cohort_enters_time_at_its_moment ... ok
+test tests::events_parse_with_time_places_verses ... ok
+test tests::compile_laws::polity_eras_become_territory_moments ... ok
+test tests::one_entity_per_era_however_many_witnesses_claimed_it ... ok
+test tests::eras_landmarks_landmask_parse ... ok
+test tests::compile_laws::unresolvable_places_fail_loud ... ok
+test tests::reconcile_laws::authored_routes_require_reconciliation_rows ... ok
+test tests::the_compile_refuses_a_registry_no_witness_backs ... ok
+test tests::waiver_laws::territory_waivers_parse_and_match ... ok
+test tests::the_registry_file_declares_every_unification_and_nothing_else ... ok
+test tests::narratives_parse_with_ordered_legs ... ok
+test tests::shape_drift_is_a_named_error ... ok
+test tests::reconcile_laws::supersessions_must_resolve ... ok
+test tests::polities_parse_typed_and_sane ... ok
+test tests::vendor_writes_are_deterministic_and_pinned ... ok
+test tests::compile_laws::narratives_become_routes_with_dated_legs ... ok
+test tests::bridge_laws::old_regions_become_layer_areas_with_moments ... ok
+test tests::physical_partition_face_census ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.10s
+
+     Running unittests src/main.rs (/home/donovan/mut/target/debug/deps/map_compile-ddf6669ec9181b05)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/basemap_lineage.rs (/home/donovan/mut/target/debug/deps/basemap_lineage-967f32a6d8b3e299)
+
+running 7 tests
+test the_gpl_vendor_and_ingest_are_removed ... ok
+test the_lineage_catalogue_covers_every_source_feature_and_recorded_transform ... ok
+test renamed_gpl_input_is_refused_by_the_real_build_before_any_output ... FAILED
+test gpl_content_split_across_renamed_input_files_is_refused ... ok
+test permitted_geometry_keeps_its_identity_independently_of_excluded_names ... ok
+test gpl_descendants_keep_their_refusal_through_composed_inputs_and_outputs ... ok
+test every_gpl_feature_and_recorded_transform_is_refused_before_admission ... ok
+
+failures:
+
+---- renamed_gpl_input_is_refused_by_the_real_build_before_any_output stdout ----
+
+thread 'renamed_gpl_input_is_refused_by_the_real_build_before_any_output' (1217156) panicked at crates/map-compile/tests/basemap_lineage.rs:82:5:
+assertion `left == right` failed: the real build reports the complete excluded lineage before reading unrelated sources
+  left: "map-compile FAILED: read polities.json: No such file or directory (os error 2) (run refresh first)\n"
+ right: "map-compile FAILED: excluded input: Excluded([ExcludedGeometry { source: HistoricalBasemaps, geometry: \"unnamed/0/raw\", origin: \"data/historical-basemaps/world_100.geojson\", source_sha256: \"20265dc221c92f070f88d0a2ab6459b6942a86c2b865524131c9a1f546e03e86\", vertices: {Fingerprint(\"1378b5300ccd3d4b4c563eee2f698e216f757a3d00e000ab16628cbe9034c785\"), Fingerprint(\"253c5278ecec741e87fe2a023aaba3c8cbba589bd26eaaa25f48f57264e80c35\"), Fingerprint(\"29f4389bd6c7c37b0f3913fa462e5b629b456d47e24ca941829ac9a52596915e\"), Fingerprint(\"59734fdaca8380862f2860a98b639dc967cdade8d2283d4e2fee2ab6908f80b7\"), Fingerprint(\"61e20e45cad42d4df2f1e7c2232c48ac58e55d95a35d8e615b47cb33af8322ba\"), Fingerprint(\"7372712d4ea53c9d886b4e0b75e60f17d2d224b24985cc43067fd218a6afdeb8\"), Fingerprint(\"814b15bb97293cad93c60f3b970e1b224c6ee9ecf93b9064f9262daa0d58c19f\"), Fingerprint(\"9ea06253af66ed4862968d850f1f3829e0e907e73fb15451779592fc52bb8e99\"), Fingerprint(\"a4e582c24f8ebfe8e45a53545af4bc66d286ca06733c152428d391050166a247\"), Fingerprint(\"a9f3bc8e5976bfe3046a2028857b3237e6d640b27d98271c8f20e9720f0412b9\"), Fingerprint(\"c144c17472f35dfaf19fb47196588aed4b570ca0b7876568b31ade09ab393656\"), Fingerprint(\"cc40c8e3545319f62b1483b52b7bff1bc5db02587165302c50ff158053fcc3f5\"), Fingerprint(\"f025f85ad86d6449506f31eeca9507faefe1d9850ef259e90d3620fd06eeaedf\")} }, ExcludedGeometry { source: HistoricalBasemaps, geometry: \"unnamed/0/raw\", origin: \"data/historical-basemaps/world_bc1.geojson\", source_sha256: \"0099bac4e9d74dce953c63802252d3021d7cc1ec54bc9ae2ba48e93c6c442e9a\", vertices: {Fingerprint(\"1378b5300ccd3d4b4c563eee2f698e216f757a3d00e000ab16628cbe9034c785\"), Fingerprint(\"253c5278ecec741e87fe2a023aaba3c8cbba589bd26eaaa25f48f57264e80c35\"), Fingerprint(\"29f4389bd6c7c37b0f3913fa462e5b629b456d47e24ca941829ac9a52596915e\"), Fingerprint(\"59734fdaca8380862f2860a98b639dc967cdade8d2283d4e2fee2ab6908f80b7\"), Fingerprint(\"61e20e45cad42d4df2f1e7c2232c48ac58e55d95a35d8e615b47cb33af8322ba\"), Fingerprint(\"7372712d4ea53c9d886b4e0b75e60f17d2d224b24985cc43067fd218a6afdeb8\"), Fingerprint(\"814b15bb97293cad93c60f3b970e1b224c6ee9ecf93b9064f9262daa0d58c19f\"), Fingerprint(\"9ea06253af66ed4862968d850f1f3829e0e907e73fb15451779592fc52bb8e99\"), Fingerprint(\"a4e582c24f8ebfe8e45a53545af4bc66d286ca06733c152428d391050166a247\"), Fingerprint(\"a9f3bc8e5976bfe3046a2028857b3237e6d640b27d98271c8f20e9720f0412b9\"), Fingerprint(\"c144c17472f35dfaf19fb47196588aed4b570ca0b7876568b31ade09ab393656\"), Fingerprint(\"cc40c8e3545319f62b1483b52b7bff1bc5db02587165302c50ff158053fcc3f5\"), Fingerprint(\"f025f85ad86d6449506f31eeca9507faefe1d9850ef259e90d3620fd06eeaedf\")} }])\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    renamed_gpl_input_is_refused_by_the_real_build_before_any_output
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.28s
+
+error: test failed, to rerun pass `-p map-compile --test basemap_lineage`
+     Running tests/excluded_bytes.rs (/home/donovan/mut/target/debug/deps/excluded_bytes-3e22c318b78b27c3)
+
+running 1 test
+test excluded_lineage_has_no_compiled_plate_or_vendored_descendants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/excluded_lineage.rs (/home/donovan/mut/target/debug/deps/excluded_lineage-aa35236ee4395e8b)
+
+running 3 tests
+test excluded_lineage_is_removed_from_partition_provenance ... ok
+test excluded_lineage_never_enters_the_scripture_timeline ... ok
+test excluded_lineage_never_enters_the_partition ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.30s
+
+     Running tests/exclusion_content.rs (/home/donovan/mut/target/debug/deps/exclusion_content-ff8fd93a3425cf14)
+
+running 21 tests
+test lineage_rounding_boundaries_and_longitude_seams_preserve_nearby_keys ... ok
+test restoration_probe_child ... ignored
+test nonconsecutive_excluded_vertices_are_admitted_under_the_run_ruling ... ok
+test generated_partition_keys_preserve_the_existing_quantization ... ok
+test the_partition_point_key_preserves_the_existing_byte_identity ... ok
+test generated_random_ring_sub_tolerance_perturbations_are_refused ... ok
+test generated_random_ring_subsets_are_refused ... ok
+test generated_random_ring_rotations_are_refused ... ok
+test generated_random_ring_single_vertex_deletions_are_refused ... ok
+test generated_random_ring_reversals_are_refused ... ok
+test independently_authored_random_geometry_is_admitted ... ok
+test unrelated_sequences_do_not_make_an_excluded_run ... ok
+test restored_judah_is_refused_through_another_polity_input ... ok
+test judah_with_one_unique_vertex_removed_is_refused_as_a_polity ... ok
+test permitted_controls_survive_with_biblical_names ... ok
+test catalogue_producer_and_compiler_share_generated_rounding ... ok
+test excluded_content_in_multiple_input_files_is_refused ... ok
+test restored_med_input_is_refused ... ok
+test every_historical_sequence_is_bound_to_its_ordered_content ... ok
+test historical_clips_rotations_reversals_and_deletions_are_refused ... ok
+test permitted_replacements_survive_the_real_input_door ... ok
+
+test result: ok. 20 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 16.67s
+
+     Running tests/review_x2_partial_lineage.rs (/home/donovan/mut/target/debug/deps/review_x2_partial_lineage-3e18a9a9c5c0e018)
+
+running 5 tests
+test a_complete_gpl_feature_is_refused ... FAILED
+test three_consecutive_gpl_vertices_are_refused_as_compiled_output ... FAILED
+test three_consecutive_gpl_vertices_are_refused_as_renamed_input ... FAILED
+test a_renamed_partial_gpl_polity_is_refused_by_actual_witness_gathering ... FAILED
+test independently_permitted_points_are_admitted ... ok
+
+failures:
+
+---- a_complete_gpl_feature_is_refused stdout ----
+
+thread 'a_complete_gpl_feature_is_refused' (1219888) panicked at crates/map-compile/tests/review_x2_partial_lineage.rs:73:66:
+latitude exists
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- three_consecutive_gpl_vertices_are_refused_as_compiled_output stdout ----
+
+thread 'three_consecutive_gpl_vertices_are_refused_as_compiled_output' (1219891) panicked at crates/map-compile/tests/review_x2_partial_lineage.rs:73:66:
+latitude exists
+
+---- three_consecutive_gpl_vertices_are_refused_as_renamed_input stdout ----
+
+thread 'three_consecutive_gpl_vertices_are_refused_as_renamed_input' (1219894) panicked at crates/map-compile/tests/review_x2_partial_lineage.rs:73:66:
+latitude exists
+
+---- a_renamed_partial_gpl_polity_is_refused_by_actual_witness_gathering stdout ----
+
+thread 'a_renamed_partial_gpl_polity_is_refused_by_actual_witness_gathering' (1219889) panicked at crates/map-compile/tests/review_x2_partial_lineage.rs:73:66:
+latitude exists
+
+
+failures:
+    a_complete_gpl_feature_is_refused
+    a_renamed_partial_gpl_polity_is_refused_by_actual_witness_gathering
+    three_consecutive_gpl_vertices_are_refused_as_compiled_output
+    three_consecutive_gpl_vertices_are_refused_as_renamed_input
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
+error: test failed, to rerun pass `-p map-compile --test review_x2_partial_lineage`
+   Doc-tests map_adapters
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests map_canon
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests map_compile
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 2 targets failed:
+    `-p map-compile --test basemap_lineage`
+    `-p map-compile --test review_x2_partial_lineage`
