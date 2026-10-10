@@ -1,6 +1,6 @@
 # MAPS-X0 second Codex review
 
-**CHANGES REQUESTED** — Important F-282 and F-283. Reviewed exact range
+**CHANGES REQUESTED** — Important F-283 and F-284. Reviewed exact range
 `origin/lane/claude/MG-BASE` **6ac32bfbf67e26b9cfe94560806fda293db05801**
 through **9cb7e9aa7ec8f5c6d11e8c710835f69c98a41861**. MG-BASE exists;
 the CX-M0 fallback was not used. The report branch
@@ -40,7 +40,7 @@ ODbL or GPL pipeline. No KJV, contract/version, golden fixture, renderer or
 map-types change is present. No added Rust application or test comment line
 was found. Retiring assertions requiring excluded shapes is appropriate.
 
-## F-282 — Important: the negative lineage law is an ID/path inventory
+## F-283 — Important: the negative lineage law is an ID/path inventory
 
 `crates/map-compile/tests/excluded_lineage.rs:9–59` asserts a manually declared
 source-family constant, gathers with **no polity inputs**, then compares a
@@ -76,7 +76,7 @@ shared representation with X5/C4 and consult before map-types/graph-types
 changes; do not introduce a competing licensing rule or weaken the live-home
 registry check. C4 remains the owner of the general permissive licensing law.
 
-## F-283 — Important: touched tests retain ten message-free assertions
+## F-284 — Important: touched tests retain ten message-free assertions
 
 The maintained tree-sitter Rust audit over the **whole changed test bodies**
 finds **9 changed functions, 28 assertions, 10 without messages**. Nine are in
@@ -119,7 +119,7 @@ clean-head verification claim.
 Investigation used a **build-only** `cargo test --no-run` with
 `CARGO_INCREMENTAL=0` in the same required shared target. Rebuilt exclusion
 executables then passed **4/0** on the unchanged source head; their temporary
-reintroduced-byte control also passed **4/0**, exposing F-282. The old/new
+reintroduced-byte control also passed **4/0**, exposing F-283. The old/new
 source-inventory behavior establishes an incremental artifact mismatch; its
 full tooling cause was not investigated. No full gate was repeated. The
 nonincremental canon executable lists **30 tests** (29 in tests.rs and one
@@ -136,10 +136,10 @@ X4 blocker. Baseline bytes are unchanged; no re-bless occurred. No server,
 mutation gate or owner port was touched.
 
 14b D.R.Y./type pass: the source-inventory/actual-input split and disconnected
-ID vocabulary are F-282; no parallel replacement geometry/type was added.
+ID vocabulary are F-283; no parallel replacement geometry/type was added.
 24a/24b category pass: current forbidden loaders are all removed, but the
 lineage category remains writable and the negative control escapes the law.
-Assertion readability is F-283. No Critical finding is raised.
+Assertion readability is F-284. No Critical finding is raised.
 
 Evidence is in [the review directory](evidence/2026-10-09-maps-x0-review/):
 checksummed input hashes, gate/build logs, diagnostic observations and probe,
