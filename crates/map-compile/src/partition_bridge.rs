@@ -33,64 +33,27 @@ pub fn gather_witnesses(
     let seas = load_ne_med()?; // real coast, same family as the lakes
     let lakes = load_ne_lakes()?;
 
-    // ALONG WATER THE REGION HAS NO BORDER OF ITS OWN — the border
-    // river (the Jordan) becomes a thin CORRIDOR FACE so it can win
-    // overlaps exactly like a lake. The corridor is raster-buffered at
-    // vendor time (a meandering centerline buffered on the sphere
-    // self-intersects; a raster union cannot).
-    let corridors: Vec<Vec<UnitVec>> = load_osm_corridors()?;
-
-    let mut water_rings: Vec<Vec<UnitVec>> = seas.clone();
-    water_rings.extend(lakes.iter().map(|(_, r)| r.clone()));
-    // A RIVER BELONGS TO THE MAP WHEN IT REACHES THE MAP'S WATER: the
-    // sea, a lake, or the Jordan corridor. Endorheic desert networks —
-    // wadis draining into sand beyond the map's subject — never enter.
-    // The criterion is drainage, measured on the data, not a curated
-    // list of names.
-    let mut reach_rings: Vec<Vec<UnitVec>> = water_rings.clone();
-    reach_rings.extend(corridors.iter().cloned());
-    // THE TYPE GATE: every network passes through RiverSystem, whose
-    // constructor refuses a disconnected system — the dam-split class
-    // (one river arriving as separate collinear pieces) cannot reach
-    // the canon; it dies here with coordinates. Clipping at water may
-    // legitimately split a system (a river through a lake), so the
-    // gate runs on the UNCLIPPED network and clipping happens after.
-    let mut by_net: std::collections::BTreeMap<String, (String, Vec<Vec<UnitVec>>)> =
-        std::collections::BTreeMap::new();
-    for (name, net, pts) in load_osm_rivers(30.0)? {
-        let e = by_net.entry(net).or_insert_with(|| (name.clone(), Vec::new()));
-        if e.0.is_empty() {
-            e.0 = name;
-        }
-        e.1.push(pts);
-    }
-    let mut polylines: Vec<WitnessPolyline> = Vec::new();
-    let mut jordan_n = 0usize;
-    let mut river_n = 0usize;
-    for (net, (name, paths)) in by_net {
+    let mut water_rings = seas.clone();
+    water_rings.extend(lakes.iter().map(|(_, ring)| ring.clone()));
+    let mut polylines = Vec::new();
+    for river in load_ne_rivers()? {
         let system = map_partition::RiverSystem::new(
-            if name.is_empty() { format!("network-{net}") } else { name.clone() },
-            paths,
+            river.name.clone(),
+            river.paths,
             PartitionConfig::default().tau_edge,
         )
-        .map_err(|e| format!("river system integrity: {e:?}"))?;
-        let system = match system.classify(&reach_rings, MOUTH_GAP) {
-            map_partition::Watershed::Draining(s) => s,
-            map_partition::Watershed::Endorheic { .. } => continue, // not this map's river
-        };
-        for pts in system.paths {
-            for run in clip_outside_water(&pts, &water_rings) {
+        .map_err(|error| format!("Natural Earth river integrity: {error:?}"))?;
+        let mut run_number = 0;
+        for path in system.paths {
+            for run in clip_outside_water(&path, &water_rings) {
                 if run.len() < 2 {
                     continue;
                 }
-                let id = if name.contains("Jordan") {
-                    jordan_n += 1;
-                    format!("jordan-{jordan_n}")
-                } else {
-                    river_n += 1;
-                    format!("river-{river_n}")
-                };
-                polylines.push(WitnessPolyline { id, pts: run });
+                run_number += 1;
+                polylines.push(WitnessPolyline {
+                    id: format!("{}-{run_number}", river.name),
+                    pts: run,
+                });
             }
         }
     }
@@ -106,16 +69,6 @@ pub fn gather_witnesses(
     }
     for (name, ring) in lakes {
         regions.push(WitnessRegion { id: name, kind: FaceKind::Lake, rings: vec![ring], parent: None });
-    }
-    for ring in corridors {
-        if ring.len() >= 3 {
-            regions.push(WitnessRegion {
-                id: "jordan".into(),
-                kind: FaceKind::Lake,
-                rings: vec![ring],
-                parent: None,
-            });
-        }
     }
     // THE BORDERING WORLD: every atlas polity era enters as a witness
     // of its own — one per (polity, era) so geometry may change at a
@@ -147,16 +100,6 @@ pub fn gather_witnesses(
     ).map_err(|error| format!("excluded input: {error:?}"))?;
     Ok((regions, polylines))
 }
-
-/// The MOUTH-TRUNCATION ALLOWANCE, a measured witness-accuracy
-/// property: OSM river lines can end where urban channels take over,
-/// short of the Natural Earth shoreline — the largest observed gap
-/// for a sea-reaching river in the vendored data is the Yarkon's
-/// 4.25 km, while the nearest endorheic desert network sits more than
-/// 20 km from any water ring. 5 km separates the two classes with
-/// margin on both sides.
-const MOUTH_GAP: f64 = 5.0 / 6371.0;
-
 
 /// ONE Area per entity: all of an entity's faces fill as a single
 /// path, so same-paint interior seams cannot render. The entity's
@@ -360,14 +303,6 @@ pub fn bridge_partition(
     let n_faces = part.faces.len();
     let n_rivers = part.rivers.len();
 
-    // EVERY face and river here is cut from the plane partition, whose
-    // identity a face carries is still its cohort's; what it is made OF
-    // is the partition, and that is what licensing follows.
-    let prov = |note: String| Provenance {
-        witness: Witness::Partition,
-        verses: Vec::new(),
-        note,
-    };
     let mut claim_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     let mut water_fids: BTreeSet<map_canon::FeatureId> = BTreeSet::new();
     // WHO STANDS WHEN comes from the data: each cohort ring declares
@@ -499,12 +434,12 @@ pub fn bridge_partition(
             continue;
         }
         let bid = store.insert_border(Border(r.pts.clone()));
-        let minted = EntityId(if r.id.starts_with("jordan") {
+        let minted = EntityId(if r.id.starts_with("Jordan-") {
             "partition:jordan".into()
         } else {
             "partition:rivers".into()
         });
-        identity.witness(&minted, &format!("{} (river)", r.id), LayerKind::Water, Witness::Authored, "line");
+        identity.witness(&minted, &format!("{} (river)", r.id), LayerKind::Water, Witness::NaturalEarth, "line");
         let entity = identity.resolve(&minted).clone();
         let fid = store.insert_feature(Feature::Line(PathLine {
             entity,
@@ -513,7 +448,11 @@ pub fn bridge_partition(
         }));
         store.set_provenance(
             fid,
-            prov("river from OpenStreetMap (ODbL), noded into the partition".into()),
+            Provenance {
+                witness: Witness::NaturalEarth,
+                verses: Vec::new(),
+                note: "Natural Earth 1:10m rivers and lake centerlines (public domain; modern generalized course), noded into the partition; missing courses recorded in docs/errata/rivers.md".into(),
+            },
         );
         water_fids.insert(fid);
     }
@@ -661,7 +600,7 @@ fn load_ne_lakes() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
                     let lon = c[0].as_f64()?;
                     let lat = c[1].as_f64()?;
                     // frame guard
-                    if (29.0..=34.6).contains(&lat) && (33.5..=37.8).contains(&lon) {
+                    if physical_frame_contains(lat, lon) {
                         Some(UnitVec::from_lat_lon_deg(lat, lon))
                     } else {
                         None
@@ -680,73 +619,51 @@ fn load_ne_lakes() -> Result<Vec<(String, Vec<UnitVec>)>, String> {
     Ok(out)
 }
 
-/// OSM rivers from the vendored geojson: only networks whose total
-/// length reaches `min_km` (the plate draws rivers, not ditches).
-fn load_osm_rivers(min_km: f64) -> Result<Vec<(String, String, Vec<UnitVec>)>, String> {
-    let text = std::fs::read_to_string(data_path("data/osm/rivers.geojson"))
-        .map_err(|e| format!("osm rivers: {e}"))?;
-    let v: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("osm rivers: {e}"))?;
-    let feats: Vec<&serde_json::Value> =
-        v["features"].as_array().into_iter().flatten().collect();
-    use std::collections::BTreeMap;
-    let mut net_len: BTreeMap<String, f64> = BTreeMap::new();
-    let line_of = |f: &serde_json::Value| -> Vec<UnitVec> {
-        f["geometry"]["coordinates"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| Some(UnitVec::from_lat_lon_deg(c[1].as_f64()?, c[0].as_f64()?)))
-            .collect()
-    };
-    let len_km = |pts: &[UnitVec]| -> f64 {
-        pts.windows(2).map(|w| w[0].angle_to(&w[1]) * 6371.0).sum()
-    };
-    for f in &feats {
-        let net = f["properties"]["network"].as_str().unwrap_or("").to_string();
-        let pts = line_of(f);
-        *net_len.entry(net).or_insert(0.0) += len_km(&pts);
-    }
-    let mut out = Vec::new();
-    for f in &feats {
-        let net = f["properties"]["network"].as_str().unwrap_or("");
-        if net_len.get(net).copied().unwrap_or(0.0) < min_km {
-            continue;
-        }
-        let pts = line_of(f);
-        if pts.len() >= 2 {
-            let name = f["properties"]["name"].as_str().unwrap_or("").to_string();
-            out.push((name, net.to_string(), pts));
-        }
-    }
-    Ok(out)
+struct RiverSystemSource {
+    name: String,
+    paths: Vec<Vec<UnitVec>>,
 }
 
-/// The vendored Jordan corridor polygons (raster-buffered).
-fn load_osm_corridors() -> Result<Vec<Vec<UnitVec>>, String> {
-    let text = std::fs::read_to_string(data_path("data/osm/rivers.geojson"))
-        .map_err(|e| format!("osm rivers: {e}"))?;
-    let v: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("osm rivers: {e}"))?;
-    let mut out = Vec::new();
-    for f in v["features"].as_array().into_iter().flatten() {
-        if !f["properties"]["corridor"].as_bool().unwrap_or(false) {
-            continue;
-        }
-        let Some(outer) = f["geometry"]["coordinates"].as_array().and_then(|r| r.first()) else {
-            continue;
+fn physical_frame_contains(latitude: f64, longitude: f64) -> bool {
+    (29.0..=34.6).contains(&latitude) && (33.5..=37.8).contains(&longitude)
+}
+
+fn load_ne_rivers() -> Result<Vec<RiverSystemSource>, String> {
+    let text = std::fs::read_to_string(data_path(
+        "data/natural-earth/ne_10m_rivers_lake_centerlines.geojson",
+    ))
+    .map_err(|error| format!("Natural Earth rivers: {error}"))?;
+    let rivers = map_adapters::hydro::read_rivers(&text)
+        .map_err(|error| format!("Natural Earth rivers: {error:?}"))?;
+    let mut systems: std::collections::BTreeMap<
+        map_adapters::hydro::RiverNumber,
+        RiverSystemSource,
+    > = std::collections::BTreeMap::new();
+    for river in rivers {
+        let paths = match river.shape {
+            map_adapters::hydro::RiverShape::Course(paths) => paths,
+            map_adapters::hydro::RiverShape::Unlocated => continue,
         };
-        let ring: Vec<UnitVec> = outer
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| Some(UnitVec::from_lat_lon_deg(c[1].as_f64()?, c[0].as_f64()?)))
-            .collect();
-        if ring.len() >= 3 {
-            out.push(ring);
-        }
+        let system = systems
+            .entry(river.number)
+            .or_insert_with(|| RiverSystemSource {
+                name: river
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("unnamed-natural-earth-{}", river.number.0)),
+                paths: Vec::new(),
+            });
+        system.paths.extend(paths);
     }
-    Ok(out)
+    Ok(systems
+        .into_values()
+        .filter(|system| {
+            system.paths.iter().flatten().any(|point| {
+                let (latitude, longitude) = point.to_lat_lon_deg();
+                physical_frame_contains(latitude, longitude)
+            })
+        })
+        .collect())
 }
 
 /// Split a polyline into the runs OUTSIDE every water ring, keeping

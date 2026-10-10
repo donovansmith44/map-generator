@@ -675,3 +675,241 @@ fn journeys_cover_the_whole_bible() {
     }).count();
     assert!(multi_year >= 5, "exodus, Abraham, Jacob, Paul's long roads span years");
 }
+
+#[test]
+fn river_build_inputs_exclude_osm() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for relative in [
+        "crates/map-compile/src/main.rs",
+        "crates/map-compile/src/partition_bridge.rs",
+    ] {
+        let source =
+            std::fs::read_to_string(root.join(relative)).expect("compiler source is readable");
+        assert!(
+            !source.contains("data/osm"),
+            "the compiler never reads an OSM river input"
+        );
+    }
+    assert!(
+        !root.join("data/osm").exists(),
+        "OSM river bytes are not vendored build inputs"
+    );
+}
+
+#[test]
+fn river_adapter_preserves_every_natural_earth_vertex() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let text = std::fs::read_to_string(
+        root.join("data/natural-earth/ne_10m_rivers_lake_centerlines.geojson"),
+    )
+    .expect("Natural Earth rivers are readable");
+    let source: serde_json::Value = serde_json::from_str(&text).expect("Natural Earth river JSON");
+    let features = source["features"].as_array().expect("river features");
+    let rivers = crate::hydro::read_rivers(&text).expect("Natural Earth courses are admitted");
+    assert_eq!(
+        rivers.len(),
+        features.len(),
+        "every Natural Earth river feature is retained"
+    );
+    for (river, feature) in rivers.iter().zip(features) {
+        assert_eq!(
+            river.number.0,
+            feature["properties"]["rivernum"]
+                .as_i64()
+                .expect("river number"),
+            "the source's river identity is retained"
+        );
+        assert_eq!(
+            river.name.as_deref(),
+            feature["properties"]["name"].as_str(),
+            "the source's name is retained without a guessed name"
+        );
+        let expected_course = match feature["properties"]["featurecla"].as_str() {
+            Some("River") => crate::hydro::RiverCourse::River,
+            Some("Lake Centerline") => crate::hydro::RiverCourse::LakeCenterline,
+            _ => panic!("the source names a known river course class"),
+        };
+        assert_eq!(
+            river.course, expected_course,
+            "the source distinguishes rivers from lake centerlines"
+        );
+        let paths = feature["geometry"]["coordinates"]
+            .as_array()
+            .expect("source paths");
+        let course = match &river.shape {
+            crate::hydro::RiverShape::Course(course) => course.as_slice(),
+            crate::hydro::RiverShape::Unlocated => {
+                assert!(
+                    paths.is_empty(),
+                    "a source without vertices is explicitly unlocated"
+                );
+                &[]
+            }
+        };
+        assert_eq!(course.len(), paths.len(), "every source path is retained");
+        for (path, coordinates) in course.iter().zip(paths) {
+            let coordinates = coordinates.as_array().expect("source coordinates");
+            assert_eq!(
+                path.len(),
+                coordinates.len(),
+                "every source vertex is retained"
+            );
+            for (point, coordinate) in path.iter().zip(coordinates) {
+                assert_eq!(
+                    *point,
+                    map_types::UnitVec::from_lat_lon_deg(
+                        coordinate[1].as_f64().expect("latitude"),
+                        coordinate[0].as_f64().expect("longitude")
+                    ),
+                    "the course uses the source vertex without tuning"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn golden_named_rivers_have_courses_or_recorded_gaps() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let census = std::fs::read_to_string(root.join("docs/errata/rivers.md"))
+        .expect("the river census records the golden requirements");
+    let rivers = crate::hydro::read_rivers(
+        &std::fs::read_to_string(
+            root.join("data/natural-earth/ne_10m_rivers_lake_centerlines.geojson"),
+        )
+        .expect("Natural Earth rivers are readable"),
+    )
+    .expect("Natural Earth river courses are admitted");
+    for name in [
+        "Jordan",
+        "Nile",
+        "Euphrates",
+        "Tigris",
+        "Orontes",
+        "Eleutheros",
+        "Khabur",
+        "Arnon",
+        "Jabbok",
+        "Zered",
+        "Kanah",
+        "Kishon",
+        "Yarkon",
+        "Yarmuk",
+        "Belus",
+        "Shihor-libnath",
+        "River of Egypt",
+        "Pelusiac Nile",
+    ] {
+        let course = rivers.iter().any(|river| {
+            river.name.as_deref() == Some(name)
+                && river.course == crate::hydro::RiverCourse::River
+                && matches!(&river.shape, crate::hydro::RiverShape::Course(paths) if paths.iter().any(|path| path.len() >= 2))
+        });
+        assert!(
+            course || census.contains(&format!("| {name} | Missing |")),
+            "golden river {name} has a Natural Earth course or an explicit missing-course record"
+        );
+    }
+}
+
+fn river_fixture(geometry: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {"rivernum": 229, "name": null, "featurecla": "River"},
+            "geometry": geometry
+        }]
+    })
+}
+
+#[test]
+fn generated_river_courses_preserve_source_order_and_unknown_names() {
+    for latitude in [-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0] {
+        for longitude in [-180.0, -90.0, 0.0, 90.0, 180.0] {
+            let coordinates = serde_json::json!([
+                [longitude, latitude],
+                [longitude / 2.0, latitude / 2.0],
+                [0.0, 0.0]
+            ]);
+            for geometry in [
+                serde_json::json!({"type": "LineString", "coordinates": coordinates}),
+                serde_json::json!({"type": "MultiLineString", "coordinates": [coordinates]}),
+            ] {
+                let source = river_fixture(geometry).to_string();
+                let rivers =
+                    crate::hydro::read_rivers(&source).expect("generated river course is admitted");
+                assert_eq!(
+                    rivers.len(),
+                    1,
+                    "one source feature produces one river record"
+                );
+                assert_eq!(rivers[0].name, None, "an unknown name remains unknown");
+                assert_eq!(
+                    rivers[0].shape,
+                    crate::hydro::RiverShape::Course(vec![vec![
+                        map_types::UnitVec::from_lat_lon_deg(latitude, longitude),
+                        map_types::UnitVec::from_lat_lon_deg(latitude / 2.0, longitude / 2.0),
+                        map_types::UnitVec::from_lat_lon_deg(0.0, 0.0),
+                    ]]),
+                    "source vertices retain their order and positions"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn malformed_river_courses_refuse_without_dropping_vertices() {
+    for position in [
+        serde_json::json!([]),
+        serde_json::json!([35.0]),
+        serde_json::json!(["35", 32]),
+        serde_json::json!([35, null]),
+        serde_json::json!([181, 32]),
+        serde_json::json!([35, 91]),
+    ] {
+        let source = river_fixture(
+            serde_json::json!({"type": "LineString", "coordinates": [[35, 32], position]}),
+        );
+        assert_eq!(
+            crate::hydro::read_rivers(&source.to_string()),
+            Err(crate::hydro::RiverError::Position),
+            "a malformed vertex refuses the course instead of shortening it"
+        );
+    }
+    for geometry in [
+        serde_json::json!({"type": "Polygon", "coordinates": [[[35, 32], [36, 33]]]}),
+        serde_json::json!({"type": "Point", "coordinates": [35, 32]}),
+    ] {
+        assert_eq!(
+            crate::hydro::read_rivers(&river_fixture(geometry).to_string()),
+            Err(crate::hydro::RiverError::Geometry),
+            "a non-river geometry refuses the river adapter"
+        );
+    }
+    for coordinates in [serde_json::json!([]), serde_json::json!([[35, 32]])] {
+        let source =
+            river_fixture(serde_json::json!({"type": "LineString", "coordinates": coordinates}));
+        assert_eq!(
+            crate::hydro::read_rivers(&source.to_string()),
+            Err(crate::hydro::RiverError::Path),
+            "an incomplete course is recorded as an error rather than drawn"
+        );
+    }
+    for class in [
+        serde_json::json!("Canal"),
+        serde_json::json!(true),
+        serde_json::json!(null),
+    ] {
+        let mut source = river_fixture(
+            serde_json::json!({"type": "LineString", "coordinates": [[35, 32], [36, 33]]}),
+        );
+        source["features"][0]["properties"]["featurecla"] = class;
+        assert_eq!(
+            crate::hydro::read_rivers(&source.to_string()),
+            Err(crate::hydro::RiverError::Course),
+            "an unknown course class cannot masquerade as a river"
+        );
+    }
+}

@@ -260,6 +260,28 @@ fn build(args: &[String]) {
     ));
 
     let ne_dir = std::path::Path::new("data/natural-earth");
+    let river_sources = map_adapters::hydro::read_rivers(
+        &std::fs::read_to_string(ne_dir.join("ne_10m_rivers_lake_centerlines.geojson"))
+            .unwrap_or_else(|error| die(&format!("Natural Earth rivers: {error}"))),
+    )
+    .unwrap_or_else(|error| die(&format!("Natural Earth rivers: {error:?}")));
+    let unlocated: Vec<_> = river_sources
+        .iter()
+        .filter_map(|river| match river.shape {
+            map_adapters::hydro::RiverShape::Course(_) => None,
+            map_adapters::hydro::RiverShape::Unlocated => Some(format!(
+                "{} (NE {})",
+                river.name.as_deref().unwrap_or("unnamed"),
+                river.number.0,
+            )),
+        })
+        .collect();
+    let river_census = format!(
+        "Natural Earth river input: {} source records; unlocated courses: {unlocated:?}",
+        river_sources.len(),
+    );
+    eprintln!("{river_census}");
+    report_md.push_str(&format!("- {river_census}\n"));
     let creation = atlas.creation_anchor().map(|(y, _)| y).unwrap_or(-4004);
     let tp0 = ts_or_die(creation);
     let waters = vec![
@@ -318,11 +340,8 @@ fn build(args: &[String]) {
         &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
-    // The traced plate's own water is gone from the canon: the sphere
-    // partition serves the real sea, lakes, and rivers with shared
-    // borders — the plate trace was its scaffolding, not a second
-    // voice speaking over it.
-    eprintln!("water: bridged");
+    eprintln!("water: Natural Earth; river courses and recorded gaps: docs/errata/rivers.md");
+    report_md.push_str("- River courses: Natural Earth 1:10m (public domain, modern generalized courses); golden requirements and missing courses: docs/errata/rivers.md\n");
 
     // ---- THE SPHERE PARTITION: one closed arrangement from the plate
     // witnesses; its faces and rivers enter the canon with shared
