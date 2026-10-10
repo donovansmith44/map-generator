@@ -279,3 +279,155 @@ single gate log, independent restoration source/outcomes and SHA-256 manifest.
 No excluded coordinate fixture is committed. Claude owns the repair on the
 same author lane; review its next exact head before landing. No own lock,
 server or background job remains.
+
+## Second repair re-review: 7bcbaba..46c738a (2026-10-09)
+
+**CHANGES REQUESTED — existing Important F-283 remains OPEN; F-287 CLOSED.**
+F-284 stays closed. No new Critical finding or F-number is assigned: the two
+new reproductions belong to the existing excluded-descendant category.
+
+Exact repair endpoints are **7bcbabab132443e535fa7b18c2cdb4500457e3c8** and
+**46c738aabc0c7f629574e3317ffd76a78f00c7dd**, the fetched latest author head
+on `origin/lane/claude/MAPS-X0`. Whole-item base is the present
+`origin/lane/claude/MG-BASE` **6ac32bfbf67e26b9cfe94560806fda293db05801**;
+no CX-M0 fallback was needed. Production/test/tool/data bytes at the head
+are identical to source checkpoint **6ecddb00f0693af540ac9d8e3a83fdd14ca1eca9**.
+This appends to the same review report/branch at 08166d8, without adopting or
+repairing author code. Read the current atlas rules, ops X0 row and migration
+plan at `origin/lane/claude/MAPS-C12` before reviewing.
+
+### F-287 accepted: one point-key owner
+
+`map-partition::PointKey` owns integer rounding and big-endian byte encoding.
+Both partition sorting/deduplication and content hashing call it. The lineage
+index calls its separate, explicitly named latitude/longitude policy; the
+Python catalogue producer delegates to the Rust `quarantine_keys` example
+rather than restating that policy. Existing Cartesian partition identity is
+preserved, rather than silently changing to latitude/longitude identity.
+
+Generated partition-byte controls, producer/compiler complete-output controls,
+signed rounding/seam controls and the independently reproduced 107-geometry
+catalogue pass. All production sites from F-287 now use this owner. The
+closed key representation's integer reads cannot fail for any constructible
+key. No map-types/graph-types change, dependency change in this repair, new
+parser, copied quantizer or dead compatibility door was found. F-287 is
+independently CLOSED at this head; no new rounding mismatch is alleged.
+
+### F-283 still open: resampling and feature splitting erase the run
+
+The original deletion is repaired. An independent rerun removes the same
+unique first vertex from historical Judah, supplies the remaining 155 through
+`gather_witnesses`, and now gets the entire expected excluded-ring/run refusal.
+The retained author red log shows the pre-repair **0 passed / 1 failed**, with
+complete 155-vertex admission followed by refusal `left: None`; this is a
+behavioral red, not one of the earlier build-cache failures.
+
+Two further diagnostics exercise real admission at the exact reviewed head:
+
+| Diagnostic | Guard / actual compiler result | Expected-refusal diagnostic |
+|---|---|---|
+| Insert the normalized spherical midpoint between every adjacent pair of historical Judah vertices, preserving every original point and spherical boundary edge | `check_points = Ok(())`; renamed polity admitted unchanged with 311 vertices: 156 originals plus 155 midpoints | **RED**, exit101 |
+| Split each original edge into a separate closed polygon feature with a common center and original endpoints | `check_geojson = Ok(())`; all 155 renamed polygon witnesses admitted unchanged, retaining every original Judah edge | **RED**, exit101 |
+| Split the ring into longer features retaining three consecutive source vertices | Complete excluded-ring/run refusal | green |
+| Independent permitted polygon under biblical identity `judah` | Complete geometry admitted unchanged | green |
+
+The split diagnostic establishes excluded ancestry and complete admission of
+all its features; it does not claim the fan's dissolved partition equals the
+original polygon. The resampling diagnostic preserves the original spherical
+boundary exactly and needs no topology-equivalence assumption. Neither probe
+changes source coordinates, licensing metadata, names in production data,
+worktree inputs or golden files. Historical bytes are read from the pinned
+base at runtime, never committed as a coordinate fixture.
+
+The failed abstraction remains compiler input ancestry. At
+`crates/map-compile/src/exclusion.rs:123`, only three adjacent *input* vertices
+are compared to adjacent historical vertices. An inserted point resets that
+pattern even when every excluded original point and edge remains. At176,
+each sequence is checked independently; the GeoJSON walker at 198 preserves
+feature boundaries, so dividing each historical edge into a feature also
+removes every three-vertex window. The compiled-output check at 194 uses the
+same per-border rule and supplies no independent derivation guarantee.
+
+The controller's recorded minimum-three ordered-run rule is acknowledged:
+this implementation satisfies that narrower rule, and quarantine.md openly
+records its short/nonconsecutive-fragment limits. A run detector may serve
+as a supplemental control. That restriction does not establish the requested
+X0 negative lineage closure or the binding prohibition on reintroduced
+excluded sources. These are concrete descendants retaining the original
+content, not a claim to recover arbitrary ancestry from unrelated coordinates.
+All 113 author tests pass while both admitted-descendant refusals fail.
+
+**Closure remains with X0's existing exclusion/admission owner**, coordinating
+with C4's sole general licensing/derivation policy and X5's shared integration
+boundary. Bind admitted descendants to the recorded source/derivation decision
+before transforms can discard it, so resampling and feature splitting preserve
+exclusion. Generate these transformations, renamed/indirect descendants and
+nonempty admitted-input families, with complete refusal and unchanged-output
+outcomes plus permitted controls. Keep the present run detector where useful;
+do not invent a second licensing rule, infer ancestry by a tuned threshold,
+restore ID bans or unilaterally change shared types. No reviewer repair is made.
+
+### Whole-item source, contract and principle checks
+
+All requested plate contour/survey/water, tribes12, Wikimedia and spliced
+OpenBible build entry points and files remain removed, with no compiled
+loader or export restored. The 107 historical fingerprints are generated hash
+data; the owning producer reproduces them byte for byte. Quarantine lists
+each removed source/tool, reason and replacement, including the separate
+NUM34 survey, future Scripture/Rawson work, retained NE Mediterranean clip
+and retained atlas-coordinate/OpenBible settlement join. Reading the deleted
+producers supports those two retained inputs' different ancestry.
+
+Against MG-BASE, **all 43 retained data files are byte-identical**. The only
+deleted data files are `data/openbible/regions.geojson`,
+`data/wikimedia/tribes12.geojson` and its LICENSE.md. Permitted retained
+geometry was not deleted by mistake; tool removals follow X0's assigned whole
+directory scope and are documented individually. No KJV, golden image/test
+baseline, renderer, contract/version, registry or shared map-types/graph-types
+change occurs in this repair. No golden was re-blessed. Legacy vocabulary
+and separately owned OSM/GPL/registry work are not falsely declared clean.
+
+Independent maintained tree-sitter whole-body assertion audit at the tested
+source checkpoint is **40 changed bodies / 63 assertions / 0 message-free**. Auditing
+the latest head additionally counts the retained author evidence probe:
+**43 bodies / 68 assertions / 0 message-free**. The sole tuple-vector candidate is the
+already accepted complete source-to-license table. Diff/added-comment checks
+are clean; generated laws retain one behavior and a plain message per assertion.
+14b accepts the point-key consolidation, closed source/run/direction sums and
+maintained tooling. 24a/24b accepts complete removal of the current offending
+loaders, but F-283's admitted ancestry category remains writable as shown above.
+
+### Exactly one gate, diagnostics and limits
+
+After building the existing catalogue-producer example, ran exactly one scoped
+Cargo gate under the configured environment, shared target, `CARGO_INCREMENTAL=0`
+and a fresh `--cfg maps_x0_second_rereview` artifact identity:
+
+```text
+nice -n 10 cargo test -j 4 -p map-adapters -p map-canon -p map-compile -p map-partition
+113 passed / 0 failed
+adapters 16, canon 30, compiler 18, supplemental exclusion 4, content 20, partition 25
+```
+
+The content suite took 13.11s; all doctests passed (zero examples). Its six
+ignored entries are the author's restoration subprocess (exercised by its
+parent) and five temporary reviewer diagnostics. Those five were then invoked
+**directly from that same test executable**, with no gate rerun or Cargo rebuild:
+three green controls and the two behavioral reds above. The temporary source
+append was restored before returning to the review branch; retained probe code
+is evidence only. The two inherited library import warnings and inherited test
+import warning remain outside the Important/Critical findings.
+
+Foreign `heavy` lock remains C12 landing, held by codex-maps-land2. No full
+workspace/make-contract, mutation, fresh canonical build or browser/golden gate
+was run; full integration still needs the separately reviewed X4 repair and
+outstanding gates. No server, port 8080 operation, shared artifact regeneration,
+foreign process change or owner approval was inferred. Reviewer application
+LOC delta **0**; no own lock, server or background job remains.
+
+Evidence: [second repair re-review directory](evidence/2026-10-09-maps-x0-second-rereview/),
+with exact endpoints/input hashes, source/head assertion audits, catalogue
+reproduction, 43 retained-data hashes, raw author red, five independent probe
+logs/source/observations, the single gate and SHA-256 manifest. Claude keeps
+the same repair lane; this verdict supersedes only the pending independent
+F-283/F-287 dispositions for 46c738a.

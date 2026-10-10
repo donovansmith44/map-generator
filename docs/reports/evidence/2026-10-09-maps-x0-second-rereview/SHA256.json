@@ -1,0 +1,19 @@
+{
+  "author-reviewer-deletion-red.log.gz": "a807d45b2d946938a4e5bed8abb66969d38dd782fed01ef142002568742aaf77",
+  "author-reviewer-probe.rs": "d9268a375ba0508d5a1931347c4bdb047c97df24bdb9869b85a3d240b427760a",
+  "catalogue-check.log": "234600842c3f5d97cdeb5fcf7419366cb8a1f7cb3407fe81df3ffe2808bb7cba",
+  "diagnostic-observations.json": "f52e56f9905a9898daae63f383ac6d0d039a3da442e8cf4080e4b697d07b98b4",
+  "gate.log.gz": "a52ccab5083e62435f342d47c99cd740876d4a06708c8135dd2927b8b51a3962",
+  "head-assertion-audit.json": "bebe54862eb288cbe17ba7f494bc2dbb0f8318d2b14b52db184e726a2149af14",
+  "input-hashes.json": "399b1f17c3f5b6062acbba160ae3569fef39ecba53e38fba77afa403f2a3f8d5",
+  "producer-build.log.gz": "9c269d1e74ae6fc94eb907fa9ca608726557928c2762f367ad83d99ca719fa6e",
+  "range.json": "87250e0f128220f1f90301f72bd751c0eb6b0ebf9377729538fdc8041f2bcab9",
+  "retained-data-hashes.json": "d458f215d5a2c2dbd96a747759fe1ca84043cdc2c9176f02539577f62d438d94",
+  "reviewer-probe.rs": "2706d78dd7c6b6861277813e0a13eb473daab79f5fe13ce86fb2d95e79bea51e",
+  "reviewer_densification_is_refused.log.gz": "e1884fb1b309503f60faea04fae980f15d0e55a50a40766c53c0eb6758e44cff",
+  "reviewer_permitted_geometry_survives.log.gz": "7fdd121d1994fa25e8a0e41ad00e63e511b0a25395c8741fb3ec0b2a92d2bf38",
+  "reviewer_single_vertex_deletion_is_refused.log.gz": "c377543cb6889c162a7f46237cda9195648f608f4d9ea3ced1769b9799f7c606",
+  "reviewer_split_features_are_refused.log.gz": "b09a49fa5576796c97bd2636936d31b0b281993c4dc3ff8a9e3a203624bf811b",
+  "reviewer_split_long_runs_are_refused.log.gz": "cba23c5405b4b9f71d6a47c8c2fcb82c7d60d454f1994d1df706cdcda84948a8",
+  "source-assertion-audit.json": "a8534cabf0e9c9736e013bd95d0b4e6a50cb6828721334cf24f133ccb2d66373"
+}

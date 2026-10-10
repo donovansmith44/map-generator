@@ -1,0 +1,11 @@
+{
+  "crates/map-compile/examples/quarantine_keys.rs": "606e36063315b22c688df983c513b727b0f91e430371a26e5241a57f96b0c9a7",
+  "crates/map-compile/src/exclusion.rs": "5f3af522328c0ec91bc978a5b0be28fb02a52f3f8502b94e0aa26342d64a4f83",
+  "crates/map-compile/src/partition_bridge.rs": "b8ed7b2ed054cca3a26619b5d6900209b9bbcd6f8062c7db56f1c5bb33391d5d",
+  "crates/map-compile/tests/exclusion_content.rs": "696dd1977f655f35d6fec7ca07a7676ac9186b89d24629ef8253564bdeed46fd",
+  "crates/map-partition/src/build.rs": "d5bd43c6fe068d3a68ef19363d928e8ab1f8791ff98c141c4179a82a4c1685e1",
+  "crates/map-partition/src/lib.rs": "64fe0de9aa29fcd431bb615eb8b8a237466b4d91f463103ce781d77f18905cfd",
+  "crates/map-partition/src/point_key.rs": "04e7ae39cff35016b0b181b136e410c8aecba92a785b45540dc8059f6a3c7f6b",
+  "data/authored/excluded-geometry-fingerprints.json": "69b7c3b34565b6422307806e8acd43fca1c4b1bb893d3304c641d3740ef463d8",
+  "tools/quarantine_fingerprints.py": "85271b13dc7ffd193f205fcf1daa66160b9a1179c4f2ee19fe788a3e6beb9c60"
+}

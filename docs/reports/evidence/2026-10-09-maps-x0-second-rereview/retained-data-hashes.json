@@ -1,0 +1,174 @@
+{
+  "data/atlas-exports/SOURCE.md": {
+    "base": "b5f982a1d38e8b4ea7f35be407bbeba874f0330c2832fd01d45df2843db325ea",
+    "head": "b5f982a1d38e8b4ea7f35be407bbeba874f0330c2832fd01d45df2843db325ea"
+  },
+  "data/atlas-exports/chronology.json": {
+    "base": "9e12a88040140b3e6c9f6596fa9a03e2d39aaebd480de1e19aab374758609e13",
+    "head": "9e12a88040140b3e6c9f6596fa9a03e2d39aaebd480de1e19aab374758609e13"
+  },
+  "data/atlas-exports/gazetteer.json": {
+    "base": "be04b6a443327f4932dc1d8a7000986bdb06723bdbc7e8291c66b288581e8b12",
+    "head": "be04b6a443327f4932dc1d8a7000986bdb06723bdbc7e8291c66b288581e8b12"
+  },
+  "data/atlas-vendor/eras.json": {
+    "base": "0f0d2722504856b08a6b11aba440cc59aca33648afc4c078cd68a618a292207c",
+    "head": "0f0d2722504856b08a6b11aba440cc59aca33648afc4c078cd68a618a292207c"
+  },
+  "data/atlas-vendor/events.json": {
+    "base": "eed2be6d0c8c466517a9d91bd14862d1a19d97f0146b9d78ccfb7637901f4b76",
+    "head": "eed2be6d0c8c466517a9d91bd14862d1a19d97f0146b9d78ccfb7637901f4b76"
+  },
+  "data/atlas-vendor/land-mask.json": {
+    "base": "291475bd5e09ab2bcc375980351e4b0346613c515b532a75ab02188e5171fe2a",
+    "head": "291475bd5e09ab2bcc375980351e4b0346613c515b532a75ab02188e5171fe2a"
+  },
+  "data/atlas-vendor/landmarks.json": {
+    "base": "617b93304786034b69f83ddbf2b44e66f21cee2db5883fdfc98ffd5559a66617",
+    "head": "617b93304786034b69f83ddbf2b44e66f21cee2db5883fdfc98ffd5559a66617"
+  },
+  "data/atlas-vendor/manifest.json": {
+    "base": "abf08475573d0254521c21138cbfb957114e520907adcb9c8ed3956073fe6311",
+    "head": "abf08475573d0254521c21138cbfb957114e520907adcb9c8ed3956073fe6311"
+  },
+  "data/atlas-vendor/names.json": {
+    "base": "41c7417f17c9206685518f5d967e5062651ae086d27bc4c6f2954d05637ba05d",
+    "head": "41c7417f17c9206685518f5d967e5062651ae086d27bc4c6f2954d05637ba05d"
+  },
+  "data/atlas-vendor/narratives.json": {
+    "base": "d59295f572a2636c7676de60974dc97d5ebf3b7778ed8acc425eace590305e2e",
+    "head": "d59295f572a2636c7676de60974dc97d5ebf3b7778ed8acc425eace590305e2e"
+  },
+  "data/atlas-vendor/polities.json": {
+    "base": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14",
+    "head": "2f60d50483f2daa0f754af721abc4ca01edd8a353a6a6b5e0153b8240bad4b14"
+  },
+  "data/authored/reconcile.json": {
+    "base": "63c26855dc6c5bdd4ebb6ae9ac9f6cf62df8208ad473d427c568915988b2c594",
+    "head": "63c26855dc6c5bdd4ebb6ae9ac9f6cf62df8208ad473d427c568915988b2c594"
+  },
+  "data/authored/registry.json": {
+    "base": "726a07fb0676b61b2bd38105729802963403fb522866ee9f7e379fec2138da45",
+    "head": "726a07fb0676b61b2bd38105729802963403fb522866ee9f7e379fec2138da45"
+  },
+  "data/historical-basemaps/LICENSE": {
+    "base": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "head": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  "data/historical-basemaps/world_100.geojson": {
+    "base": "20265dc221c92f070f88d0a2ab6459b6942a86c2b865524131c9a1f546e03e86",
+    "head": "20265dc221c92f070f88d0a2ab6459b6942a86c2b865524131c9a1f546e03e86"
+  },
+  "data/historical-basemaps/world_bc1.geojson": {
+    "base": "0099bac4e9d74dce953c63802252d3021d7cc1ec54bc9ae2ba48e93c6c442e9a",
+    "head": "0099bac4e9d74dce953c63802252d3021d7cc1ec54bc9ae2ba48e93c6c442e9a"
+  },
+  "data/historical-basemaps/world_bc100.geojson": {
+    "base": "710c05247c2e1bc99bf6ad334a939143a5451cfa7bb1c9087e18821eda67c9d0",
+    "head": "710c05247c2e1bc99bf6ad334a939143a5451cfa7bb1c9087e18821eda67c9d0"
+  },
+  "data/historical-basemaps/world_bc1000.geojson": {
+    "base": "c3ba4242712ee55c99669f3f0493def883b1424ee6b5666840a49b30b71bcecc",
+    "head": "c3ba4242712ee55c99669f3f0493def883b1424ee6b5666840a49b30b71bcecc"
+  },
+  "data/historical-basemaps/world_bc1500.geojson": {
+    "base": "8f82479089bbffd760df8093c4f2e8689d44a67fcb173adf6960fc8de70861aa",
+    "head": "8f82479089bbffd760df8093c4f2e8689d44a67fcb173adf6960fc8de70861aa"
+  },
+  "data/historical-basemaps/world_bc200.geojson": {
+    "base": "4fd73b9d463e6d31a54c5437fbc7a08d24dfeadcabd2a50ddbcd363abf8d82f8",
+    "head": "4fd73b9d463e6d31a54c5437fbc7a08d24dfeadcabd2a50ddbcd363abf8d82f8"
+  },
+  "data/historical-basemaps/world_bc2000.geojson": {
+    "base": "ca78719de30fafc242f26a61535a9854553ff3544a86656ef6e62289b5d9751f",
+    "head": "ca78719de30fafc242f26a61535a9854553ff3544a86656ef6e62289b5d9751f"
+  },
+  "data/historical-basemaps/world_bc3000.geojson": {
+    "base": "2cf107e2f0d4f9b5427b293f19b11fffe7c1134f52320df4f94b4889b978f033",
+    "head": "2cf107e2f0d4f9b5427b293f19b11fffe7c1134f52320df4f94b4889b978f033"
+  },
+  "data/historical-basemaps/world_bc323.geojson": {
+    "base": "03eadec707e29647de3c4e75391da9792fe08affb9d1a2dae2bfd9519a88a72d",
+    "head": "03eadec707e29647de3c4e75391da9792fe08affb9d1a2dae2bfd9519a88a72d"
+  },
+  "data/historical-basemaps/world_bc4000.geojson": {
+    "base": "e3c4f1a6a255301e69edcb75b3e5fd8d0e52461967e54146bb9f1f57d4654173",
+    "head": "e3c4f1a6a255301e69edcb75b3e5fd8d0e52461967e54146bb9f1f57d4654173"
+  },
+  "data/historical-basemaps/world_bc500.geojson": {
+    "base": "ebf257ef748c37906de08f8a2c5410c85b06957ac72c2f0e6a13eae67de12e57",
+    "head": "ebf257ef748c37906de08f8a2c5410c85b06957ac72c2f0e6a13eae67de12e57"
+  },
+  "data/historical-basemaps/world_bc700.geojson": {
+    "base": "377238d6e333d5aca61a7aa42c64f9712b7c0403fc8d7d3ae1c753a42ad676ca",
+    "head": "377238d6e333d5aca61a7aa42c64f9712b7c0403fc8d7d3ae1c753a42ad676ca"
+  },
+  "data/natural-earth/LICENSE.md": {
+    "base": "e84fb01b675b1997df3112507ab1e2b7d4389ef79b9afab6d0b7db03c0920312",
+    "head": "e84fb01b675b1997df3112507ab1e2b7d4389ef79b9afab6d0b7db03c0920312"
+  },
+  "data/natural-earth/med_clip.geojson": {
+    "base": "295c6825c0fac42cd3d9922179745adeacb7a28ff9edfe7f21babc318223b62e",
+    "head": "295c6825c0fac42cd3d9922179745adeacb7a28ff9edfe7f21babc318223b62e"
+  },
+  "data/natural-earth/ne_10m_lakes.geojson": {
+    "base": "2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9",
+    "head": "2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9"
+  },
+  "data/natural-earth/ne_10m_land.geojson": {
+    "base": "1ac90796408bc6ad6911d69448485d3c4dbf2190370080368a09976e1c9f7416",
+    "head": "1ac90796408bc6ad6911d69448485d3c4dbf2190370080368a09976e1c9f7416"
+  },
+  "data/natural-earth/ne_10m_ocean.geojson": {
+    "base": "f9696a1337c746a0f6c8c13bc60d0f230d2ef8d105198d5657726c8f8e763fc2",
+    "head": "f9696a1337c746a0f6c8c13bc60d0f230d2ef8d105198d5657726c8f8e763fc2"
+  },
+  "data/natural-earth/ne_10m_rivers_lake_centerlines.geojson": {
+    "base": "bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a",
+    "head": "bb854a900ecbd3b408df46d5e16e3e0f974ba55993f9d8b5c26e855273c0905a"
+  },
+  "data/natural-earth/ne_110m_lakes.geojson": {
+    "base": "eb02ecc86c82004fccbf979058bfabbbd6c2d07968c7844d38eb1c9152d2ffc9",
+    "head": "eb02ecc86c82004fccbf979058bfabbbd6c2d07968c7844d38eb1c9152d2ffc9"
+  },
+  "data/natural-earth/ne_110m_land.geojson": {
+    "base": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9",
+    "head": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9"
+  },
+  "data/natural-earth/ne_110m_ocean.geojson": {
+    "base": "5cf3eb6fb202ff7f1cc0b27b49235a05703687f6cd81e45115d4250aa15b8a76",
+    "head": "5cf3eb6fb202ff7f1cc0b27b49235a05703687f6cd81e45115d4250aa15b8a76"
+  },
+  "data/natural-earth/ne_50m_lakes.geojson": {
+    "base": "d350b75978b26fe839b797c2c529b2fb8f47fb3983c03f4964e36d5df9378a52",
+    "head": "d350b75978b26fe839b797c2c529b2fb8f47fb3983c03f4964e36d5df9378a52"
+  },
+  "data/natural-earth/ne_50m_land.geojson": {
+    "base": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b",
+    "head": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b"
+  },
+  "data/openbible/LICENSE.md": {
+    "base": "a9172b4c2de621cd113701979e0f8aa41bb522828c0a2ee6612a0feccd1128bb",
+    "head": "a9172b4c2de621cd113701979e0f8aa41bb522828c0a2ee6612a0feccd1128bb"
+  },
+  "data/openbible/settlements.geojson": {
+    "base": "af2752bfcda00077c4553d474e0dbeef90189c6031819cb6e3aaee4c13b005b5",
+    "head": "af2752bfcda00077c4553d474e0dbeef90189c6031819cb6e3aaee4c13b005b5"
+  },
+  "data/osm/LICENSE.md": {
+    "base": "cb051ebe34a92fb9cb421b262bd9f798fc70c4b209090dacbe11416b59eddd52",
+    "head": "cb051ebe34a92fb9cb421b262bd9f798fc70c4b209090dacbe11416b59eddd52"
+  },
+  "data/osm/rivers.geojson": {
+    "base": "832d356abdfd3c2a3ffbd6288a142843f1243e58c8d12573a93f49a5a490ec74",
+    "head": "832d356abdfd3c2a3ffbd6288a142843f1243e58c8d12573a93f49a5a490ec74"
+  },
+  "data/terrain/README.md": {
+    "base": "586adf2f8447070d5b6d03e7d7d83c7ad5486dfa197d42bcf4217c85df078900",
+    "head": "586adf2f8447070d5b6d03e7d7d83c7ad5486dfa197d42bcf4217c85df078900"
+  },
+  "data/terrain/etopo_15min.bin": {
+    "base": "d8aad8f42539369b5ee1e010e92af704772f6efc2a6fcc7401bee68a4d0a7ae4",
+    "head": "d8aad8f42539369b5ee1e010e92af704772f6efc2a6fcc7401bee68a4d0a7ae4"
+  }
+}

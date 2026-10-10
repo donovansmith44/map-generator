@@ -1,0 +1,46 @@
+[
+  {
+    "test": "reviewer_single_vertex_deletion_is_refused",
+    "exit": 0,
+    "seconds": 0.145,
+    "observations": [
+      "removed_index=0 input_vertices=155 refused=true",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.14s"
+    ]
+  },
+  {
+    "test": "reviewer_densification_is_refused",
+    "exit": 101,
+    "seconds": 13.231,
+    "observations": [
+      "original_vertices=156 admitted_vertices=311 content_guard=Ok(())",
+      "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 13.23s"
+    ]
+  },
+  {
+    "test": "reviewer_split_features_are_refused",
+    "exit": 101,
+    "seconds": 13.107,
+    "observations": [
+      "split_features=155 geojson_guard=Ok(())",
+      "admitted_features=155 original_edges=155",
+      "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 13.10s"
+    ]
+  },
+  {
+    "test": "reviewer_split_long_runs_are_refused",
+    "exit": 0,
+    "seconds": 0.131,
+    "observations": [
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.13s"
+    ]
+  },
+  {
+    "test": "reviewer_permitted_geometry_survives",
+    "exit": 0,
+    "seconds": 13.304,
+    "observations": [
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 13.30s"
+    ]
+  }
+]

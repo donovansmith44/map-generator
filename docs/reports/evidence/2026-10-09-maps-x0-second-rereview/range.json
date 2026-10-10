@@ -1,0 +1,11 @@
+{
+  "whole_base": "6ac32bfbf67e26b9cfe94560806fda293db05801",
+  "repair_base": "7bcbabab132443e535fa7b18c2cdb4500457e3c8",
+  "head": "46c738aabc0c7f629574e3317ffd76a78f00c7dd",
+  "source_head": "6ecddb00f0693af540ac9d8e3a83fdd14ca1eca9",
+  "prior_review": "08166d86b7f5899aad7d9dc66719a6da8fa1eb5f",
+  "fallback_used": false,
+  "single_gate": ". ~/.bible-atlas-env; CARGO_TARGET_DIR=~/mut/target CARGO_INCREMENTAL=0 RUSTFLAGS='--cfg maps_x0_second_rereview' nice -n 10 cargo test -j 4 -p map-adapters -p map-canon -p map-compile -p map-partition",
+  "probe_recipe": "Append reviewer-probe.rs to crates/map-compile/tests/exclusion_content.rs at the exact head, build the existing quarantine_keys example under the same cfg, run the one scoped gate, then run each reviewer test directly from the exclusion_content executable using --exact <name> --ignored --nocapture. Restore the temporary source append afterward.",
+  "source_bytes_preserved_from_source_head": true
+}
