@@ -11,6 +11,7 @@ pub enum ExcludedSource {
     KnowingTheBible,
     Tribes12,
     SplicedRegions,
+    HistoricalBasemaps,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

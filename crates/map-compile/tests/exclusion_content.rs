@@ -106,10 +106,10 @@ fn number(expression: &syn::Expr) -> f64 {
 }
 
 fn expected(index: usize) -> ExclusionError {
-    let catalogue: serde_json::Value = serde_json::from_str(include_str!(
+    static CATALOGUE: OnceLock<serde_json::Value> = OnceLock::new();
+    let catalogue = CATALOGUE.get_or_init(|| serde_json::from_str(include_str!(
         "../../../data/authored/excluded-geometry-fingerprints.json"
-    ))
-    .expect("the checked quarantine catalogue decodes");
+    )).expect("the checked quarantine catalogue decodes"));
     let geometry = serde_json::from_value(catalogue["geometries"][index].clone())
         .expect("the independently catalogued complete geometry decodes");
     ExclusionError::Excluded(vec![geometry])

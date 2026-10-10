@@ -1,10 +1,3 @@
-//! map-compile refresh: pull the atlas API into data/atlas-vendor.
-//!
-//!   map-compile refresh [--base 127.0.0.1:8080] [--out data/atlas-vendor]
-//!
-//! Every payload is parse-validated BEFORE anything is written; a shape
-//! error vendors nothing. The manifest pin moves iff the data moved.
-
 use map_compile::vendor::*;
 
 fn main() {
@@ -40,16 +33,15 @@ fn main() {
 
     let mut payloads: Vec<(String, Vec<u8>)> = Vec::new();
 
-    // The whole span the anchor allows; the atlas clamps as it sees fit.
     let polities = get("/api/polities?from=-4004&to=2000");
-    let polity_rows = parse_polities(&String::from_utf8_lossy(&polities))
-        .unwrap_or_else(|e| die(&e));
+    let polity_rows =
+        parse_polities(&String::from_utf8_lossy(&polities)).unwrap_or_else(|e| die(&e));
     eprintln!("  {} polity eras", polity_rows.len());
     payloads.push(("polities.json".to_string(), polities));
 
     let narratives = get("/api/narratives");
-    let narrative_rows = parse_narratives(&String::from_utf8_lossy(&narratives))
-        .unwrap_or_else(|e| die(&e));
+    let narrative_rows =
+        parse_narratives(&String::from_utf8_lossy(&narratives)).unwrap_or_else(|e| die(&e));
     eprintln!("  {} narratives", narrative_rows.len());
     payloads.push(("narratives.json".to_string(), narratives));
 
@@ -74,7 +66,9 @@ fn main() {
     eprintln!("  {} leg events", events.len());
     payloads.push((
         "events.json".to_string(),
-        serde_json::to_string_pretty(&serde_json::Value::Array(events)).unwrap().into_bytes(),
+        serde_json::to_string_pretty(&serde_json::Value::Array(events))
+            .unwrap()
+            .into_bytes(),
     ));
 
     for (name, path) in [
@@ -93,7 +87,10 @@ fn main() {
     }
 
     let pin = write_vendor(std::path::Path::new(&out), &payloads).unwrap_or_else(|e| die(&e));
-    eprintln!("vendored {} files to {out}, pin {pin:016x}", payloads.len() + 1);
+    eprintln!(
+        "vendored {} files to {out}, pin {pin:016x}",
+        payloads.len() + 1
+    );
 }
 
 fn die(e: &str) -> ! {
@@ -107,11 +104,6 @@ fn ts_or_die(y: i32) -> map_canon::Timestamp {
         .unwrap_or_else(|_| die(&format!("no such year {y}")))
 }
 
-/// Compile every witness into data/canon: atlas polities → Territory,
-/// atlas narratives (+ reconciliation-kept authored routes) →
-/// Journeys, authored scripture surveys → ScriptureClaims,
-/// natural-earth → Water and Relief, historical-basemaps → Background.
-/// Validates the whole canon; violations fail the build.
 fn build(args: &[String]) {
     use map_canon::{LayerKind, Provenance, Witness};
     use map_compile::compile::*;
@@ -126,6 +118,8 @@ fn build(args: &[String]) {
             .cloned()
             .unwrap_or_else(|| default.to_string())
     };
+    map_compile::exclusion::check_build_inputs(std::path::Path::new("data"))
+        .unwrap_or_else(|error| die(&format!("excluded input: {error:?}")));
     let vendor_dir = opt("--vendor", "data/atlas-vendor");
     let out_dir = opt("--out", "data/canon");
     let read = |name: &str| -> String {
@@ -136,14 +130,16 @@ fn build(args: &[String]) {
     let mut store = map_canon::CanonStore::default();
     let mut report_md = String::from("# Canon compile report\n\n");
 
-    // ---- atlas witness: the polity rows feed the sphere partition
-    // below (Territory is partition-derived now — flush against the
-    // water and every neighboring claim; the old hand-rolled era fold
-    // retired into the presence algebra).
     let polities = parse_polities(&read("polities.json")).unwrap_or_else(|e| die(&e));
-    let rep = CompileReport { polity_eras: polities.len(), ..Default::default() };
+    let rep = CompileReport {
+        polity_eras: polities.len(),
+        ..Default::default()
+    };
     eprintln!("territory: {} polity eras", rep.polity_eras);
-    report_md.push_str(&format!("- Territory: {} atlas polity eras\n", rep.polity_eras));
+    report_md.push_str(&format!(
+        "- Territory: {} atlas polity eras\n",
+        rep.polity_eras
+    ));
 
     let narratives = parse_narratives(&read("narratives.json")).unwrap_or_else(|e| die(&e));
     let events = parse_vendored_events(&read("events.json")).unwrap_or_else(|e| die(&e));
@@ -197,7 +193,10 @@ fn build(args: &[String]) {
     ));
 
     let mut kept_spans = Vec::new();
-    for r in authored.iter().filter(|r| verdicts.kept.contains(&r.tag.to_string())) {
+    for r in authored
+        .iter()
+        .filter(|r| verdicts.kept.contains(&r.tag.to_string()))
+    {
         let end = r.to_year.unwrap_or(r.from_year).max(r.from_year);
         let mut legs = Vec::new();
         for w in r.stations.windows(2) {
@@ -226,7 +225,10 @@ fn build(args: &[String]) {
             fid,
             Provenance {
                 witness: Witness::Authored,
-                verses: vec![format!("book {} ch {}-{}", r.book, r.chapter_from, r.chapter_to)],
+                verses: vec![format!(
+                    "book {} ch {}-{}",
+                    r.book, r.chapter_from, r.chapter_to
+                )],
                 note: "authored route kept by reconciliation (no atlas narrative yet)".to_string(),
             },
         );
@@ -243,14 +245,8 @@ fn build(args: &[String]) {
         LayerKind::ScriptureClaims,
         Witness::Authored,
         "authored",
-        // No class filter: the scripture timeline carries Land
-        // (border-text surveys) AND Claim (city-derived hulls,
-        // visions, era extents) — the tenure law downstream decides
-        // how each renders, and a filter here would silently erase
-        // the claims' boundaries and names.
         None,
         &drops,
-        &BTreeMap::new(),
         &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
@@ -321,13 +317,9 @@ fn build(args: &[String]) {
         "natural-earth",
         Some(map_types::RegionClass::Water),
         &BTreeSet::new(),
-        &BTreeMap::new(),
         &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
-    // The dry land rides the same natural-earth timeline as the sea —
-    // same borders, same witness — into the Relief layer, the stage
-    // beneath every era of the Biblical world.
     bridge_filtered(
         &mut store,
         &water_tl,
@@ -336,35 +328,25 @@ fn build(args: &[String]) {
         "natural-earth",
         Some(map_types::RegionClass::Terrain(0)),
         &BTreeSet::new(),
-        &BTreeMap::new(),
         &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("water: Natural Earth; river courses and recorded gaps: docs/errata/rivers.md");
     report_md.push_str("- River courses: Natural Earth 1:10m (public domain, modern generalized courses); golden requirements and missing courses: docs/errata/rivers.md\n");
 
-    // ---- THE SPHERE PARTITION: one closed arrangement from the plate
-    // witnesses; its faces and rivers enter the canon with shared
-    // borders, and the 4π completeness law is checked right here.
-    // WHO STANDS WHEN rides the vendored data as era ids; this
-    // resolver turns an era id into its opening moment through the
-    // vendored era table — never a hardcoded year, never a hardcoded
-    // cohort.
     let era_table = {
         let text = std::fs::read_to_string("data/atlas-vendor/eras.json")
             .unwrap_or_else(|e| die(&format!("eras: {e}")));
         parse_eras(&text).unwrap_or_else(|e| die(&e))
     };
-    let summary = map_compile::partition_bridge::bridge_partition(
-        &mut store,
-        tp0,
-        &polities,
-        &mut identity,
-    )
-    .unwrap_or_else(|e| die(&format!("partition: {e}")));
+    let summary =
+        map_compile::partition_bridge::bridge_partition(&mut store, tp0, &polities, &mut identity)
+            .unwrap_or_else(|e| die(&format!("partition: {e}")));
     eprintln!("{summary}");
-    report_md.push_str(&format!("- {summary}
-"));
+    report_md.push_str(&format!(
+        "- {summary}
+"
+    ));
 
     let terrain_bytes = std::fs::read("data/terrain/etopo_15min.bin")
         .unwrap_or_else(|e| die(&format!("terrain: {e}")));
@@ -379,93 +361,20 @@ fn build(args: &[String]) {
         "etopo",
         Some(map_types::RegionClass::Terrain(0)),
         &BTreeSet::new(),
-        &BTreeMap::new(),
         &mut identity,
     )
     .unwrap_or_else(|e| die(&e));
     eprintln!("relief: bridged");
 
-    let bm_dir = std::path::Path::new("data/historical-basemaps");
-    let mut epochs = Vec::new();
-    let mut paths: Vec<_> = std::fs::read_dir(bm_dir)
-        .unwrap_or_else(|e| die(&format!("basemaps: {e}")))
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| p.extension().map(|x| x == "geojson").unwrap_or(false))
-        .collect();
-    paths.sort();
-    for path in paths {
-        let label = path.file_stem().unwrap().to_string_lossy().to_string();
-        let year = map_adapters::epoch_year_from_label(&label)
-            .unwrap_or_else(|| die(&format!("epoch label {label}")));
-        epochs.push(map_adapters::EpochSource {
-            year,
-            label,
-            text: std::fs::read_to_string(&path).unwrap_or_else(|e| die(&format!("{e}"))),
-        });
-    }
-    let config = map_adapters::IngestConfig {
-        snap: Some(0.02),
-        source: atlas_graph_types::covenant::SourceId::new("historical-basemaps"),
-        anchor: None,
-    };
-    let bm = map_adapters::ingest(&config, &epochs).unwrap_or_else(|e| die(&format!("{e:?}")));
-    // Rule-based supersession, reported: a background region whose
-    // slug matches an atlas polity id or era-name slug is shadowed by
-    // Territory — the same entity must not wear two witnesses at once.
-    let slugify = |s: &str| -> String {
-        let mut out = String::new();
-        let mut dash = false;
-        for ch in s.chars() {
-            if ch.is_ascii_alphanumeric() {
-                out.push(ch.to_ascii_lowercase());
-                dash = false;
-            } else if !dash && !out.is_empty() {
-                out.push('-');
-                dash = true;
-            }
-        }
-        out.trim_end_matches('-').to_string()
-    };
-    let mut bg_shadows: BTreeMap<String, Vec<(i32, i32)>> = BTreeMap::new();
-    for p in &polities {
-        for key in [slugify(&p.id), slugify(&p.name)] {
-            bg_shadows.entry(key).or_default().push((p.from_year, p.to_year));
-        }
-    }
-    report_md.push_str(&format!(
-        "- Background: {} entity slugs shadowed by atlas Territory DURING its eras (never outside them)
-",
-        bg_shadows.len()
-    ));
-    bridge_filtered(
-        &mut store,
-        &bm.timeline,
-        LayerKind::Background,
-        Witness::Basemap,
-        "basemap",
-        Some(map_types::RegionClass::Land),
-        &BTreeSet::new(),
-        &bg_shadows,
-        &mut identity,
-    )
-    .unwrap_or_else(|e| die(&e));
-    eprintln!("background: {} epochs bridged", epochs.len());
+    report_md.push_str("- Historical background: GPL outlines excluded; missing coverage and permitted replacement evidence: docs/errata/background.md\n");
 
-    // ---- the laws (waived pairs downgrade to warnings)
-    // THE FRAME-EDGE LAW: at the frame's last year, every
-    // ScriptureClaims feature must be gone or carry a WRITTEN
-    // endurance justification (map_canon::ENDURES_MARK). A feature
-    // that merely leaked past its era — because nobody declared when
-    // its world ends — fails the build here, by name.
     let frame_edge = era_table
         .iter()
         .map(|e| e.to_year)
         .max()
         .map(ts_or_die)
         .unwrap_or_else(|| die("eras: empty table"));
-    let leaks =
-        store.validate_frame_edge(map_canon::LayerKind::ScriptureClaims, &frame_edge);
+    let leaks = store.validate_frame_edge(map_canon::LayerKind::ScriptureClaims, &frame_edge);
     if !leaks.is_empty() {
         die(&format!(
             "frame-edge law: {} feature(s) stand at the end of time without a declared \
@@ -485,7 +394,10 @@ fn build(args: &[String]) {
             _ => false,
         });
     if !waived.is_empty() {
-        eprintln!("warnings: {} acknowledged territorial conflicts (see report)", waived.len());
+        eprintln!(
+            "warnings: {} acknowledged territorial conflicts (see report)",
+            waived.len()
+        );
         report_md.push_str(&format!(
             "
 ## Acknowledged conflicts (awaiting upstream ruling)
@@ -495,20 +407,31 @@ fn build(args: &[String]) {
             waived.len()
         ));
     }
-    report_md.push_str(&format!("\n## Validation\n\n{} violations\n", violations.len()));
+    report_md.push_str(&format!(
+        "\n## Validation\n\n{} violations\n",
+        violations.len()
+    ));
     for v in violations.iter().take(50) {
         report_md.push_str(&format!("- {v:?}\n"));
     }
     std::fs::create_dir_all(&out_dir).unwrap_or_else(|e| die(&format!("{e}")));
-    std::fs::write(std::path::Path::new(&out_dir).join("reconciliation-report.md"), &report_md)
-        .unwrap_or_else(|e| die(&format!("{e}")));
+    std::fs::write(
+        std::path::Path::new(&out_dir).join("reconciliation-report.md"),
+        &report_md,
+    )
+    .unwrap_or_else(|e| die(&format!("{e}")));
     if !violations.is_empty() {
-        eprintln!("canon INVALID: {} violations (see reconciliation-report.md)", violations.len());
+        eprintln!(
+            "canon INVALID: {} violations (see reconciliation-report.md)",
+            violations.len()
+        );
         for v in violations.iter().take(10) {
             eprintln!("  {v:?}");
         }
         std::process::exit(1);
     }
+    map_compile::exclusion::check_compiled(&store)
+        .unwrap_or_else(|error| die(&format!("excluded output: {error:?}")));
     identity.check().unwrap_or_else(|e| die(&e));
     let bytes = map_canon::persist::to_bytes(&store).unwrap_or_else(|e| die(&e));
     std::fs::write(std::path::Path::new(&out_dir).join("canon.json"), &bytes)

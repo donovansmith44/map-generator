@@ -35,12 +35,13 @@ def historical(path):
 
 
 def source_rows(path, source, geometries):
+    checksum = hashlib.sha256(historical(path)).hexdigest()
     for name, points in geometries:
         yield {
             'source': source,
             'geometry': name,
             'origin': path,
-            'source_sha256': hashlib.sha256(historical(path)).hexdigest(),
+            'source_sha256': checksum,
             'vertices': sorted({fingerprint(lat, lon) for lat, lon in points}),
         }
 
@@ -83,6 +84,48 @@ def rust_geometries(path, plate):
             yield name, points
 
 
+def rounded(value, scale):
+    value /= scale
+    return (math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)) * scale
+
+
+def quantized(value):
+    value *= 1e7
+    return (math.floor(value + 0.5) if value >= 0 else math.ceil(value - 0.5)) / 1e7
+
+
+def basemap_geometries(path):
+    for index, feature in enumerate(json.loads(historical(path))['features']):
+        name = feature['properties'].get('NAME') or 'unnamed'
+        geometry = feature['geometry']
+        polygons = geometry['coordinates'] if geometry['type'] == 'MultiPolygon' else [geometry['coordinates']]
+        raw = [(lat, lon) for polygon in polygons for ring in polygon for lon, lat, *rest in ring]
+        if raw:
+            yield f'{name}/{index}/raw', raw
+        for method, snap in [('quantized', None), ('snap-0.02', 0.02)]:
+            points = []
+            for polygon in polygons:
+                for ring in polygon:
+                    cleaned = []
+                    for lon, lat, *rest in ring:
+                        if snap is not None:
+                            lon, lat = rounded(lon, snap), rounded(lat, snap)
+                        point = (quantized(lat), quantized(lon))
+                        if not cleaned or point != cleaned[-1]:
+                            cleaned.append(point)
+                    while len(cleaned) > 1 and cleaned[0] == cleaned[-1]:
+                        cleaned.pop()
+                    if len(cleaned) >= 3:
+                        points.extend(cleaned)
+            if points:
+                yield f'{name}/{index}/{method}', points
+
+
+def basemap_paths():
+    paths = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', BASE, '--', 'data/historical-basemaps']).decode().splitlines()
+    return [path for path in paths if path.endswith('.geojson')]
+
+
 def catalogue():
     rows = []
     for path, source, geometries in [
@@ -92,7 +135,20 @@ def catalogue():
         ('crates/map-adapters/src/plate_water.rs', 'KnowingTheBible', rust_geometries('crates/map-adapters/src/plate_water.rs', True)),
     ]:
         rows.extend(source_rows(path, source, geometries))
-    return {'base': BASE, 'decision': 'docs/errata/quarantine.md', 'geometries': rows}
+    for path in basemap_paths():
+        rows.extend(source_rows(path, 'HistoricalBasemaps', basemap_geometries(path)))
+    controls = []
+    indexed = [(index, set(row['vertices'])) for index, row in enumerate(rows)]
+    for index, row in enumerate(rows):
+        if row['source'] != 'HistoricalBasemaps':
+            continue
+        _, feature, method = row['geometry'].rsplit('/', 2)
+        observed = indexed[index][1]
+        controls.append({
+            'origin': row['origin'], 'feature': int(feature), 'method': method,
+            'excluded': [other for other, vertices in indexed if vertices <= observed],
+        })
+    return {'base': BASE, 'decision': 'docs/errata/quarantine.md; docs/errata/background.md', 'geometries': rows, 'basemap_controls': controls}
 
 
 def main():
