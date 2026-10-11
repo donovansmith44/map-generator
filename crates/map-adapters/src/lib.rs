@@ -1,34 +1,16 @@
-//! map-generator source adapters — phase 2 of docs/map-system-handoff.md.
-//!
-//! An adapter turns ONE source's bytes into a lawful `WorldTimeline`
-//! behind the `TimelineSource` seam. The phase-2 law is FIDELITY: what
-//! came out is exactly what went in (quantized by the disclosed
-//! method), proven ring-for-ring by `fidelity_violations` and by the
-//! tests, which also run every map-types data validator over real
-//! ingested output.
-
-pub mod arcs;
-pub mod basemaps;
 pub mod exports;
 pub mod geojson;
 pub mod hydro;
-pub mod plate_water;
 pub mod quantize;
 pub mod surveys;
 pub mod terrain;
 
-pub use basemaps::{
-    epoch_year_from_label, fidelity_violations, ingest, EpochSource, Exemption, HistoricalBasemaps,
-    Ingest, IngestConfig, IngestError, TimelineSource,
-};
 pub use exports::{load_exports, AtlasExports, ExportError};
-pub use hydro::{ingest_ocean, ingest_water, WaterSource};
-pub use plate_water::{plate_chart, plate_river_paths, plate_water_timeline, plate_water_witnesses};
-pub use surveys::plate_canaan_ring;
+pub use hydro::{ingest_ocean, ingest_water, WaterError, WaterSource};
 pub use surveys::{authored_routes, AuthoredRoute};
 pub use terrain::{ingest_terrain, ElevationGrid};
 pub use surveys::{
-    binding_report, merge_timelines, merged_gazetteer, promised_land_timeline,
+    binding_report, merge_timelines, merged_gazetteer,
     scripture_timeline, scripture_timeline_with, stand_in_gazetteer, BindingRow, MergeError,
 };
 

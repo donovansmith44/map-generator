@@ -6,12 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use atlas_graph_types::covenant::{PlaceId, TimePoint, Year};
 use map_canon::{
-    Area, Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
+    Border, CanonStore, EntityId, Feature, LayerKind, Leg, Provenance, Route, Snapshot,
     Timestamp, Witness, World,
 };
 use map_types::UnitVec;
 
-use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+use crate::vendor::{EventRow, NarrativeRow};
 
 fn ts(y: i32) -> Result<Timestamp, String> {
     Year::new(y).map(TimePoint::year_only).map_err(|_| format!("no such year {y}"))
@@ -155,6 +155,8 @@ pub fn compile_narratives(
             .map_err(|_| format!("journeys: contradiction at {edge}"))?;
     }
     store.set_layer(LayerKind::Journeys, world);
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(CompileReport { routes, ..Default::default() })
 }
 
@@ -193,5 +195,7 @@ pub fn append_ways(
         world.insert(edge, sid).map_err(|_| "journeys: contradiction on append".to_string())?;
     }
     store.set_layer(LayerKind::Journeys, world);
+    crate::exclusion::check_compiled(store)
+        .map_err(|error| format!("excluded output: {error:?}"))?;
     Ok(())
 }

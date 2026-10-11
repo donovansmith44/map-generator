@@ -1,3 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/map-types", "crates/map-partition", "crates/map-canon", "crates/map-compile", "crates/map-adapters", "crates/map-provider", "crates/map-encoders", "crates/map-viewer"]
+
+[workspace.dependencies]
+atlas-graph-types = { git = "https://github.com/donovansmith44/your-word-is-truth-interactive-atlas", rev = "e49593567e05bf61210a842b68ef85bb6c75514e" }

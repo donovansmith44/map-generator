@@ -1,8 +1,3 @@
-//! TOOLCHAIN-1 (atlas spec 2026-09-14-relational-artifact-design §3.2):
-//! map-generator path-depends on atlas-graph-types from eight crates and
-//! pins the atlas version root (C6). The two repos must build with the
-//! same compiler, or the root the atlas computes and the root this repo
-//! recomputes could disagree with ZERO data change.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,7 +5,6 @@ use std::process::Command;
 const PINNED: &str = "1.97.1";
 
 fn repo_root() -> PathBuf {
-    // crates/map-types/ -> crates/ -> repo root
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
@@ -42,13 +36,6 @@ fn the_compiler_that_built_this_test_is_the_pinned_version() {
 
 #[test]
 fn rustup_resolves_the_pin_from_the_repo_root() {
-    // env_remove("RUSTUP_TOOLCHAIN") matters: cargo-launched test processes
-    // inherit RUSTUP_TOOLCHAIN from the toolchain that built/ran this test,
-    // and that env var outranks rust-toolchain.toml when the proxy resolves
-    // a version -- without removing it, this test would pass even if
-    // rust-toolchain.toml were deleted or pointed elsewhere, never actually
-    // consulting the file it claims to prove is load-bearing. The proxy
-    // itself is found via CARGO_HOME/bin, falling back to ~/.cargo/bin.
     let cargo_home = std::env::var("CARGO_HOME").map(PathBuf::from).or_else(|_| {
         std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))

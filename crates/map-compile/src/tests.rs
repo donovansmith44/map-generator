@@ -98,7 +98,7 @@ fn vendor_writes_are_deterministic_and_pinned() {
 
 mod compile_laws {
     use crate::compile::*;
-    use crate::vendor::{EventRow, NarrativeRow, PolityRow};
+    use crate::vendor::{EventRow, NarrativeRow};
     use atlas_graph_types::covenant::{TimePoint, Year};
     use map_canon::{Feature, LayerKind};
 
@@ -167,22 +167,36 @@ mod compile_laws {
         assert_eq!(store.validate(), vec![], "lawful, including no-overlap");
     }
 
-    /// A narrative's dated leg events become a Route whose legs span the
-    /// gaps between events, walked place to place.
     #[test]
-    fn narratives_become_routes_with_dated_legs() {
+    fn unsupported_abraham_stand_in_is_refused() {
         let narrative = NarrativeRow {
-            id: "abraham-migration".into(), name: "Abraham's Migration".into(),
+            id: "abraham-migration".into(),
+            name: "Abraham's Migration".into(),
             color: "#D97706".into(),
             legs: vec!["ab_ur".into(), "ab_haran".into(), "ab_shechem".into()],
         };
         let events = vec![
-            EventRow { id: "ab_ur".into(), label: "Ur".into(), when: Some((-2095, -2093)),
-                       places: vec!["ur-1".into()], verses: vec!["GEN.11.28".into()] },
-            EventRow { id: "ab_haran".into(), label: "Haran".into(), when: Some((-2092, -2091)),
-                       places: vec!["haran".into()], verses: vec!["GEN.12.1".into()] },
-            EventRow { id: "ab_shechem".into(), label: "Shechem".into(), when: Some((-2090, -2090)),
-                       places: vec!["shechem".into()], verses: vec!["GEN.12.6".into()] },
+            EventRow {
+                id: "ab_ur".into(),
+                label: "Ur".into(),
+                when: Some((-2095, -2093)),
+                places: vec!["ur-1".into()],
+                verses: vec!["GEN.11.28".into()],
+            },
+            EventRow {
+                id: "ab_haran".into(),
+                label: "Haran".into(),
+                when: Some((-2092, -2091)),
+                places: vec!["haran".into()],
+                verses: vec!["GEN.12.1".into()],
+            },
+            EventRow {
+                id: "ab_shechem".into(),
+                label: "Shechem".into(),
+                when: Some((-2090, -2090)),
+                places: vec!["shechem".into()],
+                verses: vec!["GEN.12.6".into()],
+            },
         ];
         let places: std::collections::BTreeMap<String, (f64, f64)> = [
             ("ur-1".to_string(), (30.96, 46.10)),
@@ -191,12 +205,80 @@ mod compile_laws {
         ]
         .into_iter()
         .collect();
+        let points: Vec<_> = ["ur-1", "haran", "shechem"]
+            .iter()
+            .map(|id| {
+                let (lat, lon) = places[*id];
+                map_types::UnitVec::from_lat_lon_deg(lat, lon)
+            })
+            .collect();
+        let expected = crate::exclusion::check_points(&points)
+            .expect_err("the unsupported historical stand-in has excluded lineage");
         let mut store = map_canon::CanonStore::default();
-        let report = compile_narratives(&mut store, &[narrative], &events, &places)
-            .expect("compiles");
-        assert_eq!(report.routes, 1);
+        let actual = compile_narratives(&mut store, &[narrative], &events, &places)
+            .expect_err("the unsupported route is refused");
+        assert_eq!(
+            actual,
+            format!("excluded output: {expected:?}"),
+            "the narrative compiler returns the complete refusal from the sole geometric owner"
+        );
+    }
+
+    #[test]
+    fn permitted_source_lines_preserve_narrative_leg_intervals() {
+        let narrative = NarrativeRow {
+            id: "synthetic-native-source".into(),
+            name: "Source interval law".into(),
+            color: "#D97706".into(),
+            legs: vec!["source-0".into(), "source-1".into(), "source-2".into()],
+        };
+        let events = vec![
+            EventRow {
+                id: "source-0".into(),
+                label: "Source 0".into(),
+                when: Some((-2095, -2093)),
+                places: vec!["source-0".into()],
+                verses: vec![],
+            },
+            EventRow {
+                id: "source-1".into(),
+                label: "Source 1".into(),
+                when: Some((-2092, -2091)),
+                places: vec!["source-1".into()],
+                verses: vec![],
+            },
+            EventRow {
+                id: "source-2".into(),
+                label: "Source 2".into(),
+                when: Some((-2090, -2090)),
+                places: vec!["source-2".into()],
+                verses: vec![],
+            },
+        ];
+        let source: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../data/natural-earth/ne_10m_rivers_lake_centerlines.geojson"
+        ))
+        .unwrap();
+        let line = crate::exclusion::geojson_lines(&source)
+            .into_iter()
+            .find(|line| line.0.len() >= 3)
+            .unwrap();
+        let places = line
+            .0
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(index, point)| (format!("source-{index}"), (point.y, point.x)))
+            .collect();
+        let mut store = map_canon::CanonStore::default();
+        let report =
+            compile_narratives(&mut store, &[narrative], &events, &places).expect("compiles");
+        assert_eq!(report.routes, 1, "one input route produces one route");
         let world = &store.layers()[&LayerKind::Journeys];
-        assert!(!world.moments().is_empty());
+        assert!(
+            !world.moments().is_empty(),
+            "dated legs produce exploration moments"
+        );
         let route = store
             .features()
             .values()
@@ -205,11 +287,26 @@ mod compile_laws {
                 _ => None,
             })
             .expect("a way was compiled");
-        assert_eq!(route.entity.0, "abraham-migration");
+        assert_eq!(
+            route.entity.0, "synthetic-native-source",
+            "the synthetic source identity is preserved"
+        );
         assert_eq!(route.legs.len(), 2, "three stations, two walks");
-        assert_eq!(route.legs[0].span, (ts(-2093), ts(-2092)), "depart when Ur ends, arrive when Haran begins");
-        assert_eq!(route.legs[1].span, (ts(-2091), ts(-2090)));
-        assert_eq!(store.validate(), vec![]);
+        assert_eq!(
+            route.legs[0].span,
+            (ts(-2093), ts(-2092)),
+            "depart when the first interval ends, arrive when the second starts"
+        );
+        assert_eq!(
+            route.legs[1].span,
+            (ts(-2091), ts(-2090)),
+            "the second leg preserves its departure and arrival intervals"
+        );
+        assert_eq!(
+            store.validate(),
+            vec![],
+            "the permitted route and dated layers are lawful"
+        );
     }
 
     /// A narrative leg whose place the gazetteer cannot resolve is a
@@ -369,192 +466,87 @@ mod waiver_laws {
     }
 }
 
-/// The integration law (L50): the real plate witnesses build one
-/// lawful partition — Canaan is a face, Jerusalem is on land, and
-/// the world sums to 4π.
 #[test]
-fn plate_partition_face_census() {
-    // The plate core alone (no polity cohorts): the census law holds
-    // for the arrangement's heart independent of the bordering world.
+fn physical_partition_face_census() {
     let (regions, polylines) =
-        crate::partition_bridge::gather_witnesses(&[]).expect("witnesses gather");
-    let p = map_partition::build(&regions, &polylines, &map_partition::PartitionConfig::default())
-        .expect("plate partition builds");
-    for (i, f) in p.faces.iter().enumerate() {
-        eprintln!(
-            "face {i}: kind={:?} area={:.3e} cycles={} claims={:?} conflicts={:?}",
-            f.kind, f.area, f.cycles.len(), f.claims, f.conflicts
-        );
-    }
-    for d in &p.diagnostics {
-        eprintln!("diag: {d}");
-    }
-    eprintln!("residual: {:.2e}", p.area_residual());
-    assert!(p.area_residual() < 1e-10, "the 4π law on real data");
+        crate::partition_bridge::gather_witnesses(&[]).expect("retained witnesses gather");
+    let partition = map_partition::build(
+        &regions,
+        &polylines,
+        &map_partition::PartitionConfig::default(),
+    )
+    .expect("retained physical witnesses form a partition");
     assert!(
-        p.faces.iter().any(|f| f.kind == map_partition::FaceKind::LandClaim
-            && f.claims == vec!["canaan".to_string()]),
-        "the pure Canaan face exists"
+        partition.area_residual() < 1e-10,
+        "physical faces cover the sphere"
     );
-    // every tribe names at least one face: the open-data allotments
-    // survive snapping, healing, and precedence end to end.
-    for tribe in [
-        "judah", "simeon", "benjamin", "ephraim", "manasseh-west", "dan", "issachar",
-        "zebulun", "asher", "naphtali", "reuben", "gad", "manasseh-east",
-        // the attested neighbors ride the same guarantee
-        "philistia", "phoenicia", "geshur", "ammon", "moab", "edom",
-    ] {
-        assert!(
-            p.faces.iter().any(|f| f.claims.first().map(String::as_str) == Some(tribe)),
-            "tribe {tribe} names no face"
-        );
-    }
-    // the settlement roster made it through the bridge
     let cities = crate::partition_bridge::load_settlements_for_law().expect("settlements load");
-    assert!(cities.len() >= 12, "a plate's worth of cities");
-    assert!(cities.iter().any(|(p, n, _, _)| p == "jerusalem" && n == "Jerusalem"));
-    // A CITY STANDS ON LAND: any rostered settlement whose site lies
-    // beneath a water witness never becomes a canon point. Sodom's
-    // traditional site is under the Dead Sea's south basin — the law
-    // holds for whoever is drowned, by measurement, not by name.
-    let waters: Vec<&Vec<map_types::UnitVec>> = regions
+    assert!(
+        cities.len() >= 12,
+        "the retained settlement roster is complete"
+    );
+    assert!(
+        cities
+            .iter()
+            .any(|(place, name, _, _)| place == "jerusalem" && name == "Jerusalem"),
+        "Jerusalem retains its recorded settlement identity"
+    );
+    let waters: Vec<_> = regions
         .iter()
-        .filter(|r| {
-            matches!(r.kind, map_partition::FaceKind::Sea | map_partition::FaceKind::Lake)
+        .filter(|region| {
+            matches!(
+                region.kind,
+                map_partition::FaceKind::Sea | map_partition::FaceKind::Lake
+            )
         })
-        .flat_map(|r| r.rings.iter())
+        .flat_map(|region| region.rings.iter())
         .collect();
-    let drowned: Vec<&str> = cities
+    let drowned: Vec<_> = cities
         .iter()
         .filter(|(_, _, lat, lon)| {
             let at = map_types::UnitVec::from_lat_lon_deg(*lat, *lon);
-            waters.iter().any(|ring| map_partition::winding(ring, &at) != 0)
+            waters
+                .iter()
+                .any(|ring| map_partition::winding(ring, &at) != 0)
         })
-        .map(|(p, _, _, _)| p.as_str())
+        .map(|(place, _, _, _)| place.as_str())
         .collect();
-    assert!(drowned.contains(&"sodom"), "the roster's known drowned site is caught");
-    // and a drowned site is not erased — it becomes a MEMORY feature
-    // (asserted at the type level: the bridge emits Feature::Memory
-    // for it; see the canon provider law for its inscription dress)
-    let jer = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
-    let mut jer_face = None;
-    for (i, _f) in p.faces.iter().enumerate() {
-        let rings = p.face_rings(i);
-        let signed: f64 = rings.iter().map(|r| map_partition::cycle_area(r)).sum();
-        let w: i32 = rings.iter().map(|r| map_partition::winding(r, &jer)).sum();
+    assert!(
+        drowned.contains(&"sodom"),
+        "the recorded submerged site remains detected"
+    );
+    let jerusalem = map_types::UnitVec::from_lat_lon_deg(31.78, 35.23);
+    let mut containing = Vec::new();
+    for (index, face) in partition.faces.iter().enumerate() {
+        let rings = partition.face_rings(index);
+        let signed: f64 = rings
+            .iter()
+            .map(|ring| map_partition::cycle_area(ring))
+            .sum();
+        let winding: i32 = rings
+            .iter()
+            .map(|ring| map_partition::winding(ring, &jerusalem))
+            .sum();
         let target = if signed <= 1e-12 { 0 } else { 1 };
-        if w == target {
-            eprintln!("JERUSALEM lives in face {i} ({:?})", p.faces[i].kind);
-            jer_face = Some(p.faces[i].kind.clone());
+        if winding == target {
+            containing.push(face.kind.clone());
         }
     }
-    assert_eq!(jer_face, Some(map_partition::FaceKind::LandClaim), "Jerusalem is on land");
-    for (i, f) in p.faces.iter().enumerate() {
-        if f.kind == map_partition::FaceKind::Background && f.area < 1.0 {
-            let r0 = &p.face_rings(i)[0];
-            let (la, lo) = r0[0].to_lat_lon_deg();
-            let mut nbs: Vec<String> = Vec::new();
-            for cy in &f.cycles {
-                for &h in cy {
-                    let nb = p.halves[p.halves[h].twin].face;
-                    let s = format!("{}:{:?}{:?}", nb, p.faces[nb].kind, p.faces[nb].claims);
-                    if !nbs.contains(&s) {
-                        nbs.push(s);
-                    }
-                }
-            }
-            eprintln!("POCKET {i} {:.1e} sr at ({la:.3},{lo:.3}) nbs={nbs:?}", f.area);
-        }
-    }
-    for (i, f) in p.faces.iter().enumerate() {
-        let mut xs: Vec<f64> = Vec::new();
-        for ring in p.face_rings(i) {
-            let n = ring.len();
-            for k in 0..n {
-                let (la1, lo1) = ring[k].to_lat_lon_deg();
-                let (la2, lo2) = ring[(k + 1) % n].to_lat_lon_deg();
-                if (la1 - 32.0) * (la2 - 32.0) <= 0.0 && la1 != la2 {
-                    let x = lo1 + (32.0 - la1) / (la2 - la1) * (lo2 - lo1);
-                    if x > 35.2 && x < 35.75 {
-                        xs.push(x);
-                    }
-                }
-            }
-        }
-        if !xs.is_empty() {
-            xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let xs4: Vec<String> = xs.iter().map(|x| format!("{x:.5}")).collect();
-            eprintln!("STEM face {i} {:?} claims={:?} xs={:?}", f.kind, f.claims, xs4);
-        }
-    }
-    {
-        use std::collections::BTreeMap;
-        let mut firsts: BTreeMap<String, usize> = BTreeMap::new();
-        let mut anywhere: BTreeMap<String, usize> = BTreeMap::new();
-        for f in &p.faces {
-            if let Some(w) = f.claims.first() {
-                *firsts.entry(w.clone()).or_insert(0) += 1;
-            }
-            for w in &f.claims {
-                *anywhere.entry(w.clone()).or_insert(0) += 1;
-            }
-        }
-        eprintln!("CLAIMS first: {firsts:?}");
-        let probe = map_types::UnitVec::from_lat_lon_deg(32.1, 35.15);
-        for (i, f) in p.faces.iter().enumerate() {
-            let rings = p.face_rings(i);
-            let signed: f64 = rings.iter().map(|r| map_partition::cycle_area(r)).sum();
-            let wnum: i32 = rings.iter().map(|r| map_partition::winding(r, &probe)).sum();
-            let target = if signed <= 1e-12 { 0 } else { 1 };
-            if wnum == target {
-                eprintln!("EPHRAIM-PROBE face {i} {:?} claims={:?}", f.kind, f.claims);
-            }
-        }
-        for r in &regions {
-            if ["ephraim", "simeon", "benjamin"].contains(&r.id.as_str()) {
-                let probe = match r.id.as_str() {
-                    "ephraim" => map_types::UnitVec::from_lat_lon_deg(32.1, 35.15),
-                    "simeon" => map_types::UnitVec::from_lat_lon_deg(31.2, 34.75),
-                    _ => map_types::UnitVec::from_lat_lon_deg(31.9, 35.2),
-                };
-                eprintln!(
-                    "RING {}: {} pts, winding at interior probe = {}",
-                    r.id,
-                    r.rings[0].len(),
-                    map_partition::winding(&r.rings[0], &probe)
-                );
-            }
-        }
-        for w in ["ephraim", "simeon"] {
-            eprintln!(
-                "CLAIMS {w}: first={} anywhere={}",
-                firsts.get(w).copied().unwrap_or(0),
-                anywhere.get(w).copied().unwrap_or(0)
-            );
-        }
-    }
-    let backgrounds =
-        p.faces.iter().filter(|f| f.kind == map_partition::FaceKind::Background).count();
-    assert_eq!(backgrounds, 1, "one Background face: every other cell is claimed — no wedges");
-    for (i, f) in p.faces.iter().enumerate() {
-        if f.kind == map_partition::FaceKind::Background && f.area < 1.0 {
-            let r0 = &p.face_rings(i)[0];
-            let (la, lo) = r0[0].to_lat_lon_deg();
-            eprintln!("BG WEDGE face {i}: {:.2e} sr at ({la:.3},{lo:.3}) {} pts", f.area, r0.len());
-        }
-    }
-    for (i, _f) in p.faces.iter().enumerate() {
-        for (ci, ring) in p.face_rings(i).iter().enumerate() {
-            let (la, lo) = ring[0].to_lat_lon_deg();
-            eprintln!(
-                "  face {i} ring {ci}: {} pts, starts ({la:.2},{lo:.2}), signed {:.3e}",
-                ring.len(),
-                map_partition::cycle_area(ring)
-            );
-        }
-    }
+    assert_eq!(
+        containing,
+        vec![map_partition::FaceKind::Background],
+        "Jerusalem has no territorial claim supplied by the excluded sources"
+    );
+    assert_eq!(
+        partition
+            .faces
+            .iter()
+            .filter(|face| face.kind == map_partition::FaceKind::Background)
+            .count(),
+        1,
+        "retained physical witnesses leave one background face"
+    );
 }
-
 
 /// A COHORT ENTERS TIME: features overlaid from a moment join every
 /// state at or after it — a rising moment is created if none stands

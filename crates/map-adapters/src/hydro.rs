@@ -20,11 +20,130 @@ use map_types::{
     RegionClass, RegionGeom, RegionHistory, RegionId, RegionPart, UnitVec, WorldTimeline,
 };
 
-use crate::basemaps::IngestError;
 use crate::geojson::parse_features;
 use crate::quantize::clean_ring;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum WaterError {
+    Parse(String, crate::geojson::ParseError),
+}
+
 const HYDRO_PROVENANCE: &str = "natural-earth (public domain; modern coastline shapes)";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RiverCourse {
+    River,
+    LakeCenterline,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RiverNumber(pub i64);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RiverSource {
+    pub number: RiverNumber,
+    pub name: Option<String>,
+    pub course: RiverCourse,
+    pub shape: RiverShape,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RiverShape {
+    Course(Vec<Vec<UnitVec>>),
+    Unlocated,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RiverError {
+    Json(String),
+    Collection,
+    Feature,
+    Number,
+    Name,
+    Course,
+    Geometry,
+    Path,
+    Position,
+}
+
+pub fn read_rivers(text: &str) -> Result<Vec<RiverSource>, RiverError> {
+    let root: serde_json::Value =
+        serde_json::from_str(text).map_err(|error| RiverError::Json(error.to_string()))?;
+    if root["type"].as_str() != Some("FeatureCollection") {
+        return Err(RiverError::Collection);
+    }
+    root["features"]
+        .as_array()
+        .ok_or(RiverError::Collection)?
+        .iter()
+        .map(read_river)
+        .collect()
+}
+
+fn read_river(feature: &serde_json::Value) -> Result<RiverSource, RiverError> {
+    if feature["type"].as_str() != Some("Feature") {
+        return Err(RiverError::Feature);
+    }
+    let properties = &feature["properties"];
+    let number = RiverNumber(properties["rivernum"].as_i64().ok_or(RiverError::Number)?);
+    let name = match properties.get("name") {
+        Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(name)) => Some(name.clone()),
+        _ => return Err(RiverError::Name),
+    };
+    let course = match properties["featurecla"].as_str() {
+        Some("River") => RiverCourse::River,
+        Some("Lake Centerline") => RiverCourse::LakeCenterline,
+        _ => return Err(RiverError::Course),
+    };
+    let geometry = &feature["geometry"];
+    let paths = match geometry["type"].as_str() {
+        Some("LineString") => vec![read_river_path(&geometry["coordinates"])?],
+        Some("MultiLineString") => geometry["coordinates"]
+            .as_array()
+            .ok_or(RiverError::Geometry)?
+            .iter()
+            .map(read_river_path)
+            .collect::<Result<Vec<_>, _>>()?,
+        _ => return Err(RiverError::Geometry),
+    };
+    let shape = if paths.is_empty() {
+        RiverShape::Unlocated
+    } else {
+        RiverShape::Course(paths)
+    };
+    Ok(RiverSource {
+        number,
+        name,
+        course,
+        shape,
+    })
+}
+
+fn read_river_path(coordinates: &serde_json::Value) -> Result<Vec<UnitVec>, RiverError> {
+    let coordinates = coordinates.as_array().ok_or(RiverError::Path)?;
+    if coordinates.len() < 2 {
+        return Err(RiverError::Path);
+    }
+    coordinates
+        .iter()
+        .map(|position| {
+            let position = position.as_array().ok_or(RiverError::Position)?;
+            let longitude = position
+                .first()
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(RiverError::Position)?;
+            let latitude = position
+                .get(1)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(RiverError::Position)?;
+            if !(-180.0..=180.0).contains(&longitude) || !(-90.0..=90.0).contains(&latitude) {
+                return Err(RiverError::Position);
+            }
+            Ok(UnitVec::from_lat_lon_deg(latitude, longitude))
+        })
+        .collect()
+}
 
 fn hash_id(tag: &str) -> ContentHash {
     let mut h = DefaultHasher::new();
@@ -52,7 +171,7 @@ pub fn ingest_water(
     source: &SourceId,
     from: TimePoint,
     waters: &[WaterSource],
-) -> Result<WorldTimeline, IngestError> {
+) -> Result<WorldTimeline, WaterError> {
     let gen_1_9_10 = || {
         let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
@@ -73,7 +192,7 @@ pub fn ingest_water(
 
     for w in waters {
         let mut features = parse_features(&w.text)
-            .map_err(|e| IngestError::Parse(w.label_for_unnamed.to_string(), e))?;
+            .map_err(|e| WaterError::Parse(w.label_for_unnamed.to_string(), e))?;
         if w.skip_largest_feature {
             let vertex_count = |f: &crate::geojson::SourceFeature| -> usize {
                 f.polygons
@@ -94,7 +213,7 @@ pub fn ingest_water(
                 for ring in std::iter::once(&poly.outer).chain(&poly.holes) {
                     // Water keeps its full precision: no snap — the
                     // coastline IS the detail we came for.
-                    let Some(pts) = clean_ring(ring, None) else { continue };
+                    let Some(pts) = clean_ring(ring) else { continue };
                     let mut closed: Vec<UnitVec> =
                         pts.iter().map(|q| q.to_unit_vec()).collect();
                     closed.push(closed[0]);
@@ -159,7 +278,7 @@ pub fn ingest_ocean(
     source: &SourceId,
     from: TimePoint,
     land_text: &str,
-) -> Result<WorldTimeline, IngestError> {
+) -> Result<WorldTimeline, WaterError> {
     let gen_1_9_10 = || {
         let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
@@ -176,13 +295,13 @@ pub fn ingest_ocean(
 
     let mut tl = WorldTimeline::default();
     let features =
-        parse_features(land_text).map_err(|e| IngestError::Parse("land".to_string(), e))?;
+        parse_features(land_text).map_err(|e| WaterError::Parse("land".to_string(), e))?;
     let mut holes: Vec<Vec<(BoundaryId, Orientation)>> = Vec::new();
     for f in &features {
         for poly in &f.polygons {
             // Only the land's outer rings shape the sea; land's own
             // holes are inland matters.
-            let Some(pts) = clean_ring(&poly.outer, None) else { continue };
+            let Some(pts) = clean_ring(&poly.outer) else { continue };
             let mut closed: Vec<UnitVec> = pts.iter().map(|q| q.to_unit_vec()).collect();
             closed.push(closed[0]);
             let bid = BoundaryId({

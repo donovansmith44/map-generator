@@ -1,0 +1,253 @@
+# X0 source quarantine
+
+The owner's permissive-source rule excludes NonCommercial, ShareAlike,
+copyleft and unlicensed geography. Removing a drawing does not disprove its
+biblical place or holding. Missing permitted geometry remains unrecorded and
+undrawn; it never means unclaimed. No golden baseline is re-blessed.
+
+Evidence: atlas MAPS migration design §5.9 and §8.2; golden 1446 specification
+B9; the removed `data/wikimedia/LICENSE.md`; and the retained
+`data/openbible/LICENSE.md`. These are the project's recorded source findings,
+not a new attribution or a new licence grant.
+
+## Excluded sources and descendants
+
+| Removal | Licence or provenance reason | Replacement |
+|---|---|---|
+| `PLATE-CANAAN`, its 332 contour waypoints, `plate_canaan_ring` in `crates/map-adapters/src/surveys.rs` | Traced from Cory Baugher / Knowing the Bible LLC, *Canaan Before the Conquest of Joshua*, ©2020. Publisher permits personal, teaching and non-commercial use only. Authored stand-in provenance did not make the tracing CC0. | Canaan evidence from Gen 10:19 and permitted, justified geometry through X16; no substitute Canaan ring in X0. NUM 34's separate Scripture survey remains. |
+| `crates/map-adapters/src/plate_water.rs`, its module and exports | Water polygons, rivers and chart calibration compiled from the same excluded plate. This module was compiled even though the main compiler had stopped drawing its water. | Existing Natural Earth water remains; X1 owns permitted river replacement. No plate-derived water remains compiled. |
+| `data/wikimedia/tribes12.geojson` and `data/wikimedia/LICENSE.md` | Wikimedia Commons *12 Tribes of Israel Map.svg*, derived from *12 tribus de Israel.svg*, CC BY-SA 3.0. Raster tracing, georeferencing, Jordan splitting and shoreline splicing retain that ancestry. | Scripture evidence and surveys (Josh 13–19) in X3, with permitted Rawson 1873 geometry through X16. No tribal ring replacement in X0. |
+| `data/openbible/regions.geojson` | Upstream OpenBible Bible-Geocoding-Data is CC BY 4.0, but this local derivative spliced its six outlines onto CC BY-SA tribes12 rings. The permissive upstream licence does not erase the excluded ancestor. | Re-derive from OpenBible alone with complete permitted lineage; nothing yet. Philistia, Phoenicia, Geshur, Ammon, Moab and Edom remain recorded identities, without these polygon witnesses. |
+| Excluded region loaders, presence declarations and snapping in `crates/map-compile/src/partition_bridge.rs` | These paths admitted the plate, tribes12 and spliced-region descendants into one shared arrangement. Every partition-derived face could consequently inherit their geometry. | Build the same spherical partition from retained physical and supplied polity witnesses. No guessed holding or replacement border. |
+| Plate and tribes exports in `crates/map-adapters/src/lib.rs`; unused era resolver in `crates/map-compile/src/main.rs` | Entry points and the era resolver existed to admit the removed witnesses. | Removed together with their consumers. |
+| Partition source-family inventory in `crates/map-canon/src/lib.rs` | Previously claimed Authored, OpenBible and Wikimedia as arrangement inputs. Those loaders no longer supply the arrangement. | Exactly Atlas, NaturalEarth and Osm. Standalone survey and settlement provenance remains unchanged. This is not a whole-pipeline permissive-source claim. |
+
+## Removed tools
+
+Every file below lived under `tools/plate_trace/`; the directory is removed.
+Removing a tool does not itself exclude every dataset that tool once produced:
+actual source ancestry decides. No replacement tool is invented in X0.
+
+| File | Reason | Replacement |
+|---|---|---|
+| `calibrate.py` | Detected reference-plate city dots and fitted its tracing chart. | Permitted-source control points in X16. |
+| `trace_green.py` | Traced the excluded plate's Canaan colour mask. | X16 permitted geometry; none in X0. |
+| `emit_plate.py` | Emitted the excluded Canaan contour as Rust waypoints. | Scripture evidence in X3/X16; none in X0. |
+| `trace_water.py` | Traced excluded plate water. | Existing Natural Earth water. |
+| `trace_water2.py` | Traced excluded plate water and river strokes. | Natural Earth and justified CC0 river work in X1/X16. |
+| `emit_water.py` | Emitted excluded water into Rust source. | Existing Natural Earth adapter. |
+| `emit_water2.py` | Emitted excluded plate water and river geometry. | Natural Earth and justified CC0 river work in X1/X16. |
+| `overlay.py` | Compared the plate-derived tracing against the excluded reference. | Permitted-source golden checks; no new tool in X0. |
+| `vendor_tribes12.py` | Raster-traced and spliced the CC BY-SA map. | X16's permitted-source geometry. |
+| `vendor_openbible.py` | Spliced otherwise permitted regions onto tribes12. | Unspliced OpenBible derivation; none yet. |
+| `vendor_osm_rivers.py` | Produced ODbL river geometry; this plate-tool directory belongs to X0. | X1 Natural Earth replacement. Existing OSM data removal belongs to X1. |
+| `vendor_jordan_corridor.py` | Produced an ODbL corridor from OSM through the chart. | X1 permitted river geometry; no replacement corridor in X0. |
+| `vendor_med.py` | Rasterized Natural Earth land through the working chart, rather than tracing plate water. Removed as part of the directory ownership. | Retained NE-derived `med_clip.geojson`; future native-course ingestion is X16. |
+| `vendor_settlements.py` | Legacy atlas-coordinate/OpenBible-type join, not a plate-geometry trace. Removed as part of the directory ownership. | Retained `settlements.geojson`; current atlas identification producer owns future replacements. |
+
+## Retained inputs and limits
+
+Natural Earth's native lakes and its land-complement Mediterranean clip remain:
+the latter's recorded source is `ne_10m_land`, not the plate's painted coast.
+The chart is a coordinate transformation used by the old tool, not a new grant
+of a licence to copied plate geometry. Settlements retain atlas coordinates and
+OpenBible typing, not coordinates traced from plate dots.
+
+OSM rivers and their OSM-derived corridor still enter the partition. X1 removes
+them. Historical basemaps and the conservative Atlas-source licence remain for
+X2 and the separately assigned atlas producers. X0 excludes the three source
+families assigned to it; it does not approve the remaining pipeline for release.
+The stale local OpenBible licence note is kept as evidence of the quarantined
+splice, not as a statement that `regions.geojson` still exists.
+
+Persisted legacy canon files outside this worktree are not changed. They must
+be regenerated from the cleaned source branch before serving it. Existing
+licence vocabulary remains able to describe legacy artifacts honestly.
+
+## Executable geometric guard (F-283 repair)
+
+Controller ruling supplied to this worker on 2026-10-09 supersedes the ordered
+three-vertex rule: exclusion is geometric. The legacy-named
+`data/authored/excluded-geometry-fingerprints.json` now records the 107 excluded
+polylines from `6ac32bfbf67e26b9cfe94560806fda293db05801`, their source family,
+original path and original SHA-256, plus the explicit geometric policy. These
+coordinates are negative admission evidence inside the guard; they are never
+loaded as witnesses or drawn. The excluded map inputs and tools remain removed.
+Recovering only vertex hashes cannot implement this ruling; retaining only the
+old run detector was rejected because resampling and feature splitting bypass it.
+
+The stated tolerance is **100 meters**. For each excluded polyline separately,
+refuse when the sum of unexplained segment lengths across every feature in the
+build exceeds **the lesser of 2,000 meters and 10 percent of that excluded
+polyline's spherical length**. The inequality is strict. Counts preserve segment
+occurrences, including duplicates and reversals; features are not dissolved and
+unrelated features never acquire connecting edges. Inputs and outputs contribute
+to the same check. Partition admission combines supplied polities, repository
+GeoJSON and vendored polity rings, then checks those with gathered outputs.
+Timeline admission and exit combine its boundaries, current compiled borders and
+repository inputs. Other compiler exits check repository inputs with every
+compiled border. GeoJSON checks aggregate before deciding, including nested
+features and directories. Refusals carry the complete source record and policy.
+
+A stretch also within 100 meters of a pinned permitted line is explained and
+removed before counting. The generated catalogue pins paths, SHA-256 and the
+closed public-domain licence of Natural Earth's retained native 10m/50m/110m land, ocean and lake lines,
+10m river/lake centerlines and the retained NE Mediterranean clip. Source properties
+and filenames in incoming builds never grant an exemption. A future permitted
+survey needs cited source data at this same catalogue door; no surveyed course is
+invented here. NE explanations are clipped to the excluded geometry's extent with
+a tolerance margin by the owning Rust producer, using library polygon clipping.
+The fixed list of source files at the pinned historical base supplies the evidence; no imported NE coordinates are
+retuned. General source eligibility/derivation policy remains C4's responsibility.
+
+The maintained `geo` crate owns spherical distance, bearing, interpolation,
+densification and length, as well as planar meter buffering, difference and line
+clipping. Each excluded line has a local azimuthal-equidistant meter frame: geo's
+spherical distance and bearing from its first point are expressed as east/north
+coordinates. Great-circle arcs are densified by geo at at most 10km intervals
+before projection/indexing. This is a numerical approximation for the regional
+quarantine geometry, not a claim of exact geodesic buffering at global antipodes;
+the spherical sagitta of a 10km chord is under 2m. No tolerance or threshold was
+tuned to a shape or a gate. `rstar` selects candidate segments; each segment is
+clipped separately so overlapping feature occurrences remain in the length sum.
+
+Library survey: [geo](https://docs.rs/geo/0.31.0/geo/) (MIT/Apache-2.0, maintained
+GeoRust crate) supplies the required algorithms and is the controller's choice.
+[BooleanOps clipping](https://docs.rs/geo/0.31.0/geo/algorithm/bool_ops/trait.BooleanOps.html)
+and [Buffer](https://docs.rs/geo/0.31.0/geo/algorithm/buffer/trait.Buffer.html) fit
+partial segment measurement and permitted-buffer subtraction directly.
+[rstar](https://docs.rs/rstar/0.12.2/rstar/) (MIT/Apache-2.0, maintained GeoRust
+crate, also used by geo) avoids a new spatial index.
+[proj4rs](https://docs.rs/proj4rs/latest/proj4rs/) was considered for a separate
+projection engine; geo's spherical distance and bearing already supply the local
+meter frame, so no additional CRS/datum conversion machinery is needed.
+Existing Serde and tree-sitter own JSON and historical Rust parsing; the existing
+coordinate walker now collects sequences once and is shared by guard and producer.
+There is no new JSON parser, geodesic solver, buffer or clipping implementation.
+Dependency licences are recorded in `LICENSES.md`.
+
+`map-partition::PointKey` remains the single owner of existing partition identity
+(Cartesian components rounded at 1e9 units and big-endian encoding). Both partition
+consumers still call it. The unused latitude/longitude lineage quantizer and
+vertex-run machinery are removed. Catalogue coordinates remain floating source
+coordinates: no second quantizer or vertex equality decides geometric lineage.
+
+`tools/quarantine_fingerprints.py --check` reproduces the complete negative and
+permitted catalogue through the built Rust `quarantine_keys` example, using the
+shared `CARGO_TARGET_DIR`. Generated laws cover resampling, splitting, reversal,
+single-vertex deletion and sub-tolerance perturbation, independent geometry,
+permitted explanation, permitted sub-tolerance geometry, short-line thresholds,
+partial explanations and repeated features. The reviewer's real Judah midpoint
+and fan probes, renamed GeoJSON, multiple nested files, compiled borders,
+timeline entry/unchanged-output and restored-med input controls bind the actual
+admission doors. Historical two-point paths are recorded and measured. The
+absence of a match does not establish absence of a place, claim or lineage; it
+only admits geometry under this explicitly ruled check.
+
+A read-only isolation on this repair finds unexplained matches in retained OSM
+rivers, twelve GPL historical basemaps, several vendored atlas polity courses and
+some disclosed Scripture stand-in courses. This establishes geometric overlap
+under the controller rule, not proof that these sources copied an excluded map.
+X1/X2 remove their assigned OSM/GPL inputs; X3/C4 own the remaining course
+provenance/explanations. No input receives an eligibility exemption just because
+it is called Atlas or Scripture. Existing course coordinates and confidence are
+not changed here. The full retained-corpus compile consequently stays refused
+until those owners supply permitted explanations or eligible replacements.
+
+For concurrent shared-target builds, set `QUARANTINE_KEYS_EXECUTABLE` to the
+verified producer image when generating/checking the catalogue and running the
+producer law. Otherwise the standard shared-target example path is used. A
+build's executable may be captured outside the target tree; this avoids consuming
+a different worktree's producer after it overwrites the common example pathname.
+
+## Retained corpus courses (MG-X0-3)
+
+The five retained-corpus failures at the end of the X0 report are resolved by
+registering exact native Natural Earth coast, ocean, lake and river lines, and
+quarantining unsupported courses below. No cited survey supplies an equally
+explanatory course for these overlaps. The geometric policy remains 100 m
+with a 2,000 m maximum and the original short-line fraction of 0.1.
+Overlap is exclusion-law evidence, not a claim of historical copying.
+The machine-readable decisions are `data/authored/quarantined-courses.json`.
+Polity holding evidence and all Scripture references, dates, waypoint identities,
+provenance and alternatives remain; empty region parts mean Unlocated.
+Four courses compose approximately 3,157.55 m of unexplained Judah overlap;
+seven compose approximately 4,031.99 m of GPL Roman Empire overlap. Their
+individual contributions are recorded even where each alone is below threshold.
+The two remaining Egypt intervals compose 2,303.83 m of unexplained GPL overlap
+and are likewise retained as Unlocated, with their holding evidence unchanged.
+
+The former Abraham narrative fixture is independently refused against the same
+OSM Barada line recorded for `scripture-route/R-ABRAHAM`. Its timing law now
+uses explicitly synthetic identities on three unmodified native Natural Earth
+source points; the unsupported fixture stays solely as a refusal control.
+Raw GeoJSON admission uses the same `UnitVec` representation as typed input.
+
+| Polity interval | Outcome | Excluded overlap |
+|---|---|---|
+| assyria -911..-609 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| israel -1050..-931 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| judah -930..-587 | Unlocated; evidence retained | Tribes12: judah/0/0 |
+| judah -164..-63 | Unlocated; evidence retained | KnowingTheBible: PLATE_JORDAN_1 |
+| judah -39..-4 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| phoenicia -1200..-539 | Unlocated; evidence retained | SplicedRegions: Phoenicia/0/0 |
+| roman-empire -30..100 | Unlocated; evidence retained | KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| alexander-empire -335..-323 | Unlocated; evidence retained | OsmRivers: Nahr ez Zahrani/1288/0 |
+| babylon -2100..-1156 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| babylon -626..-539 | Unlocated; evidence retained | OsmRivers: Valley of Gaza (Wadi Ghazza)/70/0 |
+| egypt -1549..-1069 | Unlocated; evidence retained | OsmRivers: Litani River/78/0 |
+| egypt -331..-30 | Unlocated; evidence retained | HistoricalBasemaps: Achaemenid Empire/16/0/0/raw |
+| elam -4004..-539 | Unlocated; evidence retained | HistoricalBasemaps: Parthian Empire/149/0/0/raw |
+| hittites -1600..-1180 | Unlocated; evidence retained | HistoricalBasemaps: Hittites/104/0/0/raw |
+| israel -930..-722 | Unlocated; evidence retained | OsmRivers: Nahal Sorek/1006/0 |
+| parthian-empire -140..100 | Unlocated; evidence retained | HistoricalBasemaps: Parthian Empire/149/0/0/raw |
+| persia -539..-331 | Unlocated; evidence retained | OsmRivers: Nahr ez Zahrani/1288/0 |
+| roman-empire -200..-31 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/5/0/raw |
+| seleucid-empire -301..-150 | Unlocated; evidence retained | HistoricalBasemaps: Suren Kingdom/130/0/0/raw |
+| seleucid-empire -149..-64 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| egypt -4004..-1550 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/22/0/raw |
+| egypt -1068..-332 | Unlocated; evidence retained | HistoricalBasemaps: Roman Empire/150/22/0/raw |
+
+| Scripture course | Cited span endpoints | Outcome / excluded overlap |
+|---|---|---|
+| `scripture-survey:NT-JUDAEA` | 1KI.4.21–1KI.4.25 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-JACOB` | GEN.28.10–GEN.35.27 | Unlocated; Tribes12: gad/0/0 |
+| `scripture-era/ISRAEL-UNITED/phase0` | 1SA.11.14–1SA.11.15 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-PAUL3` | ACT.18.23–ACT.21.17 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-EXILE` | 2KI.25.1–2KI.25.21 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-survey:EZK47` | EZK.47.13–EZK.47.20 | Unlocated; SplicedRegions: Phoenicia/0/0 |
+| `scripture-survey:EZK48` | EZK.48.8–EZK.48.20 | Unlocated; Tribes12: ephraim/0/0 |
+| `scripture-era/JUDAH-KINGDOM/phase0` | 1KI.12.20–1KI.12.24 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-era/ISRAEL-NORTH/phase1` | 2KI.14.25–2KI.14.27 | Unlocated; SplicedRegions: Phoenicia/0/0 |
+| `scripture-survey:N-CANAAN` | GEN.10.15–GEN.10.19 | Unlocated; KnowingTheBible: PLATE_CANAAN_CONTOUR |
+| `scripture-survey:NT-PEREA` | LUK.3.1–LUK.3.1 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-route/R-RETURN` | EZR.1.1–EZR.2.70 | Unlocated; Tribes12: manasseh-east/0/0 |
+| `scripture-route/R-ROME` | ACT.27.1–ACT.28.16 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-survey:N-TIRAS` | GEN.10.2–GEN.10.2 | Unlocated; HistoricalBasemaps: Empire of Alexander/40/3/0/raw |
+| `scripture-route/R-NATIVITY` | MAT.2.1–MAT.2.23 | Unlocated; OsmRivers: Nahal Shikma/320/0 |
+| `scripture-survey:N-LUD` | GEN.10.22–GEN.10.22 | Unlocated; HistoricalBasemaps: Greek city-states/119/1/0/raw |
+| `scripture-survey:NT-GALILEE` | LUK.3.1–LUK.3.1 | Unlocated; OsmRivers: Nahal Kishon/269/0 |
+| `scripture-route/R-PAUL2` | ACT.15.36–ACT.18.22 | Unlocated; HistoricalBasemaps: Roman Empire/150/5/0/raw |
+| `scripture-survey:N-PHUT` | GEN.10.6–GEN.10.6 | Unlocated; HistoricalBasemaps: Ptolemaic Kingdom/36/0/0/raw |
+| `scripture-route/R-ARK` | 1SA.4.1–1SA.7.2 | Unlocated; OsmRivers: Nahal Sorek/215/0 |
+| `scripture-era/ISRAEL-UNITED/phase1` | 1KI.4.21–1KI.4.25 | Unlocated; KnowingTheBible: PLATE_AREA_GREAT_SEA_0 |
+| `scripture-route/R-JOSEPH` | GEN.37.12–GEN.37.36 | Unlocated; OsmRivers: Ayalon River/1273/0 |
+| `scripture-survey:N-JAVAN` | GEN.10.2–GEN.10.5 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-route/R-EXODUS` | NUM.33.5–NUM.33.49 | Unlocated; HistoricalBasemaps: Nabatean Kingdom/439/0/0/raw |
+| `scripture-survey:N-CUSH` | GEN.10.6–GEN.10.7 | Unlocated; HistoricalBasemaps: Meroe/11/0/0/raw |
+| `scripture-era/ISRAEL-NORTH/phase0` | 1KI.12.16–1KI.12.20 | Unlocated; OsmRivers: Zarqa River/126/0 |
+| `scripture-survey:N-MIZRAIM` | GEN.10.6–GEN.10.6 | Unlocated; HistoricalBasemaps: Roman Empire/150/22/0/raw |
+| `scripture-route/R-ABRAHAM` | GEN.11.31–GEN.13.18 | Unlocated; OsmRivers: Barada River/302/0 |
+| `scripture-survey:NT-ITUREA` | LUK.3.1–LUK.3.1 | Unlocated; OsmRivers: /162/0 |
+| `scripture-survey:N-ARAM` | GEN.10.22–GEN.10.23 | Unlocated; OsmRivers: Barada River/68/0 |
+| `scripture-era/YEHUD/phase0` | EZR.1.1–EZR.1.3 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-SPIES` | NUM.13.17–NUM.13.26 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-PHILIP` | ACT.8.26–ACT.8.40 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-ELIJAH` | 1KI.19.1–1KI.19.8 | Unlocated; Tribes12: judah/0/0 |
+| `scripture-route/R-PAUL1` | ACT.13.1–ACT.14.28 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-SHINAR` | GEN.10.8–GEN.10.10 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-route/R-JONAH` | JON.1.3–JON.3.3 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-GOMER` | GEN.10.2–GEN.10.3 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-ELAM` | GEN.10.22–GEN.10.22 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-ASSHUR` | GEN.10.11–GEN.10.12 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |
+| `scripture-survey:N-MESHECH` | GEN.10.2–GEN.10.2 | Unlocated; HistoricalBasemaps: Roman Empire/150/21/0/raw |

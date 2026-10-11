@@ -909,10 +909,9 @@ fn every_witness_names_the_terms_its_data_is_available_under() {
             (Witness::OpenBible, vec!["CC-BY-4.0"]),
             (Witness::Osm, vec!["ODbL-1.0"]),
             (Witness::Wikimedia, vec!["CC-BY-SA-3.0"]),
-            // the composite: every dataset the plane partition consumes
             (
                 Witness::Partition,
-                vec!["public-domain", "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-3.0", "CC-BY-SA-4.0", "ODbL-1.0"],
+                vec!["public-domain", "CC-BY-SA-4.0"],
             ),
         ],
         "each origin's terms, whole: the vendored LICENSE file of each dataset"
@@ -933,9 +932,9 @@ fn the_share_alike_origins_are_named_not_inferred() {
             Witness::Basemap,
             Witness::Osm,
             Witness::Wikimedia,
-            // the partition inherits share-alike from four of its six inputs
             Witness::Partition,
-        ]
+        ],
+        "the complete share-alike origin inventory follows the recorded source terms"
     );
 }
 

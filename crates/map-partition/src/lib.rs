@@ -16,6 +16,8 @@
 //! presented to the builder, never canonical geometry themselves.
 
 mod build;
+mod point_key;
+pub use point_key::PointKey;
 #[cfg(test)]
 mod tests;
 
@@ -509,22 +511,14 @@ impl Partition {
     /// ride separately — geometry identity is geometric.
     pub fn content_hash(&self) -> u64 {
         let mut order: Vec<usize> = (0..self.vertices.len()).collect();
-        let key = |v: &UnitVec| {
-            let q = |x: f64| ((x * 1e9).round() as i64).to_be_bytes();
-            let mut k = [0u8; 24];
-            k[..8].copy_from_slice(&q(v.x()));
-            k[8..16].copy_from_slice(&q(v.y()));
-            k[16..].copy_from_slice(&q(v.z()));
-            k
-        };
-        order.sort_by_key(|&i| key(&self.vertices[i]));
+        order.sort_by_key(|&i| PointKey::partition(&self.vertices[i]).bytes());
         let mut rank = vec![0usize; self.vertices.len()];
         for (r, &i) in order.iter().enumerate() {
             rank[i] = r;
         }
         let mut h = Fnv::new();
         for &i in &order {
-            h.bytes(&key(&self.vertices[i]));
+            h.bytes(&PointKey::partition(&self.vertices[i]).bytes());
         }
         let mut edge_keys: Vec<(usize, usize, bool)> = self
             .edges

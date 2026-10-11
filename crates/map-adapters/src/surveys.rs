@@ -24,6 +24,8 @@ use atlas_graph_types::covenant::{ContentHash, PlaceId};
 use atlas_graph_types::covenant::{BibleLocus, LocusRange, VerseRef};
 
 use crate::exports::AtlasExports;
+use serde::Deserialize;
+use std::sync::OnceLock;
 use map_types::{
     AtlasEventRef, AtlasPlaceRef, BorderSurvey, Boundary, BoundaryHistory, BoundaryId, BoundarySource,
     ChangeEvent, ChangeKind, EdgeCharacter, GazetteerEntry, GazetteerExport, Interval,
@@ -42,400 +44,6 @@ struct Waypoint {
     lat: f64,
     lon: f64,
 }
-
-/// The promised land's borders, specified by God to Moses — NUM
-/// 34:1-12, walked in text order: south side west along Edom, up the
-/// Great Sea, the north border to Hazar-enan, then down the east side
-/// to the Salt Sea. A closed circuit.
-const NUM_34_CIRCUIT: &[Waypoint] = &[
-    Waypoint { name: "south end of the Salt Sea", lat: 31.05, lon: 35.44 },
-    Waypoint { name: "ascent of Akrabbim", lat: 30.95, lon: 35.20 },
-    Waypoint { name: "wilderness of Zin", lat: 30.80, lon: 34.80 },
-    Waypoint { name: "Kadesh-barnea", lat: 30.69, lon: 34.49 },
-    Waypoint { name: "Hazar-addar", lat: 30.75, lon: 34.30 },
-    Waypoint { name: "Azmon", lat: 30.85, lon: 34.20 },
-    Waypoint { name: "Brook of Egypt", lat: 31.16, lon: 33.80 },
-    Waypoint { name: "Great Sea off Joppa", lat: 32.05, lon: 34.70 },
-    Waypoint { name: "Great Sea off Tyre", lat: 33.27, lon: 35.18 },
-    Waypoint { name: "mount Hor (northern)", lat: 34.30, lon: 35.90 },
-    Waypoint { name: "entrance of Hamath", lat: 34.42, lon: 36.37 },
-    Waypoint { name: "Zedad", lat: 34.31, lon: 36.60 },
-    Waypoint { name: "Ziphron", lat: 34.35, lon: 36.85 },
-    Waypoint { name: "Hazar-enan", lat: 34.23, lon: 37.24 },
-    Waypoint { name: "Shepham", lat: 33.80, lon: 36.40 },
-    Waypoint { name: "Riblah east of Ain", lat: 33.40, lon: 35.95 },
-    Waypoint { name: "east slope of the sea of Chinnereth", lat: 32.83, lon: 35.65 },
-    Waypoint { name: "the Jordan at Bethabara", lat: 32.00, lon: 35.55 },
-    Waypoint { name: "north end of the Salt Sea", lat: 31.76, lon: 35.55 },
-];
-
-// THE ALLOTMENT LATTICE (JOS 13-19), organic authoring. Every border
-// two tribes share is authored ONCE as a densified, gently wiggling
-// polyline and BOTH circuits walk the identical literals, so neighbors
-// tile with no gap and no overlap. Coastal circuits overhang into the
-// sea and the lakes; the Water layer paints after the claims, so the
-// visible edge is the real natural-earth shoreline. West-bank circuits
-// stop at lon 35.555, east-bank at 35.57: the hairline between is the
-// Jordan (river geometry itself is a standing atlas ask). Intermediate
-// "reach" waypoints are disclosed interpolation markers, not places.
-
-// ------------------------- the traced plate contour (calibration proof)
-//
-// One region of the owner's reference plate, georeferenced and traced:
-// the pixel->position function is an affine fit over 12 detected city
-// dots (mean residual 1.6 km, max 2.8 km), the border is the region's
-// color mask contour (~75 m/px), Douglas-Peucker simplified at ~300 m.
-// Every waypoint is an interpolation marker of that tracing, not a
-// place. This is the precision reference the tribal circuits converge
-// to; the method spreads region by region.
-
-const PLATE_CANAAN_CONTOUR: &[Waypoint] = &[
-    Waypoint { name: "canaan contour 000", lat: 33.47979, lon: 35.66262 },
-    Waypoint { name: "canaan contour 001", lat: 33.47555, lon: 35.64545 },
-    Waypoint { name: "canaan contour 002", lat: 33.44757, lon: 35.60701 },
-    Waypoint { name: "canaan contour 003", lat: 33.42254, lon: 35.58572 },
-    Waypoint { name: "canaan contour 004", lat: 33.42087, lon: 35.57009 },
-    Waypoint { name: "canaan contour 005", lat: 33.41522, lon: 35.55884 },
-    Waypoint { name: "canaan contour 006", lat: 33.40936, lon: 35.55797 },
-    Waypoint { name: "canaan contour 007", lat: 33.41014, lon: 35.55131 },
-    Waypoint { name: "canaan contour 008", lat: 33.38634, lon: 35.53375 },
-    Waypoint { name: "canaan contour 009", lat: 33.33047, lon: 35.52222 },
-    Waypoint { name: "canaan contour 010", lat: 33.32212, lon: 35.51537 },
-    Waypoint { name: "canaan contour 011", lat: 33.27417, lon: 35.49881 },
-    Waypoint { name: "canaan contour 012", lat: 33.26780, lon: 35.52542 },
-    Waypoint { name: "canaan contour 013", lat: 33.25737, lon: 35.52521 },
-    Waypoint { name: "canaan contour 014", lat: 32.99502, lon: 35.43080 },
-    Waypoint { name: "canaan contour 015", lat: 32.96732, lon: 35.41242 },
-    Waypoint { name: "canaan contour 016", lat: 32.87357, lon: 35.36895 },
-    Waypoint { name: "canaan contour 017", lat: 32.73422, lon: 35.28816 },
-    Waypoint { name: "canaan contour 018", lat: 32.66143, lon: 35.23991 },
-    Waypoint { name: "canaan contour 019", lat: 32.65835, lon: 35.23019 },
-    Waypoint { name: "canaan contour 020", lat: 32.66833, lon: 35.18510 },
-    Waypoint { name: "canaan contour 021", lat: 32.70707, lon: 35.13612 },
-    Waypoint { name: "canaan contour 022", lat: 32.74570, lon: 35.12799 },
-    Waypoint { name: "canaan contour 023", lat: 32.76963, lon: 35.10397 },
-    Waypoint { name: "canaan contour 024", lat: 32.79257, lon: 35.09775 },
-    Waypoint { name: "canaan contour 025", lat: 32.80661, lon: 35.07947 },
-    Waypoint { name: "canaan contour 026", lat: 32.82768, lon: 35.06875 },
-    Waypoint { name: "canaan contour 027", lat: 32.84809, lon: 35.05040 },
-    Waypoint { name: "canaan contour 028", lat: 32.86847, lon: 35.01537 },
-    Waypoint { name: "canaan contour 029", lat: 32.87471, lon: 34.99544 },
-    Waypoint { name: "canaan contour 030", lat: 32.86811, lon: 34.96486 },
-    Waypoint { name: "canaan contour 031", lat: 32.85219, lon: 34.94449 },
-    Waypoint { name: "canaan contour 032", lat: 32.80218, lon: 34.93309 },
-    Waypoint { name: "canaan contour 033", lat: 32.77349, lon: 34.93325 },
-    Waypoint { name: "canaan contour 034", lat: 32.73713, lon: 34.92435 },
-    Waypoint { name: "canaan contour 035", lat: 32.71072, lon: 34.90674 },
-    Waypoint { name: "canaan contour 036", lat: 32.67357, lon: 34.90599 },
-    Waypoint { name: "canaan contour 037", lat: 32.65480, lon: 34.89818 },
-    Waypoint { name: "canaan contour 038", lat: 32.60600, lon: 34.89200 },
-    Waypoint { name: "canaan contour 039", lat: 32.56713, lon: 34.87859 },
-    Waypoint { name: "canaan contour 040", lat: 32.54628, lon: 34.87743 },
-    Waypoint { name: "canaan contour 041", lat: 32.49567, lon: 34.86378 },
-    Waypoint { name: "canaan contour 042", lat: 32.47175, lon: 34.85216 },
-    Waypoint { name: "canaan contour 043", lat: 32.32241, lon: 34.81722 },
-    Waypoint { name: "canaan contour 044", lat: 32.07747, lon: 34.73356 },
-    Waypoint { name: "canaan contour 045", lat: 32.05626, lon: 34.71680 },
-    Waypoint { name: "canaan contour 046", lat: 31.95781, lon: 34.68065 },
-    Waypoint { name: "canaan contour 047", lat: 31.93594, lon: 34.66462 },
-    Waypoint { name: "canaan contour 048", lat: 31.86546, lon: 34.63201 },
-    Waypoint { name: "canaan contour 049", lat: 31.84173, lon: 34.61074 },
-    Waypoint { name: "canaan contour 050", lat: 31.82420, lon: 34.60667 },
-    Waypoint { name: "canaan contour 051", lat: 31.77253, lon: 34.57964 },
-    Waypoint { name: "canaan contour 052", lat: 31.67015, lon: 34.51000 },
-    Waypoint { name: "canaan contour 053", lat: 31.54422, lon: 34.40869 },
-    Waypoint { name: "canaan contour 054", lat: 31.49685, lon: 34.36169 },
-    Waypoint { name: "canaan contour 055", lat: 31.48393, lon: 34.35475 },
-    Waypoint { name: "canaan contour 056", lat: 31.46019, lon: 34.36247 },
-    Waypoint { name: "canaan contour 057", lat: 31.44426, lon: 34.38365 },
-    Waypoint { name: "canaan contour 058", lat: 31.39105, lon: 34.40412 },
-    Waypoint { name: "canaan contour 059", lat: 31.36514, lon: 34.42958 },
-    Waypoint { name: "canaan contour 060", lat: 31.34073, lon: 34.44469 },
-    Waypoint { name: "canaan contour 061", lat: 31.31448, lon: 34.45307 },
-    Waypoint { name: "canaan contour 062", lat: 31.28322, lon: 34.45095 },
-    Waypoint { name: "canaan contour 063", lat: 31.24655, lon: 34.45912 },
-    Waypoint { name: "canaan contour 064", lat: 31.22746, lon: 34.46839 },
-    Waypoint { name: "canaan contour 065", lat: 31.20624, lon: 34.48727 },
-    Waypoint { name: "canaan contour 066", lat: 31.19273, lon: 34.51225 },
-    Waypoint { name: "canaan contour 067", lat: 31.17472, lon: 34.53342 },
-    Waypoint { name: "canaan contour 068", lat: 31.17113, lon: 34.55117 },
-    Waypoint { name: "canaan contour 069", lat: 31.15687, lon: 34.58133 },
-    Waypoint { name: "canaan contour 070", lat: 31.12464, lon: 34.59553 },
-    Waypoint { name: "canaan contour 071", lat: 31.11864, lon: 34.60284 },
-    Waypoint { name: "canaan contour 072", lat: 31.08529, lon: 34.67717 },
-    Waypoint { name: "canaan contour 073", lat: 31.10795, lon: 34.68579 },
-    Waypoint { name: "canaan contour 074", lat: 31.10848, lon: 34.69249 },
-    Waypoint { name: "canaan contour 075", lat: 31.04070, lon: 34.96811 },
-    Waypoint { name: "canaan contour 076", lat: 31.01336, lon: 35.03513 },
-    Waypoint { name: "canaan contour 077", lat: 30.96466, lon: 35.19752 },
-    Waypoint { name: "canaan contour 078", lat: 30.95742, lon: 35.20109 },
-    Waypoint { name: "canaan contour 079", lat: 30.94287, lon: 35.17703 },
-    Waypoint { name: "canaan contour 080", lat: 30.89767, lon: 35.29197 },
-    Waypoint { name: "canaan contour 081", lat: 30.90190, lon: 35.30987 },
-    Waypoint { name: "canaan contour 082", lat: 30.88825, lon: 35.30737 },
-    Waypoint { name: "canaan contour 083", lat: 30.88406, lon: 35.32214 },
-    Waypoint { name: "canaan contour 084", lat: 30.89420, lon: 35.37284 },
-    Waypoint { name: "canaan contour 085", lat: 30.91528, lon: 35.39628 },
-    Waypoint { name: "canaan contour 086", lat: 30.93858, lon: 35.40567 },
-    Waypoint { name: "canaan contour 087", lat: 30.98746, lon: 35.40739 },
-    Waypoint { name: "canaan contour 088", lat: 31.01473, lon: 35.41388 },
-    Waypoint { name: "canaan contour 089", lat: 31.03018, lon: 35.42459 },
-    Waypoint { name: "canaan contour 090", lat: 31.03886, lon: 35.44853 },
-    Waypoint { name: "canaan contour 091", lat: 31.08651, lon: 35.47486 },
-    Waypoint { name: "canaan contour 092", lat: 31.09906, lon: 35.47277 },
-    Waypoint { name: "canaan contour 093", lat: 31.11034, lon: 35.46260 },
-    Waypoint { name: "canaan contour 094", lat: 31.12090, lon: 35.42122 },
-    Waypoint { name: "canaan contour 095", lat: 31.15166, lon: 35.41516 },
-    Waypoint { name: "canaan contour 096", lat: 31.18537, lon: 35.39134 },
-    Waypoint { name: "canaan contour 097", lat: 31.20692, lon: 35.38954 },
-    Waypoint { name: "canaan contour 098", lat: 31.21125, lon: 35.40225 },
-    Waypoint { name: "canaan contour 099", lat: 31.22214, lon: 35.41287 },
-    Waypoint { name: "canaan contour 100", lat: 31.23766, lon: 35.41987 },
-    Waypoint { name: "canaan contour 101", lat: 31.26694, lon: 35.42343 },
-    Waypoint { name: "canaan contour 102", lat: 31.28690, lon: 35.43720 },
-    Waypoint { name: "canaan contour 103", lat: 31.30120, lon: 35.43971 },
-    Waypoint { name: "canaan contour 104", lat: 31.31984, lon: 35.45420 },
-    Waypoint { name: "canaan contour 105", lat: 31.33316, lon: 35.45419 },
-    Waypoint { name: "canaan contour 106", lat: 31.35217, lon: 35.43406 },
-    Waypoint { name: "canaan contour 107", lat: 31.43128, lon: 35.42377 },
-    Waypoint { name: "canaan contour 108", lat: 31.47681, lon: 35.42989 },
-    Waypoint { name: "canaan contour 109", lat: 31.51607, lon: 35.42325 },
-    Waypoint { name: "canaan contour 110", lat: 31.56134, lon: 35.44347 },
-    Waypoint { name: "canaan contour 111", lat: 31.61101, lon: 35.43779 },
-    Waypoint { name: "canaan contour 112", lat: 31.64769, lon: 35.46378 },
-    Waypoint { name: "canaan contour 113", lat: 31.70330, lon: 35.48941 },
-    Waypoint { name: "canaan contour 114", lat: 31.72312, lon: 35.51060 },
-    Waypoint { name: "canaan contour 115", lat: 31.72264, lon: 35.53584 },
-    Waypoint { name: "canaan contour 116", lat: 31.72636, lon: 35.54631 },
-    Waypoint { name: "canaan contour 117", lat: 31.74373, lon: 35.55928 },
-    Waypoint { name: "canaan contour 118", lat: 31.78027, lon: 35.55169 },
-    Waypoint { name: "canaan contour 119", lat: 31.78105, lon: 35.55113 },
-    Waypoint { name: "canaan contour 120", lat: 31.78975, lon: 35.55296 },
-    Waypoint { name: "canaan contour 121", lat: 31.79664, lon: 35.55441 },
-    Waypoint { name: "canaan contour 122", lat: 31.80592, lon: 35.54643 },
-    Waypoint { name: "canaan contour 123", lat: 31.80592, lon: 35.54643 },
-    Waypoint { name: "canaan contour 124", lat: 31.81832, lon: 35.54594 },
-    Waypoint { name: "canaan contour 125", lat: 31.82343, lon: 35.55198 },
-    Waypoint { name: "canaan contour 126", lat: 31.82460, lon: 35.55160 },
-    Waypoint { name: "canaan contour 127", lat: 31.82999, lon: 35.54989 },
-    Waypoint { name: "canaan contour 128", lat: 31.83647, lon: 35.55224 },
-    Waypoint { name: "canaan contour 129", lat: 31.84430, lon: 35.55166 },
-    Waypoint { name: "canaan contour 130", lat: 31.84548, lon: 35.55076 },
-    Waypoint { name: "canaan contour 131", lat: 31.85290, lon: 35.54515 },
-    Waypoint { name: "canaan contour 132", lat: 31.85877, lon: 35.54527 },
-    Waypoint { name: "canaan contour 133", lat: 31.85877, lon: 35.54527 },
-    Waypoint { name: "canaan contour 134", lat: 31.86387, lon: 35.55131 },
-    Waypoint { name: "canaan contour 135", lat: 31.86716, lon: 35.55191 },
-    Waypoint { name: "canaan contour 136", lat: 31.87297, lon: 35.55298 },
-    Waypoint { name: "canaan contour 137", lat: 31.87677, lon: 35.54771 },
-    Waypoint { name: "canaan contour 138", lat: 31.88302, lon: 35.53907 },
-    Waypoint { name: "canaan contour 139", lat: 31.88302, lon: 35.53907 },
-    Waypoint { name: "canaan contour 140", lat: 31.88894, lon: 35.53622 },
-    Waypoint { name: "canaan contour 141", lat: 31.89412, lon: 35.53781 },
-    Waypoint { name: "canaan contour 142", lat: 31.89413, lon: 35.53781 },
-    Waypoint { name: "canaan contour 143", lat: 31.90534, lon: 35.52984 },
-    Waypoint { name: "canaan contour 144", lat: 31.90734, lon: 35.52842 },
-    Waypoint { name: "canaan contour 145", lat: 31.91839, lon: 35.53088 },
-    Waypoint { name: "canaan contour 146", lat: 31.92281, lon: 35.53839 },
-    Waypoint { name: "canaan contour 147", lat: 31.92736, lon: 35.53922 },
-    Waypoint { name: "canaan contour 148", lat: 31.93565, lon: 35.54904 },
-    Waypoint { name: "canaan contour 149", lat: 31.95202, lon: 35.54566 },
-    Waypoint { name: "canaan contour 150", lat: 31.95520, lon: 35.54667 },
-    Waypoint { name: "canaan contour 151", lat: 31.96873, lon: 35.55096 },
-    Waypoint { name: "canaan contour 152", lat: 31.96952, lon: 35.55121 },
-    Waypoint { name: "canaan contour 153", lat: 31.98333, lon: 35.54023 },
-    Waypoint { name: "canaan contour 154", lat: 31.98409, lon: 35.53963 },
-    Waypoint { name: "canaan contour 155", lat: 31.99453, lon: 35.54183 },
-    Waypoint { name: "canaan contour 156", lat: 31.99578, lon: 35.54209 },
-    Waypoint { name: "canaan contour 157", lat: 32.00238, lon: 35.53777 },
-    Waypoint { name: "canaan contour 158", lat: 32.00641, lon: 35.53191 },
-    Waypoint { name: "canaan contour 159", lat: 32.00641, lon: 35.53191 },
-    Waypoint { name: "canaan contour 160", lat: 32.01879, lon: 35.53216 },
-    Waypoint { name: "canaan contour 161", lat: 32.01879, lon: 35.53216 },
-    Waypoint { name: "canaan contour 162", lat: 32.02477, lon: 35.52634 },
-    Waypoint { name: "canaan contour 163", lat: 32.02477, lon: 35.52634 },
-    Waypoint { name: "canaan contour 164", lat: 32.03395, lon: 35.52355 },
-    Waypoint { name: "canaan contour 165", lat: 32.03777, lon: 35.52466 },
-    Waypoint { name: "canaan contour 166", lat: 32.04498, lon: 35.52674 },
-    Waypoint { name: "canaan contour 167", lat: 32.05009, lon: 35.53279 },
-    Waypoint { name: "canaan contour 168", lat: 32.05009, lon: 35.53279 },
-    Waypoint { name: "canaan contour 169", lat: 32.06441, lon: 35.53382 },
-    Waypoint { name: "canaan contour 170", lat: 32.06569, lon: 35.53462 },
-    Waypoint { name: "canaan contour 171", lat: 32.07666, lon: 35.54149 },
-    Waypoint { name: "canaan contour 172", lat: 32.08174, lon: 35.54902 },
-    Waypoint { name: "canaan contour 173", lat: 32.08960, lon: 35.54695 },
-    Waypoint { name: "canaan contour 174", lat: 32.10150, lon: 35.53828 },
-    Waypoint { name: "canaan contour 175", lat: 32.10607, lon: 35.53837 },
-    Waypoint { name: "canaan contour 176", lat: 32.10718, lon: 35.53935 },
-    Waypoint { name: "canaan contour 177", lat: 32.11153, lon: 35.54316 },
-    Waypoint { name: "canaan contour 178", lat: 32.10385, lon: 35.55244 },
-    Waypoint { name: "canaan contour 179", lat: 32.10891, lon: 35.56071 },
-    Waypoint { name: "canaan contour 180", lat: 32.11412, lon: 35.56081 },
-    Waypoint { name: "canaan contour 181", lat: 32.11744, lon: 35.54834 },
-    Waypoint { name: "canaan contour 182", lat: 32.12082, lon: 35.55130 },
-    Waypoint { name: "canaan contour 183", lat: 32.12859, lon: 35.55442 },
-    Waypoint { name: "canaan contour 184", lat: 32.13905, lon: 35.55315 },
-    Waypoint { name: "canaan contour 185", lat: 32.13936, lon: 35.55371 },
-    Waypoint { name: "canaan contour 186", lat: 32.14283, lon: 35.55991 },
-    Waypoint { name: "canaan contour 187", lat: 32.15006, lon: 35.56351 },
-    Waypoint { name: "canaan contour 188", lat: 32.15059, lon: 35.56378 },
-    Waypoint { name: "canaan contour 189", lat: 32.16503, lon: 35.55887 },
-    Waypoint { name: "canaan contour 190", lat: 32.16822, lon: 35.56051 },
-    Waypoint { name: "canaan contour 191", lat: 32.17407, lon: 35.56351 },
-    Waypoint { name: "canaan contour 192", lat: 32.17866, lon: 35.56211 },
-    Waypoint { name: "canaan contour 193", lat: 32.18050, lon: 35.56374 },
-    Waypoint { name: "canaan contour 194", lat: 32.19149, lon: 35.57351 },
-    Waypoint { name: "canaan contour 195", lat: 32.19149, lon: 35.57351 },
-    Waypoint { name: "canaan contour 196", lat: 32.20461, lon: 35.56932 },
-    Waypoint { name: "canaan contour 197", lat: 32.20581, lon: 35.57089 },
-    Waypoint { name: "canaan contour 198", lat: 32.21034, lon: 35.57686 },
-    Waypoint { name: "canaan contour 199", lat: 32.21427, lon: 35.57620 },
-    Waypoint { name: "canaan contour 200", lat: 32.21893, lon: 35.57110 },
-    Waypoint { name: "canaan contour 201", lat: 32.21959, lon: 35.57037 },
-    Waypoint { name: "canaan contour 202", lat: 32.22285, lon: 35.57043 },
-    Waypoint { name: "canaan contour 203", lat: 32.22993, lon: 35.57577 },
-    Waypoint { name: "canaan contour 204", lat: 32.23441, lon: 35.56978 },
-    Waypoint { name: "canaan contour 205", lat: 32.23595, lon: 35.56773 },
-    Waypoint { name: "canaan contour 206", lat: 32.24692, lon: 35.57389 },
-    Waypoint { name: "canaan contour 207", lat: 32.25148, lon: 35.57398 },
-    Waypoint { name: "canaan contour 208", lat: 32.25148, lon: 35.57398 },
-    Waypoint { name: "canaan contour 209", lat: 32.25682, lon: 35.56740 },
-    Waypoint { name: "canaan contour 210", lat: 32.26137, lon: 35.56824 },
-    Waypoint { name: "canaan contour 211", lat: 32.26659, lon: 35.56380 },
-    Waypoint { name: "canaan contour 212", lat: 32.26734, lon: 35.56316 },
-    Waypoint { name: "canaan contour 213", lat: 32.27125, lon: 35.56324 },
-    Waypoint { name: "canaan contour 214", lat: 32.28219, lon: 35.57089 },
-    Waypoint { name: "canaan contour 215", lat: 32.28464, lon: 35.57029 },
-    Waypoint { name: "canaan contour 216", lat: 32.29071, lon: 35.56883 },
-    Waypoint { name: "canaan contour 217", lat: 32.29735, lon: 35.56380 },
-    Waypoint { name: "canaan contour 218", lat: 32.29931, lon: 35.56232 },
-    Waypoint { name: "canaan contour 219", lat: 32.30965, lon: 35.56699 },
-    Waypoint { name: "canaan contour 220", lat: 32.31023, lon: 35.56678 },
-    Waypoint { name: "canaan contour 221", lat: 32.31950, lon: 35.56347 },
-    Waypoint { name: "canaan contour 222", lat: 32.32351, lon: 35.55835 },
-    Waypoint { name: "canaan contour 223", lat: 32.32351, lon: 35.55835 },
-    Waypoint { name: "canaan contour 224", lat: 32.34307, lon: 35.55875 },
-    Waypoint { name: "canaan contour 225", lat: 32.34307, lon: 35.55875 },
-    Waypoint { name: "canaan contour 226", lat: 32.34756, lon: 35.56255 },
-    Waypoint { name: "canaan contour 227", lat: 32.34756, lon: 35.56255 },
-    Waypoint { name: "canaan contour 228", lat: 32.35283, lon: 35.55969 },
-    Waypoint { name: "canaan contour 229", lat: 32.35870, lon: 35.55980 },
-    Waypoint { name: "canaan contour 230", lat: 32.35870, lon: 35.55980 },
-    Waypoint { name: "canaan contour 231", lat: 32.36836, lon: 35.56668 },
-    Waypoint { name: "canaan contour 232", lat: 32.37552, lon: 35.56649 },
-    Waypoint { name: "canaan contour 233", lat: 32.38401, lon: 35.56626 },
-    Waypoint { name: "canaan contour 234", lat: 32.39267, lon: 35.55678 },
-    Waypoint { name: "canaan contour 235", lat: 32.39528, lon: 35.55683 },
-    Waypoint { name: "canaan contour 236", lat: 32.39646, lon: 35.55841 },
-    Waypoint { name: "canaan contour 237", lat: 32.40037, lon: 35.56362 },
-    Waypoint { name: "canaan contour 238", lat: 32.40037, lon: 35.56362 },
-    Waypoint { name: "canaan contour 239", lat: 32.40497, lon: 35.56148 },
-    Waypoint { name: "canaan contour 240", lat: 32.41078, lon: 35.56457 },
-    Waypoint { name: "canaan contour 241", lat: 32.41475, lon: 35.56168 },
-    Waypoint { name: "canaan contour 242", lat: 32.42061, lon: 35.56254 },
-    Waypoint { name: "canaan contour 243", lat: 32.42061, lon: 35.56254 },
-    Waypoint { name: "canaan contour 244", lat: 32.42381, lon: 35.56557 },
-    Waypoint { name: "canaan contour 245", lat: 32.43036, lon: 35.56422 },
-    Waypoint { name: "canaan contour 246", lat: 32.43418, lon: 35.56875 },
-    Waypoint { name: "canaan contour 247", lat: 32.43944, lon: 35.57087 },
-    Waypoint { name: "canaan contour 248", lat: 32.44001, lon: 35.57110 },
-    Waypoint { name: "canaan contour 249", lat: 32.44916, lon: 35.56980 },
-    Waypoint { name: "canaan contour 250", lat: 32.45031, lon: 35.57074 },
-    Waypoint { name: "canaan contour 251", lat: 32.45751, lon: 35.57665 },
-    Waypoint { name: "canaan contour 252", lat: 32.45751, lon: 35.57665 },
-    Waypoint { name: "canaan contour 253", lat: 32.46079, lon: 35.57597 },
-    Waypoint { name: "canaan contour 254", lat: 32.46611, lon: 35.57014 },
-    Waypoint { name: "canaan contour 255", lat: 32.46611, lon: 35.57014 },
-    Waypoint { name: "canaan contour 256", lat: 32.47328, lon: 35.57028 },
-    Waypoint { name: "canaan contour 257", lat: 32.47385, lon: 35.57051 },
-    Waypoint { name: "canaan contour 258", lat: 32.47911, lon: 35.57263 },
-    Waypoint { name: "canaan contour 259", lat: 32.48739, lon: 35.58319 },
-    Waypoint { name: "canaan contour 260", lat: 32.48739, lon: 35.58319 },
-    Waypoint { name: "canaan contour 261", lat: 32.49790, lon: 35.57895 },
-    Waypoint { name: "canaan contour 262", lat: 32.50530, lon: 35.56722 },
-    Waypoint { name: "canaan contour 263", lat: 32.50982, lon: 35.56628 },
-    Waypoint { name: "canaan contour 264", lat: 32.51512, lon: 35.56519 },
-    Waypoint { name: "canaan contour 265", lat: 32.52610, lon: 35.57061 },
-    Waypoint { name: "canaan contour 266", lat: 32.53465, lon: 35.56707 },
-    Waypoint { name: "canaan contour 267", lat: 32.53606, lon: 35.56922 },
-    Waypoint { name: "canaan contour 268", lat: 32.53909, lon: 35.57384 },
-    Waypoint { name: "canaan contour 269", lat: 32.54624, lon: 35.57473 },
-    Waypoint { name: "canaan contour 270", lat: 32.55201, lon: 35.58004 },
-    Waypoint { name: "canaan contour 271", lat: 32.55201, lon: 35.58004 },
-    Waypoint { name: "canaan contour 272", lat: 32.55723, lon: 35.58015 },
-    Waypoint { name: "canaan contour 273", lat: 32.56120, lon: 35.57726 },
-    Waypoint { name: "canaan contour 274", lat: 32.56637, lon: 35.57959 },
-    Waypoint { name: "canaan contour 275", lat: 32.59765, lon: 35.58096 },
-    Waypoint { name: "canaan contour 276", lat: 32.60297, lon: 35.57513 },
-    Waypoint { name: "canaan contour 277", lat: 32.60297, lon: 35.57513 },
-    Waypoint { name: "canaan contour 278", lat: 32.61536, lon: 35.57538 },
-    Waypoint { name: "canaan contour 279", lat: 32.62528, lon: 35.56815 },
-    Waypoint { name: "canaan contour 280", lat: 32.63037, lon: 35.57001 },
-    Waypoint { name: "canaan contour 281", lat: 32.63175, lon: 35.57051 },
-    Waypoint { name: "canaan contour 282", lat: 32.63758, lon: 35.57035 },
-    Waypoint { name: "canaan contour 283", lat: 32.63988, lon: 35.58924 },
-    Waypoint { name: "canaan contour 284", lat: 32.65483, lon: 35.59177 },
-    Waypoint { name: "canaan contour 285", lat: 32.64777, lon: 35.58569 },
-    Waypoint { name: "canaan contour 286", lat: 32.64927, lon: 35.57090 },
-    Waypoint { name: "canaan contour 287", lat: 32.65453, lon: 35.57320 },
-    Waypoint { name: "canaan contour 288", lat: 32.66181, lon: 35.56740 },
-    Waypoint { name: "canaan contour 289", lat: 32.66703, lon: 35.56751 },
-    Waypoint { name: "canaan contour 290", lat: 32.67757, lon: 35.56178 },
-    Waypoint { name: "canaan contour 291", lat: 32.67955, lon: 35.56399 },
-    Waypoint { name: "canaan contour 292", lat: 32.68843, lon: 35.57388 },
-    Waypoint { name: "canaan contour 293", lat: 32.69430, lon: 35.57400 },
-    Waypoint { name: "canaan contour 294", lat: 32.69894, lon: 35.56964 },
-    Waypoint { name: "canaan contour 295", lat: 32.70480, lon: 35.57050 },
-    Waypoint { name: "canaan contour 296", lat: 32.70480, lon: 35.57050 },
-    Waypoint { name: "canaan contour 297", lat: 32.70735, lon: 35.57352 },
-    Waypoint { name: "canaan contour 298", lat: 32.70788, lon: 35.58021 },
-    Waypoint { name: "canaan contour 299", lat: 32.71894, lon: 35.58862 },
-    Waypoint { name: "canaan contour 300", lat: 32.71808, lon: 35.59676 },
-    Waypoint { name: "canaan contour 301", lat: 32.73560, lon: 35.59711 },
-    Waypoint { name: "canaan contour 302", lat: 32.76247, lon: 35.59023 },
-    Waypoint { name: "canaan contour 303", lat: 32.78297, lon: 35.57505 },
-    Waypoint { name: "canaan contour 304", lat: 32.80985, lon: 35.56742 },
-    Waypoint { name: "canaan contour 305", lat: 32.82843, lon: 35.55071 },
-    Waypoint { name: "canaan contour 306", lat: 32.83625, lon: 35.55087 },
-    Waypoint { name: "canaan contour 307", lat: 32.85171, lon: 35.56084 },
-    Waypoint { name: "canaan contour 308", lat: 32.87119, lon: 35.60059 },
-    Waypoint { name: "canaan contour 309", lat: 32.87218, lon: 35.61694 },
-    Waypoint { name: "canaan contour 310", lat: 32.88001, lon: 35.63282 },
-    Waypoint { name: "canaan contour 311", lat: 32.91332, lon: 35.64896 },
-    Waypoint { name: "canaan contour 312", lat: 33.05141, lon: 35.65769 },
-    Waypoint { name: "canaan contour 313", lat: 33.06855, lon: 35.64838 },
-    Waypoint { name: "canaan contour 314", lat: 33.08029, lon: 35.64788 },
-    Waypoint { name: "canaan contour 315", lat: 33.14791, lon: 35.65889 },
-    Waypoint { name: "canaan contour 316", lat: 33.16492, lon: 35.65627 },
-    Waypoint { name: "canaan contour 317", lat: 33.18009, lon: 35.64692 },
-    Waypoint { name: "canaan contour 318", lat: 33.20417, lon: 35.64963 },
-    Waypoint { name: "canaan contour 319", lat: 33.22322, lon: 35.64259 },
-    Waypoint { name: "canaan contour 320", lat: 33.24965, lon: 35.65872 },
-    Waypoint { name: "canaan contour 321", lat: 33.29018, lon: 35.65359 },
-    Waypoint { name: "canaan contour 322", lat: 33.31917, lon: 35.67274 },
-    Waypoint { name: "canaan contour 323", lat: 33.33690, lon: 35.66642 },
-    Waypoint { name: "canaan contour 324", lat: 33.36034, lon: 35.66838 },
-    Waypoint { name: "canaan contour 325", lat: 33.39781, lon: 35.68695 },
-    Waypoint { name: "canaan contour 326", lat: 33.41683, lon: 35.71630 },
-    Waypoint { name: "canaan contour 327", lat: 33.43038, lon: 35.72400 },
-    Waypoint { name: "canaan contour 328", lat: 33.44474, lon: 35.72354 },
-    Waypoint { name: "canaan contour 329", lat: 33.45794, lon: 35.71490 },
-    Waypoint { name: "canaan contour 330", lat: 33.47753, lon: 35.67891 },
-    Waypoint { name: "canaan contour 331", lat: 33.47978, lon: 35.66336 },
-];
-
-/// The traced Canaan contour as a sphere ring, for the partition
-/// builder (the same waypoints the survey rides).
-pub fn plate_canaan_ring() -> Vec<UnitVec> {
-    PLATE_CANAAN_CONTOUR
-        .iter()
-        .map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon))
-        .collect()
-}
-
-// Tribal border rings come from open data — see
-// data/wikimedia/tribes12.geojson and load_tribal_rings() in the
-// partition bridge. The hand-authored JOS circuits are gone.
 
 // --------------------------------- the table of nations (GEN 10)
 //
@@ -830,40 +438,6 @@ macro_rules! city_note {
         concat!($commentary, " ", city_note!())
     };
 }
-const CITY_NOTE: &str = city_note!();
-
-/// The division of the land, Ussher's traditional year.
-
-const SURVEYS: &[SurveySpec] = &[
-    SurveySpec {
-        tag: "PLATE-CANAAN",
-        label: "Canaan (traced contour)",
-        note: "Georeferenced tracing of the reference plate's Canaan region \
-               (affine calibration over 12 city dots, mean residual 1.6 km); \
-               waypoints are tracing markers, not places.",
-        book: 4, chapter: 34, verse_from: 1, verse_to: 12,
-        year: -2200,
-        // The tracing is the PRE-CONQUEST reference world; from the
-        // conquest the allotment carries the plate's story.
-        stands: Stands::Until(-1406), holds: Holds::Claim,
-        grade: Grade::CityDerived,
-        circuit: PLATE_CANAAN_CONTOUR,
-    },
-    SurveySpec {
-        tag: "NUM34",
-        label: "the land promised (NUM 34)",
-        note: "The border circuit God specified to Moses, NUM 34:1-12; waypoint \
-               coordinates are approximate traditional identifications (stand-in, \
-               see provenance), several northern and eastern ones uncertain.",
-        book: 4, chapter: 34, verse_from: 1, verse_to: 12,
-        year: -1452,
-        // The promise-as-map yields at the exile: the loss of the
-        // land ends the survey's world, not the covenant.
-        stands: Stands::Until(-586), holds: Holds::Claim,
-        grade: Grade::BorderText,
-        circuit: NUM_34_CIRCUIT,
-    },
-];
 
 const NATIONS_NOTE: &str = "An ancestral homeland of the table of nations, placed by \
     traditional identifications as a broad hull (rendered Unknown); rise at the \
@@ -1213,7 +787,9 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
     let year_after = if arrival == -1 { 1 } else { arrival + 1 };
     let (pts, waypoints, bound) = resolve_circuit(r.stations, atlas);
     let provenance = circuit_provenance(atlas, bound, r.stations.len());
-    let bid = BoundaryId(hash_id(&format!("scripture-route/{}", r.tag)));
+    let key = format!("scripture-route/{}", r.tag);
+    let bid = BoundaryId(hash_id(&key));
+    let pts = course_geometry(&key, pts).into_points();
     tl.boundaries.insert(
         bid,
         BoundaryHistory {
@@ -1277,7 +853,7 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
                 },
         );
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         for w in s.circuit {
             add(w);
         }
@@ -1336,8 +912,12 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
         interpolation: InterpolationMethod::Geodesic,
         provenance: provenance.clone(),
     };
+    let key = format!("scripture-survey:{}", s.tag);
+    let boundary_id = BoundaryId(hash_id(&key));
+    let geometry = course_geometry(&key, pts);
+    let parts = geometry.parts(boundary_id);
     let boundary = Boundary {
-        pts,
+        pts: geometry.into_points(),
         // Honesty renders: a walked border is a Line; a city-derived
         // hull is Unknown and the styles draw it distinctly (law 6).
         character: match s.grade {
@@ -1349,7 +929,6 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
         provenance: provenance.clone(),
     };
 
-    let boundary_id = BoundaryId(hash_id(&format!("scripture-survey:{}", s.tag)));
     let region_id = RegionId(hash_id(&format!("scripture-region:{}", s.tag)));
     let valid = match s.stands {
         Stands::Until(u) => Interval { from: tp(year), to: Some(tp(u)) },
@@ -1376,10 +955,7 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
             geom_history: vec![(
                 valid,
                 RegionGeom {
-                    parts: vec![RegionPart {
-                        cycle: vec![(boundary_id, Orientation::Forward)],
-                        holes: vec![],
-                    }],
+                    parts,
                 },
             )],
         },
@@ -1462,7 +1038,10 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         let mut pts: Vec<UnitVec> =
             ph.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
         pts.push(pts[0]);
-        let bid = BoundaryId(hash_id(&format!("scripture-era/{}/phase{}", e.tag, i)));
+        let key = format!("scripture-era/{}/phase{}", e.tag, i);
+        let bid = BoundaryId(hash_id(&key));
+        let geometry = course_geometry(&key, pts);
+        let parts = geometry.parts(bid);
         let until = years.get(i + 1).map(|(y, _)| tp(*y)).or(end);
         let interval = Interval { from: tp(years[i].0), to: until };
         tl.boundaries.insert(
@@ -1471,7 +1050,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
                 versions: vec![(
                     interval,
                     Boundary {
-                        pts,
+                        pts: geometry.into_points(),
                         character: EdgeCharacter::Unknown, // extents, not walked lines
                         source: BoundarySource::Survey(BorderSurvey {
                             verses,
@@ -1492,10 +1071,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         geom_history.push((
             interval,
             RegionGeom {
-                parts: vec![RegionPart {
-                    cycle: vec![(bid, Orientation::Forward)],
-                    holes: vec![],
-                }],
+                parts,
             },
         ));
         tl.events.push(ChangeEvent {
@@ -1600,7 +1176,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
             }
         }
     };
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         push(
             s.tag.to_string(),
             atlas.resolve_event(s.book, (s.chapter, s.verse_from), (s.chapter, s.verse_to)),
@@ -1638,7 +1214,7 @@ pub fn binding_report(atlas: &AtlasExports) -> Vec<BindingRow> {
 /// disclosed stand-ins. None = fully stand-in (fixtures, tests).
 pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     let mut tl = WorldTimeline::default();
-    for s in SURVEYS.iter().chain(SURVEYS_MORE) {
+    for s in SURVEYS_MORE.iter() {
         add_survey(&mut tl, s, atlas);
     }
     for e in KINGDOMS {
@@ -1651,11 +1227,52 @@ pub fn scripture_timeline_with(atlas: Option<&AtlasExports>) -> WorldTimeline {
     tl
 }
 
-/// The NUM 34 survey alone (the founding fixture; tests lean on it).
-pub fn promised_land_timeline() -> WorldTimeline {
-    let mut tl = WorldTimeline::default();
-    add_survey(&mut tl, &SURVEYS[0], None);
-    tl
+enum CourseGeometry {
+    Located(Vec<UnitVec>),
+    Unlocated,
+}
+
+fn course_geometry(key: &str, points: Vec<UnitVec>) -> CourseGeometry {
+    static QUARANTINE: OnceLock<CourseQuarantine> = OnceLock::new();
+    let quarantine = QUARANTINE.get_or_init(|| {
+        serde_json::from_str(include_str!(
+            "../../../data/authored/quarantined-courses.json"
+        ))
+        .expect("the recorded course quarantine is typed data")
+    });
+    match quarantine.courses.iter().find(|course| course.key == key) {
+        Some(_) => CourseGeometry::Unlocated,
+        None => CourseGeometry::Located(points),
+    }
+}
+
+impl CourseGeometry {
+    fn parts(&self, boundary: BoundaryId) -> Vec<RegionPart> {
+        match self {
+            Self::Located(_) => vec![RegionPart {
+                cycle: vec![(boundary, Orientation::Forward)],
+                holes: vec![],
+            }],
+            Self::Unlocated => vec![],
+        }
+    }
+
+    fn into_points(self) -> Vec<UnitVec> {
+        match self {
+            Self::Located(points) => points,
+            Self::Unlocated => vec![],
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct CourseQuarantine {
+    courses: Vec<QuarantinedCourse>,
+}
+
+#[derive(Deserialize)]
+struct QuarantinedCourse {
+    key: String,
 }
 
 /// Merge two timelines from different sources into one world. Ids are
@@ -1739,4 +1356,377 @@ pub fn authored_routes() -> Vec<AuthoredRoute> {
             stations: r.stations.iter().map(|w| (w.name, w.lat, w.lon)).collect(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod allotment_laws {
+    use serde_json::{json, Value};
+
+    #[test]
+    fn the_promised_land_is_not_present_at_the_exodus_stop() {
+        let timeline = super::scripture_timeline();
+        assert!(
+            !timeline.boundaries.is_empty(),
+            "the remaining Scripture surveys must still be rendered"
+        );
+        assert_eq!(
+            numbers_34_boundaries(&timeline),
+            Vec::<map_types::BoundaryId>::new(),
+            "Numbers 34 must remain undrawn until its dating and selected courses are admitted"
+        );
+    }
+
+    #[test]
+    fn an_export_placement_cannot_restore_the_unlocated_numbers_34_circuit() {
+        for year in -1500..=-1300 {
+            let gazetteer = json!({"format_version": 1, "atlas_version_root": "1", "places": []});
+            let chronology = json!({
+                "format_version": 1, "atlas_version_root": "1",
+                "events": [{"id": "fixture-numbers-survey", "label": "fixture survey", "attestations": ["NUM.34.1"], "placement": {"from_year": year, "to_year": year, "basis": "Textual"}}]
+            });
+            let atlas =
+                crate::exports::load_exports(&gazetteer.to_string(), &chronology.to_string())
+                    .expect("the complete fixture export must load");
+            let timeline = super::scripture_timeline_with(Some(&atlas));
+            assert_eq!(
+                numbers_34_boundaries(&timeline),
+                Vec::<map_types::BoundaryId>::new(),
+                "a matched placement must not supply an unprovided Numbers 34 course"
+            );
+        }
+    }
+
+    fn numbers_34_boundaries(timeline: &map_types::WorldTimeline) -> Vec<map_types::BoundaryId> {
+        timeline
+            .boundaries
+            .iter()
+            .filter_map(|(id, history)| {
+                history
+                    .versions
+                    .iter()
+                    .any(|(_, boundary)| match &boundary.source {
+                        map_types::BoundarySource::Survey(survey) => {
+                            survey.verses.from.unit.book == 4
+                                && survey.verses.from.unit.chapter == 34
+                        }
+                        _ => false,
+                    })
+                    .then_some(*id)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_allotment_survey_row_cites_scripture() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            assert!(
+                cites_scripture(survey),
+                "each survey and waypoint must cite its Scripture verse"
+            );
+        }
+    }
+
+    #[test]
+    fn allotment_evidence_does_not_read_an_excluded_source() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            assert_eq!(
+                survey["source"], "kjv",
+                "every survey source must be the public-domain KJV"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_and_non_survey_verses_fail_for_every_row() {
+        let evidence = evidence();
+        for survey in surveys(&evidence) {
+            for invalid in [
+                json!([]),
+                json!([""]),
+                json!(["GEN.10.1"]),
+                json!(["JOS.19.47"]),
+                json!(["JOS.15.1-bad"]),
+                json!(["JOS.16.11"]),
+            ] {
+                let mut changed = survey.clone();
+                changed["verses"] = invalid;
+                assert!(
+                    !cites_scripture(&changed),
+                    "missing or out-of-scope survey citations must be refused"
+                );
+            }
+            for (sequence_index, sequence) in sequences(survey).iter().enumerate() {
+                for waypoint_index in 0..waypoints(sequence).len() {
+                    let mut changed = survey.clone();
+                    changed["sequence"][sequence_index]["waypoints"][waypoint_index]["verse"] =
+                        json!("");
+                    assert!(
+                        !cites_scripture(&changed),
+                        "every waypoint needs its own verse rather than a survey-level fallback"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_promised_land_and_thirteen_lots_are_recorded() {
+        let evidence = evidence();
+        let lots: Vec<_> = surveys(&evidence)
+            .iter()
+            .map(|row| row["lot"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            lots,
+            vec![
+                "promised_land",
+                "reuben",
+                "gad",
+                "manasseh_east",
+                "judah",
+                "ephraim",
+                "manasseh_west",
+                "benjamin",
+                "simeon",
+                "zebulun",
+                "issachar",
+                "asher",
+                "naphtali",
+                "dan"
+            ],
+            "the evidence inventory must retain all thirteen lots and the distinct promise"
+        );
+    }
+
+    #[test]
+    fn judahs_south_walk_retains_the_text_order() {
+        let evidence = evidence();
+        let judah = surveys(&evidence)
+            .iter()
+            .find(|row| row["lot"] == "judah")
+            .unwrap();
+        let south = sequences(judah)
+            .iter()
+            .find(|row| row["side"] == "south")
+            .unwrap();
+        let names: Vec<_> = waypoints(south)
+            .iter()
+            .map(|row| row["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "JOS.15.2:sea-bay",
+                "Maaleh-acrabbim",
+                "Zin",
+                "Kadesh-barnea",
+                "Hezron",
+                "Adar",
+                "Karkaa",
+                "Azmon",
+                "river of Egypt",
+                "Great Sea"
+            ],
+            "Judah's south walk must follow Joshua 15:2-4 in order"
+        );
+    }
+
+    #[test]
+    fn city_lists_do_not_become_boundary_walks() {
+        let evidence = evidence();
+        for lot in ["simeon", "dan"] {
+            let survey = surveys(&evidence)
+                .iter()
+                .find(|row| row["lot"] == lot)
+                .unwrap();
+            assert!(
+                sequences(survey)
+                    .iter()
+                    .all(|row| row["kind"] != "border_walk"),
+                "a city list must not be promoted to a walked boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn survey_evidence_cannot_supply_coordinates_or_geometry() {
+        let evidence = evidence();
+        assert!(
+            has_no_geometry(&evidence),
+            "survey evidence must leave geometry and selected Site extents to the atlas"
+        );
+    }
+
+    #[test]
+    fn inherited_atlas_place_ids_are_references_without_coordinates() {
+        let evidence = evidence();
+        let gazetteer: Value =
+            serde_json::from_str(include_str!("../../../data/atlas-exports/gazetteer.json"))
+                .unwrap();
+        let ids: std::collections::BTreeSet<_> = gazetteer["places"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["id"].as_str().unwrap())
+            .collect();
+        for survey in surveys(&evidence) {
+            for sequence in sequences(survey) {
+                for waypoint in waypoints(sequence) {
+                    if let Some(place) = waypoint["site"]["atlas"].as_str() {
+                        assert!(
+                            ids.contains(place),
+                            "each atlas reference must use an existing place identity"
+                        );
+                    } else {
+                        assert!(waypoint["site"]["unlocated"].as_str().is_some_and(|name| !name.is_empty()), "an unresolved waypoint must remain explicitly recorded without a point");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_selected_scale_keeps_late_wilderness_and_gilgal_distinct() {
+        let evidence = evidence();
+        assert_eq!(
+            evidence["dating"],
+            json!({
+                "scale": "exodus_1446",
+                "exodus_year": -1446,
+                "exodus_grounds": ["1KI.6.1"],
+                "temple_begun_year": -966,
+                "temple_begun_precision": "approximate",
+                "exodus_to_temple_years": 480,
+                "source_chronology": "Ussher is retained as source provenance only; none of his dates supplies an adopted interval endpoint.",
+                "late_wilderness_year": -1407,
+                "late_wilderness_grounds": ["NUM.33.38", "DEU.1.3", "NUM.33.50", "NUM.36.13"],
+                "gilgal_from_year": -1401,
+                "gilgal_to_year": -1400,
+                "gilgal_grounds": ["JOS.14.6", "JOS.14.7", "JOS.14.10"],
+                "division_from_year": -1401,
+                "division_to_year": -1399,
+                "shown_at_year": -1399,
+                "shown_at_basis": "owner_ruled",
+                "shown_at_grounds": ["JOS.18.1", "JOS.19.51"],
+                "alternative_years": [-1400, -1401],
+                "justification": "The fortieth year uses inclusive counting: 1446 minus 39 is 1407. Caleb's forty-five years and ages give circa 1401-1400. Shiloh follows Gilgal without its own exact year; 1399 is the owner-chosen completed-allotment stop. Joshua 13 recalls Moses' earlier grants; no lot is asserted at 1446.",
+                "alternative": "1400 uses Caleb's ages as elapsed years; 1401 uses the inclusive forty-five years. Neither reading dates the Shiloh survey exactly. Joshua 19:47 is undated and is recorded separately. No universal shift is applied to other chronology."
+            }),
+            "the adopted dating must retain its grounds, owner ruling and alternatives"
+        );
+    }
+
+    #[test]
+    fn dans_northern_move_is_a_separate_undated_record() {
+        let evidence = evidence();
+        assert_eq!(
+            evidence["later_reading"],
+            json!([{
+                "lot": "dan", "verse": "JOS.19.47", "period": "undated", "site": {"atlas": "dan"},
+                "justification": "The move to Leshem is narrated here but is not dated relative to the initial lots. It is recorded without geometry at the completed-allotment stop.",
+                "alternative": "Placement at a later stop requires its own dating evidence; no chronological shift or inferred date is supplied here."
+            }]),
+            "Dan's later northern move must stay recorded outside the initial survey period"
+        );
+    }
+
+    fn evidence() -> Value {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/authored/surveys/allotments.toml");
+        let output = std::process::Command::new("python3")
+            .args(["-c", "import json,sys,tomli; json.dump(tomli.loads(open(sys.argv[1]).read()),sys.stdout)"])
+            .arg(path)
+            .output()
+            .expect("the evidence laws require Python 3 with the MIT-licensed tomli parser");
+        assert!(
+            output.status.success(),
+            "the authored survey table must parse as TOML: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout)
+            .expect("tomli's parsed evidence must be JSON serializable")
+    }
+
+    fn surveys(evidence: &Value) -> &[Value] {
+        evidence["survey"].as_array().unwrap()
+    }
+
+    fn sequences(survey: &Value) -> &[Value] {
+        survey["sequence"].as_array().unwrap()
+    }
+
+    fn waypoints(sequence: &Value) -> &[Value] {
+        sequence["waypoints"].as_array().unwrap()
+    }
+
+    fn cites_scripture(survey: &Value) -> bool {
+        survey["verses"]
+            .as_array()
+            .is_some_and(|verses| !verses.is_empty() && verses.iter().all(survey_verse))
+            && sequences(survey).iter().all(|sequence| {
+                !waypoints(sequence).is_empty()
+                    && waypoints(sequence)
+                        .iter()
+                        .all(|waypoint| survey_verse(&waypoint["verse"]))
+            })
+    }
+
+    fn survey_verse(value: &Value) -> bool {
+        let Some(text) = value.as_str() else {
+            return false;
+        };
+        let (start, end) = match text.split_once('-') {
+            Some((start, end)) => {
+                let Ok(end) = end.parse::<u16>() else {
+                    return false;
+                };
+                (start, Some(end))
+            }
+            None => (text, None),
+        };
+        let Some((book, chapter, verse)) = crate::exports::parse_locus(start) else {
+            return false;
+        };
+        let allowed = match book {
+            4 => chapter == 34 && (1..=15).contains(&verse),
+            6 => match chapter {
+                13 => (1..=33).contains(&verse),
+                14 => (1..=15).contains(&verse),
+                15 => (1..=63).contains(&verse),
+                16 => (1..=10).contains(&verse),
+                17 => (1..=18).contains(&verse),
+                18 => (1..=28).contains(&verse),
+                19 => (1..=51).contains(&verse) && verse != 47,
+                _ => false,
+            },
+            _ => false,
+        };
+        allowed
+            && start.split('.').count() == 3
+            && end.is_none_or(|end| {
+                end >= verse
+                    && !(book == 6 && chapter == 19 && verse <= 47 && end >= 47)
+                    && survey_verse(&json!(format!(
+                        "{}.{}.{}",
+                        if book == 4 { "NUM" } else { "JOS" },
+                        chapter,
+                        end
+                    )))
+            })
+    }
+
+    fn has_no_geometry(value: &Value) -> bool {
+        match value {
+            Value::Object(fields) => fields.iter().all(|(key, value)| {
+                !matches!(
+                    key.as_str(),
+                    "lat" | "lon" | "coordinates" | "pts" | "polygon" | "ring"
+                ) && has_no_geometry(value)
+            }),
+            Value::Array(values) => values.iter().all(has_no_geometry),
+            _ => true,
+        }
+    }
 }
