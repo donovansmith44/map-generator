@@ -255,6 +255,7 @@
      module, served from the binary like the page itself and testable
      in Node (crates/map-viewer/tests/limb.test.mjs). -->
 <script src="/limb.js"></script>
+<script src="/retained-gpu.js"></script>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -626,42 +627,13 @@ function gpuUpload(bytes, offset) {
   // stream only if a packet length were unaligned — every field is a
   // multiple of 4 bytes, so a slice-free view is safe.
   const verts = new Float32Array(bytes.slice(offset + 48, offset + 48 + count * 12));
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(gpu.loc.aPos);
-  gl.vertexAttribPointer(gpu.loc.aPos, 3, gl.FLOAT, false, 0, 0);
-  // aPrev defaults to the vertex's own position: uMorph=1 draws the
-  // plain shape; a refinement rebinds this attribute (§38).
-  gl.enableVertexAttribArray(gpu.loc.aPrev);
-  gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
-  // Cumulative chord length per vertex, radians (≈ arc at these
-  // segment sizes) — the dash rhythm's ruler. Fills never read it
-  // (their VAOs leave aArc unbound, which reads a constant 0).
-  const arcs = new Float32Array(count);
-  let acc = 0;
-  for (let i = 1; i < count; i++) {
-    acc += Math.hypot(
-      verts[i * 3] - verts[i * 3 - 3],
-      verts[i * 3 + 1] - verts[i * 3 - 2],
-      verts[i * 3 + 2] - verts[i * 3 - 1]);
-    arcs[i] = acc;
+  const resource = uploadGeometry(gl, gpu.loc, verts);
+  try {
+    gpu.cache.set(idHex, { state: "gpu", kind, ...resource, bytes: len, cap: ringCap(verts) });
+  } catch (error) {
+    disposeGeometry(gl, resource);
+    throw error;
   }
-  const abuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, abuf);
-  gl.bufferData(gl.ARRAY_BUFFER, arcs, gl.STATIC_DRAW);
-  if (gpu.loc.aArc >= 0) {
-    gl.enableVertexAttribArray(gpu.loc.aArc);
-    gl.vertexAttribPointer(gpu.loc.aArc, 1, gl.FLOAT, false, 0, 0);
-  }
-  gl.bindVertexArray(null);
-  // The CPU copy stays resident beside the GPU buffer: extents, hit
-  // testing, and refinement correspondence all read it (§59, §38).
-  // The bounding cap (limb.js) settles most rings' visibility in one
-  // dot product per frame, so only limb straddlers ever pay to clip.
-  gpu.cache.set(idHex, { state: "gpu", kind, count, vao, buf, abuf, bytes: len, verts, cap: ringCap(verts) });
   return len;
 }
 
@@ -678,28 +650,7 @@ function camKeyOf(C) {
 // One clipped lobe as a scratch fan buffer — the same attribute layout
 // gpuUpload builds, minus the cache entry.
 function lobeVao(lobe) {
-  const gl = gpu.gl;
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, lobe, gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(gpu.loc.aPos);
-  gl.vertexAttribPointer(gpu.loc.aPos, 3, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(gpu.loc.aPrev);
-  gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
-  gl.bindVertexArray(null);
-  return { vao, buf, count: lobe.length / 3 };
-}
-
-function dropClipScratch(r) {
-  const gl = gpu.gl;
-  for (const d of r.clipScratch || []) {
-    gl.deleteVertexArray(d.vao);
-    gl.deleteBuffer(d.buf);
-  }
-  r.clipScratch = null;
-  r.clipKey = null;
+  return uploadLobe(gpu.gl, gpu.loc, lobe);
 }
 
 // THE VISIBLE RING (the GPU's reading of clip_ring_front): the fill
@@ -721,7 +672,7 @@ function visibleFillDraws(r, proj, camKey) {
     if (t <= -sinR) return [];   // whole cap behind: nothing to draw
   }
   if (r.clipKey !== camKey) {
-    dropClipScratch(r);
+    dropClipScratch(gpu.gl, r);
     r.clipKey = camKey;
     const vr = clipRingFront(r.verts, proj.C, proj.E, proj.N);
     r.clipSelf = vr === r.verts;
@@ -1044,13 +995,7 @@ function activateScene(s, fade) {
       if (fine && coarse && fine.state === "gpu" && coarse.state === "gpu") {
         const parents = refinementParents(coarse.verts, fine.verts);
         if (parents) {
-          const pbuf = gl.createBuffer();
-          gl.bindVertexArray(fine.vao);
-          gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
-          gl.bufferData(gl.ARRAY_BUFFER, parents, gl.STATIC_DRAW);
-          gl.enableVertexAttribArray(gpu.loc.aPrev);
-          gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
-          gl.bindVertexArray(null);
+          const pbuf = uploadPrevious(gl, gpu.loc, fine, parents);
           it.morph = { start: now, pbuf, id: it.id };
         }
       }
@@ -1095,10 +1040,7 @@ function gpuEvict() {
   for (const [id, r] of gpu.cache) {
     if (total <= GPU_BUDGET_BYTES) break;
     if (retained.has(id) || r.state !== "gpu") continue;
-    gl.deleteVertexArray(r.vao);
-    gl.deleteBuffer(r.buf);
-    if (r.abuf) gl.deleteBuffer(r.abuf);
-    dropClipScratch(r);
+    disposeGeometry(gl, r);
     gpu.cache.delete(id);
     total -= r.bytes || 0;
   }
@@ -1109,14 +1051,7 @@ function gpuEvict() {
 function endMorph(it) {
   const gl = gpu.gl;
   const r = gpu.cache.get(it.morph.id);
-  if (r && r.state === "gpu") {
-    gl.bindVertexArray(r.vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, r.buf);
-    gl.enableVertexAttribArray(gpu.loc.aPrev);
-    gl.vertexAttribPointer(gpu.loc.aPrev, 3, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
-  }
-  gl.deleteBuffer(it.morph.pbuf);
+  endPrevious(gl, gpu.loc, r?.state === "gpu" ? r : null, it.morph.pbuf);
   it.morph = null;
 }
 
@@ -1634,41 +1569,11 @@ function gpuDraw() {
       }
       const [cr, cg, cb, caBase] = it.style.color;
       const ca = caBase * (it.alpha !== undefined ? it.alpha : 1);
-      const pagePass = () => {
-        if (!it.whole) return;
-        if (proj.mode === 0) {
-          gl.uniform1i(loc.uMode, 3);  // the globe's limb disc
-          gl.bindVertexArray(gpu.discVao);
-          gl.drawArrays(gl.TRIANGLE_FAN, 0, gpu.discCount);
-        } else {
-          gl.uniform1i(loc.uMode, 2);  // the flat chart's page
-          gl.bindVertexArray(gpu.pageVao);
-          gl.drawArrays(gl.TRIANGLES, 0, 3);
-        }
-        gl.uniform1i(loc.uMode, proj.mode);
-      };
-      gl.uniform2f(loc.uDash, 0, 0);     // fills are never dashed
-      gl.uniform1f(loc.uFrontMin, -1.1); // parity needs every fragment
-      gl.enable(gl.STENCIL_TEST);
-      gl.colorMask(false, false, false, false);
-      gl.stencilFunc(gl.ALWAYS, 0, 0xff);
-      gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
-      pagePass();
-      for (const d of draws) {
-        gl.bindVertexArray(d.vao);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, d.count);
-      }
-      gl.colorMask(true, true, true, true);
-      gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
-      gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
-      gl.uniform4f(loc.uColor, cr / 255, cg / 255, cb / 255, ca / 255);
-      pagePass();
-      for (const d of draws) {
-        gl.bindVertexArray(d.vao);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, d.count);
-      }
-      gl.disable(gl.STENCIL_TEST);
-      gl.uniform1f(loc.uFrontMin, frameFrontMin); // strokes/markers keep theirs
+      drawStencilFill(gl, loc, draws, {
+        whole: it.whole, mode: proj.mode, pageVao: gpu.pageVao,
+        discVao: gpu.discVao, discCount: gpu.discCount,
+        color: [cr, cg, cb, ca], frontMin: frameFrontMin
+      });
       continue;
     }
     const r = resident(it.id);
