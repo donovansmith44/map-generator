@@ -1479,3 +1479,45 @@ fn two_origin_scene() -> Snapshot {
     push(B, "Eastland", 20.0, Credit::new(SourceId::new("historical-basemaps"), License::Gpl3));
     sc
 }
+
+#[cfg(feature = "openapi")]
+#[test]
+fn served_camera_exports_the_canonical_fields_and_chart() {
+    use crate::camera::{Camera, ChartKind};
+    use utoipa::PartialSchema;
+    // Arrange
+    let schema = serde_json::to_value(Camera::schema()).unwrap();
+    // Act
+    for (step, chart) in (1..32).flat_map(|step| [ChartKind::Globe, ChartKind::Flat].map(|chart| (step, chart))) {
+        let camera = Camera::new(chart, f64::from(step), -f64::from(step), 10.0, 1200.0);
+        let body = serde_json::to_value(camera).unwrap();
+        // Assert
+        assert_eq!(body["chart"], camera.chart.name(), "projection uses its source chart name");
+        assert_eq!(body["lat"], camera.lat, "latitude is the source camera value");
+        assert_eq!(body["lon"], camera.lon, "longitude is the source camera value");
+        assert_eq!(body["width"], camera.width, "width is the source camera value");
+        assert_eq!(body["zoom"], camera.zoom, "zoom is the source camera value");
+    }
+    assert_eq!(<Camera as utoipa::ToSchema>::name(), "MapGeneratorCamera", "the source camera schema cannot replace the graph slice camera schema");
+    assert_eq!(schema["properties"].as_object().unwrap().len(), 5, "the schema exposes only the five canonical camera fields");
+}
+
+#[cfg(feature = "openapi")]
+#[test]
+fn served_style_exports_the_validated_source_value() {
+    use utoipa::PartialSchema;
+    // Arrange
+    let schema = serde_json::to_value(Style::schema()).unwrap();
+    // Act
+    for step in 1u8..32 {
+        let mut spec = honest_style_parts();
+        spec.tint_alpha = step;
+        let style = Style::new(spec).unwrap();
+        let body = serde_json::to_value(style).unwrap();
+        // Assert
+        assert_eq!(body["tint_alpha"], step, "serialization retains the validated style tint");
+        assert_eq!(body["labeling"]["territory"]["family"], style.labeling().territory.family, "serialization retains the canonical font family");
+    }
+    assert_eq!(<Style as utoipa::ToSchema>::name(), "MapGeneratorStyle", "the style publishes the accepted canonical source alias");
+    assert!(schema["properties"].as_object().unwrap().contains_key("boundaries"), "the canonical style schema includes its boundary dress");
+}

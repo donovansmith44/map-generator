@@ -6,6 +6,9 @@
 use crate::geom::{Bbox, UnitVec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum ChartKind {
     Globe,
     Flat,
@@ -63,6 +66,9 @@ pub const WIDTH_MIN: f64 = 320.0;
 pub const WIDTH_MAX: f64 = 8000.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = MapGeneratorCamera))]
 pub struct Camera {
     pub chart: ChartKind,
     pub lat: f64,

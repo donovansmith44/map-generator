@@ -12,12 +12,16 @@ use crate::boundary::EdgeCharacter;
 use crate::ident::{Canon, MapAddressed, MapKind, StyleId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Rgba(pub u8, pub u8, pub u8, pub u8);
 
 /// How a boundary stroke is drawn. `Zonal` is the frontier treatment: a
 /// soft band whose width comes from the DATA (EdgeCharacter::Frontier's
 /// width_km), not from the style.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum StrokePattern {
     Solid,
     Dashed,
@@ -26,6 +30,8 @@ pub enum StrokePattern {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Stroke {
     pub color: Rgba,
     pub width: f64,
@@ -40,6 +46,8 @@ impl Stroke {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Paint {
     pub fill: Rgba,
 }
@@ -56,12 +64,16 @@ impl Paint {
 /// expansion of Rome" and "the shrinking of Judah" are the same query
 /// with different palettes.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct AgeRamp {
     pub newest: Paint,
     pub oldest: Paint,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct LabelStyle {
     pub color: Rgba,
     /// The casing that keeps text legible over any fill.
@@ -96,6 +108,8 @@ pub enum LabelFace {
 /// layout uses for fitting and collision boxes, so the measure always
 /// matches the dress it measures.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct TypeVoice {
     pub family: &'static str,
     pub weight: u16,
@@ -110,6 +124,8 @@ pub struct TypeVoice {
 /// How an area label scales with the ground it names — declared, so a
 /// style may choose quiet uniform labels or loud hierarchical ones.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct LabelScale {
     /// ring area (steradians) whose label renders at exactly base size
     pub unit_area_sr: f64,
@@ -137,6 +153,8 @@ pub struct LabelScale {
 /// the scaling law. One value per style; every label decision reads
 /// from here.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Labeling {
     pub base: LabelStyle,
     pub territory: TypeVoice,
@@ -158,6 +176,8 @@ impl Labeling {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MarkerStyle {
     pub color: Rgba,
     pub size: f64,
@@ -167,6 +187,8 @@ pub struct MarkerStyle {
 /// split — "what changed at the fall of Samaria" is a scene, not a
 /// caption.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DeltaEmphasis {
     pub before: Stroke,
     pub after: Stroke,
@@ -175,6 +197,8 @@ pub struct DeltaEmphasis {
 
 /// Per-EdgeCharacter stroke rules.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BoundaryStrokes {
     pub line: Stroke,
     pub frontier: Stroke,
@@ -188,6 +212,8 @@ pub struct BoundaryStrokes {
 /// and the globe's chrome (limb circle, graticule). Dress data: a dark
 /// style gets a dark page, never a hardcoded cream.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GlobeChrome {
     pub limb: Stroke,
     pub limb_fill: Paint,
@@ -198,6 +224,8 @@ pub struct GlobeChrome {
 /// rest of the world wears when one subject is realized. Injectable:
 /// these factors were once constants in viewer code.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GhostDress {
     /// stroke alpha multiplier (0..=1)
     pub stroke_alpha: f64,
@@ -212,6 +240,8 @@ pub struct GhostDress {
 /// reads THIS, instead of hardcoding the same convention twice and
 /// drifting.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PatternGeometry {
     pub dashed_on: f64,
     pub dashed_off: f64,
@@ -310,6 +340,9 @@ pub struct StyleSpec {
 /// A complete style. Constructed only through `new`, which enforces the
 /// honesty laws — a dishonest style is unrepresentable, not discouraged.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = MapGeneratorStyle))]
 pub struct Style {
     boundaries: BoundaryStrokes,
     region: Paint,
