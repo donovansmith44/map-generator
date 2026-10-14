@@ -10,10 +10,11 @@ serde = { version = "1", features = ["derive"], optional = true }
 utoipa = { version = "6", optional = true }
 
 [dev-dependencies]
-serde_json = "1"
+proptest = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [features]
 default = []
-serde = ["dep:serde"]
-openapi = ["serde", "dep:utoipa"]
+serde = ["dep:serde", "atlas-graph-types/serde"]
+openapi = ["serde", "dep:utoipa", "atlas-graph-types/openapi"]
 canon-ids = ["atlas-graph-types/canon-ids"]

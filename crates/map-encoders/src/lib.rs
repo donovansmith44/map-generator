@@ -1219,7 +1219,7 @@ impl TransitionEncoder for JsonTransitionEncoder {
         let steps: Vec<serde_json::Value> = script
             .steps
             .iter()
-            .map(|s| match s {
+            .map(|draw| { let mut value = match &draw.step {
                 TransitionStep::Morph { boundary, from_pts, to_pts } => serde_json::json!({
                     "kind": "morph",
                     "boundary": format!("{:016x}", boundary.0 .0),
@@ -1251,7 +1251,15 @@ impl TransitionEncoder for JsonTransitionEncoder {
                         .collect::<Vec<_>>(),
                     "child": format!("{:016x}", child.0 .0),
                 }),
-            })
+                TransitionStep::PointTrack { entity, from, to, extent, radius_m } => serde_json::json!({ "kind": "point_track", "entity": entity.0.hex(), "from": pts_json(&[*from]), "to": pts_json(&[*to]), "extent": [format!("{:?}",extent.0), format!("{:?}",extent.1)], "radius_m": radius_m }),
+                TransitionStep::PointFade { entity, at, radius_m, appears } => serde_json::json!({ "kind": "point_fade", "entity": entity.0.hex(), "at": pts_json(&[*at]), "radius_m": radius_m, "appears": appears }),
+                TransitionStep::SegmentTrack { entity, segment, from, to } => serde_json::json!({ "kind": "segment_track", "entity": entity.0.hex(), "segment": segment.0.hex(), "from": pts_json(from), "to": pts_json(to) }),
+                TransitionStep::SegmentFade { entity, segment, course, appears } => serde_json::json!({ "kind": "segment_fade", "entity": entity.0.hex(), "segment": segment.0.hex(), "course": pts_json(course), "appears": appears }),
+                TransitionStep::LabelTrack { entity, text, from, to } => serde_json::json!({ "kind": "label_track", "entity": entity.0.hex(), "text": text, "from": pts_json(&[*from]), "to": pts_json(&[*to]) }),
+                TransitionStep::LabelFade { entity, from, to } => serde_json::json!({ "kind": "label_fade", "entity": entity.0.hex(), "from": from.as_ref().map(|label| serde_json::json!({ "text": label.text, "anchor": pts_json(&[label.anchor]) })), "to": to.as_ref().map(|label| serde_json::json!({ "text": label.text, "anchor": pts_json(&[label.anchor]) })) }),
+            };
+            if let Some(clip) = &draw.clip { value["clip"] = serde_json::json!(clip); }
+            value })
             .collect();
         Ok(serde_json::json!({ "steps": steps }).to_string())
     }

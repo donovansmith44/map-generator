@@ -26,6 +26,8 @@
 #![allow(dead_code)]
 
 pub mod algebra;
+#[cfg(feature = "canon-ids")]
+pub mod atlas_transition;
 pub mod boundary;
 pub mod camera;
 pub mod contracts;
@@ -71,8 +73,11 @@ pub use timeline::{
     Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,
     RegionClass, RegionHistory, WorldTimeline,
 };
-pub use transition::{TransitionScript, TransitionStep};
+pub use transition::{PlaceExtentKind, TransitionDraw, TransitionScript, TransitionStep};
 
 pub mod chart;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod transition_properties;

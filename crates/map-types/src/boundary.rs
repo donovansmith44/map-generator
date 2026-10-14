@@ -81,6 +81,8 @@ pub struct Boundary {
 
 /// Which way a region walks a shared arc.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum Orientation {
     Forward,
     Reverse,
@@ -95,9 +97,11 @@ pub enum Orientation {
 /// is everything, minus its holes. This is how the world ocean exists:
 /// the sphere minus the land, with no fictitious envelope boundary.
 #[derive(Clone, Debug, PartialEq)]
-pub struct RegionPart {
-    pub cycle: Vec<(BoundaryId, Orientation)>,
-    pub holes: Vec<Vec<(BoundaryId, Orientation)>>,
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RegionPart<B = BoundaryId> {
+    pub cycle: Vec<(B, Orientation)>,
+    pub holes: Vec<Vec<(B, Orientation)>>,
 }
 
 /// A region's geometry. AMENDMENT to the §B sketch (phase-2 finding,
@@ -106,6 +110,8 @@ pub struct RegionPart {
 /// is a LIST of parts, not one cycle. The sketch's single-cycle shape
 /// is the one-part case.
 #[derive(Clone, Debug, PartialEq)]
-pub struct RegionGeom {
-    pub parts: Vec<RegionPart>,
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RegionGeom<B = BoundaryId> {
+    pub parts: Vec<RegionPart<B>>,
 }

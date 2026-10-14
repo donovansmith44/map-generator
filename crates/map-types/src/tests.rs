@@ -22,6 +22,7 @@ use crate::ident::*;
 use crate::laws::*;
 use crate::query::*;
 use crate::scene::*;
+use crate::scene::PlacedLabel;
 use crate::style::*;
 use crate::timeline::*;
 use crate::transition::*;
@@ -362,7 +363,7 @@ struct ToyState {
 
 fn apply(mut st: ToyState, script: &TransitionScript) -> ToyState {
     for step in &script.steps {
-        match step {
+        match &step.step {
             TransitionStep::Morph { boundary, to_pts, .. } => {
                 st.geoms.insert(*boundary, to_pts.clone());
             }
@@ -384,6 +385,12 @@ fn apply(mut st: ToyState, script: &TransitionScript) -> ToyState {
                 }
                 st.present.insert(*child, true);
             }
+            TransitionStep::PointTrack { .. }
+            | TransitionStep::PointFade { .. }
+            | TransitionStep::SegmentTrack { .. }
+            | TransitionStep::SegmentFade { .. }
+            | TransitionStep::LabelTrack { .. }
+            | TransitionStep::LabelFade { .. } => panic!("the topology oracle accepts no presentation tracks"),
         }
     }
     st
@@ -402,12 +409,12 @@ fn law03_transition_composition() {
             boundary: BoundaryId(fixture_hash(S_SEED)),
             from_pts: vec![uv(0.0, 0.0)],
             to_pts: vec![uv(1.0, 1.0)],
-        }],
+        }.into()],
     };
     let second = TransitionScript {
         steps: vec![
-            TransitionStep::SplitAlong { parent: RegionId(fixture_hash(A_SEED)), seam: vec![uv(0.0, 0.0)], children: vec![c1, c2] },
-            TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) },
+            TransitionStep::SplitAlong { parent: RegionId(fixture_hash(A_SEED)), seam: vec![uv(0.0, 0.0)], children: vec![c1, c2] }.into(),
+            TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) }.into(),
         ],
     };
 
@@ -587,10 +594,10 @@ fn law08_overlay_and_script_monoids() {
         vec![Snapshot::empty(), marker_scene(1), marker_scene(2), marker_scene(3)];
     check_monoid(&scenes);
 
-    let scripts = vec![
+    let scripts: Vec<TransitionScript> = vec![
         TransitionScript::empty(),
-        TransitionScript { steps: vec![TransitionStep::FadeIn { region: RegionId(fixture_hash(A_SEED)) }] },
-        TransitionScript { steps: vec![TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) }] },
+        TransitionScript { steps: vec![TransitionStep::FadeIn { region: RegionId(fixture_hash(A_SEED)) }.into()] },
+        TransitionScript { steps: vec![TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) }.into()] },
     ];
     check_monoid(&scripts);
 }

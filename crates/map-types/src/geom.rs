@@ -9,6 +9,8 @@ const UNIT_EPS: f64 = 1e-9;
 /// A point on the unit sphere; |v| = 1 is checked at construction, so
 /// downstream math never renormalizes defensively.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct UnitVec {
     x: f64,
     y: f64,
@@ -26,6 +28,38 @@ pub enum GeomError {
     DegenerateRing,
     /// Morphing requires equal point counts (resampling is upstream work).
     PointCountMismatch,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for UnitVec {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Admitted;
+        impl<'de> serde::de::Visitor<'de> for Admitted {
+            type Value = UnitVec;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a finite unit vector with x, y and z")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<UnitVec, A::Error> {
+                let (mut x, mut y, mut z) = (None, None, None);
+                while let Some(key) = map.next_key::<String>()? {
+                    let field = match key.as_str() {
+                        "x" => &mut x,
+                        "y" => &mut y,
+                        "z" => &mut z,
+                        other => return Err(serde::de::Error::unknown_field(other, &["x", "y", "z"])),
+                    };
+                    if field.is_some() { return Err(serde::de::Error::custom("duplicate vector coordinate")); }
+                    *field = Some(map.next_value::<f64>()?);
+                }
+                let x = x.ok_or_else(|| serde::de::Error::missing_field("x"))?;
+                let y = y.ok_or_else(|| serde::de::Error::missing_field("y"))?;
+                let z = z.ok_or_else(|| serde::de::Error::missing_field("z"))?;
+                if !x.is_finite() || !y.is_finite() || !z.is_finite() { return Err(serde::de::Error::custom("non-finite vector coordinate")); }
+                UnitVec::new(x,y,z).map_err(|error| serde::de::Error::custom(format!("{error:?}")))
+            }
+        }
+        deserializer.deserialize_struct("UnitVec", &["x", "y", "z"], Admitted)
+    }
 }
 
 impl UnitVec {

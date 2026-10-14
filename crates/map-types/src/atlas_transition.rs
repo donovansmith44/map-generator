@@ -1,0 +1,108 @@
+use atlas_graph_types::edge::HoldingState;
+use atlas_graph_types::id::AnyNodeId;
+use atlas_graph_types::map_slice::{FeatureCollection, StoredShape};
+use atlas_graph_types::map_timing::RecordedMapCause;
+use atlas_graph_types::place_versions::Basis;
+
+use crate::boundary::RegionGeom;
+use crate::transition::TransitionScript;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ArcRef {
+    pub store: String,
+    pub key: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ArcChange {
+    pub arc: ArcRef,
+    pub before_shape: Option<String>,
+    pub after_shape: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FaceHolding<N = AnyNodeId> {
+    pub territory: N,
+    pub holding: Option<HoldingState>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FaceTransfer<N = AnyNodeId> {
+    pub subset: String,
+    pub boundary: RegionGeom<ArcRef>,
+    pub from: Option<FaceHolding<N>>,
+    pub to: Option<FaceHolding<N>>,
+    pub basis: Basis,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RecordedMapChange<N = AnyNodeId> {
+    pub year: i32,
+    pub before_year: i32,
+    pub causes: Vec<RecordedMapCause>,
+    pub arcs: Vec<ArcChange>,
+    pub transfers: Vec<FaceTransfer<N>>,
+    pub script: TransitionScript<N, ArcRef>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct MapKeyframe<N = AnyNodeId> {
+    pub change: RecordedMapChange<N>,
+    pub before: FeatureCollection,
+    pub after: FeatureCollection,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct MapTransition<N = AnyNodeId> {
+    pub from_year: i32,
+    pub to_year: i32,
+    pub origin: FeatureCollection,
+    pub destination: FeatureCollection,
+    pub shapes: Vec<StoredShape>,
+    pub keyframes: Vec<MapKeyframe<N>>,
+    pub after_year: Option<i32>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum TransitionRefusal {
+    MissingGrounds { year: i32 },
+    MissingCorrespondence { year: i32, shape: String },
+    UnclassifiedSubset { year: i32, shape: String },
+    UnresolvedDating { causes: Vec<RecordedMapCause> },
+    EndpointMismatch,
+    InvalidWindow,
+    NotRecorded,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum TransitionRead<N = AnyNodeId> {
+    Ready { transition: MapTransition<N> },
+    Refused { reason: TransitionRefusal, destination: FeatureCollection },
+}
