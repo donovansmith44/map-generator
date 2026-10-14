@@ -577,7 +577,7 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
              from the reference plate through its chart (see provenance)."
                 .to_string(),
         ),
-        grounds: [Ground::Scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
+        grounds: [crate::scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
     };
     let valid = Interval { from, to: None };
     let chart = plate_chart();

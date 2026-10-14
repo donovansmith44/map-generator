@@ -188,7 +188,7 @@ pub fn ingest_terrain(grid: &ElevationGrid, from: TimePoint) -> WorldTimeline {
                 .to_string(),
         ),
         grounds: [
-            Ground::Scripture(gen_1_9()),
+            crate::scripture(gen_1_9()),
             Ground::Source(SourceId::new("etopo1")),
         ]
         .into(),

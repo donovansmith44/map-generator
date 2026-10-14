@@ -175,6 +175,8 @@ impl std::fmt::Display for Refused {
 }
 
 mod templates;
+#[cfg(feature = "publication")]
+pub use templates::publish_inputs;
 
 /// A base style, taken apart by name — the spec every derived dress
 /// starts from.
@@ -318,7 +320,7 @@ fn load_canon(canon_path: &std::path::Path) -> App {
         let ghost = ghosted(base);
         ghosts.insert(base.id(), ghost.id());
         style_table.insert(ghost.id(), ghost);
-        style_table.insert(base.id(), *base);
+        style_table.insert(base.id(), base.clone());
     }
     let mut overlay_tints = BTreeMap::new();
     for (_, base, _) in &loaded {
@@ -1253,7 +1255,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
                 // query's own style (the base dress on unknown ids).
                 let dress_style = parse_style(app, p.get("style"))
                     .and_then(|id| app.style_values.get(&id))
-                    .copied();
+                    .cloned();
                 let gpu_enc = match dress_style {
                     Some(st) => GpuSceneEncoder {
                         paper: st.paper(),

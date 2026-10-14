@@ -422,7 +422,7 @@ fn emit_scene(
 fn emit_labels(s: &mut String, scene: &Snapshot, proj: &Projector, overflow_em: f64) {
     for laid in layout::layout(scene, proj, overflow_em) {
         let l = &scene.labels[laid.index];
-        let v = l.voice;
+        let v = &l.voice;
         let subject_attr = match &l.subject {
             LabelSubject::Place(p) => format!(" data-place=\"{}\"", esc(&p.0 .0)),
             _ => String::new(),

@@ -39,7 +39,7 @@ pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
 
 fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
     const TV: map_types::style::TypeVoice = map_types::style::TypeVoice {
-        family: "sans-serif",
+        family: "sans-serif".into(),
         weight: 600,
         italic: false,
         uppercase: false,
@@ -47,7 +47,7 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
         advance_em: 0.62,
     };
     const MEM: map_types::style::TypeVoice = map_types::style::TypeVoice {
-        family: "serif",
+        family: "serif".into(),
         weight: 400,
         italic: true,
         uppercase: false,

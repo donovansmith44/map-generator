@@ -60,6 +60,18 @@ fn ext_for(ctype: &str) -> &'static str {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(feature = "publication")]
+    if args.first().map(String::as_str) == Some("publish") {
+        if args.len() != 4 {
+            eprintln!("publish requires template.ron camera.json output-directory");
+            std::process::exit(2);
+        }
+        if let Err(error) = map_viewer::publish_inputs(std::path::Path::new(&args[1]), std::path::Path::new(&args[2]), std::path::Path::new(&args[3])) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let out_dir = std::env::var("MAP_CLI_OUT").unwrap_or_else(|_| "out/artifacts".to_string());
     std::fs::create_dir_all(&out_dir).expect("artifact directory");
 

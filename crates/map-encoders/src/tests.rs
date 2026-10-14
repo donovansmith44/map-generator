@@ -10,7 +10,7 @@ use map_types::scene::{LabelSubject, StyledMarker};
 
 fn test_voice() -> map_types::style::TypeVoice {
     map_types::style::TypeVoice {
-        family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+        family: "'Segoe UI', ui-sans-serif, system-ui, sans-serif".into(),
         weight: 600,
         italic: false,
         uppercase: false,
@@ -586,7 +586,7 @@ fn label_wears_its_declared_voice() {
         style: LabelStyle { color: Rgba(10, 10, 10, 255), halo: Rgba(240, 240, 240, 220), size: 16.0, halo_width_em: 0.24 },
         face: map_types::scene::LabelFace::Territory,
         voice: map_types::style::TypeVoice {
-            family: "TestFace, serif",
+            family: "TestFace, serif".into(),
             weight: 512,
             italic: true,
             uppercase: true,

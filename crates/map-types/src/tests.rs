@@ -37,7 +37,7 @@ fn cred(name: impl Into<String>) -> crate::license::Credit {
 
 fn test_labeling(base: LabelStyle) -> crate::style::Labeling {
     const TV: crate::style::TypeVoice = crate::style::TypeVoice {
-    family: "sans-serif",
+    family: std::borrow::Cow::Borrowed("sans-serif"),
     weight: 600,
     italic: false,
     uppercase: false,
@@ -665,7 +665,7 @@ fn law10_selection_coherence() {
             style: style.label_style(),
             face: crate::scene::LabelFace::Place,
             voice: crate::style::TypeVoice {
-                family: "sans-serif",
+                family: std::borrow::Cow::Borrowed("sans-serif"),
                 weight: 600,
                 italic: false,
                 uppercase: false,
@@ -832,7 +832,7 @@ fn contract_c6_stale_pin_fails_loud() {
 fn labeling_voice_follows_face() {
     use crate::style::{LabelFace, LabelScale, Labeling, TypeVoice};
     let v = |family: &'static str| TypeVoice {
-        family,
+        family: family.into(),
         weight: 400,
         italic: false,
         uppercase: false,
@@ -1143,7 +1143,7 @@ fn style_identity_sees_every_field() {
 
     // Differ ONLY in a voice's family.
     let mut familied = honest_style_parts();
-    familied.labeling.water.family = "'Some Other Serif', serif";
+    familied.labeling.water.family = "'Some Other Serif', serif".into();
     assert_ne!(id0, build_style(familied).id(), "the family is part of the dress");
 
     // Differ ONLY in the label scaling law.
@@ -1283,7 +1283,7 @@ mod consolidation_laws {
             subject,
             style: crate::style::LabelStyle { color: crate::style::Rgba(0, 0, 0, 255), halo: crate::style::Rgba(255, 255, 255, 255), size: 12.0, halo_width_em: 0.24 },
             face: crate::style::LabelFace::Place,
-            voice: crate::style::TypeVoice { family: "serif", weight: 400, italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.6 },
+            voice: crate::style::TypeVoice { family: "serif".into(), weight: 400, italic: false, uppercase: false, tracking_em: 0.0, advance_em: 0.6 },
             piece: Piece::Labels,
         };
         let place = |id: &str| LabelSubject::Place(crate::AtlasPlaceRef(atlas_graph_types::covenant::PlaceId::new(id.to_string())));
@@ -1316,9 +1316,9 @@ mod camera_laws {
     fn a_style_refuses_a_negative_or_unbounded_overflow() {
         let mut spec = crate::tests::honest_style_parts();
         spec.labeling.scale.overflow_em = -0.1;
-        assert!(crate::style::Style::new(spec).is_err());
+        assert!(crate::style::Style::new(spec.clone()).is_err());
         spec.labeling.scale.overflow_em = f64::INFINITY;
-        assert!(crate::style::Style::new(spec).is_err());
+        assert!(crate::style::Style::new(spec.clone()).is_err());
         spec.labeling.scale.overflow_em = 0.0;
         assert!(crate::style::Style::new(spec).is_ok());
     }
@@ -1472,7 +1472,7 @@ fn two_origin_scene() -> Snapshot {
             style: style.label_style(),
             face: crate::scene::LabelFace::Place,
             voice: crate::style::TypeVoice {
-                family: "sans-serif",
+                family: std::borrow::Cow::Borrowed("sans-serif"),
                 weight: 600,
                 italic: false,
                 uppercase: false,
@@ -1521,10 +1521,10 @@ fn served_style_exports_the_validated_source_value() {
         let mut spec = honest_style_parts();
         spec.tint_alpha = step;
         let style = Style::new(spec).unwrap();
-        let body = serde_json::to_value(style).unwrap();
+        let body = serde_json::to_value(&style).unwrap();
         // Assert
         assert_eq!(body["tint_alpha"], step, "serialization retains the validated style tint");
-        assert_eq!(body["labeling"]["territory"]["family"], style.labeling().territory.family, "serialization retains the canonical font family");
+        assert_eq!(body["labeling"]["territory"]["family"], style.labeling().territory.family.as_ref(), "serialization retains the canonical font family");
     }
     assert_eq!(<Style as utoipa::ToSchema>::name(), "MapGeneratorStyle", "the style publishes the accepted canonical source alias");
     assert!(schema["properties"].as_object().unwrap().contains_key("boundaries"), "the canonical style schema includes its boundary dress");
@@ -1594,5 +1594,36 @@ fn canonical_hash_writer_preserves_opaque_source_bytes() {
         // Assert
         assert_eq!(selected.0, hash.0.to_vec(), "canonical framing retains every source hash byte");
         assert_ne!(hash, next, "different generated source seeds retain distinct identities");
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn compiled_style_roundtrips_owned_fonts_and_rejects_dishonest_boundaries() {
+    // Arrange
+    for step in 1u8..12 {
+        let style = honest_style();
+        let mut body = serde_json::to_value(&style).unwrap();
+        body["labeling"]["territory"]["family"] = format!("served-font-{step}").into();
+        // Act
+        let decoded: Style = serde_json::from_value(body.clone()).unwrap();
+        // Assert
+        assert_eq!(decoded.labeling().territory.family, format!("served-font-{step}"), "compiled fonts retain their served ownership");
+        assert_eq!(serde_json::to_value(decoded).unwrap(), body, "compiled style fields retain their publication values");
+        body["boundaries"]["unknown"] = body["boundaries"]["line"].clone();
+        assert!(serde_json::from_value::<Style>(body).is_err(), "compiled style cannot bypass source boundary honesty");
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn compiled_camera_keeps_constructor_bounds() {
+    // Arrange
+    for step in 1..12 {
+        let body = serde_json::json!({"chart":"globe","lat":100.0 + f64::from(step),"lon":f64::from(step),"zoom":2.0,"width":f64::from(step)});
+        // Act
+        let camera: crate::camera::Camera = serde_json::from_value(body).unwrap();
+        // Assert
+        assert_eq!(camera, crate::camera::Camera::new(crate::camera::ChartKind::Globe, 100.0 + f64::from(step), f64::from(step), 2.0, f64::from(step)), "compiled camera uses the same source bounds as its constructor");
     }
 }

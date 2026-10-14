@@ -1196,7 +1196,7 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
     .expect("route verses are ordered");
     let justification = Justification {
         text: Some(r.note.to_string()),
-        grounds: [Ground::Scripture(verses.clone())].into(),
+        grounds: [crate::scripture(verses.clone())].into(),
     };
     let resolved = atlas.and_then(|a| {
         a.resolve_event(r.book, (r.chapter_from, r.verse_from), (r.chapter_to, r.verse_to))
@@ -1304,7 +1304,7 @@ pub fn stand_in_gazetteer() -> GazetteerExport {
 fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExports>) {
     let justification = Justification {
         text: Some(s.note.to_string()),
-        grounds: [Ground::Scripture(verses_of(s))].into(),
+        grounds: [crate::scripture(verses_of(s))].into(),
     };
 
     // C2/C3 binding: the atlas dates and locates what it can; the
@@ -1457,7 +1457,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
         };
         let justification = Justification {
             text: Some(ph.note.to_string()),
-            grounds: [Ground::Scripture(verses.clone())].into(),
+            grounds: [crate::scripture(verses.clone())].into(),
         };
         let mut pts: Vec<UnitVec> =
             ph.circuit.iter().map(|w| UnitVec::from_lat_lon_deg(w.lat, w.lon)).collect();
@@ -1527,7 +1527,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
             driver: fdriver,
             justification: Justification {
                 text: Some(note.to_string()),
-                grounds: [Ground::Scripture(verses)].into(),
+                grounds: [crate::scripture(verses)].into(),
             },
             provenance: prov,
         });

@@ -34,3 +34,33 @@ pub use surveys::{
 
 #[cfg(test)]
 mod tests;
+
+fn scripture(range: atlas_graph_types::text::BibleLocusRange) -> atlas_graph_types::edge::Ground {
+    use atlas_graph_types::passage::{Reading, Written};
+    assert!(range.from.span.is_none() && range.to.span.is_none(), "map Scripture evidence must cite whole source verses");
+    let first = range.from.unit;
+    let last = range.to.unit;
+    let written = Written::new(first.clone(), last.clone()).expect("an admitted Scripture range is ordered");
+    let units = if first == last { vec![first] } else { vec![first, last] };
+    let reading = Reading::of(units).expect("an admitted Scripture range has ordered endpoints");
+    atlas_graph_types::edge::Ground::Scripture(reading.place(&written).expect("the cited endpoints are present in their admitted reading"))
+}
+
+#[cfg(test)]
+mod scripture_admission_tests {
+    #[test]
+    fn whole_scripture_admission_retains_generated_cited_bounds() {
+        use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
+        // Arrange
+        for book in 1..=66 {
+            let first = VerseRef { book, chapter: 1, verse: 1 };
+            let last = VerseRef { book, chapter: 1, verse: 2 };
+            let range = LocusRange::new(BibleLocus::whole(first.clone()), BibleLocus::whole(last.clone())).unwrap();
+            // Act
+            let atlas_graph_types::edge::Ground::Scripture(span) = super::scripture(range) else { panic!("Scripture admission must remain Scripture"); };
+            // Assert
+            assert_eq!(span.first(), &first, "the original first cited verse survives source admission");
+            assert_eq!(span.last(), &last, "the original last cited verse survives source admission");
+        }
+    }
+}

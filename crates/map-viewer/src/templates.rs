@@ -191,9 +191,7 @@ fn ramp(r: &TRamp) -> AgeRamp {
 
 fn voice(v: TVoice) -> TypeVoice {
     TypeVoice {
-        // leaked once per process at load: templates are read exactly
-        // once, and 'static keeps the Style tree Copy
-        family: Box::leak(v.family.into_boxed_str()),
+        family: v.family.into(),
         weight: v.weight,
         italic: v.italic,
         uppercase: v.uppercase,
@@ -353,5 +351,46 @@ mod tests {
     fn unknown_fields_are_named_errors() {
         let err = super::parse_template("(bogus: 1)").unwrap_err();
         assert!(err.contains("schema"), "{err}");
+    }
+}
+
+#[cfg(feature = "publication")]
+pub fn publish(camera: &map_types::camera::Camera, style: &Style, directory: &std::path::Path) -> Result<(), String> {
+    let camera = serde_json::to_vec(camera).map_err(|error| error.to_string())?;
+    let style = serde_json::to_vec(style).map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    std::fs::write(directory.join("camera.json"), camera).map_err(|error| error.to_string())?;
+    std::fs::write(directory.join("style.json"), style).map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "publication")]
+pub fn publish_inputs(template: &std::path::Path, camera: &std::path::Path, directory: &std::path::Path) -> Result<(), String> {
+    let raw = std::fs::read_to_string(template).map_err(|error| error.to_string())?;
+    let (style, _) = parse_template(&raw)?;
+    let camera = std::fs::read(camera).map_err(|error| error.to_string())?;
+    let camera = serde_json::from_slice(&camera).map_err(|error| error.to_string())?;
+    publish(&camera, &style, directory)
+}
+
+#[cfg(all(test, feature = "publication"))]
+mod publication_tests {
+    #[test]
+    fn canonical_publication_preserves_generated_camera_and_admitted_style() {
+        // Arrange
+        let template = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../templates/canaan.ron");
+        let raw = std::fs::read_to_string(template).unwrap();
+        let (style, _) = super::parse_template(&raw).unwrap();
+        for seed in 1..12 {
+            let camera = map_types::camera::Camera::new(map_types::camera::ChartKind::Globe, f64::from(seed), f64::from(seed * 2), 3.0, 1200.0);
+            let directory = std::env::temp_dir().join(format!("map-publication-{}-{seed}", std::process::id()));
+            // Act
+            super::publish(&camera, &style, &directory).unwrap();
+            let published_camera = std::fs::read(directory.join("camera.json")).unwrap();
+            let published_style = std::fs::read(directory.join("style.json")).unwrap();
+            std::fs::remove_dir_all(directory).unwrap();
+            // Assert
+            assert_eq!(serde_json::from_slice::<map_types::camera::Camera>(&published_camera).unwrap(), camera, "publication retains the exact generated source camera");
+            assert_eq!(serde_json::from_slice::<map_types::style::Style>(&published_style).unwrap(), style, "publication retains the exact admitted canonical style");
+        }
     }
 }

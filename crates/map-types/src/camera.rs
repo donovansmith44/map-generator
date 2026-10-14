@@ -6,7 +6,7 @@
 use crate::geom::{Bbox, UnitVec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum ChartKind {
@@ -66,14 +66,16 @@ pub const WIDTH_MIN: f64 = 320.0;
 pub const WIDTH_MAX: f64 = 8000.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "openapi", schema(as = MapGeneratorCamera))]
 pub struct Camera {
     pub chart: ChartKind,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_latitude"))]
     pub lat: f64,
     pub lon: f64,
     pub zoom: f64,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_width"))]
     pub width: f64,
 }
 
@@ -81,10 +83,10 @@ impl Camera {
     pub fn new(chart: ChartKind, lat: f64, lon: f64, zoom: f64, width: f64) -> Camera {
         Camera {
             chart,
-            lat: lat.clamp(-LAT_LIMIT, LAT_LIMIT),
+            lat: latitude(lat),
             lon,
             zoom,
-            width: width.clamp(WIDTH_MIN, WIDTH_MAX),
+            width: page_width(width),
         }
     }
 
@@ -110,4 +112,17 @@ impl Camera {
                 .min(std::f64::consts::PI),
         }
     }
+}
+
+fn latitude(value: f64) -> f64 { value.clamp(-LAT_LIMIT, LAT_LIMIT) }
+fn page_width(value: f64) -> f64 { value.clamp(WIDTH_MIN, WIDTH_MAX) }
+
+#[cfg(feature = "serde")]
+fn deserialize_latitude<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    <f64 as serde::Deserialize>::deserialize(deserializer).map(latitude)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_width<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    <f64 as serde::Deserialize>::deserialize(deserializer).map(page_width)
 }

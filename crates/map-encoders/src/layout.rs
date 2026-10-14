@@ -293,7 +293,7 @@ pub fn verdicts(scene: &Snapshot, proj: &Projector, overflow_em: f64) -> Vec<Ver
             out.push(Verdict::Yielded(index, Yield::Behind));
             continue;
         };
-        let v = l.voice;
+        let v = &l.voice;
         let text = if v.uppercase { l.text.to_uppercase() } else { l.text.clone() };
         let chars = text.chars().count().max(1) as f64;
         let mut size = l.style.size * proj.width / DESIGN_WIDTH;

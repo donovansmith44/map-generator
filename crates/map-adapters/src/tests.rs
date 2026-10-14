@@ -30,7 +30,7 @@ fn creation_anchor() -> Anchor {
         at: tp(-4004),
         justification: Justification {
             text: Some("In the beginning God created the heaven and the earth.".to_string()),
-            grounds: [Ground::Scripture(LocusRange::new(gen11.clone(), gen11).unwrap())].into(),
+            grounds: [crate::scripture(LocusRange::new(gen11.clone(), gen11).unwrap())].into(),
         },
         provenance: "owner-config:ussher-tradition (pending atlas C2 export)".to_string(),
     }

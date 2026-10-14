@@ -63,7 +63,7 @@ pub fn ingest_water(
              is the Word's; the shapes are modern coastline data (see provenance)."
                 .to_string(),
         ),
-        grounds: [Ground::Scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
+        grounds: [crate::scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
     };
     let valid = Interval { from, to: None };
 
@@ -170,7 +170,7 @@ pub fn ingest_ocean(
              is the Word's; the shapes are modern coastline data (see provenance)."
                 .to_string(),
         ),
-        grounds: [Ground::Scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
+        grounds: [crate::scripture(gen_1_9_10()), Ground::Source(source.clone())].into(),
     };
     let valid = Interval { from, to: None };
 
