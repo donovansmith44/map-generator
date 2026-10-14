@@ -8,6 +8,7 @@ description = "map-generator domain types — phase 1 of docs/map-system-handoff
 atlas-graph-types = { version = "0.24" }
 serde = { version = "1", features = ["derive"], optional = true }
 utoipa = { version = "6", optional = true }
+serde_json = { version = "1", features = ["float_roundtrip"], optional = true }
 
 [dev-dependencies]
 proptest = "1"
@@ -15,6 +16,6 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [features]
 default = []
-serde = ["dep:serde", "atlas-graph-types/serde"]
+serde = ["dep:serde", "dep:serde_json", "atlas-graph-types/serde"]
 openapi = ["serde", "dep:utoipa", "atlas-graph-types/openapi"]
 canon-ids = ["atlas-graph-types/canon-ids"]

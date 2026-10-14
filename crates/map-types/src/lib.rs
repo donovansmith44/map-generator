@@ -81,3 +81,6 @@ mod tests;
 
 #[cfg(test)]
 mod transition_properties;
+
+#[cfg(all(test, feature = "canon-ids", feature = "serde"))]
+mod atlas_transition_properties;

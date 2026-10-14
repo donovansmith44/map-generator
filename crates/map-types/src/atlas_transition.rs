@@ -123,3 +123,7 @@ pub fn admit_script<R, B>(script: TransitionScript<R, B>) -> Result<TransitionSc
 fn paired(from: &[crate::geom::UnitVec], to: &[crate::geom::UnitVec]) -> bool {
     from.len() >= 2 && from.len() == to.len()
 }
+
+#[cfg(feature = "serde")]
+#[path = "atlas_transition_codec.rs"]
+mod codec;
