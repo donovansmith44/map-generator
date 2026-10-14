@@ -1,3 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/map-types", "crates/map-partition", "crates/map-canon", "crates/map-compile", "crates/map-adapters", "crates/map-provider", "crates/map-encoders", "crates/map-viewer"]
+
+[patch.crates-io]
+atlas-graph-types = { path = "../../w/CX-FSHARP-wire/graph-types" }
