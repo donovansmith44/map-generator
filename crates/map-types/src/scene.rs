@@ -126,7 +126,7 @@ fn canon_trace(c: &mut Canon, t: &Option<Trace>) {
     c.opt(t, |c, t| {
         c.str_(&t.layer).str_(&t.entity);
         c.seq(&t.borders, |c, b| {
-            c.u64_(b.0);
+            c.hash(b);
         });
     });
 }
@@ -188,7 +188,7 @@ impl MapAddressed for Snapshot {
         let mut c = Canon::new();
         c.tag("scene");
         c.seq(&self.regions, |c, r| {
-            c.u64_(r.region.0 .0);
+            c.hash(&r.region.0);
             c.str_(r.entity.as_deref().unwrap_or(""));
             c.seq(&r.outer, |c, ring| ring.canon(c));
             c.seq(&r.holes, |c, ring| ring.canon(c));
@@ -203,7 +203,7 @@ impl MapAddressed for Snapshot {
             canon_trace(c, &r.trace);
         });
         c.seq(&self.boundaries, |c, b| {
-            c.u64_(b.boundary.0 .0);
+            c.hash(&b.boundary.0);
             c.seq(&b.pts, |c, p| p.canon(c));
             b.stroke.canon(c);
             let srcs: Vec<_> = b.sources.iter().collect();
@@ -242,8 +242,8 @@ impl MapAddressed for Snapshot {
             c.str_(&l.text);
             l.at.canon(c);
             match &l.subject {
-                LabelSubject::Region(r) => c.u8_(0).u64_(r.0 .0),
-                LabelSubject::Boundary(b) => c.u8_(1).u64_(b.0 .0),
+                LabelSubject::Region(r) => c.u8_(0).hash(&r.0),
+                LabelSubject::Boundary(b) => c.u8_(1).hash(&b.0),
                 LabelSubject::Free => c.u8_(2),
                 LabelSubject::Place(p) => c.u8_(3).str_(&p.0 .0),
                 LabelSubject::Memory(p) => c.u8_(4).str_(&p.0 .0),
@@ -277,7 +277,7 @@ pub enum Ground {
 impl Ground {
     pub fn wire(&self) -> String {
         match self {
-            Ground::Region(r) => format!("region:{:016x}", r.0 .0),
+            Ground::Region(r) => format!("region:{}", r.0.hex()),
             Ground::Unclaimed => "unclaimed".to_string(),
         }
     }

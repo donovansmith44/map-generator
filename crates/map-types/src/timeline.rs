@@ -187,13 +187,11 @@ fn canon_justification(c: &mut Canon, j: &Justification) {
     c.seq(&grounds, |c, g| match g {
         Ground::Scripture(range) => {
             c.u8_(0);
-            for locus in [&range.from, &range.to] {
-                c.u8_(locus.unit.book)
-                    .u64_(u64::from(locus.unit.chapter))
-                    .u64_(u64::from(locus.unit.verse));
-                c.opt(&locus.span, |c, s| {
-                    c.str_(&s.layer.0).u64_(u64::from(s.start)).u64_(u64::from(s.end));
-                });
+            for reference in [range.first(), range.last()] {
+                c.u8_(reference.book)
+                    .u64_(u64::from(reference.chapter))
+                    .u64_(u64::from(reference.verse))
+                    .u8_(0);
             }
         }
         Ground::Anchor(a) => {
@@ -214,37 +212,37 @@ impl MapAddressed for ChangeEvent {
         canon_time_point(&mut c, &self.at);
         match &self.kind {
             ChangeKind::Rise { region } => {
-                c.u8_(0).u64_(region.0 .0);
+                c.u8_(0).hash(&region.0);
             }
             ChangeKind::Fall { region } => {
-                c.u8_(1).u64_(region.0 .0);
+                c.u8_(1).hash(&region.0);
             }
             ChangeKind::Shift { boundary } => {
-                c.u8_(2).u64_(boundary.0 .0);
+                c.u8_(2).hash(&boundary.0);
             }
             ChangeKind::Journey { boundary } => {
-                c.u8_(6).u64_(boundary.0 .0);
+                c.u8_(6).hash(&boundary.0);
             }
             ChangeKind::Split { parent, children, seam } => {
-                c.u8_(3).u64_(parent.0 .0);
+                c.u8_(3).hash(&parent.0);
                 c.seq(children, |c, r| {
-                    c.u64_(r.0 .0);
+                    c.hash(&r.0);
                 });
                 c.seq(seam, |c, p| p.canon(c));
             }
             ChangeKind::Merge { parents, child } => {
                 c.u8_(4);
                 c.seq(parents, |c, r| {
-                    c.u64_(r.0 .0);
+                    c.hash(&r.0);
                 });
-                c.u64_(child.0 .0);
+                c.hash(&child.0);
             }
             ChangeKind::Rename { region } => {
-                c.u8_(5).u64_(region.0 .0);
+                c.u8_(5).hash(&region.0);
             }
         }
         c.opt(&self.driver, |c, d| {
-            c.str_(&d.event.0).u64_(d.atlas_root.0);
+            c.str_(&d.event.0).hash(&d.atlas_root);
         });
         canon_justification(&mut c, &self.justification);
         c.str_(&self.provenance);
@@ -284,4 +282,39 @@ pub struct WorldTimeline {
     pub regions: BTreeMap<RegionId, RegionHistory>,
     pub events: Vec<ChangeEvent>,
     pub atlas_pin: Option<AtlasPin>,
+}
+
+#[cfg(test)]
+mod canonical_ground_tests {
+    use super::*;
+    use atlas_graph_types::passage::{Reading, Written};
+    use atlas_graph_types::text::{BibleTag, VerseRef};
+    use atlas_graph_types::id::SourceId;
+
+    #[test]
+    fn scripture_ground_retains_the_previous_no_offset_byte_sequence() {
+        // Arrange
+        for seed in 1u16..32 {
+            let first = VerseRef { book: 0, chapter: seed, verse: 1 };
+            let last = VerseRef { verse: 2, ..first.clone() };
+            let reading = Reading::<BibleTag>::of(vec![first.clone(), last.clone()]).unwrap();
+            let span = reading.place(&Written::new(first.clone(), last.clone()).unwrap()).unwrap();
+            let source = SourceId::new(format!("source-{seed}"));
+            let justification = Justification {
+                text: Some(format!("ground-{seed}")),
+                grounds: std::collections::BTreeSet::from([Ground::Scripture(span), Ground::Source(source.clone())]),
+            };
+            let mut previous = Canon::new();
+            previous.u8_(1).str_(justification.text.as_ref().unwrap()).u64_(2).u8_(0);
+            for reference in [&first, &last] {
+                previous.u8_(reference.book).u64_(u64::from(reference.chapter)).u64_(u64::from(reference.verse)).u8_(0);
+            }
+            previous.u8_(2).str_(&source.0);
+            // Act
+            let mut actual = Canon::new();
+            canon_justification(&mut actual, &justification);
+            // Assert
+            assert_eq!(actual.0, previous.0, "existing no-offset ground bytes are unchanged");
+        }
+    }
 }

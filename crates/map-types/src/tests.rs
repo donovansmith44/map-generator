@@ -101,11 +101,11 @@ fn shift_event(bid: BoundaryId, at: i32) -> ChangeEvent {
     }
 }
 
-const W: BoundaryId = BoundaryId(ContentHash(1));
-const S: BoundaryId = BoundaryId(ContentHash(2));
-const E: BoundaryId = BoundaryId(ContentHash(3));
-const A: RegionId = RegionId(ContentHash(10));
-const B: RegionId = RegionId(ContentHash(11));
+const W_SEED: u64 = 1;
+const S_SEED: u64 = 2;
+const E_SEED: u64 = 3;
+const A_SEED: u64 = 10;
+const B_SEED: u64 = 11;
 
 /// Two regions sharing ONE arc (S): the arc-sharing shape from §B.
 /// Junctions n and s are the SAME values in every arc touching them.
@@ -117,9 +117,9 @@ fn two_region_world() -> WorldTimeline {
     let east = arc(vec![s, uv(0.0, 10.0), n]); // s -> n the long way east
 
     let mut boundaries = BTreeMap::new();
-    boundaries.insert(W, open_hist(-2000, west));
-    boundaries.insert(S, open_hist(-2000, shared));
-    boundaries.insert(E, open_hist(-2000, east));
+    boundaries.insert(BoundaryId(fixture_hash(W_SEED)), open_hist(-2000, west));
+    boundaries.insert(BoundaryId(fixture_hash(S_SEED)), open_hist(-2000, shared));
+    boundaries.insert(BoundaryId(fixture_hash(E_SEED)), open_hist(-2000, east));
 
     let region = |name: &str, cycle: Vec<(BoundaryId, Orientation)>| RegionHistory {
         class: RegionClass::default(),
@@ -130,8 +130,8 @@ fn two_region_world() -> WorldTimeline {
         )],
     };
     let mut regions = BTreeMap::new();
-    regions.insert(A, region("Westland", vec![(W, Orientation::Forward), (S, Orientation::Forward)]));
-    regions.insert(B, region("Eastland", vec![(S, Orientation::Reverse), (E, Orientation::Forward)]));
+    regions.insert(RegionId(fixture_hash(A_SEED)), region("Westland", vec![(BoundaryId(fixture_hash(W_SEED)), Orientation::Forward), (BoundaryId(fixture_hash(S_SEED)), Orientation::Forward)]));
+    regions.insert(RegionId(fixture_hash(B_SEED)), region("Eastland", vec![(BoundaryId(fixture_hash(S_SEED)), Orientation::Reverse), (BoundaryId(fixture_hash(E_SEED)), Orientation::Forward)]));
 
     WorldTimeline { anchor: None, boundaries, regions, events: Vec::new(), atlas_pin: None }
 }
@@ -189,6 +189,13 @@ fn honest_style_parts() -> crate::style::StyleSpec {
 
 fn build_style(p: crate::style::StyleSpec) -> Style {
     Style::new(p).unwrap()
+}
+
+fn fixture_hash(seed: u64) -> ContentHash {
+    #[cfg(not(feature = "canon-ids"))]
+    { ContentHash(seed) }
+    #[cfg(feature = "canon-ids")]
+    { atlas_graph_types::sections::logical_hash(&seed.to_be_bytes()) }
 }
 
 fn honest_style() -> Style {
@@ -277,7 +284,7 @@ fn law00_anchor() {
 #[test]
 fn law01_query_determinism() {
     let q = RenderQuery {
-        subject: RenderSubject::Region(A),
+        subject: RenderSubject::Region(RegionId(fixture_hash(A_SEED))),
         time: TimeSelector::At(tp(-586)),
         camera: None,
         lod: Lod(0.001),
@@ -287,7 +294,7 @@ fn law01_query_determinism() {
             .with(crate::piece::Piece::Claims)
             .with(crate::piece::Piece::Markers)
             .with(crate::piece::Piece::Labels),
-        style: StyleId(ContentHash(7)),
+        style: StyleId(fixture_hash(7)),
     };
     assert_eq!(q.map_pid(), q.clone().map_pid());
 
@@ -324,18 +331,18 @@ fn law02_partition_structure() {
 
     // Break a junction: Eastland's east arc no longer starts at s.
     let mut broken = world.clone();
-    let hist = broken.boundaries.get_mut(&E).unwrap();
+    let hist = broken.boundaries.get_mut(&BoundaryId(fixture_hash(E_SEED))).unwrap();
     hist.versions[0].1.pts[0] = uv(-10.0, 0.5);
     let violations = validate_partition_structure(&broken);
     assert!(
-        violations.iter().any(|v| matches!(v, Violation::BrokenCycle { region, .. } if *region == B)),
+        violations.iter().any(|v| matches!(v, Violation::BrokenCycle { region, .. } if *region == RegionId(fixture_hash(B_SEED)))),
         "moved junction must break Eastland's cycle: {violations:?}"
     );
 
     // Reference an arc the timeline doesn't hold.
     let mut dangling = world.clone();
-    let ghost = BoundaryId(ContentHash(99));
-    dangling.regions.get_mut(&A).unwrap().geom_history[0].1.parts[0].cycle[0].0 = ghost;
+    let ghost = BoundaryId(fixture_hash(99));
+    dangling.regions.get_mut(&RegionId(fixture_hash(A_SEED))).unwrap().geom_history[0].1.parts[0].cycle[0].0 = ghost;
     let violations = validate_partition_structure(&dangling);
     assert!(violations
         .iter()
@@ -384,23 +391,23 @@ fn apply(mut st: ToyState, script: &TransitionScript) -> ToyState {
 
 #[test]
 fn law03_transition_composition() {
-    let c1 = RegionId(ContentHash(21));
-    let c2 = RegionId(ContentHash(22));
+    let c1 = RegionId(fixture_hash(21));
+    let c2 = RegionId(fixture_hash(22));
     let start = ToyState {
-        present: BTreeMap::from([(A, true), (B, true)]),
-        geoms: BTreeMap::from([(S, vec![uv(0.0, 0.0)])]),
+        present: BTreeMap::from([(RegionId(fixture_hash(A_SEED)), true), (RegionId(fixture_hash(B_SEED)), true)]),
+        geoms: BTreeMap::from([(BoundaryId(fixture_hash(S_SEED)), vec![uv(0.0, 0.0)])]),
     };
     let first = TransitionScript {
         steps: vec![TransitionStep::Morph {
-            boundary: S,
+            boundary: BoundaryId(fixture_hash(S_SEED)),
             from_pts: vec![uv(0.0, 0.0)],
             to_pts: vec![uv(1.0, 1.0)],
         }],
     };
     let second = TransitionScript {
         steps: vec![
-            TransitionStep::SplitAlong { parent: A, seam: vec![uv(0.0, 0.0)], children: vec![c1, c2] },
-            TransitionStep::FadeOut { region: B },
+            TransitionStep::SplitAlong { parent: RegionId(fixture_hash(A_SEED)), seam: vec![uv(0.0, 0.0)], children: vec![c1, c2] },
+            TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) },
         ],
     };
 
@@ -453,7 +460,7 @@ fn law04_morph_safety() {
 fn law05_history_coherence() {
     // A narrated shift: two versions, and the event that tells the story.
     let mut world = two_region_world();
-    let hist = world.boundaries.get_mut(&S).unwrap();
+    let hist = world.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap();
     let old = hist.versions[0].1.clone();
     let mut moved = old.clone();
     moved.pts[1] = uv(0.0, 1.0);
@@ -461,7 +468,7 @@ fn law05_history_coherence() {
         (Interval::new(tp(-2000), Some(tp(-1500))).unwrap(), old),
         (Interval::open_from(tp(-1500)), moved),
     ];
-    world.events.push(shift_event(S, -1500));
+    world.events.push(shift_event(BoundaryId(fixture_hash(S_SEED)), -1500));
     assert_eq!(validate_history_coherence(&world), vec![]);
 
     // The narrated world is lawful under EVERY data validator at once.
@@ -480,13 +487,13 @@ fn law05_history_coherence() {
 
     // Overlapping intervals are incoherent.
     let mut overlapping = two_region_world();
-    let hist = overlapping.boundaries.get_mut(&S).unwrap();
+    let hist = overlapping.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap();
     let b = hist.versions[0].1.clone();
     hist.versions = vec![
         (Interval::new(tp(-2000), Some(tp(-1400))).unwrap(), b.clone()),
         (Interval::open_from(tp(-1500)), b),
     ];
-    overlapping.events.push(shift_event(S, -1500));
+    overlapping.events.push(shift_event(BoundaryId(fixture_hash(S_SEED)), -1500));
     let violations = validate_history_coherence(&overlapping);
     assert!(violations
         .iter()
@@ -501,7 +508,7 @@ fn law06_provenance_totality_and_honesty() {
     assert_eq!(validate_provenance_totality(&world), vec![]);
 
     let mut anonymous = world.clone();
-    anonymous.boundaries.get_mut(&S).unwrap().versions[0].1.provenance = String::new();
+    anonymous.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap().versions[0].1.provenance = String::new();
     let violations = validate_provenance_totality(&anonymous);
     assert!(violations.iter().any(|v| matches!(v, Violation::EmptyProvenance { .. })));
 
@@ -582,8 +589,8 @@ fn law08_overlay_and_script_monoids() {
 
     let scripts = vec![
         TransitionScript::empty(),
-        TransitionScript { steps: vec![TransitionStep::FadeIn { region: A }] },
-        TransitionScript { steps: vec![TransitionStep::FadeOut { region: B }] },
+        TransitionScript { steps: vec![TransitionStep::FadeIn { region: RegionId(fixture_hash(A_SEED)) }] },
+        TransitionScript { steps: vec![TransitionStep::FadeOut { region: RegionId(fixture_hash(B_SEED)) }] },
     ];
     check_monoid(&scripts);
 }
@@ -596,7 +603,7 @@ fn law08_overlay_and_script_monoids() {
 /// identically and the fold touches each distinct scene once.
 #[test]
 fn law09_accumulation_exactness() {
-    let events = vec![shift_event(S, -1500), shift_event(S, -1200)];
+    let events = vec![shift_event(BoundaryId(fixture_hash(S_SEED)), -1500), shift_event(BoundaryId(fixture_hash(S_SEED)), -1200)];
     let scene_at = |t: TimePoint| -> Snapshot {
         let mut sc = marker_scene(0);
         for (i, e) in events.iter().enumerate() {
@@ -670,19 +677,19 @@ fn law10_selection_coherence() {
         sc.attribution.insert(cred("historical-source"));
         sc
     };
-    let a = region_scene(A, "Westland", 0.0);
-    let b = region_scene(B, "Eastland", 20.0);
+    let a = region_scene(RegionId(fixture_hash(A_SEED)), "Westland", 0.0);
+    let b = region_scene(RegionId(fixture_hash(B_SEED)), "Eastland", 20.0);
     let world = a.clone().combine(b.clone());
 
     // Selecting A out of the world is exactly A's own scene.
-    assert_eq!(world.select_region(A), a);
+    assert_eq!(world.select_region(RegionId(fixture_hash(A_SEED))), a);
     // Selection distributes over overlay.
     assert_eq!(
-        world.select_region(B),
-        a.select_region(B).combine(b.select_region(B))
+        world.select_region(RegionId(fixture_hash(B_SEED))),
+        a.select_region(RegionId(fixture_hash(B_SEED))).combine(b.select_region(RegionId(fixture_hash(B_SEED))))
     );
     // Selecting an absent subject yields (attributed) emptiness.
-    let ghost = world.select_region(RegionId(ContentHash(404)));
+    let ghost = world.select_region(RegionId(fixture_hash(404)));
     assert!(ghost.regions.is_empty() && ghost.labels.is_empty());
 }
 
@@ -737,12 +744,12 @@ fn exports(known_event: &str, at: i32, known_place: &str) -> (ChronologyExport, 
         basis: PlacementBasis::Traditional,
     };
     let chronology = ChronologyExport {
-        atlas_root: ContentHash(555),
+        atlas_root: fixture_hash(555),
         placements: BTreeMap::from([(EventId::new(known_event), placement)]),
         spans: Vec::new(),
     };
     let gazetteer = GazetteerExport {
-        atlas_root: ContentHash(555),
+        atlas_root: fixture_hash(555),
         places: BTreeMap::from([(
             PlaceId::new(known_place),
             GazetteerEntry { canonical_name: known_place.to_string(), position: uv(33.0, 36.0), aliases: Vec::new(), provenance: None, attestations: Vec::new() },
@@ -756,8 +763,8 @@ fn law12_bible_preference() {
     let (chronology, gazetteer) = exports("fall-of-samaria", -721, "hazar-enan");
     let driven = |at: i32, event: &str| ChangeEvent {
         at: tp(at),
-        kind: ChangeKind::Fall { region: A },
-        driver: Some(AtlasEventRef { event: EventId::new(event), atlas_root: ContentHash(555) }),
+        kind: ChangeKind::Fall { region: RegionId(fixture_hash(A_SEED)) },
+        driver: Some(AtlasEventRef { event: EventId::new(event), atlas_root: fixture_hash(555) }),
         justification: Justification::default(),
         provenance: prov(),
     };
@@ -782,30 +789,30 @@ fn law12_bible_preference() {
     // (b) An Imported version overlapping a Survey's validity on the
     // same arc silently overrides Scripture: violation.
     let mut overridden = two_region_world();
-    let hist = overridden.boundaries.get_mut(&S).unwrap();
+    let hist = overridden.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap();
     let imported = hist.versions[0].1.clone();
     hist.versions = vec![
         (Interval::open_from(tp(-1400)), survey_boundary("hazar-enan")),
         (Interval::open_from(tp(-1300)), imported.clone()),
     ];
     let violations = validate_bible_preference(&overridden, &chronology, &gazetteer);
-    assert!(violations.iter().any(|v| matches!(v, Violation::ImportedOverridesSurvey { boundary } if *boundary == S)));
+    assert!(violations.iter().any(|v| matches!(v, Violation::ImportedOverridesSurvey { boundary } if *boundary == BoundaryId(fixture_hash(S_SEED)))));
 
     // A closed survey followed by an import (a narrated succession) is
     // lawful — Scripture speaks for its interval, scholarship after.
     let mut succeeded = two_region_world();
-    let hist = succeeded.boundaries.get_mut(&S).unwrap();
+    let hist = succeeded.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap();
     hist.versions = vec![
         (Interval::new(tp(-1400), Some(tp(-1300))).unwrap(), survey_boundary("hazar-enan")),
         (Interval::open_from(tp(-1300)), imported),
     ];
-    succeeded.events.push(shift_event(S, -1300));
+    succeeded.events.push(shift_event(BoundaryId(fixture_hash(S_SEED)), -1300));
     assert_eq!(validate_bible_preference(&succeeded, &chronology, &gazetteer), vec![]);
 
     // (c) A waypoint the gazetteer doesn't hold fails referential
     // integrity across the repos.
     let mut unmoored = two_region_world();
-    unmoored.boundaries.get_mut(&S).unwrap().versions[0].1 = survey_boundary("atlantis");
+    unmoored.boundaries.get_mut(&BoundaryId(fixture_hash(S_SEED))).unwrap().versions[0].1 = survey_boundary("atlantis");
     let violations = validate_bible_preference(&unmoored, &chronology, &gazetteer);
     assert!(violations.iter().any(|v| matches!(v, Violation::UnresolvedWaypoint { .. })));
 }
@@ -814,9 +821,9 @@ fn law12_bible_preference() {
 
 #[test]
 fn contract_c6_stale_pin_fails_loud() {
-    let pin = AtlasPin { version_root: ContentHash(555) };
-    assert!(!pin.is_stale(ContentHash(555)));
-    assert!(pin.is_stale(ContentHash(556)));
+    let pin = AtlasPin { version_root: fixture_hash(555) };
+    assert!(!pin.is_stale(fixture_hash(555)));
+    assert!(pin.is_stale(fixture_hash(556)));
 }
 
 /// Each label face maps to its declared voice — the style is the only
@@ -1209,6 +1216,7 @@ fn piece_set_is_a_monoid_over_pieces_and_round_trips() {
 }
 
 mod consolidation_laws {
+    use super::fixture_hash;
     use crate::camera::{Camera, ChartKind};
     use crate::scene::{Ground, LabelSubject, PlacedLabel, Snapshot, StyledRegion};
     use crate::{MapAddressed, Monoid, Piece, Ring, UnitVec};
@@ -1227,7 +1235,7 @@ mod consolidation_laws {
             camera: None,
             lod: crate::Lod(0.001),
             pieces: crate::PieceSet::empty().with(Piece::Fills),
-            style: crate::StyleId(atlas_graph_types::covenant::ContentHash(7)),
+            style: crate::StyleId(fixture_hash(7)),
         };
         let a = q.map_pid();
         q.camera = Some(Camera::new(ChartKind::Globe, 31.5, 35.0, 4.0, 1200.0));
@@ -1240,7 +1248,7 @@ mod consolidation_laws {
 
     fn land(n: u64, lat: f64, lon: f64, d: f64, piece: Piece) -> StyledRegion {
         StyledRegion {
-            region: crate::RegionId(atlas_graph_types::covenant::ContentHash(n)),
+            region: crate::RegionId(fixture_hash(n)),
             entity: Some(format!("e{n}")),
             outer: vec![Ring::new(vec![uv(lat, lon), uv(lat, lon + d), uv(lat + d, lon + d), uv(lat + d, lon)]).unwrap()],
             holes: vec![],
@@ -1259,8 +1267,8 @@ mod consolidation_laws {
         s.regions.push(land(1, 0.0, 0.0, 10.0, Piece::Fills));
         s.regions.push(land(2, 2.0, 2.0, 2.0, Piece::Claims));
         s.regions.push(land(3, 20.0, 20.0, 2.0, Piece::Water));
-        assert_eq!(s.ground_at(&uv(3.0, 3.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(2))), "the claim painted on top");
-        assert_eq!(s.ground_at(&uv(8.0, 8.0)), Ground::Region(crate::RegionId(atlas_graph_types::covenant::ContentHash(1))));
+        assert_eq!(s.ground_at(&uv(3.0, 3.0)), Ground::Region(crate::RegionId(fixture_hash(2))), "the claim painted on top");
+        assert_eq!(s.ground_at(&uv(8.0, 8.0)), Ground::Region(crate::RegionId(fixture_hash(1))));
         assert_eq!(s.ground_at(&uv(21.0, 21.0)), Ground::Unclaimed, "water is not ground");
         assert_eq!(s.ground_at(&uv(-5.0, -5.0)), Ground::Unclaimed);
     }
@@ -1412,7 +1420,7 @@ mod licensing_laws {
         let cut = sc.under(&permissive);
 
         assert_eq!(cut.regions.len(), 1, "only the public-domain region survives");
-        assert_eq!(cut.regions[0].region, super::A);
+        assert_eq!(cut.regions[0].region, super::RegionId(super::fixture_hash(super::A_SEED)));
         assert_eq!(cut.licenses(), [License::PublicDomain].into_iter().collect());
         assert!(!cut.requires_share_alike());
         assert_eq!(
@@ -1475,8 +1483,8 @@ fn two_origin_scene() -> Snapshot {
         });
         sc.attribution.insert(credit);
     };
-    push(A, "Westland", 0.0, Credit::new(SourceId::new("natural-earth"), License::PublicDomain));
-    push(B, "Eastland", 20.0, Credit::new(SourceId::new("historical-basemaps"), License::Gpl3));
+    push(RegionId(fixture_hash(A_SEED)), "Westland", 0.0, Credit::new(SourceId::new("natural-earth"), License::PublicDomain));
+    push(RegionId(fixture_hash(B_SEED)), "Eastland", 20.0, Credit::new(SourceId::new("historical-basemaps"), License::Gpl3));
     sc
 }
 
@@ -1520,4 +1528,71 @@ fn served_style_exports_the_validated_source_value() {
     }
     assert_eq!(<Style as utoipa::ToSchema>::name(), "MapGeneratorStyle", "the style publishes the accepted canonical source alias");
     assert!(schema["properties"].as_object().unwrap().contains_key("boundaries"), "the canonical style schema includes its boundary dress");
+}
+
+#[cfg(not(feature = "canon-ids"))]
+#[test]
+fn default_map_identity_retains_its_existing_hash_bytes() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    // Arrange
+    for step in 1u8..32 {
+        let mut spec = honest_style_parts();
+        spec.tint_alpha = step;
+        let style = Style::new(spec).unwrap();
+        let mut expected = DefaultHasher::new();
+        style.canonical_bytes().hash(&mut expected);
+        // Act
+        let selected = style.map_pid();
+        // Assert
+        assert_eq!(selected.hash, ContentHash(expected.finish()), "default map identity retains its prior hash bytes");
+    }
+}
+
+#[cfg(feature = "canon-ids")]
+#[test]
+fn canonical_map_identity_uses_the_existing_graph_hash() {
+    // Arrange
+    for step in 1u8..32 {
+        let mut spec = honest_style_parts();
+        spec.tint_alpha = step;
+        let style = Style::new(spec).unwrap();
+        let expected = atlas_graph_types::sections::logical_hash(&style.canonical_bytes());
+        // Act
+        let selected = style.map_pid();
+        // Assert
+        assert_eq!(selected.hash, expected, "canonical map identity composes the one graph hash function");
+    }
+}
+
+#[cfg(not(feature = "canon-ids"))]
+#[test]
+fn default_hash_writer_retains_numeric_framing() {
+    // Arrange
+    for seed in 1u64..64 {
+        let hash = fixture_hash(seed);
+        let mut previous = Canon::new();
+        previous.u64_(seed);
+        // Act
+        let mut selected = Canon::new();
+        selected.hash(&hash);
+        // Assert
+        assert_eq!(selected.0, previous.0, "default canonical hash framing retains prior bytes");
+    }
+}
+
+#[cfg(feature = "canon-ids")]
+#[test]
+fn canonical_hash_writer_preserves_opaque_source_bytes() {
+    // Arrange
+    for seed in 1u64..64 {
+        let hash = fixture_hash(seed);
+        let next = fixture_hash(seed + 1);
+        // Act
+        let mut selected = Canon::new();
+        selected.hash(&hash);
+        // Assert
+        assert_eq!(selected.0, hash.0.to_vec(), "canonical framing retains every source hash byte");
+        assert_ne!(hash, next, "different generated source seeds retain distinct identities");
+    }
 }

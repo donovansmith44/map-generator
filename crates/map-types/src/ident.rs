@@ -12,7 +12,9 @@
 //! When the atlas-side `covenant` module lands (spec §C1 prerequisite),
 //! collapsing this mirror is a mechanical follow-up.
 
+#[cfg(not(feature = "canon-ids"))]
 use std::collections::hash_map::DefaultHasher;
+#[cfg(not(feature = "canon-ids"))]
 use std::hash::{Hash, Hasher};
 
 pub use atlas_graph_types::covenant::ContentHash;
@@ -44,9 +46,15 @@ pub trait MapAddressed {
     fn canonical_bytes(&self) -> Vec<u8>;
     fn map_kind(&self) -> MapKind;
     fn map_pid(&self) -> MapPid {
-        let mut h = DefaultHasher::new();
-        self.canonical_bytes().hash(&mut h);
-        MapPid { kind: self.map_kind(), hash: ContentHash(h.finish()) }
+        #[cfg(feature = "canon-ids")]
+        let hash = atlas_graph_types::sections::logical_hash(&self.canonical_bytes());
+        #[cfg(not(feature = "canon-ids"))]
+        let hash = {
+            let mut h = DefaultHasher::new();
+            self.canonical_bytes().hash(&mut h);
+            ContentHash(h.finish())
+        };
+        MapPid { kind: self.map_kind(), hash }
     }
 }
 
@@ -69,6 +77,15 @@ impl Canon {
     pub fn u64_(&mut self, v: u64) -> &mut Self {
         self.0.extend_from_slice(&v.to_be_bytes());
         self
+    }
+    pub(crate) fn hash(&mut self, value: &ContentHash) -> &mut Self {
+        #[cfg(not(feature = "canon-ids"))]
+        { self.u64_(value.0) }
+        #[cfg(feature = "canon-ids")]
+        {
+            self.0.extend_from_slice(&value.0);
+            self
+        }
     }
     pub fn i32_(&mut self, v: i32) -> &mut Self {
         self.0.extend_from_slice(&v.to_be_bytes());

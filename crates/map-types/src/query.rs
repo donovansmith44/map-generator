@@ -74,16 +74,16 @@ impl MapAddressed for RenderQuery {
                 v.canon(&mut c);
             }
             RenderSubject::Boundary(b) => {
-                c.u8_(2).u64_(b.0 .0);
+                c.u8_(2).hash(&b.0);
             }
             RenderSubject::Region(r) => {
-                c.u8_(3).u64_(r.0 .0);
+                c.u8_(3).hash(&r.0);
             }
             RenderSubject::RegionTerrain(r) => {
-                c.u8_(4).u64_(r.0 .0);
+                c.u8_(4).hash(&r.0);
             }
             RenderSubject::Change(e) => {
-                c.u8_(5).u64_(e.0 .0);
+                c.u8_(5).hash(&e.0);
             }
             RenderSubject::World => {
                 c.u8_(6);
@@ -105,7 +105,7 @@ impl MapAddressed for RenderQuery {
         // Canon has no u16_ and this task invents no new Canon method:
         // the ten-bit set widens into the u64 lane, losslessly.
         c.u64_(u64::from(self.pieces.bits()));
-        c.u64_(self.style.0 .0);
+        c.hash(&self.style.0);
         c.done()
     }
     fn map_kind(&self) -> MapKind {

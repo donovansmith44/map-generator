@@ -7,7 +7,7 @@ edition = "2021"
 # API into typed vendored files (refresh), and compiles every witness
 # into data/canon. All intelligence lives here; the renderer stays dumb.
 [dependencies]
-atlas-graph-types = { path = "../../../bible-atlas/graph-types" }
+atlas-graph-types = { path = "../../../../w/CX-FSHARP-wire/graph-types" }
 map-types = { path = "../map-types" }
 map-canon = { path = "../map-canon" }
 map-partition = { path = "../map-partition" }

@@ -69,8 +69,8 @@ pub fn validate_scene_names(scene: &crate::scene::Snapshot) -> Vec<Violation> {
     let mut v = Vec::new();
     for l in &scene.labels {
         let key = match &l.subject {
-            LabelSubject::Region(r) => format!("region:{:016x}", r.0 .0),
-            LabelSubject::Boundary(b) => format!("boundary:{:016x}", b.0 .0),
+            LabelSubject::Region(r) => format!("region:{}", r.0.hex()),
+            LabelSubject::Boundary(b) => format!("boundary:{}", b.0.hex()),
             LabelSubject::Place(p) => format!("place:{}", p.0 .0),
             LabelSubject::Memory(p) => format!("memory:{}", p.0 .0),
             LabelSubject::Free => continue,
