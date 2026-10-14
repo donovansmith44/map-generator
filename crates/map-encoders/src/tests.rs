@@ -391,15 +391,15 @@ fn transition_json_is_faithful_and_deterministic() {
                 boundary: BoundaryId(ContentHash(7)),
                 from_pts: vec![uv(31.0, 35.0), uv(32.0, 35.0)],
                 to_pts: vec![uv(31.0, 35.5), uv(32.0, 35.5)],
-            },
-            TransitionStep::FadeIn { region: rid(1) },
-            TransitionStep::FadeOut { region: rid(2) },
+            }.into(),
+            TransitionStep::FadeIn { region: rid(1) }.into(),
+            TransitionStep::FadeOut { region: rid(2) }.into(),
             TransitionStep::SplitAlong {
                 parent: rid(3),
                 seam: vec![uv(31.0, 35.0), uv(32.0, 35.0)],
                 children: vec![rid(4), rid(5)],
-            },
-            TransitionStep::MergeAcross { parents: vec![rid(4), rid(5)], child: rid(3) },
+            }.into(),
+            TransitionStep::MergeAcross { parents: vec![rid(4), rid(5)], child: rid(3) }.into(),
         ],
     };
     let a = JsonTransitionEncoder.encode_transition(&script).unwrap();

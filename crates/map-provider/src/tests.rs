@@ -39,7 +39,7 @@ pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
 
 fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
     const TV: map_types::style::TypeVoice = map_types::style::TypeVoice {
-        family: "sans-serif".into(),
+        family: std::borrow::Cow::Borrowed("sans-serif"),
         weight: 600,
         italic: false,
         uppercase: false,
@@ -47,7 +47,7 @@ fn test_labeling(base: LabelStyle) -> map_types::style::Labeling {
         advance_em: 0.62,
     };
     const MEM: map_types::style::TypeVoice = map_types::style::TypeVoice {
-        family: "serif".into(),
+        family: std::borrow::Cow::Borrowed("serif"),
         weight: 400,
         italic: true,
         uppercase: false,
@@ -452,7 +452,7 @@ mod canon_provider_laws {
         let p = CanonProvider::new(fixture(), BTreeMap::new(), Some(gazetteer()));
         let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
         let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
-        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        assert_eq!(rise.steps, vec![map_types::TransitionDraw::from(map_types::TransitionStep::FadeIn { region: assyria })]);
     }
 
     /// The scene the provider renders keeps the one-name law the
@@ -514,11 +514,11 @@ mod canon_provider_laws {
         let p = CanonProvider::new(store, BTreeMap::from([(sid, style())]), Some(gazetteer()));
         let assyria = crate::canon_provider::rid_of(&EntityId("assyria".into()));
         let rise = p.transition(ts(-2000), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
-        assert_eq!(rise.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        assert_eq!(rise.steps, vec![map_types::TransitionDraw::from(map_types::TransitionStep::FadeIn { region: assyria })]);
         let fall = p.transition(ts(-1500), ts(-800), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
-        assert_eq!(fall.steps, vec![map_types::TransitionStep::FadeOut { region: assyria }]);
+        assert_eq!(fall.steps, vec![map_types::TransitionDraw::from(map_types::TransitionStep::FadeOut { region: assyria })]);
         let back = p.transition(ts(-800), ts(-1500), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
-        assert_eq!(back.steps, vec![map_types::TransitionStep::FadeIn { region: assyria }]);
+        assert_eq!(back.steps, vec![map_types::TransitionDraw::from(map_types::TransitionStep::FadeIn { region: assyria })]);
         let still = p.transition(ts(-1500), ts(-1200), map_types::Bbox::whole_world(), Lod(0.001)).unwrap();
         assert!(still.steps.is_empty(), "a region that rose and fell within the span is no difference between its ends: {:?}", still.steps);
     }
@@ -551,7 +551,7 @@ mod canon_provider_laws {
         let after = p.render(&world_q_pieces(sid, -50, PieceSet::empty().with(Piece::Fills).with(Piece::Borders))).unwrap();
         let drawn: usize = after.boundaries.iter().map(|b| map_types::densify_edges(&b.pts, true).len()).sum();
         assert_eq!(plan.steps.len(), 1, "one morph, no fades: {:?}", plan.steps.len());
-        match &plan.steps[0] {
+        match &plan.steps[0].step {
             map_types::TransitionStep::Morph { from_pts, to_pts, .. } => {
                 assert_eq!(from_pts.len(), to_pts.len());
                 assert!(to_pts.len() >= drawn, "morph {} >= drawn {drawn}", to_pts.len());

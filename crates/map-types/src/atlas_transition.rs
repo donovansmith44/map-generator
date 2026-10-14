@@ -27,7 +27,7 @@ pub struct ArcChange {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FaceHolding<N = AnyNodeId> {
@@ -36,7 +36,7 @@ pub struct FaceHolding<N = AnyNodeId> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FaceTransfer<N = AnyNodeId> {
@@ -48,7 +48,7 @@ pub struct FaceTransfer<N = AnyNodeId> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RecordedMapChange<N = AnyNodeId> {
@@ -61,7 +61,7 @@ pub struct RecordedMapChange<N = AnyNodeId> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MapKeyframe<N = AnyNodeId> {
@@ -71,7 +71,7 @@ pub struct MapKeyframe<N = AnyNodeId> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MapTransition<N = AnyNodeId> {
@@ -85,7 +85,7 @@ pub struct MapTransition<N = AnyNodeId> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum TransitionRefusal {
@@ -99,7 +99,7 @@ pub enum TransitionRefusal {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum TransitionRead<N = AnyNodeId> {
