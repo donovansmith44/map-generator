@@ -30,3 +30,40 @@ proptest! {
         prop_assert!(serde_json::from_str::<UnitVec>(&bad).is_err(), "the source door refuses a non-unit vector instead of bypassing construction");
     }
 }
+
+#[cfg(feature = "canon-ids")]
+proptest! {
+    #[test]
+    fn script_admission_keeps_matched_points_and_refuses_broken_tracks(
+        boundary in any::<u32>(), clip in "[a-z0-9]{1,20}",
+        lat in -80.0f64..80.0, lon in -170.0f64..170.0, n in 2usize..12) {
+        use crate::atlas_transition::{admit_script, TransitionRefusal};
+        let start = UnitVec::from_lat_lon_deg(lat, lon);
+        let end = UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1);
+        let make = |to: Vec<UnitVec>| TransitionScript { steps: vec![TransitionDraw {
+            step: TransitionStep::<u64,u32>::Morph { boundary, from_pts: vec![start; n], to_pts: to },
+            clip: Some(clip.clone()),
+        }] };
+        let valid = make(vec![end; n]);
+        prop_assert_eq!(admit_script(valid.clone()), Ok(valid), "admission preserves every matched endpoint and exact clip");
+        prop_assert_eq!(admit_script(make(vec![end; n - 1])), Err(TransitionRefusal::EndpointMismatch), "unequal paired tracks are refused without resampling");
+
+    }
+}
+
+proptest! {
+    #[test]
+    fn vector_constructors_refuse_nonfinite_coordinates_and_preserve_valid_controls(
+        lat in -80.0f64..80.0, lon in -170.0f64..170.0, scale in 0.1f64..20.0, case in 0u8..3) {
+        let invalid = match case { 0 => f64::NAN, 1 => f64::INFINITY, _ => f64::NEG_INFINITY };
+        prop_assert!(UnitVec::new(invalid, 0.0, 0.0).is_err(), "the checked constructor refuses nonfinite coordinates");
+        prop_assert!(UnitVec::normalize(invalid, 0.0, 0.0).is_err(), "normalization refuses nonfinite coordinates");
+        prop_assert!(std::panic::catch_unwind(|| UnitVec::from_lat_lon_deg(invalid, lon)).is_err(), "the infallible geographic constructor refuses nonfinite latitude");
+        prop_assert!(std::panic::catch_unwind(|| UnitVec::from_lat_lon_deg(lat, invalid)).is_err(), "the infallible geographic constructor refuses nonfinite longitude");
+        let admitted = UnitVec::from_lat_lon_deg(lat, lon);
+        let restored = UnitVec::new(admitted.x(), admitted.y(), admitted.z()).expect("a finite spherical point remains admitted");
+        prop_assert_eq!(restored, admitted, "the checked constructor preserves valid source coordinates");
+        let normalized = UnitVec::normalize(admitted.x() * scale, admitted.y() * scale, admitted.z() * scale).expect("finite scaled points normalize");
+        prop_assert!((normalized.dot(&admitted) - 1.0).abs() < 1e-12, "normalization preserves the finite point direction");
+    }
+}

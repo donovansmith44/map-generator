@@ -54,7 +54,6 @@ impl<'de> serde::Deserialize<'de> for UnitVec {
                 let x = x.ok_or_else(|| serde::de::Error::missing_field("x"))?;
                 let y = y.ok_or_else(|| serde::de::Error::missing_field("y"))?;
                 let z = z.ok_or_else(|| serde::de::Error::missing_field("z"))?;
-                if !x.is_finite() || !y.is_finite() || !z.is_finite() { return Err(serde::de::Error::custom("non-finite vector coordinate")); }
                 UnitVec::new(x,y,z).map_err(|error| serde::de::Error::custom(format!("{error:?}")))
             }
         }
@@ -65,7 +64,7 @@ impl<'de> serde::Deserialize<'de> for UnitVec {
 impl UnitVec {
     pub fn new(x: f64, y: f64, z: f64) -> Result<Self, GeomError> {
         let n2 = x * x + y * y + z * z;
-        if (n2.sqrt() - 1.0).abs() > UNIT_EPS {
+        if !n2.is_finite() || (n2.sqrt() - 1.0).abs() > UNIT_EPS {
             Err(GeomError::NotUnitLength)
         } else {
             Ok(UnitVec { x, y, z })
@@ -75,7 +74,9 @@ impl UnitVec {
     /// Normalizing constructor for computed vectors.
     pub fn normalize(x: f64, y: f64, z: f64) -> Result<Self, GeomError> {
         let n = (x * x + y * y + z * z).sqrt();
-        if n < UNIT_EPS {
+        if !n.is_finite() {
+            Err(GeomError::NotUnitLength)
+        } else if n < UNIT_EPS {
             Err(GeomError::ZeroVector)
         } else {
             Ok(UnitVec { x: x / n, y: y / n, z: z / n })
@@ -85,6 +86,7 @@ impl UnitVec {
     /// From geographic coordinates in degrees (adapter convenience;
     /// pure math, no source format knowledge).
     pub fn from_lat_lon_deg(lat: f64, lon: f64) -> Self {
+        assert!(lat.is_finite() && lon.is_finite(), "geographic coordinates must be finite");
         let (la, lo) = (lat.to_radians(), lon.to_radians());
         UnitVec { x: la.cos() * lo.cos(), y: la.cos() * lo.sin(), z: la.sin() }
     }

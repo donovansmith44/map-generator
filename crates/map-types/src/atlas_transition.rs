@@ -5,7 +5,7 @@ use atlas_graph_types::map_timing::RecordedMapCause;
 use atlas_graph_types::place_versions::Basis;
 
 use crate::boundary::RegionGeom;
-use crate::transition::TransitionScript;
+use crate::transition::{TransitionScript, TransitionStep};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -105,4 +105,21 @@ pub enum TransitionRefusal {
 pub enum TransitionRead<N = AnyNodeId> {
     Ready { transition: MapTransition<N> },
     Refused { reason: TransitionRefusal, destination: FeatureCollection },
+}
+
+
+pub fn admit_script<R, B>(script: TransitionScript<R, B>) -> Result<TransitionScript<R, B>, TransitionRefusal> {
+    if script.steps.iter().all(|draw| match &draw.step {
+        TransitionStep::Morph { from_pts, to_pts, .. } => paired(from_pts, to_pts),
+        TransitionStep::SegmentTrack { from, to, .. } => paired(from, to),
+        TransitionStep::SegmentFade { course, .. } => course.len() >= 2,
+        TransitionStep::FadeIn { .. } | TransitionStep::FadeOut { .. }
+        | TransitionStep::SplitAlong { .. } | TransitionStep::MergeAcross { .. }
+        | TransitionStep::PointTrack { .. } | TransitionStep::PointFade { .. }
+        | TransitionStep::LabelTrack { .. } | TransitionStep::LabelFade { .. } => true,
+    }) { Ok(script) } else { Err(TransitionRefusal::EndpointMismatch) }
+}
+
+fn paired(from: &[crate::geom::UnitVec], to: &[crate::geom::UnitVec]) -> bool {
+    from.len() >= 2 && from.len() == to.len()
 }
