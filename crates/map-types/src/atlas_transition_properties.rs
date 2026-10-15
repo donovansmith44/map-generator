@@ -31,13 +31,14 @@ proptest! {
             arcs: vec![ArcChange { arc: arc.clone(), before_shape: None, after_shape: Some(format!("shape-{seed}")) }],
             transfers: vec![FaceTransfer { subset: format!("subset-{seed}"), boundary: RegionGeom { parts: vec![RegionPart { cycle: vec![(arc, Orientation::Forward)], holes: vec![] }] }, from: None, to: Some(FaceHolding { territory: node.clone(), holding: match holding_case { 0 => None, 1 => Some(HoldingState::Unclaimed), _ => Some(HoldingState::Held { holder: Holder::Polity(PolityId::new(format!("holder-{seed}"))), how: HoldHow::Governs }) } }), basis }],
             script: TransitionScript { steps: vec![TransitionDraw { step: TransitionStep::PointTrack {
-                entity: node, from: UnitVec::from_lat_lon_deg(lat, lon), to: UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1),
+                entity: node.clone(), from: UnitVec::from_lat_lon_deg(lat, lon), to: UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1),
                 extent: (crate::transition::PlaceExtentKind::Point, crate::transition::PlaceExtentKind::Vicinity), radius_m: (0, seed),
             }, clip: Some(format!("subset-{seed}")) }] },
         };
         let mut change = change;
         let path = RegionGeom { parts: vec![RegionPart { cycle: vec![(ArcRef { store: format!("store-{seed}"), key: format!("outer-{seed}") }, Orientation::Forward)], holes: vec![vec![(ArcRef { store: format!("store-{seed}"), key: format!("hole-{seed}") }, Orientation::Reverse)]] }] };
         change.script.steps.push(TransitionStep::Morph { boundary: TransitionBoundary::Ring(path.clone()), from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 3], to_pts: vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] }.into());
+        change.script.steps.push(TransitionStep::SegmentFade { entity: node.clone(), segment: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("complete-{seed}") }), course: vec![UnitVec::from_lat_lon_deg(lat, lon), UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1)], appears: true }.into());
         let bytes = change.encode();
         let restored = RecordedMapChange::decode_on(&bytes, &readings).expect("compiled grounds are admitted on the same reading");
         prop_assert_eq!(&restored, &change, "stored change retains geometry, endpoints, identity and exact Scripture grounds");
