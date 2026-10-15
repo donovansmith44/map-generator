@@ -3,7 +3,7 @@
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
   function transitionTarget(gl, projection, paint, cold) {
-    const target = { gl, projection, paint, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], disposed: false, crossfades: 0,
+    const target = { gl, projection, paint, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], disposed: false, crossfades: 0, unsupportedWaters: 0,
       surfaces: [], glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
@@ -18,6 +18,10 @@
     if (target.disposed) throw new Error("Transition target is disposed");
     if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) throw new Error("Invalid transition fraction");
     if (fraction === 1) return settleTransition(target, frame.after);
+    if ((frame.before.waters?.length || 0) + (frame.after.waters?.length || 0) > 0) {
+      target.unsupportedWaters++;
+      return settleTransition(target, frame.after);
+    }
     const gl = target.gl;
     const state = saveState(gl);
     try {
@@ -41,11 +45,19 @@
       gl.colorMask(true, true, true, true);
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.STENCIL_TEST);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.CULL_FACE);
       gl.stencilMask(0xff);
       gl.uniform1f(program.loc.uMorph, 1);
       gl.uniform1f(program.loc.uFrontMin, -1.1);
       gl.uniform2f(program.loc.uDash, 0, 0);
       gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      gl.uniform1i(program.loc.uTex, 0);
+      gl.uniform1i(program.loc.uAfterTex, 1);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, target.glyphs.tex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, null);
       for (let scene = 0; scene < 2; scene++) {
         const surface = target.surfaces[scene];
         gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
@@ -348,7 +360,7 @@ void main() {
       return gl.getParameter(gl.TEXTURE_BINDING_2D);
     });
     gl.activeTexture(values.ACTIVE_TEXTURE);
-    values.enabled = [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST].map(capability => gl.isEnabled(capability));
+    values.enabled = [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST, gl.SCISSOR_TEST, gl.CULL_FACE].map(capability => gl.isEnabled(capability));
     return values;
   }
 
@@ -377,7 +389,7 @@ void main() {
     gl.stencilOpSeparate(gl.BACK, state.STENCIL_BACK_FAIL, state.STENCIL_BACK_PASS_DEPTH_FAIL, state.STENCIL_BACK_PASS_DEPTH_PASS);
     gl.blendFuncSeparate(state.BLEND_SRC_RGB, state.BLEND_DST_RGB, state.BLEND_SRC_ALPHA, state.BLEND_DST_ALPHA);
     gl.blendEquationSeparate(state.BLEND_EQUATION_RGB, state.BLEND_EQUATION_ALPHA);
-    [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST].forEach((capability, index) => state.enabled[index] ? gl.enable(capability) : gl.disable(capability));
+    [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST, gl.SCISSOR_TEST, gl.CULL_FACE].forEach((capability, index) => state.enabled[index] ? gl.enable(capability) : gl.disable(capability));
   }
 
   const api = { transitionTarget, drawTransition, settleTransition, disposeTransition };

@@ -11,7 +11,7 @@ const polygon = served.features.find(feature => feature.geometry.type === 'Multi
 const point = served.features.find(feature => feature.geometry.type === 'Point' && feature.properties.label?.anchor.type === 'Point');
 assert.ok(polygon, 'The served fixture has a polygon with holes.');
 assert.ok(point, 'The served fixture has an anchored label.');
-const collection = { ...served, features: [polygon, point] };
+const collection = { ...served, features: [polygon, point], waters: [] };
 for (const engine of [chromium, webkit]) {
     test(`${engine.name()} full transition target releases twenty forward reverse cycles and settles exact data`, async () => {
         const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
@@ -28,18 +28,19 @@ for (const engine of [chromium, webkit]) {
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
             for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
-            const result = await page.evaluate(async collection => {
+            const result = await page.evaluate(async ({ collection, fullCollection }) => {
                 const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: [35, 31], zoom: 3, fadeDuration: 0 });
                 await new Promise(resolve => map.once('load', resolve));
                 let pending = null, target = null, input = null, gl = null, tracking = false;
                 const groups = new Map();
                 let allocations = 0, releases = 0, coldCount = 0;
-                const original = JSON.stringify(collection);
+                let expectedDestination = collection;
+                let original = JSON.stringify(collection);
                 const paint = () => [{ fill: [190, 208, 140, 210] }, { color: [60, 70, 40, 255], width: 1, pattern: 'Solid' }, { color: [30, 30, 30, 255], size: 5 },
                     [{ color: [25, 25, 25, 255], halo: [255, 255, 255, 255], size: 14, halo_width_em: 0.24 },
                         { family: 'sans-serif', weight: 400, italic: false, uppercase: false, tracking_em: 0, advance_em: 0.5 }]];
                 const cold = destination => {
-                    if (destination !== collection || JSON.stringify(destination) !== original) throw new Error('Settlement must pass the exact unchanged ordinary source collection.');
+                    if (destination !== expectedDestination || JSON.stringify(destination) !== original) throw new Error('Settlement must pass the exact unchanged ordinary source collection.');
                     coldCount++;
                 };
                 const names = ['CURRENT_PROGRAM', 'VERTEX_ARRAY_BINDING', 'ARRAY_BUFFER_BINDING', 'DRAW_FRAMEBUFFER_BINDING', 'READ_FRAMEBUFFER_BINDING', 'RENDERBUFFER_BINDING', 'VIEWPORT', 'COLOR_CLEAR_VALUE', 'ACTIVE_TEXTURE', 'TEXTURE_BINDING_2D', 'COLOR_WRITEMASK', 'STENCIL_WRITEMASK', 'STENCIL_FUNC', 'STENCIL_REF', 'STENCIL_VALUE_MASK', 'STENCIL_FAIL', 'STENCIL_PASS_DEPTH_FAIL', 'STENCIL_PASS_DEPTH_PASS', 'LINE_WIDTH', 'UNPACK_PREMULTIPLY_ALPHA_WEBGL'];
@@ -81,6 +82,11 @@ for (const engine of [chromium, webkit]) {
                     for (const kind of ['Buffer', 'VertexArray', 'Texture', 'Framebuffer', 'Renderbuffer']) if (groups.get(kind).size !== 0) throw new Error('Settlement retained ' + kind);
                 });
                 await run(() => {
+                    expectedDestination = fullCollection;
+                    original = JSON.stringify(fullCollection);
+                    drawTransition(target, { before: fullCollection, after: fullCollection, change: { script: { steps: [] } } }, [], 0.25);
+                    if (target.unsupportedWaters !== 1) throw new Error('Unsupported water requires an explicit counted cold settlement.');
+                    for (const kind of ['Buffer', 'VertexArray', 'Texture', 'Framebuffer', 'Renderbuffer']) if (groups.get(kind).size !== 0) throw new Error('Unsupported water retained an incomplete scene overlay.');
                     disposeTransition(target); disposeTransition(target);
                     const create = gl.createProgram; gl.createProgram = () => null;
                     try {
@@ -92,12 +98,93 @@ for (const engine of [chromium, webkit]) {
                 for (const [kind, live] of groups) if (live.size !== 0) throw new Error('Disposal retained ' + kind);
                 const result = { allocations, releases, coldCount, crossfades: target.crossfades, error: gl.getError() };
                 map.remove(); return result;
-            }, collection);
+            }, { collection, fullCollection: served });
             assert.equal(result.allocations, result.releases, 'All target allocations are released, including failed factory shaders.');
-            assert.equal(result.coldCount, 40, 'Every endpoint uses the exact ordinary destination callback.');
+            assert.equal(result.coldCount, 41, 'Every endpoint uses the exact ordinary destination callback.');
             assert.equal(result.crossfades, 40, 'Missing correspondence is counted as crossfades without a historical morph claim.');
             assert.equal(result.error, 0, 'Disposal leaves no GL error.');
             assert.deepEqual(errors, [], 'The browser completes without page errors.');
+        } finally { await browser.close(); }
+    });
+}
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} projection follows the actual camera and preserves sentinel caller state`, async () => {
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const page = await browser.newPage();
+            await page.context().route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            const result = await page.evaluate(async collection => {
+                const feature = collection.features.find(feature => feature.geometry.type === 'Point');
+                const scene = { ...collection, features: [feature] };
+                const frame = { before: scene, after: scene, change: { script: { steps: [] } } };
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: feature.geometry.coordinates, zoom: 3, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                const marker = { color: [230, 30, 70, 255], size: 10 };
+                map.addSource('ordinary', { type: 'geojson', data: scene });
+                map.addLayer({ id: 'ordinary', source: 'ordinary', type: 'circle', layout: { visibility: 'none' }, paint: { 'circle-radius': marker.size / 2, 'circle-color': `rgb(${marker.color.slice(0, 3).join(',')})` } });
+                let pending = null, input = null, gl = null, target = null;
+                map.addLayer({ id: 'projection-proof', type: 'custom', renderingMode: '2d', onAdd(_map, context) { gl = context; },
+                    render(_context, args) {
+                        input = args;
+                        if (!pending) return;
+                        const operation = pending; pending = null;
+                        try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
+                    } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, marker, null], destination => { if (destination !== scene) throw new Error('Cold renderer must receive the exact source destination.'); map.getSource('ordinary').setData(destination); map.setLayoutProperty('ordinary', 'visibility', 'visible'); }); });
+                const sample = () => run(() => {
+                    const projected = map.project(feature.geometry.coordinates);
+                    gl.enable(gl.SCISSOR_TEST); gl.scissor(0, 0, 2, 2);
+                    gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT_AND_BACK);
+                    gl.blendEquationSeparate(gl.FUNC_REVERSE_SUBTRACT, gl.FUNC_SUBTRACT);
+                    gl.colorMask(false, true, false, true);
+                    const before = ['SCISSOR_BOX', 'CULL_FACE_MODE', 'BLEND_EQUATION_RGB', 'BLEND_EQUATION_ALPHA', 'COLOR_WRITEMASK'].map(name => [name, gl.getParameter(gl[name])]);
+                    const inputError = gl.getError();
+                    if (inputError !== gl.NO_ERROR) throw new Error('Sentinel input GL error: ' + inputError);
+                    drawTransition(target, frame, [], 0.25);
+                    for (const [name, value] of before) {
+                        const actual = gl.getParameter(gl[name]);
+                        if ((Array.isArray(value) || ArrayBuffer.isView(value)) ? !Array.from(value).every((element, index) => element === actual[index]) : actual !== value) throw new Error('Caller state changed: ' + name);
+                    }
+                    if (!gl.isEnabled(gl.SCISSOR_TEST) || !gl.isEnabled(gl.CULL_FACE)) throw new Error('Caller capabilities changed.');
+                    const ratio = gl.drawingBufferWidth / gl.canvas.clientWidth;
+                    const pixel = new Uint8Array(4);
+                    gl.readPixels(Math.round(projected.x * ratio), Math.round(gl.drawingBufferHeight - projected.y * ratio), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+                    gl.disable(gl.SCISSOR_TEST); gl.disable(gl.CULL_FACE); gl.blendEquation(gl.FUNC_ADD); gl.colorMask(true, true, true, true);
+                    if (pixel[3] === 0) throw new Error('The served point must be painted at its actual projected camera position.');
+                    const error = gl.getError();
+                    if (error !== gl.NO_ERROR) throw new Error('Projection GL error ' + error + ', painted alpha ' + pixel[3]);
+                    return { x: projected.x, y: projected.y, pixel: Array.from(pixel) };
+                });
+                const first = await sample();
+                await new Promise(resolve => { map.once('moveend', resolve); map.panBy([60, 0], { duration: 0 }); });
+                const moved = await sample();
+                await run(() => drawTransition(target, frame, [], 1));
+                await new Promise(resolve => map.once('idle', resolve));
+                const coldPixel = await run(() => {
+                    const projected = map.project(feature.geometry.coordinates);
+                    const ratio = gl.drawingBufferWidth / gl.canvas.clientWidth;
+                    const pixel = new Uint8Array(4);
+                    gl.readPixels(Math.round(projected.x * ratio), Math.round(gl.drawingBufferHeight - projected.y * ratio), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+                    return Array.from(pixel);
+                });
+                await run(() => disposeTransition(target));
+                map.remove(); return { first, moved, coldPixel };
+            }, collection);
+            assert.notEqual(result.first.x, result.moved.x, 'Camera motion changes the projected position of the same served point.');
+            assert.equal(result.first.pixel[3], 255, 'The initial point is visible through the official projection.');
+            assert.equal(result.moved.pixel[3], 255, 'The point remains visible at its moved projected position.');
+            assert.deepEqual(result.coldPixel, result.moved.pixel, 'Fraction one presents the same point through the ordinary cold renderer.');
         } finally { await browser.close(); }
     });
 }
