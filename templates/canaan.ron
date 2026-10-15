@@ -11,7 +11,7 @@
         // dashed. Hiding it made stand-in circuits look like confident
         // borders.
         line:     (color: (0, 0, 0, 0), width: 0.8, pattern: solid),
-        frontier: (color: (0, 0, 0, 0), width: 0.8, pattern: zonal),
+        zonal: (color: (0, 0, 0, 0), width: 0.8, pattern: zonal),
         disputed: (color: (0, 0, 0, 0), width: 0.9, pattern: solid),
         unknown:  (color: (120, 116, 105, 160), width: 0.9, pattern: dashed),
         way:      (color: (139, 46, 32, 255), width: 2.0, pattern: dashed),

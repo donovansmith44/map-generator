@@ -2,7 +2,7 @@
 (
     boundaries: (
         line:     (color: (74, 52, 34, 255),    width: 1.2, pattern: solid),
-        frontier: (color: (150, 110, 60, 255),  width: 1.2, pattern: zonal),
+        zonal: (color: (150, 110, 60, 255),  width: 1.2, pattern: zonal),
         disputed: (color: (140, 50, 40, 255),   width: 1.2, pattern: hatched),
         unknown:  (color: (120, 116, 105, 255), width: 1.1, pattern: dashed),
         // A journey reads as a WAY, never a border: warm road-red,

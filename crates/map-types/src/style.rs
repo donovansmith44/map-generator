@@ -16,12 +16,10 @@ use crate::ident::{Canon, MapAddressed, MapKind, StyleId};
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Rgba(pub u8, pub u8, pub u8, pub u8);
 
-/// How a boundary stroke is drawn. `Zonal` is the frontier treatment: a
-/// soft band whose width comes from the DATA (EdgeCharacter::Frontier's
-/// width_km), not from the style.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(description = "How a boundary stroke is drawn. Zonal is a soft band whose width comes from the data, not from the style."))]
 pub enum StrokePattern {
     Solid,
     Dashed,
@@ -201,7 +199,7 @@ pub struct DeltaEmphasis {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BoundaryStrokes {
     pub line: Stroke,
-    pub frontier: Stroke,
+    pub zonal: Stroke,
     pub disputed: Stroke,
     pub unknown: Stroke,
     /// EdgeCharacter::Way — a journey's dress, distinct from every border.
@@ -392,7 +390,7 @@ impl Style {
         if boundaries.unknown == boundaries.line {
             return Err(StyleError::UnknownIndistinctFromLine);
         }
-        if boundaries.frontier.pattern != StrokePattern::Zonal {
+        if boundaries.zonal.pattern != StrokePattern::Zonal {
             return Err(StyleError::FrontierNotZonal);
         }
         let unit = |v: f64, name: &'static str| {
@@ -442,7 +440,7 @@ impl Style {
     pub fn stroke_for(&self, character: &EdgeCharacter) -> &Stroke {
         match character {
             EdgeCharacter::Line => &self.boundaries.line,
-            EdgeCharacter::Frontier { .. } => &self.boundaries.frontier,
+            EdgeCharacter::Frontier { .. } => &self.boundaries.zonal,
             EdgeCharacter::Disputed { .. } => &self.boundaries.disputed,
             EdgeCharacter::Unknown => &self.boundaries.unknown,
             EdgeCharacter::Way => &self.boundaries.way,
@@ -504,7 +502,7 @@ impl Style {
     pub fn canon(&self, c: &mut Canon) {
         c.tag("style");
         self.boundaries.line.canon(c);
-        self.boundaries.frontier.canon(c);
+        self.boundaries.zonal.canon(c);
         self.boundaries.disputed.canon(c);
         self.boundaries.unknown.canon(c);
         self.boundaries.way.canon(c);

@@ -2,7 +2,7 @@
 (
     boundaries: (
         line:     (color: (214, 211, 200, 255), width: 1.1, pattern: solid),
-        frontier: (color: (150, 140, 110, 255), width: 1.1, pattern: zonal),
+        zonal: (color: (150, 140, 110, 255), width: 1.1, pattern: zonal),
         disputed: (color: (196, 90, 70, 255),   width: 1.1, pattern: hatched),
         unknown:  (color: (120, 125, 135, 255), width: 1.0, pattern: dashed),
         way:      (color: (235, 160, 90, 255),  width: 2.0, pattern: dashed),
