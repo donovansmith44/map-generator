@@ -1,0 +1,7 @@
+{
+  "name": "canonical-map-viewer",
+  "private": true,
+  "dependencies": {
+    "maplibre-gl": "6.13.0"
+  }
+}
