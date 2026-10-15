@@ -67,7 +67,7 @@ for (const engine of [chromium, webkit]) {
                     try { operation.run(); operation.resolve(); } catch (error) { operation.reject(error); } finally { tracking = false; }
                 } });
                 const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
-                await run(() => { target = transitionTarget(gl, () => input, paint, cold); });
+                await run(() => { target = transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold); });
                 const frame = { before: collection, after: collection, change: { script: { steps: [] } } };
                 for (let cycle = 0; cycle < 20; cycle++) for (const direction of ['forward', 'reverse']) await run(() => {
                     const before = snapshot();
@@ -85,13 +85,14 @@ for (const engine of [chromium, webkit]) {
                     expectedDestination = fullCollection;
                     original = JSON.stringify(fullCollection);
                     drawTransition(target, { before: fullCollection, after: fullCollection, change: { script: { steps: [] } } }, [], 0.25);
-                    if (target.unsupportedWaters !== 1) throw new Error('Unsupported water requires an explicit counted cold settlement.');
-                    for (const kind of ['Buffer', 'VertexArray', 'Texture', 'Framebuffer', 'Renderbuffer']) if (groups.get(kind).size !== 0) throw new Error('Unsupported water retained an incomplete scene overlay.');
+                    if (coldCount !== 40) throw new Error('The complete served scene animates through its water look.');
+                    drawTransition(target, { before: fullCollection, after: fullCollection, change: { script: { steps: [] } } }, [], 1);
+                    for (const kind of ['Buffer', 'VertexArray', 'Texture', 'Framebuffer', 'Renderbuffer']) if (groups.get(kind).size !== 0) throw new Error('Full water scene settlement retained an overlay.');
                     disposeTransition(target); disposeTransition(target);
                     const create = gl.createProgram; gl.createProgram = () => null;
                     try {
                         let refused = false;
-                        try { transitionTarget(gl, () => input, paint, cold); } catch (error) { refused = error.message.includes('program allocation'); }
+                        try { transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold); } catch (error) { refused = error.message.includes('program allocation'); }
                         if (!refused) throw new Error('Factory must refuse failed allocation.');
                     } finally { gl.createProgram = create; }
                 });
@@ -101,7 +102,7 @@ for (const engine of [chromium, webkit]) {
             }, { collection, fullCollection: served });
             assert.equal(result.allocations, result.releases, 'All target allocations are released, including failed factory shaders.');
             assert.equal(result.coldCount, 41, 'Every endpoint uses the exact ordinary destination callback.');
-            assert.equal(result.crossfades, 40, 'Missing correspondence is counted as crossfades without a historical morph claim.');
+            assert.equal(result.crossfades, 41, 'Missing correspondence is counted as crossfades without a historical morph claim.');
             assert.equal(result.error, 0, 'Disposal leaves no GL error.');
             assert.deepEqual(errors, [], 'The browser completes without page errors.');
         } finally { await browser.close(); }
@@ -141,7 +142,7 @@ for (const engine of [chromium, webkit]) {
                         try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
                     } });
                 const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
-                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, marker, null], destination => { if (destination !== scene) throw new Error('Cold renderer must receive the exact source destination.'); map.getSource('ordinary').setData(destination); map.setLayoutProperty('ordinary', 'visibility', 'visible'); }); });
+                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, marker, null], () => [null, null], destination => { if (destination !== scene) throw new Error('Cold renderer must receive the exact source destination.'); map.getSource('ordinary').setData(destination); map.setLayoutProperty('ordinary', 'visibility', 'visible'); }); });
                 const sample = () => run(() => {
                     const projected = map.project(feature.geometry.coordinates);
                     gl.enable(gl.SCISSOR_TEST); gl.scissor(0, 0, 2, 2);
@@ -185,6 +186,82 @@ for (const engine of [chromium, webkit]) {
             assert.equal(result.first.pixel[3], 255, 'The initial point is visible through the official projection.');
             assert.equal(result.moved.pixel[3], 255, 'The point remains visible at its moved projected position.');
             assert.deepEqual(result.coldPixel, result.moved.pixel, 'Fraction one presents the same point through the ordinary cold renderer.');
+        } finally { await browser.close(); }
+    });
+}
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} served water uses the shared crossfade path and exact cold water look`, async () => {
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const page = await browser.newPage();
+            await page.context().route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            const result = await page.evaluate(async source => {
+                const after = { ...source, features: [] }, before = { ...after, waters: [] };
+                const water = after.waters[0];
+                if (!water) throw new Error('The served response must contain water.');
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: water.geometry.coordinates[0][0][0], zoom: 4, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                const look = [{ fill: [30, 110, 210, 255] }, null];
+                const waterLook = value => {
+                    if (!after.waters.includes(value)) throw new Error('Water look must receive the original served WaterBody.');
+                    return look;
+                };
+                const ordinary = { type: 'FeatureCollection', features: after.waters.map(value => ({ type: 'Feature', properties: {}, geometry: value.geometry })) };
+                map.addSource('ordinary-water', { type: 'geojson', data: ordinary });
+                map.addLayer({ id: 'ordinary-water', source: 'ordinary-water', type: 'fill', layout: { visibility: 'none' }, paint: { 'fill-color': `rgb(${look[0].fill.slice(0, 3).join(',')})` } });
+                let gl, input, pending, target, coldCount = 0;
+                map.addLayer({ id: 'water-target', type: 'custom', renderingMode: '2d', onAdd(_map, context) { gl = context; }, render(_gl, args) {
+                    input = args;
+                    if (!pending) return;
+                    const operation = pending; pending = null;
+                    try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
+                } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                await run(() => {
+                    target = transitionTarget(gl, () => input, () => [null, null, null, null], waterLook, destination => {
+                        if (destination !== after) throw new Error('Cold receives the unchanged full destination.');
+                        coldCount++;
+                        map.setLayoutProperty('ordinary-water', 'visibility', 'visible');
+                    });
+                });
+                const frame = { before, after, change: { script: { steps: [] } } };
+                const sample = fraction => run(() => {
+                    drawTransition(target, frame, [], fraction);
+                    if (coldCount !== 0) throw new Error('Served water must animate rather than immediately settle cold.');
+                    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    const maximum = pixels.filter((_value, index) => index % 4 === 3).reduce((value, next) => Math.max(value, next), 0);
+                    if (gl.getError() !== gl.NO_ERROR) throw new Error('Water crossfade has a GL error.');
+                    return maximum;
+                });
+                const quarter = await sample(0.25), threeQuarters = await sample(0.75);
+                await run(() => drawTransition(target, frame, [], 1));
+                await new Promise(resolve => map.once('idle', resolve));
+                const coldAlpha = await run(() => {
+                    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    return pixels.filter((_value, index) => index % 4 === 3).reduce((value, next) => Math.max(value, next), 0);
+                });
+                await run(() => {
+                    if (target.geometry.length !== 0 || target.surfaces.length !== 0) throw new Error('Water settlement retains geometry or scene resources.');
+                    disposeTransition(target);
+                });
+                map.remove(); return { quarter, threeQuarters, coldAlpha, coldCount };
+            }, served);
+            assert.equal(result.quarter, 64, 'Water appears at the supplied quarter fraction.');
+            assert.equal(result.threeQuarters, 191, 'Water appears at the supplied three-quarter fraction.');
+            assert.equal(result.coldAlpha, 255, 'The ordinary cold renderer presents the full water look.');
+            assert.equal(result.coldCount, 1, 'The full destination settles cold once.');
         } finally { await browser.close(); }
     });
 }

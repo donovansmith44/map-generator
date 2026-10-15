@@ -7,6 +7,7 @@ export declare function transitionTarget(
     gl: WebGL2RenderingContext,
     projection: TransitionProjection,
     paint: (properties: unknown) => readonly [unknown, unknown, unknown, unknown],
+    water: (water: unknown) => readonly [unknown, unknown],
     cold: (destination: unknown) => void,
 ): TransitionTarget;
 export declare function drawTransition(target: TransitionTarget, frame: unknown, shapes: readonly unknown[], fraction: number): void;

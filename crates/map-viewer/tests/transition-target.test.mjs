@@ -12,7 +12,7 @@ test('full transition target refuses failed shader creation without retaining re
         deleteShader() { deleted++; },
     };
     const input = { shaderData: { vertexShaderPrelude: '', define: '', variantName: 'failed' } };
-    assert.throws(() => target.transitionTarget(gl, () => input, () => [null, null, null, null], () => {}), /shader allocation/i,
+    assert.throws(() => target.transitionTarget(gl, () => input, () => [null, null, null, null], () => [null, null], () => {}), /shader allocation/i,
         'The target refuses the failed shader allocation.');
     assert.equal(deleted, 0, 'No null resource is treated as an allocation.');
 });

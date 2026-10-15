@@ -2,8 +2,8 @@
   const retained = typeof module !== "undefined" && module.exports ? require("./retained-gpu.js") : scope;
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
-  function transitionTarget(gl, projection, paint, cold) {
-    const target = { gl, projection, paint, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], disposed: false, crossfades: 0, unsupportedWaters: 0,
+  function transitionTarget(gl, projection, paint, water, cold) {
+    const target = { gl, projection, paint, water, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], disposed: false, crossfades: 0,
       surfaces: [], glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
@@ -18,10 +18,6 @@
     if (target.disposed) throw new Error("Transition target is disposed");
     if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) throw new Error("Invalid transition fraction");
     if (fraction === 1) return settleTransition(target, frame.after);
-    if ((frame.before.waters?.length || 0) + (frame.after.waters?.length || 0) > 0) {
-      target.unsupportedWaters++;
-      return settleTransition(target, frame.after);
-    }
     const gl = target.gl;
     const state = saveState(gl);
     try {
@@ -229,16 +225,14 @@ void main() {
 
   function buildScene(target, loc, collection) {
     const draws = [];
+    for (const water of collection.waters || []) {
+      const [paint, stroke] = target.water(water);
+      appendGeometry(target, loc, draws, water.geometry, paint, stroke, null);
+    }
     for (const feature of collection.features) {
       const [paint, stroke, marker, label] = target.paint(feature.properties);
       const geometry = feature.geometry;
-      if (geometry.type === "MultiPolygon" && (paint || stroke)) {
-        for (const polygon of geometry.coordinates) draws.push({ rings: polygon.map(ring => upload(target, loc, ring)), paint, stroke });
-      } else if (geometry.type === "MultiLineString" && stroke) {
-        for (const course of geometry.coordinates) draws.push({ line: upload(target, loc, course), stroke });
-      } else if (geometry.type === "Point" && marker) {
-        draws.push({ point: upload(target, loc, [geometry.coordinates]), marker });
-      }
+      appendGeometry(target, loc, draws, geometry, paint, stroke, marker);
       const recorded = feature.properties.label;
       if (label && recorded && recorded.anchor.type === "Point") {
         labels.initializeGlyphAtlas(target.glyphs, target.gl);
@@ -249,6 +243,16 @@ void main() {
       }
     }
     return draws;
+  }
+
+  function appendGeometry(target, loc, draws, geometry, paint, stroke, marker) {
+    if (geometry.type === "MultiPolygon" && (paint || stroke)) {
+      for (const polygon of geometry.coordinates) draws.push({ rings: polygon.map(ring => upload(target, loc, ring)), paint, stroke });
+    } else if (geometry.type === "MultiLineString" && stroke) {
+      for (const course of geometry.coordinates) draws.push({ line: upload(target, loc, course), stroke });
+    } else if (geometry.type === "Point" && marker) {
+      draws.push({ point: upload(target, loc, [geometry.coordinates]), marker });
+    }
   }
 
   function surface(target) {
