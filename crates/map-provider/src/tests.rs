@@ -10,7 +10,7 @@ pub(crate) fn honest_style_for_memory_law() -> map_types::Style {
     map_types::Style::new(StyleSpec {
         boundaries: BoundaryStrokes {
             line: s(Rgba(1, 1, 1, 255), 1.0, StrokePattern::Solid),
-            frontier: s(Rgba(2, 2, 2, 255), 1.0, StrokePattern::Zonal),
+            zonal: s(Rgba(2, 2, 2, 255), 1.0, StrokePattern::Zonal),
             disputed: s(Rgba(3, 3, 3, 255), 1.0, StrokePattern::Hatched),
             unknown: s(Rgba(4, 4, 4, 255), 1.0, StrokePattern::Dashed),
             way: s(Rgba(5, 5, 5, 255), 1.0, StrokePattern::Dashed),
@@ -103,7 +103,7 @@ mod canon_provider_laws {
         Style::new(StyleSpec {
             boundaries: BoundaryStrokes {
                 line: stroke(0, StrokePattern::Solid),
-                frontier: stroke(60, StrokePattern::Zonal),
+                zonal: stroke(60, StrokePattern::Zonal),
                 disputed: stroke(120, StrokePattern::Hatched),
                 unknown: stroke(180, StrokePattern::Dashed),
                 way: stroke(240, StrokePattern::Dashed),

@@ -188,7 +188,7 @@ fn spec_of(base: &Style) -> map_types::style::StyleSpec {
     map_types::style::StyleSpec {
         boundaries: BoundaryStrokes {
             line: *base.stroke_for(&E::Line),
-            frontier: *base.stroke_for(&E::Frontier { width_km: 0.0 }),
+            zonal: *base.stroke_for(&E::Frontier { width_km: 0.0 }),
             disputed: *base.stroke_for(&E::Disputed { claimants: Vec::new() }),
             unknown: *base.stroke_for(&E::Unknown),
             way: *base.stroke_for(&E::Way),
@@ -227,7 +227,7 @@ fn ghosted(base: &Style) -> Style {
     let mut spec = spec_of(base);
     spec.boundaries = BoundaryStrokes {
         line: fade(&spec.boundaries.line),
-        frontier: fade(&spec.boundaries.frontier),
+        zonal: fade(&spec.boundaries.zonal),
         disputed: fade(&spec.boundaries.disputed),
         unknown: fade(&spec.boundaries.unknown),
         way: fade(&spec.boundaries.way),
@@ -256,7 +256,7 @@ fn tinted(base: &Style, paint: Paint) -> Style {
     spec.labeling.base.color = Rgba(paint.fill.0, paint.fill.1, paint.fill.2, 255);
     spec.boundaries = BoundaryStrokes {
         line: tint(&spec.boundaries.line),
-        frontier: tint(&spec.boundaries.frontier),
+        zonal: tint(&spec.boundaries.zonal),
         disputed: tint(&spec.boundaries.disputed),
         unknown: tint(&spec.boundaries.unknown),
         way: tint(&spec.boundaries.way),

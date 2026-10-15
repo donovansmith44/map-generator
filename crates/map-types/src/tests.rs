@@ -151,7 +151,7 @@ fn honest_style_parts() -> crate::style::StyleSpec {
     crate::style::StyleSpec {
         boundaries: BoundaryStrokes {
             line: stroke(0, StrokePattern::Solid),
-            frontier: stroke(60, StrokePattern::Zonal),
+            zonal: stroke(60, StrokePattern::Zonal),
             disputed: stroke(120, StrokePattern::Hatched),
             unknown: stroke(180, StrokePattern::Dashed),
             way: stroke(240, StrokePattern::Dashed),
@@ -529,9 +529,9 @@ fn law06_provenance_totality_and_honesty() {
 
     let line = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Solid };
     let zonal = Stroke { color: Rgba(0, 0, 0, 255), width: 1.0, pattern: StrokePattern::Zonal };
-    let with_strokes = |unknown, frontier| {
+    let with_strokes = |unknown, zone| {
         let mut spec = honest_style_parts();
-        spec.boundaries = BoundaryStrokes { line, frontier, disputed: line, unknown, way: zonal };
+        spec.boundaries = BoundaryStrokes { line, zonal: zone, disputed: line, unknown, way: zonal };
         spec
     };
     assert_eq!(
@@ -1535,6 +1535,34 @@ fn served_style_exports_the_validated_source_value() {
     }
     assert_eq!(<Style as utoipa::ToSchema>::name(), "MapGeneratorStyle", "the style publishes the accepted canonical source alias");
     assert!(schema["properties"].as_object().unwrap().contains_key("boundaries"), "the canonical style schema includes its boundary dress");
+}
+
+#[cfg(feature = "openapi")]
+#[test]
+fn served_zonal_stroke_uses_one_source_name_without_an_alias() {
+    use utoipa::PartialSchema;
+    // Arrange
+    let schema = serde_json::to_value(BoundaryStrokes::schema()).unwrap();
+    let pattern = serde_json::to_value(StrokePattern::schema()).unwrap();
+    for step in 1u8..32 {
+        let mut spec = honest_style_parts();
+        spec.tint_alpha = step;
+        let style = Style::new(spec).unwrap();
+        // Act
+        let body = serde_json::to_value(&style).unwrap();
+        let mut obsolete = body.clone();
+        let strokes = obsolete["boundaries"].as_object_mut().unwrap();
+        let zonal = strokes.remove("zonal");
+        if let Some(zonal) = zonal { strokes.insert("frontier".into(), zonal); }
+        // Assert
+        assert!(body["boundaries"].get("zonal").is_some(), "the served boundary dress names its zonal stroke");
+        assert!(body["boundaries"].get("frontier").is_none(), "the served boundary dress contains no obsolete name");
+        assert!(serde_json::from_value::<Style>(obsolete).is_err(), "the obsolete stroke name is not a decoding alias");
+        assert_eq!(serde_json::from_value::<Style>(body).unwrap(), style, "the source style roundtrips without changing its dress");
+    }
+    assert!(schema["properties"].get("zonal").is_some(), "the source schema publishes the zonal stroke");
+    assert!(schema["properties"].get("frontier").is_none(), "the source schema contains no obsolete stroke property");
+    assert!(!pattern.to_string().to_lowercase().contains("frontier"), "the served pattern schema contains no forbidden vocabulary");
 }
 
 #[cfg(not(feature = "canon-ids"))]

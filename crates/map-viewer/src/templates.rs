@@ -89,7 +89,7 @@ struct TLabeling {
 #[serde(deny_unknown_fields)]
 struct TBoundaries {
     line: TStroke,
-    frontier: TStroke,
+    zonal: TStroke,
     disputed: TStroke,
     unknown: TStroke,
     way: TStroke,
@@ -204,7 +204,7 @@ fn build(t: Template) -> Result<Style, map_types::style::StyleError> {
     Style::new(StyleSpec {
         boundaries: BoundaryStrokes {
             line: stroke(&t.boundaries.line),
-            frontier: stroke(&t.boundaries.frontier),
+            zonal: stroke(&t.boundaries.zonal),
             disputed: stroke(&t.boundaries.disputed),
             unknown: stroke(&t.boundaries.unknown),
             way: stroke(&t.boundaries.way),
