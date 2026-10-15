@@ -69,3 +69,23 @@ impl<R, B> Monoid for TransitionScript<R, B> {
         self
     }
 }
+
+pub fn invert<R, B>(script: TransitionScript<R, B>) -> TransitionScript<R, B> {
+    let steps = script.steps.into_iter().rev().map(|draw| {
+        let step = match draw.step {
+            TransitionStep::Morph { entity, boundary, from_pts, to_pts } => TransitionStep::Morph { entity, boundary, from_pts: to_pts, to_pts: from_pts },
+            TransitionStep::FadeIn { region } => TransitionStep::FadeOut { region },
+            TransitionStep::FadeOut { region } => TransitionStep::FadeIn { region },
+            TransitionStep::SplitAlong { parent, children, .. } => TransitionStep::MergeAcross { parents: children, child: parent },
+            TransitionStep::MergeAcross { parents, child } => TransitionStep::SplitAlong { parent: child, seam: Vec::new(), children: parents },
+            TransitionStep::PointTrack { entity, from, to, extent, radius_m } => TransitionStep::PointTrack { entity, from: to, to: from, extent: (extent.1,extent.0), radius_m: (radius_m.1,radius_m.0) },
+            TransitionStep::PointFade { entity, at, radius_m, appears } => TransitionStep::PointFade { entity, at, radius_m, appears: !appears },
+            TransitionStep::SegmentTrack { entity, segment, from, to } => TransitionStep::SegmentTrack { entity, segment, from: to, to: from },
+            TransitionStep::SegmentFade { entity, segment, course, appears } => TransitionStep::SegmentFade { entity, segment, course, appears: !appears },
+            TransitionStep::LabelTrack { entity, text, from, to } => TransitionStep::LabelTrack { entity, text, from: to, to: from },
+            TransitionStep::LabelFade { entity, from, to } => TransitionStep::LabelFade { entity, from: to, to: from },
+        };
+        TransitionDraw { step, clip: draw.clip }
+    }).collect();
+    TransitionScript { steps }
+}

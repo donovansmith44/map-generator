@@ -83,3 +83,46 @@ proptest! {
         prop_assert!((normalized.dot(&admitted) - 1.0).abs() < 1e-12, "normalization preserves the finite point direction");
     }
 }
+
+proptest! {
+    #[test]
+    fn generic_inversion_retains_references_clips_and_reverse_composition(
+        entity in any::<u64>(), boundary in "[a-z]{1,20}", clip in "[a-z]{1,20}",
+        lat in -70.0f64..70.0, lon in -160.0f64..160.0, radius in any::<u32>()) {
+        // Arrange
+        use crate::transition::{invert, PlaceExtentKind, PlacedLabel};
+        let from = UnitVec::from_lat_lon_deg(lat, lon);
+        let to = UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1);
+        let label = PlacedLabel { text: boundary.clone(), anchor: from };
+        let steps = vec![
+            TransitionStep::Morph { entity, boundary: boundary.clone(), from_pts: vec![from; 3], to_pts: vec![to; 3] },
+            TransitionStep::FadeIn { region: entity },
+            TransitionStep::FadeOut { region: entity },
+            TransitionStep::SplitAlong { parent: entity, seam: vec![from, to], children: vec![entity] },
+            TransitionStep::MergeAcross { parents: vec![entity], child: entity },
+            TransitionStep::PointTrack { entity, from, to, extent: (PlaceExtentKind::Point, PlaceExtentKind::Vicinity), radius_m: (0, radius) },
+            TransitionStep::PointFade { entity, at: from, radius_m: radius, appears: true },
+            TransitionStep::SegmentTrack { entity, segment: boundary.clone(), from: vec![from], to: vec![to] },
+            TransitionStep::SegmentFade { entity, segment: boundary.clone(), course: vec![from, to], appears: true },
+            TransitionStep::LabelTrack { entity, text: boundary.clone(), from, to },
+            TransitionStep::LabelFade { entity, from: Some(label), to: None },
+        ].into_iter().enumerate().map(|(index, step)| TransitionDraw { step, clip: Some(format!("{clip}-{index}")) }).collect::<Vec<_>>();
+        let original = TransitionScript { steps };
+        let left = TransitionScript { steps: original.steps[..5].to_vec() };
+        let right = TransitionScript { steps: original.steps[5..].to_vec() };
+        // Act
+        let reversed: TransitionScript<u64, String> = invert(original.clone());
+        let combined = invert(right).combine(invert(left));
+        // Assert
+        prop_assert_eq!(&reversed, &combined, "reversal composes in reverse order across every existing canonical step");
+        prop_assert_eq!(reversed.steps.len(), original.steps.len(), "every canonical step remains present");
+        let expected_clips = original.steps.iter().rev().map(|draw| draw.clip.clone()).collect::<Vec<_>>();
+        let actual_clips = reversed.steps.iter().map(|draw| draw.clip.clone()).collect::<Vec<_>>();
+        prop_assert_eq!(actual_clips, expected_clips, "the original clip stays with its own reversed step");
+        let TransitionStep::Morph { entity: selected, boundary: path, from_pts, to_pts } = &reversed.steps.last().unwrap().step else { prop_assert!(false, "the original morph remains a morph when reversed"); return Ok(()) };
+        prop_assert_eq!(*selected, entity, "the original reference type and identity survive reversal");
+        prop_assert_eq!(path, &boundary, "the original boundary reference survives reversal");
+        prop_assert_eq!(from_pts, &vec![to; 3], "the destination points become the reversed origin");
+        prop_assert_eq!(to_pts, &vec![from; 3], "the origin points become the reversed destination");
+    }
+}

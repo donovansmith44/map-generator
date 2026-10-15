@@ -1175,7 +1175,7 @@ impl MapProvider for CanonProvider {
             return Ok(TransitionScript::empty());
         }
         if from > to {
-            return Ok(invert(self.transition(to, from, viewport, lod)?));
+            return Ok(map_types::transition::invert(self.transition(to, from, viewport, lod)?));
         }
         let before = self.drawn_at(&from, lod);
         let after = self.drawn_at(&to, lod);
@@ -1245,26 +1245,6 @@ fn resample(pts: &[UnitVec], n: usize) -> Vec<UnitVec> {
 
 fn longest(rings: &[Vec<UnitVec>]) -> Option<&Vec<UnitVec>> {
     rings.iter().max_by_key(|r| r.len())
-}
-
-fn invert(script: TransitionScript) -> TransitionScript {
-    let steps = script.steps.into_iter().rev().map(|draw| {
-        let step = match draw.step {
-            TransitionStep::Morph { entity, boundary, from_pts, to_pts } => TransitionStep::Morph { entity, boundary, from_pts: to_pts, to_pts: from_pts },
-            TransitionStep::FadeIn { region } => TransitionStep::FadeOut { region },
-            TransitionStep::FadeOut { region } => TransitionStep::FadeIn { region },
-            TransitionStep::SplitAlong { parent, children, .. } => TransitionStep::MergeAcross { parents: children, child: parent },
-            TransitionStep::MergeAcross { parents, child } => TransitionStep::SplitAlong { parent: child, seam: Vec::new(), children: parents },
-            TransitionStep::PointTrack { entity, from, to, extent, radius_m } => TransitionStep::PointTrack { entity, from: to, to: from, extent: (extent.1,extent.0), radius_m: (radius_m.1,radius_m.0) },
-            TransitionStep::PointFade { entity, at, radius_m, appears } => TransitionStep::PointFade { entity, at, radius_m, appears: !appears },
-            TransitionStep::SegmentTrack { entity, segment, from, to } => TransitionStep::SegmentTrack { entity, segment, from: to, to: from },
-            TransitionStep::SegmentFade { entity, segment, course, appears } => TransitionStep::SegmentFade { entity, segment, course, appears: !appears },
-            TransitionStep::LabelTrack { entity, text, from, to } => TransitionStep::LabelTrack { entity, text, from: to, to: from },
-            TransitionStep::LabelFade { entity, from, to } => TransitionStep::LabelFade { entity, from: to, to: from },
-        };
-        map_types::TransitionDraw { step, clip: draw.clip }
-    }).collect();
-    TransitionScript { steps }
 }
 
 /// Palette slots by GRAPH COLORING over the shared-border graph,
