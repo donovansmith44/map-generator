@@ -37,7 +37,7 @@ proptest! {
         };
         let mut change = change;
         let path = RegionGeom { parts: vec![RegionPart { cycle: vec![(ArcRef { store: format!("store-{seed}"), key: format!("outer-{seed}") }, Orientation::Forward)], holes: vec![vec![(ArcRef { store: format!("store-{seed}"), key: format!("hole-{seed}") }, Orientation::Reverse)]] }] };
-        change.script.steps.push(TransitionStep::Morph { boundary: TransitionBoundary::Ring(path.clone()), from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 3], to_pts: vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] }.into());
+        change.script.steps.push(TransitionStep::Morph { entity: node.clone(), boundary: TransitionBoundary::Ring(path.clone()), from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 3], to_pts: vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] }.into());
         change.script.steps.push(TransitionStep::SegmentFade { entity: node.clone(), segment: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("complete-{seed}") }), course: vec![UnitVec::from_lat_lon_deg(lat, lon), UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1)], appears: true }.into());
         let bytes = change.encode();
         let restored = RecordedMapChange::decode_on(&bytes, &readings).expect("compiled grounds are admitted on the same reading");
@@ -48,6 +48,7 @@ proptest! {
         prop_assert!(RecordedMapChange::decode_on(&bytes, &missing).is_err(), "Scripture proof cannot be decoded on another reading");
         let mut malformed = change.clone();
         malformed.script.steps.push(TransitionStep::Morph {
+            entity: node.clone(),
             boundary: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("arc-{seed}") }),
             from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 2],
             to_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 1],

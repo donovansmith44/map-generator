@@ -406,6 +406,7 @@ fn law03_transition_composition() {
     };
     let first = TransitionScript {
         steps: vec![TransitionStep::Morph {
+            entity: RegionId(fixture_hash(A_SEED)),
             boundary: BoundaryId(fixture_hash(S_SEED)),
             from_pts: vec![uv(0.0, 0.0)],
             to_pts: vec![uv(1.0, 1.0)],

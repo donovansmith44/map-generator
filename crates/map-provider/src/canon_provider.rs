@@ -1196,6 +1196,7 @@ impl MapProvider for CanonProvider {
             };
             let n = a.len().max(b.len()).max(drawn(was)).max(drawn(now)).max(2);
             script.steps.push(TransitionStep::Morph {
+                entity: *rid,
                 boundary: BoundaryId(rid.0),
                 from_pts: resample(&a, n),
                 to_pts: resample(&b, n),
@@ -1249,7 +1250,7 @@ fn longest(rings: &[Vec<UnitVec>]) -> Option<&Vec<UnitVec>> {
 fn invert(script: TransitionScript) -> TransitionScript {
     let steps = script.steps.into_iter().rev().map(|draw| {
         let step = match draw.step {
-            TransitionStep::Morph { boundary, from_pts, to_pts } => TransitionStep::Morph { boundary, from_pts: to_pts, to_pts: from_pts },
+            TransitionStep::Morph { entity, boundary, from_pts, to_pts } => TransitionStep::Morph { entity, boundary, from_pts: to_pts, to_pts: from_pts },
             TransitionStep::FadeIn { region } => TransitionStep::FadeOut { region },
             TransitionStep::FadeOut { region } => TransitionStep::FadeIn { region },
             TransitionStep::SplitAlong { parent, children, .. } => TransitionStep::MergeAcross { parents: children, child: parent },

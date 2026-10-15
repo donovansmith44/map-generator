@@ -7,7 +7,7 @@ use crate::ident::{BoundaryId, RegionId};
 #[cfg_attr(feature = "serde", serde(tag = "step", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum TransitionStep<R = RegionId, B = BoundaryId> {
-    Morph { boundary: B, from_pts: Vec<UnitVec>, to_pts: Vec<UnitVec> },
+    Morph { entity: R, boundary: B, from_pts: Vec<UnitVec>, to_pts: Vec<UnitVec> },
     FadeIn { region: R },
     FadeOut { region: R },
     SplitAlong { parent: R, seam: Vec<UnitVec>, children: Vec<R> },

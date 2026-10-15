@@ -9,7 +9,7 @@ proptest! {
     fn generic_script_composition_preserves_exact_clip_and_presentation_order(
         region in any::<u64>(), boundary in any::<u32>(), clip in "[a-z0-9]{1,20}") {
         let first = TransitionDraw { step: TransitionStep::<u64,u32>::FadeIn { region }, clip: Some(clip.clone()) };
-        let second = TransitionDraw { step: TransitionStep::<u64,u32>::Morph { boundary, from_pts: vec![UnitVec::from_lat_lon_deg(0.0,0.0)], to_pts: vec![UnitVec::from_lat_lon_deg(0.0,1.0)] }, clip: None };
+        let second = TransitionDraw { step: TransitionStep::<u64,u32>::Morph { entity: u64::from(boundary), boundary, from_pts: vec![UnitVec::from_lat_lon_deg(0.0,0.0)], to_pts: vec![UnitVec::from_lat_lon_deg(0.0,1.0)] }, clip: None };
         let left = TransitionScript { steps: vec![first.clone()] };
         let right = TransitionScript { steps: vec![second.clone()] };
         let joined = left.clone().combine(right);
@@ -20,6 +20,22 @@ proptest! {
 
 #[cfg(feature = "serde")]
 proptest! {
+    #[test]
+    fn morph_serialization_retains_its_served_entity(
+        entity in any::<u64>(), boundary in any::<u32>(), lat in -80.0f64..80.0, lon in -170.0f64..170.0) {
+        // Arrange
+        let body = serde_json::json!({ "step": "morph", "entity": entity, "boundary": boundary,
+            "from_pts": vec![UnitVec::from_lat_lon_deg(lat, lon); 3],
+            "to_pts": vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] });
+        // Act
+        let restored: TransitionStep<u64, u32> = serde_json::from_value(body).expect("the served morph retains its original entity");
+        let mut encoded = serde_json::to_value(restored).expect("the admitted morph serializes");
+        // Assert
+        prop_assert_eq!(encoded["entity"].as_u64(), Some(entity), "the morph's entity is the served identity, independent of its boundary");
+        encoded.as_object_mut().unwrap().remove("entity");
+        prop_assert!(serde_json::from_value::<TransitionStep<u64, u32>>(encoded).is_err(), "a morph without its served entity cannot choose a presentation");
+    }
+
     #[test]
     fn unit_vector_serialization_roundtrips_only_admitted_points(lat in -89.0f64..89.0, lon in -179.0f64..179.0, invalid in 2.0f64..20.0) {
         let point = UnitVec::from_lat_lon_deg(lat,lon);
@@ -41,7 +57,7 @@ proptest! {
         let start = UnitVec::from_lat_lon_deg(lat, lon);
         let end = UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1);
         let make = |to: Vec<UnitVec>| TransitionScript { steps: vec![TransitionDraw {
-            step: TransitionStep::<u64,u32>::Morph { boundary, from_pts: vec![start; n], to_pts: to },
+            step: TransitionStep::<u64,u32>::Morph { entity: u64::from(boundary), boundary, from_pts: vec![start; n], to_pts: to },
             clip: Some(clip.clone()),
         }] };
         let valid = make(vec![end; n]);

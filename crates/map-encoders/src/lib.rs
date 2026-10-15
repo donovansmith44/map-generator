@@ -1220,8 +1220,9 @@ impl TransitionEncoder for JsonTransitionEncoder {
             .steps
             .iter()
             .map(|draw| { let mut value = match &draw.step {
-                TransitionStep::Morph { boundary, from_pts, to_pts } => serde_json::json!({
+                TransitionStep::Morph { entity, boundary, from_pts, to_pts } => serde_json::json!({
                     "kind": "morph",
+                    "entity": format!("{:016x}", entity.0 .0),
                     "boundary": format!("{:016x}", boundary.0 .0),
                     "from": pts_json(from_pts),
                     "to": pts_json(to_pts),

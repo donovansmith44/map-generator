@@ -388,6 +388,7 @@ fn transition_json_is_faithful_and_deterministic() {
     let script = TransitionScript {
         steps: vec![
             TransitionStep::Morph {
+                entity: rid(7),
                 boundary: BoundaryId(ContentHash(7)),
                 from_pts: vec![uv(31.0, 35.0), uv(32.0, 35.0)],
                 to_pts: vec![uv(31.0, 35.5), uv(32.0, 35.5)],
@@ -415,6 +416,7 @@ fn transition_json_is_faithful_and_deterministic() {
         .collect();
     assert_eq!(kinds, ["morph", "fade_in", "fade_out", "split", "merge"]);
     assert_eq!(doc["steps"][0]["boundary"], "0000000000000007");
+    assert_eq!(doc["steps"][0]["entity"], "0000000000000007", "the source encoder retains the selected region identity");
     assert_eq!(doc["steps"][3]["children"].as_array().unwrap().len(), 2);
     assert_eq!(doc["steps"][4]["child"], "0000000000000003");
 }
