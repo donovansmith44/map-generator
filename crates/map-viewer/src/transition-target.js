@@ -29,13 +29,13 @@
         target.morphs = buildMorphs(target, program.loc, frame);
         const covered = new Set(target.morphs.map(draw => draw.feature.id));
         const rows = frame.change?.script?.steps ?? [];
-        if (rows.length === 0 || target.morphs.length !== rows.length) target.crossfades++;
         target.surfaces = [];
         target.surfaces.push(surface(target));
         target.surfaces.push(surface(target));
         target.screen = screenQuad(target, program.loc);
-        target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc,
-          { ...collection, features: collection.features.filter(feature => !covered.has(feature.id)) }));
+        target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc, collection, covered));
+        if (rows.length === 0 || rows.some(row => !target.morphs.some(draw => draw.rows.includes(row)))
+          || target.scenes.some(scene => scene.some(draw => draw.items.length > 0))) target.crossfades++;
       }
       gl.useProgram(program.value);
       projectionUniforms(gl, program.loc, input.defaultProjectionData);
@@ -231,14 +231,14 @@ void main() {
     return resource;
   }
 
-  function buildScene(target, loc, collection) {
+  function buildScene(target, loc, collection, covered = new Set()) {
     const draws = [];
     for (const water of collection.waters || []) {
       const items = geometryItems(target, loc, water.geometry);
       draws.push({ water, items });
     }
     for (const feature of collection.features) {
-      const items = geometryItems(target, loc, feature.geometry);
+      const items = covered.has(feature.id) ? [] : geometryItems(target, loc, feature.geometry);
       const recorded = feature.properties.label;
       const glyph = recorded && recorded.anchor.type === "Point" ? glyphQuad(target, loc, recorded.anchor.coordinates) : null;
       draws.push({ feature, items, glyph });
@@ -259,15 +259,53 @@ void main() {
       const feature = candidates[candidates.length - 1];
       if (draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
         || morphs.filter(row => target.identify(row.step.entity) === identity).length !== 1
-        || rows.some(row => row !== draw && affectsEntity(target.identify, row.step, identity))
         || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
-      const vertices = points => Float32Array.from(points.flatMap(point => [point.x, point.y, point.z]));
-      const resource = retained.uploadGeometry(target.gl, loc, vertices(step.to_pts));
-      target.geometry.push(resource);
-      target.extras.push(retained.uploadPrevious(target.gl, loc, resource, vertices(step.from_pts)));
-      draws.push({ feature, items: [{ rings: [resource] }] });
+      const companions = rows.filter(row => row !== draw && affectsEntity(target.identify, row.step, identity));
+      if (companions.length > 0 && !completeSegments(step.boundary, companions)) continue;
+      const resource = pairedGeometry(target, loc, step.from_pts, step.to_pts);
+      const items = [{ rings: [resource], noStroke: companions.length > 0 }];
+      for (const row of companions) {
+        const segment = row.step;
+        const line = segment.step === "segment-track"
+          ? pairedGeometry(target, loc, segment.from, segment.to)
+          : unitGeometry(target, loc, segment.course);
+        items.push({ line, appears: segment.step === "segment-fade" ? segment.appears : undefined });
+      }
+      draws.push({ feature, items, rows: [draw, ...companions] });
     }
     return draws;
+  }
+
+  function unitGeometry(target, loc, points) {
+    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(point => [point.x, point.y, point.z])));
+    target.geometry.push(resource);
+    return resource;
+  }
+
+  function pairedGeometry(target, loc, from, to) {
+    const resource = unitGeometry(target, loc, to);
+    target.extras.push(retained.uploadPrevious(target.gl, loc, resource, Float32Array.from(from.flatMap(point => [point.x, point.y, point.z]))));
+    return resource;
+  }
+
+  function completeSegments(boundary, companions) {
+    const parts = boundary?.kind === "ring" ? boundary.boundary?.parts : null;
+    if (!parts || parts.length !== 1 || parts[0].holes.length !== 0) return false;
+    const arcs = parts[0].cycle.map(([arc]) => arc);
+    const same = (left, right) => left.store === right.store && left.key === right.key;
+    if (arcs.length !== companions.length || arcs.some((arc, index) => arcs.slice(index + 1).some(other => same(arc, other)))) return false;
+    return companions.every(row => {
+      const step = row.step;
+      if (row.clip != null || step.segment?.kind !== "arc") return false;
+      if (step.step === "segment-track") {
+        if (step.from.length < 2 || step.from.length !== step.to.length) return false;
+      } else if (step.step === "segment-fade") {
+        if (step.course.length < 2) return false;
+      } else return false;
+      const reference = step.segment.boundary;
+      return arcs.filter(arc => same(arc, reference)).length === 1
+        && companions.filter(other => other.step.segment?.kind === "arc" && same(other.step.segment.boundary, reference)).length === 1;
+    });
   }
 
   function affectsEntity(identify, step, entity) {
@@ -353,7 +391,7 @@ void main() {
         for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; prepared.push(item); }
       } else {
         const [paint, stroke, marker, label] = target.paint(draw.feature.properties);
-        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = marker; prepared.push(item); }
+        for (const item of draw.items) { item.paint = paint; item.stroke = item.noStroke ? null : stroke; item.marker = marker; prepared.push(item); }
         if (label && draw.glyph) {
           labels.initializeGlyphAtlas(target.glyphs, target.gl);
           const [style, voice] = label;
@@ -382,14 +420,15 @@ void main() {
     const gl = target.gl;
     gl.uniform1f(loc.uMorph, fraction);
     for (const draw of draws) {
+      const drawAlpha = alpha * (draw.appears === undefined ? 1 : draw.appears ? fraction : 1 - fraction);
       gl.uniform1f(loc.uLabel, draw.glyph ? 1 : 0);
       gl.uniform2f(loc.uDash, 0, 0);
       if (draw.rings) {
-        if (draw.paint) retained.drawStencilFill(gl, loc, draw.rings, { mode: 1, whole: false, color: opacity(draw.paint.fill, alpha), frontMin: -1.1 });
-        if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, alpha);
-      } else if (draw.line && draw.stroke) stroke(gl, loc, draw.line, draw.stroke, alpha);
+        if (draw.paint) retained.drawStencilFill(gl, loc, draw.rings, { mode: 1, whole: false, color: opacity(draw.paint.fill, drawAlpha), frontMin: -1.1 });
+        if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, drawAlpha);
+      } else if (draw.line && draw.stroke) stroke(gl, loc, draw.line, draw.stroke, drawAlpha);
       else if (draw.point && draw.marker) {
-        colour(gl, loc, draw.marker.color, alpha);
+        colour(gl, loc, draw.marker.color, drawAlpha);
         gl.uniform1f(loc.uPointSize, draw.marker.size * pixelRatio(gl));
         gl.bindVertexArray(draw.point.vao);
         gl.drawArrays(gl.POINTS, 0, draw.point.count);
@@ -398,7 +437,7 @@ void main() {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, glyphs.tex);
         gl.uniform1i(loc.uTex, 0);
-        gl.uniform1f(loc.uAlpha, alpha);
+        gl.uniform1f(loc.uAlpha, drawAlpha);
         gl.uniform2f(loc.uSize, draw.entry.w * pixelRatio(gl), draw.entry.h * pixelRatio(gl));
         gl.uniform4f(loc.uUV, draw.entry.u0, draw.entry.v0, draw.entry.u1, draw.entry.v1);
         gl.bindVertexArray(draw.glyph.vao);

@@ -405,6 +405,7 @@ for (const engine of [chromium, webkit]) {
                 });
                 const early = await sample(0.25), late = await sample(0.75);
                 const crossfades = target.crossfades;
+                const retainedGlyph = target.scenes[1].some(draw => draw.feature === feature && draw.glyph);
                 const mixedFrame = { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'fade-in', region: reference(other) }, clip: null }] } }, after: { ...after, features: [feature, other] } };
                 const mixed = await sample(0.5, mixedFrame);
                 const mixedMorphs = target.morphs.length;
@@ -425,7 +426,7 @@ for (const engine of [chromium, webkit]) {
                     if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained morph buffers.');
                 });
                 await run(() => disposeTransition(target));
-                const result = { early, late, clipped, mixed, mixedMorphs, mixedRetained, mixedCrossfades, sameEntity, sameEntityMorphs, sameEntityRetained, duplicateMorphs, duplicateRetained, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties || value === other.properties), error: gl.getError() };
+                const result = { early, late, clipped, mixed, mixedMorphs, mixedRetained, mixedCrossfades, sameEntity, sameEntityMorphs, sameEntityRetained, duplicateMorphs, duplicateRetained, retainedGlyph, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties || value === other.properties), error: gl.getError() };
                 map.remove(); return result;
             }, { feature, other: polygon });
             assert.ok(result.early.opaque > 0, 'An early matched border paints opaque land rather than fading the full destination.');
@@ -433,6 +434,7 @@ for (const engine of [chromium, webkit]) {
             assert.equal(result.early.fraction, 0.25, 'The GPU receives the supplied early fraction without another easing.');
             assert.equal(result.late.fraction, 0.75, 'The GPU receives the supplied later fraction without another easing.');
             assert.equal(result.crossfades, 0, 'An admitted matched morph is not counted as missing correspondence.');
+            assert.equal(result.retainedGlyph, true, 'The covered morph retains its original scene label anchor.');
             assert.equal(result.mixedMorphs, 1, 'An unrelated fade keeps the admitted border on the morph path.');
             assert.ok(result.mixed.opaque > 0, 'The matched border remains opaque during the mixed frame.');
             assert.equal(result.mixedRetained, true, 'The unrelated unsupported feature retains its ordinary scene draw.');
@@ -450,6 +452,111 @@ for (const engine of [chromium, webkit]) {
             assert.equal(result.live, 0, 'No matched-path GL allocation survives disposal.');
             assert.equal(result.error, 0, 'The matched path leaves no GL error.');
             assert.deepEqual(errors, [], 'The matched path produces no browser errors.');
+        } finally { await browser.close(); }
+    });
+}
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} ordinary producer Y20 morph retains its complete served segment border`, async () => {
+        const pageValue = JSON.parse(readFileSync(process.env.MG_TRANSITION_Y20_FIXTURE, 'utf8'));
+        assert.equal(pageValue.transition.status, 'ready', 'The ordinary producer and contract factory admit the original source.');
+        const transition = pageValue.transition.transition;
+        const frame = transition.keyframes[0];
+        const rows = frame.change.script.steps;
+        assert.equal(rows.filter(row => row.step.step === 'morph').length, 1, 'The source exports one actual seeded morph.');
+        assert.equal(rows.filter(row => row.step.step === 'segment-fade').length, 4, 'The source exports all four original boundary companions.');
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const page = await browser.newPage(), errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await page.context().route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            const result = await page.evaluate(async ({ frame, shapes }) => {
+                const morph = frame.change.script.steps.find(row => row.step.step === 'morph');
+                const feature = frame.after.features.find(feature => feature.id === morph.step.entity.id);
+                if (!feature) throw new Error('The generated reference must name the ordinary destination feature.');
+                const points = feature.geometry.coordinates[0][0];
+                const bounds = points.reduce((bounds, point) => bounds.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, bounds, fitBoundsOptions: { padding: 30 }, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                let pending = null, target = null, input = null, gl = null, tracking = false, cold = 0, allocations = 0, releases = 0;
+                const live = new Set(), selected = [];
+                const original = JSON.stringify(frame.after);
+                map.addLayer({ id: 'source-companions', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
+                    gl = context;
+                    for (const kind of ['Buffer', 'VertexArray', 'Shader', 'Program', 'Texture', 'Framebuffer', 'Renderbuffer']) {
+                        const create = gl['create' + kind].bind(gl), drop = gl['delete' + kind].bind(gl);
+                        gl['create' + kind] = (...args) => { const value = create(...args); if (tracking && value) { live.add(value); allocations++; } return value; };
+                        gl['delete' + kind] = value => { if (live.delete(value)) releases++; drop(value); };
+                    }
+                }, render(_context, args) {
+                    input = args;
+                    if (!pending) return;
+                    const operation = pending; pending = null; tracking = true;
+                    try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); } finally { tracking = false; }
+                } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                await run(() => { target = transitionTarget(gl, () => input, properties => {
+                    selected.push(properties);
+                    return [{ fill: [190, 208, 140, 255] }, { color: [60, 70, 40, 255], width: 1, pattern: 'Solid' }, null, null];
+                }, () => [null, null], destination => {
+                    if (destination !== frame.after || JSON.stringify(destination) !== original) throw new Error('The cold destination must remain the unchanged original served collection.');
+                    cold++;
+                }, reference => reference.id); });
+                const sample = (fraction, drawing = frame) => run(() => {
+                    drawTransition(target, drawing, shapes, fraction);
+                    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    let opaque = 0;
+                    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] >= 250) opaque++;
+                    return { opaque, morphs: target.morphs.length, items: target.morphs[0]?.items.length, suppressed: target.morphs[0]?.items[0].noStroke,
+                        lines: target.morphs[0]?.items.filter(item => item.line).length };
+                });
+                const early = await sample(0.25), late = await sample(0.75);
+                const sourceConsumed = target.morphs[0]?.rows.length;
+                const sourceFallback = target.crossfades;
+                const remainingGeometry = target.scenes.flatMap(scene => scene).filter(draw => draw.items.length > 0).length;
+                const incomplete = { ...frame, change: { ...frame.change, script: { steps: frame.change.script.steps.slice(0, -1) } } };
+                const partial = await sample(0.5, incomplete);
+                const duplicate = { ...frame, change: { ...frame.change, script: { steps: [...frame.change.script.steps.slice(0, -1), frame.change.script.steps.find(row => row.step.step === 'segment-fade')] } } };
+                const repeated = await sample(0.5, duplicate);
+                const fallback = target.crossfades;
+                await run(() => drawTransition(target, frame, shapes, 1));
+                for (let cycle = 0; cycle < 20; cycle++) await run(() => {
+                    drawTransition(target, frame, shapes, cycle % 2 === 0 ? 0.25 : 0.75);
+                    drawTransition(target, frame, shapes, 1);
+                    if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained companion buffers.');
+                });
+                await run(() => disposeTransition(target));
+                const result = { early, late, sourceConsumed, sourceFallback, remainingGeometry, partial, repeated, fallback, cold, allocations, releases, live: live.size,
+                    sameProperties: selected.every(value => frame.before.features.some(feature => feature.properties === value) || frame.after.features.some(feature => feature.properties === value)), error: gl.getError() };
+                map.remove(); return result;
+            }, { frame, shapes: transition.shapes });
+            assert.equal(result.early.morphs, 1, 'The ordinary five-step source reaches the true morph path.');
+            assert.equal(result.sourceConsumed, 5, 'The morph consumes exactly its original four segment companions.');
+            assert.equal(result.early.items, 5, 'The existing GPU path retains one fill and four segment buffers.');
+            assert.equal(result.early.lines, 4, 'Every original boundary arc is drawn once.');
+            assert.equal(result.early.suppressed, true, 'Only complete source-arc coverage suppresses the duplicate ring stroke.');
+            assert.ok(result.early.opaque > 0, 'The seeded source paints opaque land before settling.');
+            assert.ok(result.late.opaque > result.early.opaque, 'The admitted source border expands as the supplied time fraction advances.');
+            assert.equal(result.partial.morphs, 0, 'An incomplete source border retains the whole-entity fallback.');
+            assert.equal(result.repeated.morphs, 0, 'A repeated arc cannot stand in for a missing boundary arc.');
+            assert.equal(result.sourceFallback, result.remainingGeometry > 0 ? 1 : 0, 'Only the actual unmatched scene remainder counts as fallback for the admitted source.');
+            assert.equal(result.fallback - result.sourceFallback, 2, 'Each unsupported companion frame adds one counted scene fallback.');
+            assert.equal(result.cold, 21, 'Every endpoint settles through the unchanged cold destination.');
+            assert.equal(result.sameProperties, true, 'Fill and segments select the one painter with original served properties.');
+            assert.equal(result.allocations, result.releases, 'Twenty further moves release every companion-path allocation.');
+            assert.equal(result.live, 0, 'Disposal leaves no companion resources alive.');
+            assert.equal(result.error, 0, 'The companion path leaves no GPU error.');
+            assert.deepEqual(errors, [], 'The actual source script produces no browser error.');
         } finally { await browser.close(); }
     });
 }
