@@ -26,7 +26,7 @@
       if (target.frame !== frame || target.surfaces.some(surface => surface.width !== gl.drawingBufferWidth || surface.height !== gl.drawingBufferHeight)) {
         clearFrame(target);
         target.frame = frame;
-        target.morphs = buildMorphs(target, program.loc, frame);
+        target.morphs = buildMorphs(target, program.loc, frame, shapes);
         const covered = new Set(target.morphs.map(draw => draw.feature.id));
         const rows = frame.change?.script?.steps ?? [];
         target.surfaces = [];
@@ -246,7 +246,7 @@ void main() {
     return draws;
   }
 
-  function buildMorphs(target, loc, frame) {
+  function buildMorphs(target, loc, frame, shapes) {
     const rows = frame.change?.script?.steps ?? [];
     const morphs = rows.filter(draw => draw.step.step === "morph");
     const simple = feature => feature.geometry.type === "MultiPolygon"
@@ -261,9 +261,15 @@ void main() {
         || morphs.filter(row => target.identify(row.step.entity) === identity).length !== 1
         || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
       const companions = rows.filter(row => row !== draw && affectsEntity(target.identify, row.step, identity));
-      if (companions.length > 0 && !completeSegments(step.boundary, companions)) continue;
+      let unchanged = [];
+      if (companions.length > 0 && !completeSegments(step.boundary, companions)) {
+        if ([frame.before, frame.after].some(collection => collection.features.filter(feature => feature.id === identity).length !== 1)) continue;
+        unchanged = retainedSegments(step.boundary, companions, frame.change.arcs ?? [], shapes);
+        if (unchanged === null) continue;
+      }
       const resource = pairedGeometry(target, loc, step.from_pts, step.to_pts);
       const items = [{ rings: [resource], noStroke: companions.length > 0 }];
+      for (const geometry of unchanged) items.push(...geometryItems(target, loc, geometry));
       for (const row of companions) {
         const segment = row.step;
         const line = segment.step === "segment-track"
@@ -288,24 +294,65 @@ void main() {
     return resource;
   }
 
-  function completeSegments(boundary, companions) {
+  function sameArc(left, right) {
+    return left.store === right.store && left.key === right.key;
+  }
+
+  function uniqueArcs(arcs) {
+    return arcs.every((arc, index) => !arcs.slice(index + 1).some(other => sameArc(arc, other)));
+  }
+
+  function boundaryReferences(boundary) {
     const parts = boundary?.kind === "ring" ? boundary.boundary?.parts : null;
-    if (!parts || parts.length !== 1 || parts[0].holes.length !== 0) return false;
+    if (!parts || parts.length !== 1 || parts[0].holes.length !== 0) return null;
     const arcs = parts[0].cycle.map(([arc]) => arc);
-    const same = (left, right) => left.store === right.store && left.key === right.key;
-    if (arcs.length !== companions.length || arcs.some((arc, index) => arcs.slice(index + 1).some(other => same(arc, other)))) return false;
-    return companions.every(row => {
+    return arcs.length > 0 && uniqueArcs(arcs) ? arcs : null;
+  }
+
+  function segmentReferences(companions) {
+    const references = [];
+    for (const row of companions) {
       const step = row.step;
-      if (row.clip != null || step.segment?.kind !== "arc") return false;
+      if (row.clip != null || step.segment?.kind !== "arc") return null;
       if (step.step === "segment-track") {
-        if (step.from.length < 2 || step.from.length !== step.to.length) return false;
+        if (step.from.length < 2 || step.from.length !== step.to.length) return null;
       } else if (step.step === "segment-fade") {
-        if (step.course.length < 2) return false;
-      } else return false;
-      const reference = step.segment.boundary;
-      return arcs.filter(arc => same(arc, reference)).length === 1
-        && companions.filter(other => other.step.segment?.kind === "arc" && same(other.step.segment.boundary, reference)).length === 1;
-    });
+        if (step.course.length < 2) return null;
+      } else return null;
+      references.push(step.segment.boundary);
+    }
+    return uniqueArcs(references) ? references : null;
+  }
+
+  function completeSegments(boundary, companions) {
+    const arcs = boundaryReferences(boundary), references = segmentReferences(companions);
+    return arcs !== null && references !== null && arcs.length === references.length
+      && references.every(reference => arcs.some(arc => sameArc(arc, reference)));
+  }
+
+  function originalLine(shapes, key) {
+    const selected = shapes.filter(shape => shape.shape === key);
+    if (selected.length !== 1) return null;
+    const geometry = selected[0].geometry;
+    return geometry.type === "MultiLineString" && geometry.coordinates.length === 1 && geometry.coordinates[0].length >= 2 ? geometry : null;
+  }
+
+  function retainedSegments(boundary, companions, changes, shapes) {
+    const arcs = boundaryReferences(boundary), references = segmentReferences(companions);
+    if (arcs === null || references === null) return null;
+    const retained = [];
+    for (const reference of [...arcs, ...references]) {
+      const records = changes.filter(change => sameArc(change.arc, reference));
+      if (records.length !== 1) return null;
+      const change = records[0];
+      const keys = [change.before_shape, change.after_shape].filter(key => key != null);
+      if (keys.length === 0 || keys.some(key => originalLine(shapes, key) === null)) return null;
+      if (arcs.some(arc => sameArc(arc, reference)) && !references.some(other => sameArc(other, reference))) {
+        if (change.before_shape == null || change.before_shape !== change.after_shape) return null;
+        retained.push(originalLine(shapes, change.before_shape));
+      }
+    }
+    return retained;
   }
 
   function affectsEntity(identify, step, entity) {

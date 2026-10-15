@@ -456,15 +456,25 @@ for (const engine of [chromium, webkit]) {
     });
 }
 
-for (const engine of [chromium, webkit]) {
-    test(`${engine.name()} ordinary producer Y20 morph retains its complete served segment border`, async () => {
-        const pageValue = JSON.parse(readFileSync(process.env.MG_TRANSITION_Y20_FIXTURE, 'utf8'));
+for (const fixture of [
+    { name: 'Y20', path: 'MG_TRANSITION_Y20_FIXTURE', segments: 4, items: 5, lines: 4, reverse: null },
+    { name: 'water', path: 'MG_TRANSITION_WATER_FIXTURE', segments: 70, items: 285, lines: 284, reverse: 'MG_TRANSITION_WATER_REVERSE_FIXTURE' },
+]) for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} ordinary producer ${fixture.name} morph retains its complete served segment border`, async () => {
+        const pageValue = JSON.parse(readFileSync(process.env[fixture.path], 'utf8'));
         assert.equal(pageValue.transition.status, 'ready', 'The ordinary producer and contract factory admit the original source.');
         const transition = pageValue.transition.transition;
         const frame = transition.keyframes[0];
         const rows = frame.change.script.steps;
-        assert.equal(rows.filter(row => row.step.step === 'morph').length, 1, 'The source exports one actual seeded morph.');
-        assert.equal(rows.filter(row => row.step.step === 'segment-fade').length, 4, 'The source exports all four original boundary companions.');
+        const sourceMorph = rows.find(row => row.step.step === 'morph');
+        const reverse = fixture.reverse ? JSON.parse(readFileSync(process.env[fixture.reverse], 'utf8')).transition.transition.keyframes[0] : null;
+        assert.equal(rows.filter(row => row.step.step === 'morph').length, 1, 'The source exports one actual border morph.');
+        assert.equal(rows.filter(row => row.step.step === 'segment-fade' && row.step.entity.id === sourceMorph.step.entity.id).length, fixture.segments, 'The source exports its original changing boundary companions.');
+        if (reverse) {
+            assert.equal(frame.change.before_year, -1, 'The generated event year remains dry.');
+            assert.equal(frame.change.year, 1, 'The first wet year crosses directly into AD without year zero.');
+            assert.deepEqual(reverse.change.causes, frame.change.causes, 'The actual reverse endpoint retains the original event and grounds.');
+        }
         const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
             : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
         try {
@@ -479,7 +489,7 @@ for (const engine of [chromium, webkit]) {
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
             for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
-            const result = await page.evaluate(async ({ frame, shapes }) => {
+            const result = await page.evaluate(async ({ frame, reverse, shapes }) => {
                 const morph = frame.change.script.steps.find(row => row.step.step === 'morph');
                 const feature = frame.after.features.find(feature => feature.id === morph.step.entity.id);
                 if (!feature) throw new Error('The generated reference must name the ordinary destination feature.');
@@ -489,7 +499,8 @@ for (const engine of [chromium, webkit]) {
                 await new Promise(resolve => map.once('load', resolve));
                 let pending = null, target = null, input = null, gl = null, tracking = false, cold = 0, allocations = 0, releases = 0;
                 const live = new Set(), selected = [];
-                const original = JSON.stringify(frame.after);
+                const original = new Map([frame, reverse].filter(Boolean).map(value => [value.after, JSON.stringify(value.after)]));
+                let expectedDestination = frame.after;
                 map.addLayer({ id: 'source-companions', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
                     gl = context;
                     for (const kind of ['Buffer', 'VertexArray', 'Shader', 'Program', 'Texture', 'Framebuffer', 'Renderbuffer']) {
@@ -508,11 +519,12 @@ for (const engine of [chromium, webkit]) {
                     selected.push(properties);
                     return [{ fill: [190, 208, 140, 255] }, { color: [60, 70, 40, 255], width: 1, pattern: 'Solid' }, null, null];
                 }, () => [null, null], destination => {
-                    if (destination !== frame.after || JSON.stringify(destination) !== original) throw new Error('The cold destination must remain the unchanged original served collection.');
+                    if (destination !== expectedDestination || JSON.stringify(destination) !== original.get(destination)) throw new Error('The cold destination must remain the unchanged original served collection.');
                     cold++;
                 }, reference => reference.id); });
-                const sample = (fraction, drawing = frame) => run(() => {
-                    drawTransition(target, drawing, shapes, fraction);
+                const sample = (fraction, drawing = frame, selectedShapes = shapes) => run(() => {
+                    expectedDestination = drawing.after;
+                    drawTransition(target, drawing, selectedShapes, fraction);
                     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
                     gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
                     let opaque = 0;
@@ -523,34 +535,57 @@ for (const engine of [chromium, webkit]) {
                 const early = await sample(0.25), late = await sample(0.75);
                 const sourceConsumed = target.morphs[0]?.rows.length;
                 const sourceFallback = target.crossfades;
-                const incomplete = { ...frame, change: { ...frame.change, script: { steps: frame.change.script.steps.slice(0, -1) } } };
-                const partial = await sample(0.5, incomplete);
-                const duplicate = { ...frame, change: { ...frame.change, script: { steps: [...frame.change.script.steps.slice(0, -1), frame.change.script.steps.find(row => row.step.step === 'segment-fade')] } } };
+                let partial, inconsistent = null;
+                if (reverse) {
+                    const boundary = morph.step.boundary.boundary.parts[0].cycle.map(([arc]) => arc);
+                    const companions = frame.change.script.steps.filter(row => row.step.step === 'segment-fade' && row.step.entity.id === morph.step.entity.id);
+                    const same = (left, right) => left.store === right.store && left.key === right.key;
+                    const unchanged = boundary.find(arc => !companions.some(row => same(arc, row.step.segment.boundary)));
+                    const recorded = frame.change.arcs.find(change => same(change.arc, unchanged));
+                    partial = await sample(0.5, { ...frame }, shapes.filter(shape => shape.shape !== recorded.before_shape));
+                    const other = shapes.find(shape => shape.geometry.type === 'MultiLineString' && shape.shape !== recorded.before_shape);
+                    const contradicted = { ...frame, change: { ...frame.change, arcs: frame.change.arcs.map(change => change === recorded ? { ...change, after_shape: other.shape } : change) } };
+                    inconsistent = await sample(0.5, contradicted);
+                } else {
+                    const incomplete = { ...frame, change: { ...frame.change, script: { steps: frame.change.script.steps.slice(0, -1) } } };
+                    partial = await sample(0.5, incomplete);
+                }
+                const duplicate = { ...frame, change: { ...frame.change, script: { steps: [...frame.change.script.steps.slice(0, -1), frame.change.script.steps.find(row => row.step.step === 'segment-fade' && row.step.entity.id === morph.step.entity.id)] } } };
                 const repeated = await sample(0.5, duplicate);
                 const fallback = target.crossfades;
-                await run(() => drawTransition(target, frame, shapes, 1));
+                await run(() => { expectedDestination = frame.after; drawTransition(target, frame, shapes, 1); });
+                const reverseEarly = reverse ? await sample(0.25, reverse) : null;
+                const reverseLate = reverse ? await sample(0.75, reverse) : null;
+                if (reverse) await run(() => drawTransition(target, reverse, shapes, 1));
                 for (let cycle = 0; cycle < 20; cycle++) await run(() => {
-                    drawTransition(target, frame, shapes, cycle % 2 === 0 ? 0.25 : 0.75);
-                    drawTransition(target, frame, shapes, 1);
+                    const chosen = reverse && cycle % 2 === 1 ? reverse : frame;
+                    expectedDestination = chosen.after;
+                    drawTransition(target, chosen, shapes, cycle % 2 === 0 ? 0.25 : 0.75);
+                    drawTransition(target, chosen, shapes, 1);
                     if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained companion buffers.');
                 });
                 await run(() => disposeTransition(target));
-                const result = { early, late, sourceConsumed, sourceFallback, partial, repeated, fallback, cold, allocations, releases, live: live.size,
-                    sameProperties: selected.every(value => frame.before.features.some(feature => feature.properties === value) || frame.after.features.some(feature => feature.properties === value)), error: gl.getError() };
+                const result = { early, late, reverseEarly, reverseLate, sourceConsumed, sourceFallback, partial, inconsistent, repeated, fallback, cold, allocations, releases, live: live.size,
+                    sameProperties: selected.every(value => [frame, reverse].filter(Boolean).some(frame => frame.before.features.some(feature => feature.properties === value) || frame.after.features.some(feature => feature.properties === value))), error: gl.getError() };
                 map.remove(); return result;
-            }, { frame, shapes: transition.shapes });
-            assert.equal(result.early.morphs, 1, 'The ordinary five-step source reaches the true morph path.');
-            assert.equal(result.sourceConsumed, 5, 'The morph consumes exactly its original four segment companions.');
-            assert.equal(result.early.items, 5, 'The existing GPU path retains one fill and four segment buffers.');
-            assert.equal(result.early.lines, 4, 'Every original boundary arc is drawn once.');
+            }, { frame, reverse, shapes: transition.shapes });
+            assert.equal(result.early.morphs, 1, 'The ordinary served source reaches the true morph path.');
+            assert.equal(result.sourceConsumed, fixture.segments + 1, 'The morph consumes exactly its original changing segment companions.');
+            assert.equal(result.early.items, fixture.items, 'The existing GPU path retains one fill and the original complete border.');
+            assert.equal(result.early.lines, fixture.lines, 'Every retained or changing original boundary arc is drawn once.');
             assert.equal(result.early.suppressed, true, 'Only complete source-arc coverage suppresses the duplicate ring stroke.');
             assert.ok(result.early.opaque > 0, 'The seeded source paints opaque land before settling.');
             assert.ok(result.late.opaque > result.early.opaque, 'The admitted source border expands as the supplied time fraction advances.');
-            assert.equal(result.partial.morphs, 0, 'An incomplete source border retains the whole-entity fallback.');
+            assert.equal(result.partial.morphs, 0, 'An incomplete source border or missing original arc shape retains the whole-entity fallback.');
             assert.equal(result.repeated.morphs, 0, 'A repeated arc cannot stand in for a missing boundary arc.');
-            assert.equal(result.sourceFallback, 1, 'The original unanimated point remains one explicitly counted scene fallback.');
-            assert.equal(result.fallback - result.sourceFallback, 2, 'Each unsupported companion frame adds one counted scene fallback.');
-            assert.equal(result.cold, 21, 'Every endpoint settles through the unchanged cold destination.');
+            assert.equal(result.sourceFallback, 1, 'The original unmatched point or disappearing land remains one explicitly counted scene fallback.');
+            assert.equal(result.fallback - result.sourceFallback, reverse ? 3 : 2, 'Each unsupported companion frame adds one counted scene fallback.');
+            assert.equal(result.cold, reverse ? 22 : 21, 'Every endpoint settles through the unchanged cold destination.');
+            if (reverse) {
+                assert.equal(result.inconsistent.morphs, 0, 'An unexplained shape change cannot be treated as an unchanged border.');
+                assert.equal(result.reverseEarly.morphs, 1, 'The actual reversed water script uses the same morph path.');
+                assert.ok(result.reverseLate.opaque < result.reverseEarly.opaque, 'The original reverse script shrinks the water rather than crossfading its complete area.');
+            }
             assert.equal(result.sameProperties, true, 'Fill and segments select the one painter with original served properties.');
             assert.equal(result.allocations, result.releases, 'Twenty further moves release every companion-path allocation.');
             assert.equal(result.live, 0, 'Disposal leaves no companion resources alive.');
