@@ -3,7 +3,7 @@
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
   function transitionTarget(gl, projection, paint, water, cold) {
-    const target = { gl, projection, paint, water, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], disposed: false, crossfades: 0,
+    const target = { gl, projection, paint, water, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
       surfaces: [], glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
@@ -26,12 +26,16 @@
       if (target.frame !== frame || target.surfaces.some(surface => surface.width !== gl.drawingBufferWidth || surface.height !== gl.drawingBufferHeight)) {
         clearFrame(target);
         target.frame = frame;
-        target.crossfades++;
+        target.morphs = buildMorphs(target, program.loc, frame);
+        const covered = new Set(target.morphs.map(draw => draw.feature.id));
+        const rows = frame.change?.script?.steps ?? [];
+        if (rows.length === 0 || target.morphs.length !== rows.length) target.crossfades++;
         target.surfaces = [];
         target.surfaces.push(surface(target));
         target.surfaces.push(surface(target));
         target.screen = screenQuad(target, program.loc);
-        target.scenes = [buildScene(target, program.loc, frame.before), buildScene(target, program.loc, frame.after)];
+        target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc,
+          { ...collection, features: collection.features.filter(feature => !covered.has(feature.id)) }));
       }
       gl.useProgram(program.value);
       projectionUniforms(gl, program.loc, input.defaultProjectionData);
@@ -80,6 +84,7 @@
       gl.bindVertexArray(target.screen.vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.uniform1f(program.loc.uScreen, 0);
+      drawScene(target, program.loc, prepareScene(target, target.morphs), 1, fraction);
     } catch (error) {
       clearFrame(target);
       throw error;
@@ -116,6 +121,7 @@
     target.geometry = [];
     target.extras = [];
     target.scenes = [];
+    target.morphs = [];
     target.frame = null;
   }
 
@@ -240,6 +246,28 @@ void main() {
     return draws;
   }
 
+  function buildMorphs(target, loc, frame) {
+    const rows = frame.change?.script?.steps ?? [];
+    if (rows.some(draw => draw.step.step !== "morph")) return [];
+    const simple = feature => feature.geometry.type === "MultiPolygon"
+      && feature.geometry.coordinates.length === 1 && feature.geometry.coordinates[0].length === 1;
+    const draws = [];
+    for (const draw of rows) {
+      const step = draw.step;
+      const candidates = [frame.before, frame.after].flatMap(collection => collection.features.filter(feature => feature.id === step.entity));
+      const feature = candidates[candidates.length - 1];
+      if (draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
+        || rows.filter(row => row.step.entity === step.entity).length !== 1
+        || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
+      const vertices = points => Float32Array.from(points.flatMap(point => [point.x, point.y, point.z]));
+      const resource = retained.uploadGeometry(target.gl, loc, vertices(step.to_pts));
+      target.geometry.push(resource);
+      target.extras.push(retained.uploadPrevious(target.gl, loc, resource, vertices(step.from_pts)));
+      draws.push({ feature, items: [{ rings: [resource] }] });
+    }
+    return draws;
+  }
+
   function geometryItems(target, loc, geometry) {
     if (geometry.type === "MultiPolygon") return geometry.coordinates.map(polygon => ({ rings: polygon.map(ring => upload(target, loc, ring)) }));
     if (geometry.type === "MultiLineString") return geometry.coordinates.map(course => ({ line: upload(target, loc, course) }));
@@ -336,8 +364,9 @@ void main() {
     glyphs.dirty = false;
   }
 
-  function drawScene(target, loc, draws, alpha) {
+  function drawScene(target, loc, draws, alpha, fraction = 1) {
     const gl = target.gl;
+    gl.uniform1f(loc.uMorph, fraction);
     for (const draw of draws) {
       gl.uniform1f(loc.uLabel, draw.glyph ? 1 : 0);
       gl.uniform2f(loc.uDash, 0, 0);

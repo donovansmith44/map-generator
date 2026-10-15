@@ -239,8 +239,8 @@ for (const engine of [chromium, webkit]) {
                     });
                 });
                 const frame = { before, after, change: { script: { steps: [] } } };
-                const sample = fraction => run(() => {
-                    drawTransition(target, frame, [], fraction);
+                const sample = (fraction, drawing = frame) => run(() => {
+                    drawTransition(target, drawing, [], fraction);
                     if (coldCount !== 0) throw new Error('Served water must animate rather than immediately settle cold.');
                     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
                     gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -337,6 +337,99 @@ for (const engine of [chromium, webkit]) {
             assert.ok(result.shown.waterPixels > 0, 'The current camera reveals served water on the same frame.');
             assert.ok(result.shown.pointPixels > 0, 'The current camera reveals the served point on the same frame.');
             assert.equal(result.shown.buffers, result.hidden.buffers, 'Changing only the camera look retains the existing geometry buffers.');
+        } finally { await browser.close(); }
+    });
+}
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} served matched morph uses the canonical GPU buffers and exact cold destination`, async () => {
+        const feature = served.features.find(feature => feature.geometry.type === 'MultiPolygon' && feature.geometry.coordinates.length === 1 && feature.geometry.coordinates[0].length === 1);
+        assert.ok(feature, 'The served fixture contains an admitted single-ring region.');
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const page = await browser.newPage(), errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await page.context().route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            const result = await page.evaluate(async feature => {
+                const points = feature.geometry.coordinates[0][0];
+                const bounds = points.reduce((bounds, point) => bounds.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, bounds, fitBoundsOptions: { padding: 30 }, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                let pending = null, target = null, input = null, gl = null, tracking = false, cold = 0, allocations = 0, releases = 0;
+                const live = new Set(), selected = [];
+                const before = { type: 'FeatureCollection', features: [], waters: [] };
+                const after = { type: 'FeatureCollection', features: [feature], waters: [] };
+                const original = JSON.stringify(after);
+                const vector = ([lon, lat]) => { lat *= Math.PI / 180; lon *= Math.PI / 180; return { x: Math.cos(lat) * Math.cos(lon), y: Math.cos(lat) * Math.sin(lon), z: Math.sin(lat) }; };
+                const to_pts = points.map(vector), from_pts = to_pts.map(() => to_pts[0]);
+                const frame = { before, after, change: { script: { steps: [{ step: { step: 'morph', entity: feature.id, boundary: { kind: 'ring', parts: [] }, from_pts, to_pts }, clip: null }] } } };
+                map.addLayer({ id: 'matched-morph', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
+                    gl = context;
+                    for (const kind of ['Buffer', 'VertexArray', 'Shader', 'Program', 'Texture', 'Framebuffer', 'Renderbuffer']) {
+                        const create = gl['create' + kind].bind(gl), drop = gl['delete' + kind].bind(gl);
+                        gl['create' + kind] = (...args) => { const value = create(...args); if (tracking && value) { live.add(value); allocations++; } return value; };
+                        gl['delete' + kind] = value => { if (live.delete(value)) releases++; drop(value); };
+                    }
+                }, render(_context, args) {
+                    input = args;
+                    if (!pending) return;
+                    const operation = pending; pending = null; tracking = true;
+                    try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); } finally { tracking = false; }
+                } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                await run(() => { target = transitionTarget(gl, () => input, properties => { selected.push(properties); return [{ fill: [190, 208, 140, 255] }, null, null, null]; }, () => [null, null], destination => {
+                    if (destination !== after || JSON.stringify(destination) !== original) throw new Error('Cold destination must remain the original unchanged served collection.');
+                    cold++;
+                }); });
+                const sample = (fraction, drawing = frame) => run(() => {
+                    drawTransition(target, drawing, [], fraction);
+                    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    const program = target.programs.get(input.shaderData.variantName);
+                    let opaque = 0, visible = 0;
+                    for (let index = 3; index < pixels.length; index += 4) {
+                        if (pixels[index] >= 250) opaque++;
+                        if (pixels[index] > 0) visible++;
+                    }
+                    return { opaque, visible, fraction: gl.getUniform(program.value, program.loc.uMorph) };
+                });
+                const early = await sample(0.25), late = await sample(0.75);
+                const crossfades = target.crossfades;
+                const clipped = await sample(0.5, { ...frame, change: { script: { steps: [{ ...frame.change.script.steps[0], clip: 'source-subset' }] } } });
+                const fallbackCrossfades = target.crossfades;
+                await run(() => drawTransition(target, frame, [], 1));
+                for (let cycle = 0; cycle < 20; cycle++) await run(() => {
+                    drawTransition(target, frame, [], cycle % 2 === 0 ? 0.25 : 0.75);
+                    drawTransition(target, frame, [], 1);
+                    if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained morph buffers.');
+                });
+                await run(() => disposeTransition(target));
+                const result = { early, late, clipped, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties), error: gl.getError() };
+                map.remove(); return result;
+            }, feature);
+            assert.ok(result.early.opaque > 0, 'An early matched border paints opaque land rather than fading the full destination.');
+            assert.ok(result.late.opaque > result.early.opaque, 'The served paired border expands across the source subset as time advances.');
+            assert.equal(result.early.fraction, 0.25, 'The GPU receives the supplied early fraction without another easing.');
+            assert.equal(result.late.fraction, 0.75, 'The GPU receives the supplied later fraction without another easing.');
+            assert.equal(result.crossfades, 0, 'An admitted matched morph is not counted as missing correspondence.');
+            assert.equal(result.fallbackCrossfades, 1, 'Unsupported clipped correspondence is counted through the existing crossfade.');
+            assert.ok(result.clipped.visible > result.early.opaque, 'The fallback retains the full served destination instead of omitting its feature.');
+            assert.equal(result.clipped.opaque, 0, 'The unsupported subset retains the ordinary half-opacity scene crossfade.');
+            assert.equal(result.cold, 21, 'Every endpoint uses the ordinary cold destination callback.');
+            assert.equal(result.sameProperties, true, 'The one painter receives the original served entity properties.');
+            assert.equal(result.allocations, result.releases, 'The matched path frees every allocation after twenty further moves.');
+            assert.equal(result.live, 0, 'No matched-path GL allocation survives disposal.');
+            assert.equal(result.error, 0, 'The matched path leaves no GL error.');
+            assert.deepEqual(errors, [], 'The matched path produces no browser errors.');
         } finally { await browser.close(); }
     });
 }
