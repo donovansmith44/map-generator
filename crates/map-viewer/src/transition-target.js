@@ -48,6 +48,8 @@
       gl.uniform1f(program.loc.uFrontMin, -1.1);
       gl.uniform2f(program.loc.uDash, 0, 0);
       gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      const scenes = target.scenes.map(scene => prepareScene(target, scene));
+      uploadGlyphAtlas(target);
       gl.uniform1i(program.loc.uTex, 0);
       gl.uniform1i(program.loc.uAfterTex, 1);
       gl.activeTexture(gl.TEXTURE0);
@@ -61,7 +63,7 @@
         gl.clearColor(0, 0, 0, 0);
         gl.clearStencil(0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        drawScene(target, program.loc, target.scenes[scene], 1);
+        drawScene(target, program.loc, scenes[scene], 1);
       }
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
       gl.viewport(...state.VIEWPORT);
@@ -301,29 +303,42 @@ void main() {
     gl.vertexAttribPointer(loc.aCorner, 2, gl.FLOAT, false, 0, 0);
   }
 
-  function drawScene(target, loc, draws, alpha) {
-    const gl = target.gl;
+  function prepareScene(target, draws) {
+    const prepared = [];
     for (const draw of draws) {
       if (draw.water) {
         const [paint, stroke] = target.water(draw.water);
-        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; }
-        drawScene(target, loc, draw.items, alpha);
-        continue;
-      }
-      if (draw.feature) {
+        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; prepared.push(item); }
+      } else {
         const [paint, stroke, marker, label] = target.paint(draw.feature.properties);
-        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = marker; }
-        drawScene(target, loc, draw.items, alpha);
+        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = marker; prepared.push(item); }
         if (label && draw.glyph) {
-          labels.initializeGlyphAtlas(target.glyphs, gl);
+          labels.initializeGlyphAtlas(target.glyphs, target.gl);
           const [style, voice] = label;
           const recorded = draw.feature.properties.label;
           const entry = labels.retainedGlyphEntry(target.glyphs, voice.uppercase ? recorded.text.toUpperCase() : recorded.text,
             voice, style.size, style.color, style.halo, style.halo_width_em);
-          if (entry) drawScene(target, loc, [{ glyph: draw.glyph, entry }], alpha);
+          if (entry) prepared.push({ glyph: draw.glyph, entry });
         }
-        continue;
       }
+    }
+    return prepared;
+  }
+
+  function uploadGlyphAtlas(target) {
+    const gl = target.gl, glyphs = target.glyphs;
+    if (!glyphs.dirty) return;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, glyphs.tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, glyphs.canvas);
+    glyphs.dirty = false;
+  }
+
+  function drawScene(target, loc, draws, alpha) {
+    const gl = target.gl;
+    for (const draw of draws) {
       gl.uniform1f(loc.uLabel, draw.glyph ? 1 : 0);
       gl.uniform2f(loc.uDash, 0, 0);
       if (draw.rings) {
@@ -339,12 +354,6 @@ void main() {
         const glyphs = target.glyphs;
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, glyphs.tex);
-        if (glyphs.dirty) {
-          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, glyphs.canvas);
-          glyphs.dirty = false;
-        }
         gl.uniform1i(loc.uTex, 0);
         gl.uniform1f(loc.uAlpha, alpha);
         gl.uniform2f(loc.uSize, draw.entry.w * pixelRatio(gl), draw.entry.h * pixelRatio(gl));

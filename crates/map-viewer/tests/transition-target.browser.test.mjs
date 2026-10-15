@@ -33,7 +33,7 @@ for (const engine of [chromium, webkit]) {
                 await new Promise(resolve => map.once('load', resolve));
                 let pending = null, target = null, input = null, gl = null, tracking = false;
                 const groups = new Map();
-                let allocations = 0, releases = 0, coldCount = 0;
+                let allocations = 0, releases = 0, coldCount = 0, glyphUploads = 0;
                 let expectedDestination = collection;
                 let original = JSON.stringify(collection);
                 const paint = () => [{ fill: [190, 208, 140, 210] }, { color: [60, 70, 40, 255], width: 1, pattern: 'Solid' }, { color: [30, 30, 30, 255], size: 5 },
@@ -54,6 +54,8 @@ for (const engine of [chromium, webkit]) {
                 };
                 map.addLayer({ id: 'canonical-transition', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
                     gl = context;
+                    const upload = gl.texImage2D.bind(gl);
+                    gl.texImage2D = (...args) => { if (tracking && args.length === 6) glyphUploads++; return upload(...args); };
                     for (const kind of ['Buffer', 'VertexArray', 'Shader', 'Program', 'Texture', 'Framebuffer', 'Renderbuffer']) {
                         const live = new Set(); groups.set(kind, live);
                         const create = gl['create' + kind].bind(gl), drop = gl['delete' + kind].bind(gl);
@@ -84,8 +86,10 @@ for (const engine of [chromium, webkit]) {
                 await run(() => {
                     expectedDestination = fullCollection;
                     original = JSON.stringify(fullCollection);
+                    const previousGlyphUploads = glyphUploads;
                     drawTransition(target, { before: fullCollection, after: fullCollection, change: { script: { steps: [] } } }, [], 0.25);
                     if (coldCount !== 40) throw new Error('The complete served scene animates through its water look.');
+                    if (glyphUploads - previousGlyphUploads > 1) throw new Error('One frame batches its glyph atlas upload once; actual uploads ' + (glyphUploads - previousGlyphUploads));
                     drawTransition(target, { before: fullCollection, after: fullCollection, change: { script: { steps: [] } } }, [], 1);
                     for (const kind of ['Buffer', 'VertexArray', 'Texture', 'Framebuffer', 'Renderbuffer']) if (groups.get(kind).size !== 0) throw new Error('Full water scene settlement retained an overlay.');
                     disposeTransition(target); disposeTransition(target);
