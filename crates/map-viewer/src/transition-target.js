@@ -2,8 +2,8 @@
   const retained = typeof module !== "undefined" && module.exports ? require("./retained-gpu.js") : scope;
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
-  function transitionTarget(gl, projection, paint, water, cold) {
-    const target = { gl, projection, paint, water, cold, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
+  function transitionTarget(gl, projection, paint, water, cold, identify) {
+    const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
       surfaces: [], glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
@@ -254,11 +254,12 @@ void main() {
     const draws = [];
     for (const draw of morphs) {
       const step = draw.step;
-      const candidates = [frame.before, frame.after].flatMap(collection => collection.features.filter(feature => feature.id === step.entity));
+      const identity = target.identify(step.entity);
+      const candidates = [frame.before, frame.after].flatMap(collection => collection.features.filter(feature => feature.id === identity));
       const feature = candidates[candidates.length - 1];
       if (draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
-        || morphs.filter(row => row.step.entity === step.entity).length !== 1
-        || rows.some(row => row !== draw && affectsEntity(row.step, step.entity))
+        || morphs.filter(row => target.identify(row.step.entity) === identity).length !== 1
+        || rows.some(row => row !== draw && affectsEntity(target.identify, row.step, identity))
         || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
       const vertices = points => Float32Array.from(points.flatMap(point => [point.x, point.y, point.z]));
       const resource = retained.uploadGeometry(target.gl, loc, vertices(step.to_pts));
@@ -269,14 +270,14 @@ void main() {
     return draws;
   }
 
-  function affectsEntity(step, entity) {
+  function affectsEntity(identify, step, entity) {
     switch (step.step) {
       case "morph": return false;
-      case "fade-in": case "fade-out": return step.region === entity;
-      case "split-along": return step.parent === entity || step.children.includes(entity);
-      case "merge-across": return step.child === entity || step.parents.includes(entity);
+      case "fade-in": case "fade-out": return identify(step.region) === entity;
+      case "split-along": return identify(step.parent) === entity || step.children.some(reference => identify(reference) === entity);
+      case "merge-across": return identify(step.child) === entity || step.parents.some(reference => identify(reference) === entity);
       case "point-track": case "point-fade": case "segment-track": case "segment-fade":
-      case "label-track": case "label-fade": return step.entity === entity;
+      case "label-track": case "label-fade": return identify(step.entity) === entity;
       default: return true;
     }
   }

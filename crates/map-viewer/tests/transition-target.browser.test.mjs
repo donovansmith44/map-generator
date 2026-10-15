@@ -69,7 +69,7 @@ for (const engine of [chromium, webkit]) {
                     try { operation.run(); operation.resolve(); } catch (error) { operation.reject(error); } finally { tracking = false; }
                 } });
                 const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
-                await run(() => { target = transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold); });
+                await run(() => { target = transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold, reference => reference); });
                 const frame = { before: collection, after: collection, change: { script: { steps: [] } } };
                 for (let cycle = 0; cycle < 20; cycle++) for (const direction of ['forward', 'reverse']) await run(() => {
                     const before = snapshot();
@@ -96,7 +96,7 @@ for (const engine of [chromium, webkit]) {
                     const create = gl.createProgram; gl.createProgram = () => null;
                     try {
                         let refused = false;
-                        try { transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold); } catch (error) { refused = error.message.includes('program allocation'); }
+                        try { transitionTarget(gl, () => input, paint, () => [{ fill: [30, 110, 210, 255] }, null], cold, reference => reference); } catch (error) { refused = error.message.includes('program allocation'); }
                         if (!refused) throw new Error('Factory must refuse failed allocation.');
                     } finally { gl.createProgram = create; }
                 });
@@ -146,7 +146,7 @@ for (const engine of [chromium, webkit]) {
                         try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
                     } });
                 const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
-                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, marker, null], () => [null, null], destination => { if (destination !== scene) throw new Error('Cold renderer must receive the exact source destination.'); map.getSource('ordinary').setData(destination); map.setLayoutProperty('ordinary', 'visibility', 'visible'); }); });
+                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, marker, null], () => [null, null], destination => { if (destination !== scene) throw new Error('Cold renderer must receive the exact source destination.'); map.getSource('ordinary').setData(destination); map.setLayoutProperty('ordinary', 'visibility', 'visible'); }, reference => reference); });
                 const sample = () => run(() => {
                     const projected = map.project(feature.geometry.coordinates);
                     gl.enable(gl.SCISSOR_TEST); gl.scissor(0, 0, 2, 2);
@@ -236,7 +236,7 @@ for (const engine of [chromium, webkit]) {
                         if (destination !== after) throw new Error('Cold receives the unchanged full destination.');
                         coldCount++;
                         map.setLayoutProperty('ordinary-water', 'visibility', 'visible');
-                    });
+                    }, reference => reference);
                 });
                 const frame = { before, after, change: { script: { steps: [] } } };
                 const sample = (fraction, drawing = frame) => run(() => {
@@ -314,7 +314,7 @@ for (const engine of [chromium, webkit]) {
                 } });
                 const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
                 await run(() => { target = transitionTarget(gl, () => input, () => [null, null, visible() ? marker : null, null],
-                    () => [visible() ? { fill: [30, 110, 210, 255] } : null, null], () => {}); });
+                    () => [visible() ? { fill: [30, 110, 210, 255] } : null, null], () => {}, reference => reference); });
                 const sample = () => run(() => {
                     drawTransition(target, frame, [], 0.5);
                     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
@@ -371,7 +371,8 @@ for (const engine of [chromium, webkit]) {
                 const original = JSON.stringify(after);
                 const vector = ([lon, lat]) => { lat *= Math.PI / 180; lon *= Math.PI / 180; return { x: Math.cos(lat) * Math.cos(lon), y: Math.cos(lat) * Math.sin(lon), z: Math.sin(lat) }; };
                 const to_pts = points.map(vector), from_pts = to_pts.map(() => to_pts[0]);
-                const frame = { before, after, change: { script: { steps: [{ step: { step: 'morph', entity: feature.id, boundary: { kind: 'ring', parts: [] }, from_pts, to_pts }, clip: null }] } } };
+                const reference = feature => ({ id: feature.id, kind: feature.properties.kind.nodeKind, label: feature.properties.name });
+                const frame = { before, after, change: { script: { steps: [{ step: { step: 'morph', entity: reference(feature), boundary: { kind: 'ring', parts: [] }, from_pts, to_pts }, clip: null }] } } };
                 map.addLayer({ id: 'matched-morph', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
                     gl = context;
                     for (const kind of ['Buffer', 'VertexArray', 'Shader', 'Program', 'Texture', 'Framebuffer', 'Renderbuffer']) {
@@ -389,7 +390,7 @@ for (const engine of [chromium, webkit]) {
                 await run(() => { target = transitionTarget(gl, () => input, properties => { selected.push(properties); return [{ fill: [190, 208, 140, 255] }, null, null, null]; }, () => [null, null], destination => {
                     if (destination !== after || JSON.stringify(destination) !== original) throw new Error('Cold destination must remain the original unchanged served collection.');
                     cold++;
-                }); });
+                }, reference => reference.id); });
                 const sample = (fraction, drawing = frame) => run(() => {
                     drawTransition(target, drawing, [], fraction);
                     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
@@ -404,14 +405,17 @@ for (const engine of [chromium, webkit]) {
                 });
                 const early = await sample(0.25), late = await sample(0.75);
                 const crossfades = target.crossfades;
-                const mixedFrame = { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'fade-in', region: other.id }, clip: null }] } }, after: { ...after, features: [feature, other] } };
+                const mixedFrame = { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'fade-in', region: reference(other) }, clip: null }] } }, after: { ...after, features: [feature, other] } };
                 const mixed = await sample(0.5, mixedFrame);
                 const mixedMorphs = target.morphs.length;
                 const mixedRetained = target.scenes[1].some(draw => draw.feature === other);
                 const mixedCrossfades = target.crossfades;
-                const sameEntity = await sample(0.5, { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'label-track', entity: feature.id, text: feature.properties.label.text, from: to_pts[0], to: to_pts[0] }, clip: null }] } } });
+                const sameEntity = await sample(0.5, { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'label-track', entity: reference(feature), text: feature.properties.label.text, from: to_pts[0], to: to_pts[0] }, clip: null }] } } });
                 const sameEntityMorphs = target.morphs.length;
                 const sameEntityRetained = target.scenes[1].some(draw => draw.feature === feature);
+                await sample(0.5, { ...frame, change: { script: { steps: [frame.change.script.steps[0], { ...frame.change.script.steps[0], step: { ...frame.change.script.steps[0].step, entity: reference(feature) } }] } } });
+                const duplicateMorphs = target.morphs.length;
+                const duplicateRetained = target.scenes[1].some(draw => draw.feature === feature);
                 const clipped = await sample(0.5, { ...frame, change: { script: { steps: [{ ...frame.change.script.steps[0], clip: 'source-subset' }] } } });
                 const fallbackCrossfades = target.crossfades;
                 await run(() => drawTransition(target, frame, [], 1));
@@ -421,7 +425,7 @@ for (const engine of [chromium, webkit]) {
                     if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained morph buffers.');
                 });
                 await run(() => disposeTransition(target));
-                const result = { early, late, clipped, mixed, mixedMorphs, mixedRetained, mixedCrossfades, sameEntity, sameEntityMorphs, sameEntityRetained, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties || value === other.properties), error: gl.getError() };
+                const result = { early, late, clipped, mixed, mixedMorphs, mixedRetained, mixedCrossfades, sameEntity, sameEntityMorphs, sameEntityRetained, duplicateMorphs, duplicateRetained, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties || value === other.properties), error: gl.getError() };
                 map.remove(); return result;
             }, { feature, other: polygon });
             assert.ok(result.early.opaque > 0, 'An early matched border paints opaque land rather than fading the full destination.');
@@ -435,7 +439,9 @@ for (const engine of [chromium, webkit]) {
             assert.equal(result.mixedCrossfades, 1, 'Only the mixed fallback adds one crossfade.');
             assert.equal(result.sameEntityMorphs, 0, 'An unsupported same-entity label retains the whole feature fallback.');
             assert.equal(result.sameEntityRetained, true, 'The same-entity label is not removed from the ordinary scene.');
-            assert.equal(result.fallbackCrossfades, 3, 'Unsupported clipped correspondence is counted through the existing crossfade.');
+            assert.equal(result.duplicateMorphs, 0, 'Distinct served references to the same entity cannot admit duplicate morphs.');
+            assert.equal(result.duplicateRetained, true, 'Duplicate references retain the complete original feature fallback.');
+            assert.equal(result.fallbackCrossfades, 4, 'Unsupported clipped correspondence is counted through the existing crossfade.');
             assert.ok(result.clipped.visible > result.early.opaque, 'The fallback retains the full served destination instead of omitting its feature.');
             assert.equal(result.clipped.opaque, 0, 'The unsupported subset retains the ordinary half-opacity scene crossfade.');
             assert.equal(result.cold, 21, 'Every endpoint uses the ordinary cold destination callback.');
