@@ -359,7 +359,7 @@ for (const engine of [chromium, webkit]) {
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
             for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
-            const result = await page.evaluate(async feature => {
+            const result = await page.evaluate(async ({ feature, other }) => {
                 const points = feature.geometry.coordinates[0][0];
                 const bounds = points.reduce((bounds, point) => bounds.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
                 const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, bounds, fitBoundsOptions: { padding: 30 }, fadeDuration: 0 });
@@ -404,6 +404,14 @@ for (const engine of [chromium, webkit]) {
                 });
                 const early = await sample(0.25), late = await sample(0.75);
                 const crossfades = target.crossfades;
+                const mixedFrame = { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'fade-in', region: other.id }, clip: null }] } }, after: { ...after, features: [feature, other] } };
+                const mixed = await sample(0.5, mixedFrame);
+                const mixedMorphs = target.morphs.length;
+                const mixedRetained = target.scenes[1].some(draw => draw.feature === other);
+                const mixedCrossfades = target.crossfades;
+                const sameEntity = await sample(0.5, { ...frame, change: { script: { steps: [frame.change.script.steps[0], { step: { step: 'label-track', entity: feature.id, text: feature.properties.label.text, from: to_pts[0], to: to_pts[0] }, clip: null }] } } });
+                const sameEntityMorphs = target.morphs.length;
+                const sameEntityRetained = target.scenes[1].some(draw => draw.feature === feature);
                 const clipped = await sample(0.5, { ...frame, change: { script: { steps: [{ ...frame.change.script.steps[0], clip: 'source-subset' }] } } });
                 const fallbackCrossfades = target.crossfades;
                 await run(() => drawTransition(target, frame, [], 1));
@@ -413,15 +421,21 @@ for (const engine of [chromium, webkit]) {
                     if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained morph buffers.');
                 });
                 await run(() => disposeTransition(target));
-                const result = { early, late, clipped, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties), error: gl.getError() };
+                const result = { early, late, clipped, mixed, mixedMorphs, mixedRetained, mixedCrossfades, sameEntity, sameEntityMorphs, sameEntityRetained, crossfades, fallbackCrossfades, cold, allocations, releases, live: live.size, sameProperties: selected.every(value => value === feature.properties || value === other.properties), error: gl.getError() };
                 map.remove(); return result;
-            }, feature);
+            }, { feature, other: polygon });
             assert.ok(result.early.opaque > 0, 'An early matched border paints opaque land rather than fading the full destination.');
             assert.ok(result.late.opaque > result.early.opaque, 'The served paired border expands across the source subset as time advances.');
             assert.equal(result.early.fraction, 0.25, 'The GPU receives the supplied early fraction without another easing.');
             assert.equal(result.late.fraction, 0.75, 'The GPU receives the supplied later fraction without another easing.');
             assert.equal(result.crossfades, 0, 'An admitted matched morph is not counted as missing correspondence.');
-            assert.equal(result.fallbackCrossfades, 1, 'Unsupported clipped correspondence is counted through the existing crossfade.');
+            assert.equal(result.mixedMorphs, 1, 'An unrelated fade keeps the admitted border on the morph path.');
+            assert.ok(result.mixed.opaque > 0, 'The matched border remains opaque during the mixed frame.');
+            assert.equal(result.mixedRetained, true, 'The unrelated unsupported feature retains its ordinary scene draw.');
+            assert.equal(result.mixedCrossfades, 1, 'Only the mixed fallback adds one crossfade.');
+            assert.equal(result.sameEntityMorphs, 0, 'An unsupported same-entity label retains the whole feature fallback.');
+            assert.equal(result.sameEntityRetained, true, 'The same-entity label is not removed from the ordinary scene.');
+            assert.equal(result.fallbackCrossfades, 3, 'Unsupported clipped correspondence is counted through the existing crossfade.');
             assert.ok(result.clipped.visible > result.early.opaque, 'The fallback retains the full served destination instead of omitting its feature.');
             assert.equal(result.clipped.opaque, 0, 'The unsupported subset retains the ordinary half-opacity scene crossfade.');
             assert.equal(result.cold, 21, 'Every endpoint uses the ordinary cold destination callback.');

@@ -248,16 +248,17 @@ void main() {
 
   function buildMorphs(target, loc, frame) {
     const rows = frame.change?.script?.steps ?? [];
-    if (rows.some(draw => draw.step.step !== "morph")) return [];
+    const morphs = rows.filter(draw => draw.step.step === "morph");
     const simple = feature => feature.geometry.type === "MultiPolygon"
       && feature.geometry.coordinates.length === 1 && feature.geometry.coordinates[0].length === 1;
     const draws = [];
-    for (const draw of rows) {
+    for (const draw of morphs) {
       const step = draw.step;
       const candidates = [frame.before, frame.after].flatMap(collection => collection.features.filter(feature => feature.id === step.entity));
       const feature = candidates[candidates.length - 1];
       if (draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
-        || rows.filter(row => row.step.entity === step.entity).length !== 1
+        || morphs.filter(row => row.step.entity === step.entity).length !== 1
+        || rows.some(row => row !== draw && affectsEntity(row.step, step.entity))
         || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
       const vertices = points => Float32Array.from(points.flatMap(point => [point.x, point.y, point.z]));
       const resource = retained.uploadGeometry(target.gl, loc, vertices(step.to_pts));
@@ -266,6 +267,18 @@ void main() {
       draws.push({ feature, items: [{ rings: [resource] }] });
     }
     return draws;
+  }
+
+  function affectsEntity(step, entity) {
+    switch (step.step) {
+      case "morph": return false;
+      case "fade-in": case "fade-out": return step.region === entity;
+      case "split-along": return step.parent === entity || step.children.includes(entity);
+      case "merge-across": return step.child === entity || step.parents.includes(entity);
+      case "point-track": case "point-fade": case "segment-track": case "segment-fade":
+      case "label-track": case "label-fade": return step.entity === entity;
+      default: return true;
+    }
   }
 
   function geometryItems(target, loc, geometry) {
