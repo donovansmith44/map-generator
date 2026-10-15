@@ -523,7 +523,6 @@ for (const engine of [chromium, webkit]) {
                 const early = await sample(0.25), late = await sample(0.75);
                 const sourceConsumed = target.morphs[0]?.rows.length;
                 const sourceFallback = target.crossfades;
-                const remainingGeometry = target.scenes.flatMap(scene => scene).filter(draw => draw.items.length > 0).length;
                 const incomplete = { ...frame, change: { ...frame.change, script: { steps: frame.change.script.steps.slice(0, -1) } } };
                 const partial = await sample(0.5, incomplete);
                 const duplicate = { ...frame, change: { ...frame.change, script: { steps: [...frame.change.script.steps.slice(0, -1), frame.change.script.steps.find(row => row.step.step === 'segment-fade')] } } };
@@ -536,7 +535,7 @@ for (const engine of [chromium, webkit]) {
                     if (target.geometry.length !== 0 || target.extras.length !== 0) throw new Error('Settlement retained companion buffers.');
                 });
                 await run(() => disposeTransition(target));
-                const result = { early, late, sourceConsumed, sourceFallback, remainingGeometry, partial, repeated, fallback, cold, allocations, releases, live: live.size,
+                const result = { early, late, sourceConsumed, sourceFallback, partial, repeated, fallback, cold, allocations, releases, live: live.size,
                     sameProperties: selected.every(value => frame.before.features.some(feature => feature.properties === value) || frame.after.features.some(feature => feature.properties === value)), error: gl.getError() };
                 map.remove(); return result;
             }, { frame, shapes: transition.shapes });
@@ -549,7 +548,7 @@ for (const engine of [chromium, webkit]) {
             assert.ok(result.late.opaque > result.early.opaque, 'The admitted source border expands as the supplied time fraction advances.');
             assert.equal(result.partial.morphs, 0, 'An incomplete source border retains the whole-entity fallback.');
             assert.equal(result.repeated.morphs, 0, 'A repeated arc cannot stand in for a missing boundary arc.');
-            assert.equal(result.sourceFallback, result.remainingGeometry > 0 ? 1 : 0, 'Only the actual unmatched scene remainder counts as fallback for the admitted source.');
+            assert.equal(result.sourceFallback, 1, 'The original unanimated point remains one explicitly counted scene fallback.');
             assert.equal(result.fallback - result.sourceFallback, 2, 'Each unsupported companion frame adds one counted scene fallback.');
             assert.equal(result.cold, 21, 'Every endpoint settles through the unchanged cold destination.');
             assert.equal(result.sameProperties, true, 'Fill and segments select the one painter with original served properties.');
