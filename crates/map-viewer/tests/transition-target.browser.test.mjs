@@ -265,3 +265,74 @@ for (const engine of [chromium, webkit]) {
         } finally { await browser.close(); }
     });
 }
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} current camera refreshes water and feature looks without rebuilding geometry`, async () => {
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const page = await browser.newPage();
+            await page.context().route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            const result = await page.evaluate(async source => {
+                const water = source.waters.find(value => value.minZoom !== null);
+                if (!water) throw new Error('The served fixture must provide a minimum water zoom.');
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: water.geometry.coordinates[0][0][0], zoom: water.minZoom, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                const point = source.features.find(value => {
+                    if (value.geometry.type !== 'Point') return false;
+                    const screen = map.project(value.geometry.coordinates);
+                    return screen.x > 16 && screen.x < 304 && screen.y > 16 && screen.y < 304;
+                });
+                if (!point) throw new Error('The source fixture must include a served point in the water camera viewport.');
+                await new Promise(resolve => { map.once('moveend', resolve); map.setZoom(water.minZoom - 1); });
+                const scene = { ...source, features: [point], waters: [water] };
+                const frame = { before: scene, after: scene, change: { script: { steps: [] } } };
+                let gl, input, target, pending, buffers = 0;
+                const visible = () => map.getZoom() >= water.minZoom;
+                const marker = { color: [240, 60, 50, 255], size: 10 };
+                map.addLayer({ id: 'camera-look-target', type: 'custom', renderingMode: '2d', onAdd(_map, context) {
+                    gl = context;
+                    const allocate = gl.createBuffer.bind(gl);
+                    gl.createBuffer = () => { buffers++; return allocate(); };
+                }, render(_context, args) {
+                    input = args;
+                    if (!pending) return;
+                    const operation = pending; pending = null;
+                    try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
+                } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                await run(() => { target = transitionTarget(gl, () => input, () => [null, null, visible() ? marker : null, null],
+                    () => [visible() ? { fill: [30, 110, 210, 255] } : null, null], () => {}); });
+                const sample = () => run(() => {
+                    drawTransition(target, frame, [], 0.5);
+                    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    let waterPixels = 0, pointPixels = 0;
+                    for (let i = 0; i < pixels.length; i += 4) if (pixels[i + 3] > 0) {
+                        if (pixels[i + 2] > pixels[i]) waterPixels++;
+                        if (pixels[i] > pixels[i + 2]) pointPixels++;
+                    }
+                    if (gl.getError() !== gl.NO_ERROR) throw new Error('Camera look refresh has no GL error.');
+                    return { waterPixels, pointPixels, buffers };
+                });
+                const hidden = await sample();
+                await new Promise(resolve => { map.once('moveend', resolve); map.setZoom(water.minZoom); });
+                const shown = await sample();
+                await run(() => disposeTransition(target)); map.remove(); return { hidden, shown };
+            }, served);
+            assert.equal(result.hidden.waterPixels, 0, 'The served minimum zoom hides water initially.');
+            assert.equal(result.hidden.pointPixels, 0, 'The same camera-dependent look hides the point initially.');
+            assert.ok(result.shown.waterPixels > 0, 'The current camera reveals served water on the same frame.');
+            assert.ok(result.shown.pointPixels > 0, 'The current camera reveals the served point on the same frame.');
+            assert.equal(result.shown.buffers, result.hidden.buffers, 'Changing only the camera look retains the existing geometry buffers.');
+        } finally { await browser.close(); }
+    });
+}

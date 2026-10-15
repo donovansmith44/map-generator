@@ -226,33 +226,23 @@ void main() {
   function buildScene(target, loc, collection) {
     const draws = [];
     for (const water of collection.waters || []) {
-      const [paint, stroke] = target.water(water);
-      appendGeometry(target, loc, draws, water.geometry, paint, stroke, null);
+      const items = geometryItems(target, loc, water.geometry);
+      draws.push({ water, items });
     }
     for (const feature of collection.features) {
-      const [paint, stroke, marker, label] = target.paint(feature.properties);
-      const geometry = feature.geometry;
-      appendGeometry(target, loc, draws, geometry, paint, stroke, marker);
+      const items = geometryItems(target, loc, feature.geometry);
       const recorded = feature.properties.label;
-      if (label && recorded && recorded.anchor.type === "Point") {
-        labels.initializeGlyphAtlas(target.glyphs, target.gl);
-        const [style, voice] = label;
-        const entry = labels.retainedGlyphEntry(target.glyphs, voice.uppercase ? recorded.text.toUpperCase() : recorded.text,
-          voice, style.size, style.color, style.halo, style.halo_width_em);
-        if (entry) draws.push({ glyph: glyphQuad(target, loc, recorded.anchor.coordinates), entry });
-      }
+      const glyph = recorded && recorded.anchor.type === "Point" ? glyphQuad(target, loc, recorded.anchor.coordinates) : null;
+      draws.push({ feature, items, glyph });
     }
     return draws;
   }
 
-  function appendGeometry(target, loc, draws, geometry, paint, stroke, marker) {
-    if (geometry.type === "MultiPolygon" && (paint || stroke)) {
-      for (const polygon of geometry.coordinates) draws.push({ rings: polygon.map(ring => upload(target, loc, ring)), paint, stroke });
-    } else if (geometry.type === "MultiLineString" && stroke) {
-      for (const course of geometry.coordinates) draws.push({ line: upload(target, loc, course), stroke });
-    } else if (geometry.type === "Point" && marker) {
-      draws.push({ point: upload(target, loc, [geometry.coordinates]), marker });
-    }
+  function geometryItems(target, loc, geometry) {
+    if (geometry.type === "MultiPolygon") return geometry.coordinates.map(polygon => ({ rings: polygon.map(ring => upload(target, loc, ring)) }));
+    if (geometry.type === "MultiLineString") return geometry.coordinates.map(course => ({ line: upload(target, loc, course) }));
+    if (geometry.type === "Point") return [{ point: upload(target, loc, [geometry.coordinates]) }];
+    throw new Error("Unsupported source geometry");
   }
 
   function surface(target) {
@@ -314,13 +304,33 @@ void main() {
   function drawScene(target, loc, draws, alpha) {
     const gl = target.gl;
     for (const draw of draws) {
+      if (draw.water) {
+        const [paint, stroke] = target.water(draw.water);
+        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; }
+        drawScene(target, loc, draw.items, alpha);
+        continue;
+      }
+      if (draw.feature) {
+        const [paint, stroke, marker, label] = target.paint(draw.feature.properties);
+        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = marker; }
+        drawScene(target, loc, draw.items, alpha);
+        if (label && draw.glyph) {
+          labels.initializeGlyphAtlas(target.glyphs, gl);
+          const [style, voice] = label;
+          const recorded = draw.feature.properties.label;
+          const entry = labels.retainedGlyphEntry(target.glyphs, voice.uppercase ? recorded.text.toUpperCase() : recorded.text,
+            voice, style.size, style.color, style.halo, style.halo_width_em);
+          if (entry) drawScene(target, loc, [{ glyph: draw.glyph, entry }], alpha);
+        }
+        continue;
+      }
       gl.uniform1f(loc.uLabel, draw.glyph ? 1 : 0);
       gl.uniform2f(loc.uDash, 0, 0);
       if (draw.rings) {
         if (draw.paint) retained.drawStencilFill(gl, loc, draw.rings, { mode: 1, whole: false, color: opacity(draw.paint.fill, alpha), frontMin: -1.1 });
         if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, alpha);
-      } else if (draw.line) stroke(gl, loc, draw.line, draw.stroke, alpha);
-      else if (draw.point) {
+      } else if (draw.line && draw.stroke) stroke(gl, loc, draw.line, draw.stroke, alpha);
+      else if (draw.point && draw.marker) {
         colour(gl, loc, draw.marker.color, alpha);
         gl.uniform1f(loc.uPointSize, draw.marker.size * pixelRatio(gl));
         gl.bindVertexArray(draw.point.vao);
