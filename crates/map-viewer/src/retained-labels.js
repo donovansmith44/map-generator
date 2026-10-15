@@ -20,7 +20,7 @@ function resetGlyphAtlas(glyphs) {
   glyphs.dirty = true;
 }
 
-function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidthEm, retried) {
+function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidthEm) {
   const dpr = window.devicePixelRatio || 1;
   const px = Math.max(2, Math.round(sizeCss * 2) / 2);
   const hw = haloWidthEm === undefined ? 0.24 : haloWidthEm;
@@ -35,14 +35,11 @@ function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidth
   const pad = Math.ceil(px * dpr * 0.4);
   const w = Math.ceil(m.width) + pad * 2;
   const h = Math.ceil(px * dpr * 1.4) + pad;
-  if (w > 2048) return null;
-  if (glyphs.x + w > 2048) { glyphs.x = 0; glyphs.y += glyphs.rowH; glyphs.rowH = 0; }
-  if (glyphs.y + h > 2048) {
-    if (retried) return null;
-    resetGlyphAtlas(glyphs);
-    return retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidthEm, true);
-  }
-  const bx = glyphs.x, by = glyphs.y;
+  if (w > 2048 || h > 2048) return null;
+  const wraps = glyphs.x + w > 2048;
+  const bx = wraps ? 0 : glyphs.x;
+  const by = wraps ? glyphs.y + glyphs.rowH : glyphs.y;
+  if (by + h > 2048) return null;
   const baseline = by + pad + px * dpr;
   ctx.textAlign = "left";
   ctx.lineJoin = "round";
@@ -56,8 +53,9 @@ function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidth
     w: w / dpr, h: h / dpr, px,
   };
   glyphs.map.set(key, e);
-  glyphs.x += w;
-  glyphs.rowH = Math.max(glyphs.rowH, h);
+  glyphs.x = bx + w;
+  glyphs.y = by;
+  glyphs.rowH = Math.max(wraps ? 0 : glyphs.rowH, h);
   glyphs.dirty = true;
   return e;
 }
