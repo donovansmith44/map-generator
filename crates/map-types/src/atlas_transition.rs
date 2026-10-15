@@ -16,6 +16,15 @@ pub struct ArcRef {
     pub key: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "kind", content = "boundary", rename_all = "kebab-case", deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum TransitionBoundary {
+    Arc(ArcRef),
+    Ring(RegionGeom<ArcRef>),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -57,7 +66,7 @@ pub struct RecordedMapChange<N = AnyNodeId> {
     pub causes: Vec<RecordedMapCause>,
     pub arcs: Vec<ArcChange>,
     pub transfers: Vec<FaceTransfer<N>>,
-    pub script: TransitionScript<N, ArcRef>,
+    pub script: TransitionScript<N, TransitionBoundary>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

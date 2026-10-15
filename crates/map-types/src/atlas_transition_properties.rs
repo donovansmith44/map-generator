@@ -9,7 +9,7 @@ use atlas_graph_types::map_timing::{ChangeRowKind, RecordedMapCause, SourceChang
 use atlas_graph_types::text::{BibleTag, ConcordTag, VerseRef};
 use proptest::prelude::*;
 
-use crate::atlas_transition::{ArcChange, ArcRef, FaceHolding, FaceTransfer, RecordedMapChange};
+use crate::atlas_transition::{ArcChange, ArcRef, FaceHolding, FaceTransfer, RecordedMapChange, TransitionBoundary};
 use crate::boundary::{Orientation, RegionGeom, RegionPart};
 use crate::geom::UnitVec;
 use crate::transition::{TransitionDraw, TransitionScript, TransitionStep};
@@ -35,15 +35,19 @@ proptest! {
                 extent: (crate::transition::PlaceExtentKind::Point, crate::transition::PlaceExtentKind::Vicinity), radius_m: (0, seed),
             }, clip: Some(format!("subset-{seed}")) }] },
         };
+        let mut change = change;
+        let path = RegionGeom { parts: vec![RegionPart { cycle: vec![(ArcRef { store: format!("store-{seed}"), key: format!("outer-{seed}") }, Orientation::Forward)], holes: vec![vec![(ArcRef { store: format!("store-{seed}"), key: format!("hole-{seed}") }, Orientation::Reverse)]] }] };
+        change.script.steps.push(TransitionStep::Morph { boundary: TransitionBoundary::Ring(path.clone()), from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 3], to_pts: vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] }.into());
         let bytes = change.encode();
         let restored = RecordedMapChange::decode_on(&bytes, &readings).expect("compiled grounds are admitted on the same reading");
         prop_assert_eq!(&restored, &change, "stored change retains geometry, endpoints, identity and exact Scripture grounds");
+        prop_assert_eq!(&restored.script.steps[1].step, &change.script.steps[1].step, "whole-ring correspondence retains its exact oriented outer path and hole");
         prop_assert_eq!(restored.encode(), bytes.clone(), "one stored change has one canonical byte spelling");
         let missing = Readings { bible: Reading::<BibleTag>::of(vec![]).unwrap(), concord: Reading::<ConcordTag>::of(vec![]).unwrap() };
         prop_assert!(RecordedMapChange::decode_on(&bytes, &missing).is_err(), "Scripture proof cannot be decoded on another reading");
         let mut malformed = change.clone();
         malformed.script.steps.push(TransitionStep::Morph {
-            boundary: ArcRef { store: format!("store-{seed}"), key: format!("arc-{seed}") },
+            boundary: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("arc-{seed}") }),
             from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 2],
             to_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 1],
         }.into());
