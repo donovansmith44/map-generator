@@ -42,7 +42,7 @@ impl DecodeOn for RecordedMapChange<AnyNodeId> {
 
 fn transfer_value(transfer: &FaceTransfer<AnyNodeId>) -> Value {
     obj(vec![
-        ("subset", Value::Str(transfer.subset.clone())),
+        ("subset", Value::Str(transfer.subset.hex())),
         ("boundary", projected(&transfer.boundary)),
         ("from", holding_value(&transfer.from)),
         ("to", holding_value(&transfer.to)),
@@ -58,7 +58,7 @@ fn read_transfer(value: &Value, readings: &Readings) -> Result<FaceTransfer<AnyN
     let (to, to_path) = field(row, ROOT, "to")?;
     let (basis, basis_path) = field(row, ROOT, "basis")?;
     Ok(FaceTransfer {
-        subset: field_str(row, ROOT, "subset")?,
+        subset: atlas_graph_types::map_slice::ShapeId::parse(&field_str(row, ROOT, "subset")?).map_err(|error| CanonError::new("$.subset", format!("{error:?}")))?,
         boundary: read_projected(boundary, &boundary_path)?,
         from: read_holding(from, &from_path)?,
         to: read_holding(to, &to_path)?,

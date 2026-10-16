@@ -1,7 +1,7 @@
 use atlas_graph_types::edge::HoldingState;
-use atlas_graph_types::id::AnyNodeId;
+use atlas_graph_types::id::{AnyNodeId, ContentHash};
 use atlas_graph_types::ingest::ProvenanceId;
-use atlas_graph_types::map_slice::{FeatureCollection, StoredShape};
+use atlas_graph_types::map_slice::{FeatureCollection, ShapeId, StoredShape};
 use atlas_graph_types::map_timing::RecordedMapCause;
 use atlas_graph_types::place_versions::Basis;
 
@@ -13,8 +13,8 @@ use crate::transition::{TransitionScript, TransitionStep};
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ArcRef {
-    pub store: String,
-    pub key: String,
+    pub store: ContentHash,
+    pub key: ContentHash,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,8 +32,8 @@ pub enum TransitionBoundary {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ArcChange {
     pub arc: ArcRef,
-    pub before_shape: Option<String>,
-    pub after_shape: Option<String>,
+    pub before_shape: Option<ShapeId>,
+    pub after_shape: Option<ShapeId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub struct FaceHolding<N = AnyNodeId> {
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FaceTransfer<N = AnyNodeId, P = ProvenanceId> {
-    pub subset: String,
+    pub subset: ShapeId,
     pub boundary: RegionGeom<ArcRef>,
     pub from: Option<FaceHolding<N>>,
     pub to: Option<FaceHolding<N>>,
