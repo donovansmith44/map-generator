@@ -1,5 +1,6 @@
 use atlas_graph_types::edge::HoldingState;
 use atlas_graph_types::id::AnyNodeId;
+use atlas_graph_types::ingest::ProvenanceId;
 use atlas_graph_types::map_slice::{FeatureCollection, StoredShape};
 use atlas_graph_types::map_timing::RecordedMapCause;
 use atlas_graph_types::place_versions::Basis;
@@ -48,24 +49,24 @@ pub struct FaceHolding<N = AnyNodeId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct FaceTransfer<N = AnyNodeId> {
+pub struct FaceTransfer<N = AnyNodeId, P = ProvenanceId> {
     pub subset: String,
     pub boundary: RegionGeom<ArcRef>,
     pub from: Option<FaceHolding<N>>,
     pub to: Option<FaceHolding<N>>,
-    pub basis: Basis,
+    pub basis: Basis<P>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct RecordedMapChange<N = AnyNodeId> {
+pub struct RecordedMapChange<N = AnyNodeId, P = ProvenanceId> {
     pub year: i32,
     pub before_year: i32,
-    pub causes: Vec<RecordedMapCause>,
+    pub causes: Vec<RecordedMapCause<P>>,
     pub arcs: Vec<ArcChange>,
-    pub transfers: Vec<FaceTransfer<N>>,
+    pub transfers: Vec<FaceTransfer<N, P>>,
     pub script: TransitionScript<N, TransitionBoundary>,
 }
 
@@ -73,8 +74,8 @@ pub struct RecordedMapChange<N = AnyNodeId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapKeyframe<N = AnyNodeId> {
-    pub change: RecordedMapChange<N>,
+pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId> {
+    pub change: RecordedMapChange<N, P>,
     pub before: FeatureCollection,
     pub after: FeatureCollection,
 }
@@ -83,13 +84,13 @@ pub struct MapKeyframe<N = AnyNodeId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapTransition<N = AnyNodeId> {
+pub struct MapTransition<N = AnyNodeId, P = ProvenanceId> {
     pub from_year: i32,
     pub to_year: i32,
     pub origin: FeatureCollection,
     pub destination: FeatureCollection,
     pub shapes: Vec<StoredShape>,
-    pub keyframes: Vec<MapKeyframe<N>>,
+    pub keyframes: Vec<MapKeyframe<N, P>>,
     pub after_year: Option<i32>,
 }
 
@@ -97,7 +98,7 @@ pub struct MapTransition<N = AnyNodeId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub enum TransitionRefusal {
+pub enum TransitionRefusal<P = ProvenanceId> {
     MissingGrounds { year: i32 },
     MissingCorrespondence {
         year: i32,
@@ -111,7 +112,7 @@ pub enum TransitionRefusal {
         #[cfg_attr(feature = "openapi", schema(ignore))]
         shape: String,
     },
-    UnresolvedDating { causes: Vec<RecordedMapCause> },
+    UnresolvedDating { causes: Vec<RecordedMapCause<P>> },
     EndpointMismatch,
     InvalidWindow,
     NotRecorded,
@@ -121,9 +122,9 @@ pub enum TransitionRefusal {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub enum TransitionRead<N = AnyNodeId> {
-    Ready { transition: MapTransition<N> },
-    Refused { reason: TransitionRefusal, destination: FeatureCollection },
+pub enum TransitionRead<N = AnyNodeId, P = ProvenanceId> {
+    Ready { transition: MapTransition<N, P> },
+    Refused { reason: TransitionRefusal<P>, destination: FeatureCollection },
 }
 
 
