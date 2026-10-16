@@ -117,7 +117,7 @@ proptest! {
 proptest! {
     #[test]
     fn generic_inversion_retains_references_clips_and_reverse_composition(
-        entity in any::<u64>(), boundary in "[a-z]{1,20}", clip in "[a-z]{1,20}",
+        entity in any::<u64>(), boundary in "[a-z]{1,20}", clip in any::<u64>(),
         lat in -70.0f64..70.0, lon in -160.0f64..160.0, radius in any::<u32>()) {
         // Arrange
         use crate::transition::{invert, PlaceExtentKind, PlacedLabel};

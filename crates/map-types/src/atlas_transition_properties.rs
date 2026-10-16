@@ -114,6 +114,6 @@ proptest! {
         prop_assert!(serde_json::from_value::<ShapeId>(serde_json::json!(format!("{}0", shape.hex()))).is_err(), "an invalid-width source handle cannot enter a script");
         prop_assert_eq!(&arc_schema["properties"]["store"], &serde_json::json!({ "$ref": "#/components/schemas/ContentHash" }), "partition identity is named at the original ArcRef source");
         prop_assert_eq!(&arc_schema["properties"]["key"], &serde_json::json!({ "$ref": "#/components/schemas/ContentHash" }), "arc identity is named at the same source");
-        prop_assert!(change_schema["properties"]["after_shape"]["anyOf"].as_array().unwrap().contains(&serde_json::json!({ "$ref": "#/components/schemas/ShapeId" })), "an optional changed shape retains the shared named geometry identity");
+        prop_assert!(change_schema["properties"]["after_shape"]["oneOf"].as_array().unwrap().contains(&serde_json::json!({ "$ref": "#/components/schemas/ShapeId" })), "an optional changed shape retains the shared named geometry identity");
     }
 }
