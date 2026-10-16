@@ -113,11 +113,6 @@ pub struct RegionPart<B = BoundaryId> {
     pub holes: Vec<Vec<OrientedBoundary<B>>>,
 }
 
-/// A region's geometry. AMENDMENT to the §B sketch (phase-2 finding,
-/// recorded for owner review): real polities are routinely several
-/// separate pieces of land — a mainland and its islands — so a region
-/// is a LIST of parts, not one cycle. The sketch's single-cycle shape
-/// is the one-part case.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
