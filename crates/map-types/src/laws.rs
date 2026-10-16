@@ -218,13 +218,14 @@ fn validate_cycle(
     tl: &WorldTimeline,
     region: RegionId,
     interval: &Interval,
-    cycle: &[(BoundaryId, Orientation)],
+    cycle: &[crate::boundary::OrientedBoundary],
     v: &mut Vec<Violation>,
 ) {
     // Resolve each arc's geometry as valid at the interval's start —
     // the version any instant in the region interval sees first.
     let mut resolved: Vec<Option<&crate::boundary::Boundary>> = Vec::new();
-    for (bid, _) in cycle {
+    for edge in cycle {
+        let bid = &edge.boundary;
         let b = tl.boundaries.get(bid).and_then(|h| h.at(&interval.from));
         if b.is_none() {
             v.push(Violation::DanglingBoundary { region, boundary: *bid });
@@ -238,8 +239,8 @@ fn validate_cycle(
         let j = (i + 1) % cycle.len();
         let (Some(a), Some(b)) = (resolved[i], resolved[j]) else { continue };
         let (Some((_, a_end)), Some((b_start, _))) = (
-            oriented_endpoints(&a.pts, cycle[i].1),
-            oriented_endpoints(&b.pts, cycle[j].1),
+            oriented_endpoints(&a.pts, cycle[i].orientation),
+            oriented_endpoints(&b.pts, cycle[j].orientation),
         ) else {
             continue;
         };

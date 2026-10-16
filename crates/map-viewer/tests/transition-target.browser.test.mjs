@@ -537,7 +537,7 @@ for (const fixture of [
                 const sourceFallback = target.crossfades;
                 let partial, inconsistent = null;
                 if (reverse) {
-                    const boundary = morph.step.boundary.boundary.parts[0].cycle.map(([arc]) => arc);
+                    const boundary = morph.step.boundary.boundary.parts[0].cycle.map(edge => edge.boundary);
                     const companions = frame.change.script.steps.filter(row => row.step.step === 'segment-fade' && row.step.entity.id === morph.step.entity.id);
                     const same = (left, right) => left.store === right.store && left.key === right.key;
                     const unchanged = boundary.find(arc => !companions.some(row => same(arc, row.step.segment.boundary)));

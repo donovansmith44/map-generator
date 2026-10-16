@@ -605,7 +605,7 @@ pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
                 )],
             },
         );
-        RegionPart { cycle: vec![(bid, Orientation::Forward)], holes: Vec::new() }
+        RegionPart { cycle: vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }], holes: Vec::new() }
     };
 
     let region = |tl: &mut WorldTimeline, key: &str, label: &str, rings: &[&[(f64, f64)]]| {

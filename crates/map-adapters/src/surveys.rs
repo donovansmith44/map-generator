@@ -1377,7 +1377,7 @@ fn add_survey(tl: &mut WorldTimeline, s: &SurveySpec, atlas: Option<&AtlasExport
                 valid,
                 RegionGeom {
                     parts: vec![RegionPart {
-                        cycle: vec![(boundary_id, Orientation::Forward)],
+                        cycle: vec![map_types::OrientedBoundary { boundary: boundary_id, orientation: Orientation::Forward }],
                         holes: vec![],
                     }],
                 },
@@ -1493,7 +1493,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
             interval,
             RegionGeom {
                 parts: vec![RegionPart {
-                    cycle: vec![(bid, Orientation::Forward)],
+                    cycle: vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }],
                     holes: vec![],
                 }],
             },

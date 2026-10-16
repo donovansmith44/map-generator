@@ -122,7 +122,7 @@ fn two_region_world() -> WorldTimeline {
     boundaries.insert(BoundaryId(fixture_hash(S_SEED)), open_hist(-2000, shared));
     boundaries.insert(BoundaryId(fixture_hash(E_SEED)), open_hist(-2000, east));
 
-    let region = |name: &str, cycle: Vec<(BoundaryId, Orientation)>| RegionHistory {
+    let region = |name: &str, cycle: Vec<crate::boundary::OrientedBoundary>| RegionHistory {
         class: RegionClass::default(),
         label_history: vec![(Interval::open_from(tp(-2000)), name.to_string())],
         geom_history: vec![(
@@ -131,8 +131,8 @@ fn two_region_world() -> WorldTimeline {
         )],
     };
     let mut regions = BTreeMap::new();
-    regions.insert(RegionId(fixture_hash(A_SEED)), region("Westland", vec![(BoundaryId(fixture_hash(W_SEED)), Orientation::Forward), (BoundaryId(fixture_hash(S_SEED)), Orientation::Forward)]));
-    regions.insert(RegionId(fixture_hash(B_SEED)), region("Eastland", vec![(BoundaryId(fixture_hash(S_SEED)), Orientation::Reverse), (BoundaryId(fixture_hash(E_SEED)), Orientation::Forward)]));
+    regions.insert(RegionId(fixture_hash(A_SEED)), region("Westland", vec![crate::boundary::OrientedBoundary { boundary: BoundaryId(fixture_hash(W_SEED)), orientation: Orientation::Forward }, crate::boundary::OrientedBoundary { boundary: BoundaryId(fixture_hash(S_SEED)), orientation: Orientation::Forward }]));
+    regions.insert(RegionId(fixture_hash(B_SEED)), region("Eastland", vec![crate::boundary::OrientedBoundary { boundary: BoundaryId(fixture_hash(S_SEED)), orientation: Orientation::Reverse }, crate::boundary::OrientedBoundary { boundary: BoundaryId(fixture_hash(E_SEED)), orientation: Orientation::Forward }]));
 
     WorldTimeline { anchor: None, boundaries, regions, events: Vec::new(), atlas_pin: None }
 }
@@ -343,7 +343,7 @@ fn law02_partition_structure() {
     // Reference an arc the timeline doesn't hold.
     let mut dangling = world.clone();
     let ghost = BoundaryId(fixture_hash(99));
-    dangling.regions.get_mut(&RegionId(fixture_hash(A_SEED))).unwrap().geom_history[0].1.parts[0].cycle[0].0 = ghost;
+    dangling.regions.get_mut(&RegionId(fixture_hash(A_SEED))).unwrap().geom_history[0].1.parts[0].cycle[0].boundary = ghost;
     let violations = validate_partition_structure(&dangling);
     assert!(violations
         .iter()

@@ -1252,7 +1252,7 @@ impl TransitionEncoder for JsonTransitionEncoder {
                         .collect::<Vec<_>>(),
                     "child": format!("{:016x}", child.0 .0),
                 }),
-                TransitionStep::PointTrack { entity, from, to, extent, radius_m } => serde_json::json!({ "kind": "point_track", "entity": entity.0.hex(), "from": pts_json(&[*from]), "to": pts_json(&[*to]), "extent": [format!("{:?}",extent.0), format!("{:?}",extent.1)], "radius_m": radius_m }),
+                TransitionStep::PointTrack { entity, from, to } => serde_json::json!({ "kind": "point_track", "entity": entity.0.hex(), "from": { "at": pts_json(&[from.at]), "extent": format!("{:?}", from.extent), "radius_m": from.radius_m }, "to": { "at": pts_json(&[to.at]), "extent": format!("{:?}", to.extent), "radius_m": to.radius_m } }),
                 TransitionStep::PointFade { entity, at, radius_m, appears } => serde_json::json!({ "kind": "point_fade", "entity": entity.0.hex(), "at": pts_json(&[*at]), "radius_m": radius_m, "appears": appears }),
                 TransitionStep::SegmentTrack { entity, segment, from, to } => serde_json::json!({ "kind": "segment_track", "entity": entity.0.hex(), "segment": segment.0.hex(), "from": pts_json(from), "to": pts_json(to) }),
                 TransitionStep::SegmentFade { entity, segment, course, appears } => serde_json::json!({ "kind": "segment_fade", "entity": entity.0.hex(), "segment": segment.0.hex(), "course": pts_json(course), "appears": appears }),

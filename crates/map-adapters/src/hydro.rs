@@ -90,7 +90,7 @@ pub fn ingest_water(
         for f in &features {
             let name = f.name.clone().unwrap_or_else(|| w.label_for_unnamed.to_string());
             for poly in &f.polygons {
-                let mut cycles: Vec<Vec<(BoundaryId, Orientation)>> = Vec::new();
+                let mut cycles: Vec<Vec<map_types::OrientedBoundary>> = Vec::new();
                 for ring in std::iter::once(&poly.outer).chain(&poly.holes) {
                     // Water keeps its full precision: no snap — the
                     // coastline IS the detail we came for.
@@ -122,7 +122,7 @@ pub fn ingest_water(
                             )],
                         },
                     );
-                    cycles.push(vec![(bid, Orientation::Forward)]);
+                    cycles.push(vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }]);
                 }
                 if cycles.is_empty() {
                     continue;
@@ -177,7 +177,7 @@ pub fn ingest_ocean(
     let mut tl = WorldTimeline::default();
     let features =
         parse_features(land_text).map_err(|e| IngestError::Parse("land".to_string(), e))?;
-    let mut holes: Vec<Vec<(BoundaryId, Orientation)>> = Vec::new();
+    let mut holes: Vec<Vec<map_types::OrientedBoundary>> = Vec::new();
     for f in &features {
         for poly in &f.polygons {
             // Only the land's outer rings shape the sea; land's own
@@ -209,7 +209,7 @@ pub fn ingest_ocean(
                     )],
                 },
             );
-            holes.push(vec![(bid, Orientation::Forward)]);
+            holes.push(vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }]);
         }
     }
     let rid = RegionId(hash_id("natural-earth/water/the sea"));

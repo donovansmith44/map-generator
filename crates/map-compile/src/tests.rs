@@ -269,7 +269,7 @@ mod bridge_laws {
             class: RegionClass::Land,
             label_history: vec![(iv, "Westia".to_string())],
             geom_history: vec![(iv, RegionGeom {
-                parts: vec![RegionPart { cycle: vec![(bid, Orientation::Forward)], holes: vec![] }],
+                parts: vec![RegionPart { cycle: vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }], holes: vec![] }],
             })],
         });
         tl

@@ -103,7 +103,7 @@ pub fn bridge_filtered(
                 .parts
                 .first()
                 .and_then(|part| part.cycle.first())
-                .and_then(|(bid, _)| tl.boundaries.get(bid))
+                .and_then(|edge| tl.boundaries.get(&edge.boundary))
                 .and_then(|bh| bh.versions.first())
                 .map(|(_, b)| b.provenance.clone())
                 .unwrap_or_default();
@@ -203,7 +203,7 @@ pub fn bridge_filtered(
 fn resolve_cycle(
     store: &mut CanonStore,
     tl: &WorldTimeline,
-    cycle: &[(map_types::BoundaryId, Orientation)],
+    cycle: &[map_types::OrientedBoundary],
     iv: &map_types::Interval,
 ) -> Result<Option<map_canon::BorderId>, String> {
     // An EMPTY cycle is the whole sphere (the world-ocean part): it
@@ -217,7 +217,9 @@ fn resolve_cycle(
         ]))));
     }
     let mut ring: Vec<map_types::UnitVec> = Vec::new();
-    for (bid, orientation) in cycle {
+    for edge in cycle {
+        let bid = &edge.boundary;
+        let orientation = &edge.orientation;
         let hist = tl
             .boundaries
             .get(bid)

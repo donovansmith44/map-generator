@@ -529,8 +529,8 @@ fn real_source_ingests_lawfully() {
     for (rid, hist) in &tl.regions {
         for (_, geom) in &hist.geom_history {
             for part in &geom.parts {
-                for (b, _) in part.cycle.iter().chain(part.holes.iter().flatten()) {
-                    arc_users.entry(*b).or_default().insert(*rid);
+                for edge in part.cycle.iter().chain(part.holes.iter().flatten()) {
+                    arc_users.entry(edge.boundary).or_default().insert(*rid);
                 }
             }
         }

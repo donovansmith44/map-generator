@@ -12,12 +12,22 @@ pub enum TransitionStep<R = RegionId, B = BoundaryId> {
     FadeOut { region: R },
     SplitAlong { parent: R, seam: Vec<UnitVec>, children: Vec<R> },
     MergeAcross { parents: Vec<R>, child: R },
-    PointTrack { entity: R, from: UnitVec, to: UnitVec, extent: (PlaceExtentKind, PlaceExtentKind), radius_m: (u32, u32) },
+    PointTrack { entity: R, from: PointTrackEndpoint, to: PointTrackEndpoint },
     PointFade { entity: R, at: UnitVec, radius_m: u32, appears: bool },
     SegmentTrack { entity: R, segment: B, from: Vec<UnitVec>, to: Vec<UnitVec> },
     SegmentFade { entity: R, segment: B, course: Vec<UnitVec>, appears: bool },
     LabelTrack { entity: R, text: String, from: UnitVec, to: UnitVec },
     LabelFade { entity: R, from: Option<PlacedLabel>, to: Option<PlacedLabel> },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PointTrackEndpoint {
+    pub at: UnitVec,
+    pub extent: PlaceExtentKind,
+    pub radius_m: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,7 +88,7 @@ pub fn invert<R, B>(script: TransitionScript<R, B>) -> TransitionScript<R, B> {
             TransitionStep::FadeOut { region } => TransitionStep::FadeIn { region },
             TransitionStep::SplitAlong { parent, children, .. } => TransitionStep::MergeAcross { parents: children, child: parent },
             TransitionStep::MergeAcross { parents, child } => TransitionStep::SplitAlong { parent: child, seam: Vec::new(), children: parents },
-            TransitionStep::PointTrack { entity, from, to, extent, radius_m } => TransitionStep::PointTrack { entity, from: to, to: from, extent: (extent.1,extent.0), radius_m: (radius_m.1,radius_m.0) },
+            TransitionStep::PointTrack { entity, from, to } => TransitionStep::PointTrack { entity, from: to, to: from },
             TransitionStep::PointFade { entity, at, radius_m, appears } => TransitionStep::PointFade { entity, at, radius_m, appears: !appears },
             TransitionStep::SegmentTrack { entity, segment, from, to } => TransitionStep::SegmentTrack { entity, segment, from: to, to: from },
             TransitionStep::SegmentFade { entity, segment, course, appears } => TransitionStep::SegmentFade { entity, segment, course, appears: !appears },

@@ -211,9 +211,9 @@ fn build_epoch(
     // Assemble per-region geometry, parts in first-seen order.
     let mut regions: BTreeMap<String, RegionGeom> = BTreeMap::new();
     for (ring_idx, owner) in owners.iter().enumerate() {
-        let cycle: Vec<(BoundaryId, Orientation)> = ext.cycles[ring_idx]
+        let cycle: Vec<map_types::OrientedBoundary> = ext.cycles[ring_idx]
             .iter()
-            .map(|&(arc, dir)| (arc_ids[arc], orient(dir)))
+            .map(|&(arc, dir)| map_types::OrientedBoundary { boundary: arc_ids[arc], orientation: orient(dir) })
             .collect();
         let geom = regions.entry(owner.name.clone()).or_insert(RegionGeom { parts: Vec::new() });
         while geom.parts.len() <= owner.part {
@@ -316,7 +316,7 @@ pub fn ingest(config: &IngestConfig, epochs: &[EpochSource]) -> Result<Ingest, I
         let mut v: Vec<(BoundaryId, Orientation)> = geom
             .parts
             .iter()
-            .flat_map(|p| p.cycle.iter().chain(p.holes.iter().flatten()).copied())
+            .flat_map(|p| p.cycle.iter().chain(p.holes.iter().flatten()).map(|edge| (edge.boundary, edge.orientation)))
             .collect();
         v.sort();
         v
@@ -472,7 +472,9 @@ pub fn fidelity_violations(
         for part in &geom.parts {
             for cycle in std::iter::once(&part.cycle).chain(&part.holes) {
                 let mut ring: Vec<(u64, u64, u64)> = Vec::new();
-                for (bid, orientation) in cycle {
+                for edge in cycle {
+                    let bid = &edge.boundary;
+                    let orientation = &edge.orientation;
                     let Some(b) = tl.boundaries.get(bid).and_then(|h| h.at(&at)) else {
                         violations.push(format!("{name}: arc {bid:?} unresolved at {}", epoch.year));
                         continue;

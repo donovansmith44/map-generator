@@ -222,7 +222,7 @@ pub fn ingest_terrain(grid: &ElevationGrid, from: TimePoint) -> WorldTimeline {
                 },
             );
             parts.push(RegionPart {
-                cycle: vec![(bid, Orientation::Forward)],
+                cycle: vec![map_types::OrientedBoundary { boundary: bid, orientation: Orientation::Forward }],
                 holes: vec![],
             });
         }

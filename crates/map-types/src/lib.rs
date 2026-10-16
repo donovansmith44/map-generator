@@ -57,7 +57,7 @@ pub mod atlas {
 pub use algebra::{mconcat, Monoid};
 pub use boundary::{
     AtlasPlaceRef, BorderSurvey, Boundary, BoundarySource, EdgeCharacter, InterpolationMethod,
-    Orientation, RegionGeom, RegionPart,
+    Orientation, OrientedBoundary, RegionGeom, RegionPart,
 };
 pub use contracts::{ChronoSpan, ChronologyExport, GazetteerEntry, GazetteerExport};
 pub use encode::{EncodeError, SceneEncoder, TransitionEncoder};
@@ -73,7 +73,7 @@ pub use timeline::{
     Anchor, AtlasEventRef, AtlasPin, BoundaryHistory, ChangeEvent, ChangeKind, Interval,
     RegionClass, RegionHistory, WorldTimeline,
 };
-pub use transition::{PlaceExtentKind, TransitionDraw, TransitionScript, TransitionStep};
+pub use transition::{PointTrackEndpoint, PlaceExtentKind, TransitionDraw, TransitionScript, TransitionStep};
 
 pub mod chart;
 #[cfg(test)]

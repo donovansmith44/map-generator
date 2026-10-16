@@ -305,7 +305,7 @@ void main() {
   function boundaryReferences(boundary) {
     const parts = boundary?.kind === "ring" ? boundary.boundary?.parts : null;
     if (!parts || parts.length !== 1 || parts[0].holes.length !== 0) return null;
-    const arcs = parts[0].cycle.map(([arc]) => arc);
+    const arcs = parts[0].cycle.map(edge => edge.boundary);
     return arcs.length > 0 && uniqueArcs(arcs) ? arcs : null;
   }
 

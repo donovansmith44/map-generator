@@ -88,6 +88,15 @@ pub enum Orientation {
     Reverse,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct OrientedBoundary<B = BoundaryId> {
+    pub boundary: B,
+    pub orientation: Orientation,
+}
+
 /// One connected piece of a region: an outer cycle of oriented boundary
 /// references, plus hole cycles. Consecutive arcs must connect
 /// end-to-start — the cycle-continuity validator proves it (law 2,
@@ -100,8 +109,8 @@ pub enum Orientation {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RegionPart<B = BoundaryId> {
-    pub cycle: Vec<(B, Orientation)>,
-    pub holes: Vec<Vec<(B, Orientation)>>,
+    pub cycle: Vec<OrientedBoundary<B>>,
+    pub holes: Vec<Vec<OrientedBoundary<B>>>,
 }
 
 /// A region's geometry. AMENDMENT to the §B sketch (phase-2 finding,

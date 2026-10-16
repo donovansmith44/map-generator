@@ -37,6 +37,35 @@ proptest! {
     }
 
     #[test]
+    fn directed_paths_and_point_tracks_publish_named_fields(
+        boundary in any::<u32>(), entity in any::<u64>(), radius in any::<u32>(),
+        lat in -80.0f64..80.0, lon in -170.0f64..170.0) {
+        // Arrange
+        use crate::boundary::{Orientation, RegionGeom, RegionPart};
+        use crate::transition::PlaceExtentKind;
+        let from = UnitVec::from_lat_lon_deg(lat, lon);
+        let to = UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1);
+        let region = RegionGeom { parts: vec![RegionPart { cycle: vec![crate::boundary::OrientedBoundary { boundary: boundary, orientation: Orientation::Forward }], holes: vec![vec![crate::boundary::OrientedBoundary { boundary: boundary, orientation: Orientation::Reverse }]] }] };
+        let step = TransitionStep::<u64, u32>::PointTrack { entity, from: crate::transition::PointTrackEndpoint { at: from, extent: PlaceExtentKind::Point, radius_m: 0 }, to: crate::transition::PointTrackEndpoint { at: to, extent: PlaceExtentKind::Vicinity, radius_m: radius } };
+        // Act
+        let path = serde_json::to_value(&region).unwrap();
+        let track = serde_json::to_value(&step).unwrap();
+        // Assert
+        prop_assert_eq!(&path["parts"][0]["cycle"][0], &serde_json::json!({ "boundary": boundary, "orientation": "Forward" }), "the original directed outer arc has named fields");
+        prop_assert_eq!(&path["parts"][0]["holes"][0][0], &serde_json::json!({ "boundary": boundary, "orientation": "Reverse" }), "a hole retains its original reverse direction through the same record");
+        prop_assert_eq!(&track["from"], &serde_json::json!({ "at": from, "extent": "Point", "radius_m": 0 }), "the origin point owns its original extent and radius");
+        prop_assert_eq!(&track["to"], &serde_json::json!({ "at": to, "extent": "Vicinity", "radius_m": radius }), "the destination point owns its original extent and radius");
+        prop_assert_eq!(serde_json::from_value::<RegionGeom<u32>>(path).unwrap(), region, "the named directed path roundtrips without changing topology");
+        prop_assert_eq!(serde_json::from_value::<TransitionStep<u64, u32>>(track.clone()).unwrap(), step.clone(), "the named endpoints roundtrip every original point fact");
+        let reversed = crate::transition::invert(TransitionScript { steps: vec![step.into()] });
+        let reverse = serde_json::to_value(&reversed.steps[0].step).unwrap();
+        prop_assert_eq!(&reverse["from"], &track["to"], "inversion moves the complete destination endpoint to the origin");
+        prop_assert_eq!(&reverse["to"], &track["from"], "inversion moves the complete origin endpoint to the destination");
+        prop_assert!(serde_json::from_value::<crate::boundary::OrientedBoundary<u32>>(serde_json::json!([boundary, "Forward"])).is_err(), "a positional pair cannot bypass the named directed boundary source");
+        prop_assert!(serde_json::from_value::<TransitionStep<u64, u32>>(serde_json::json!({ "step": "point-track", "entity": entity, "from": from, "to": to, "extent": ["Point", "Vicinity"], "radius_m": [0, radius] })).is_err(), "legacy positional point facts cannot bypass the named endpoint source");
+    }
+
+    #[test]
     fn unit_vector_serialization_roundtrips_only_admitted_points(lat in -89.0f64..89.0, lon in -179.0f64..179.0, invalid in 2.0f64..20.0) {
         let point = UnitVec::from_lat_lon_deg(lat,lon);
         let json = serde_json::to_string(&point).expect("an admitted point serializes");
@@ -100,7 +129,7 @@ proptest! {
             TransitionStep::FadeOut { region: entity },
             TransitionStep::SplitAlong { parent: entity, seam: vec![from, to], children: vec![entity] },
             TransitionStep::MergeAcross { parents: vec![entity], child: entity },
-            TransitionStep::PointTrack { entity, from, to, extent: (PlaceExtentKind::Point, PlaceExtentKind::Vicinity), radius_m: (0, radius) },
+            TransitionStep::PointTrack { entity, from: crate::transition::PointTrackEndpoint { at: from, extent: PlaceExtentKind::Point, radius_m: 0 }, to: crate::transition::PointTrackEndpoint { at: to, extent: PlaceExtentKind::Vicinity, radius_m: radius } },
             TransitionStep::PointFade { entity, at: from, radius_m: radius, appears: true },
             TransitionStep::SegmentTrack { entity, segment: boundary.clone(), from: vec![from], to: vec![to] },
             TransitionStep::SegmentFade { entity, segment: boundary.clone(), course: vec![from, to], appears: true },
