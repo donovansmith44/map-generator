@@ -7,7 +7,8 @@ use crate::transition::{TransitionDraw, TransitionScript, TransitionStep};
 proptest! {
     #[test]
     fn generic_script_composition_preserves_exact_clip_and_presentation_order(
-        region in any::<u64>(), boundary in any::<u32>(), clip in "[a-z0-9]{1,20}") {
+        region in any::<u64>(), boundary in any::<u32>(), clip in any::<u64>()) {
+        let clip = atlas_graph_types::map_slice::ShapeId::parse(&format!("{clip:032x}")).unwrap();
         let first = TransitionDraw { step: TransitionStep::<u64,u32>::FadeIn { region }, clip: Some(clip.clone()) };
         let second = TransitionDraw { step: TransitionStep::<u64,u32>::Morph { entity: u64::from(boundary), boundary, from_pts: vec![UnitVec::from_lat_lon_deg(0.0,0.0)], to_pts: vec![UnitVec::from_lat_lon_deg(0.0,1.0)] }, clip: None };
         let left = TransitionScript { steps: vec![first.clone()] };
@@ -79,9 +80,10 @@ proptest! {
 proptest! {
     #[test]
     fn script_admission_keeps_matched_points_and_refuses_broken_tracks(
-        boundary in any::<u32>(), clip in "[a-z0-9]{1,20}",
+        boundary in any::<u32>(), clip in any::<u64>(),
         lat in -80.0f64..80.0, lon in -170.0f64..170.0, n in 2usize..12) {
         use crate::atlas_transition::{admit_script, TransitionRefusal};
+        let clip = atlas_graph_types::map_slice::ShapeId::parse(&format!("{clip:032x}")).unwrap();
         let start = UnitVec::from_lat_lon_deg(lat, lon);
         let end = UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1);
         let make = |to: Vec<UnitVec>| TransitionScript { steps: vec![TransitionDraw {

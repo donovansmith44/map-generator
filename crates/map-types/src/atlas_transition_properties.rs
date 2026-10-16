@@ -20,26 +20,28 @@ proptest! {
         seed in any::<u32>(), holding_case in 0u8..3, year in -4004i32..100, first in 1u16..40, count in 1u16..10,
         wording in "[a-z ]{1,30}", lat in -80.0f64..80.0, lon in -170.0f64..170.0) {
         prop_assume!(year != 0);
-        let units: Vec<VerseRef> = (first..first+count).map(|verse| VerseRef { book: 1, chapter: 1, verse }).collect();
+        let units: Vec<VerseRef> = (first..first+count).map(|verse| VerseRef { book: atlas_graph_types::text::BookId::new(1).unwrap(), chapter: 1, verse }).collect();
         let readings = Readings { bible: Reading::<BibleTag>::of(units.clone()).unwrap(), concord: Reading::<ConcordTag>::of(vec![]).unwrap() };
         let admitted = readings.bible.place(&Written::new(units[0].clone(), units[units.len()-1].clone()).unwrap()).unwrap();
         let basis = Basis { reading: Justification { text: Some(wording.clone()), grounds: BTreeSet::from([Ground::Scripture(admitted)]) }, alternatives: vec![], provenance: format!("source-{seed}") };
-        let arc = ArcRef { store: format!("store-{seed}"), key: format!("arc-{seed}") };
+        let hash = |offset: u32| atlas_graph_types::id::ContentHash::from_hex(&format!("{:032x}", u64::from(seed) + u64::from(offset))).unwrap();
+        let shape = atlas_graph_types::map_slice::ShapeId::parse(&hash(0).hex()).unwrap();
+        let arc = ArcRef { store: hash(0), key: hash(1) };
         let node = PlaceId::new(format!("place-{seed}")).erase();
         let change = RecordedMapChange {
             year, before_year: -4004, causes: vec![RecordedMapCause { kind: ChangeRowKind::FirstGrounded, dating: SourceChangeDating::Version(VersionDate::Year(year)), basis: basis.clone() }],
-            arcs: vec![ArcChange { arc: arc.clone(), before_shape: None, after_shape: Some(format!("shape-{seed}")) }],
-            transfers: vec![FaceTransfer { subset: format!("subset-{seed}"), boundary: RegionGeom { parts: vec![RegionPart { cycle: vec![crate::boundary::OrientedBoundary { boundary: arc, orientation: Orientation::Forward }], holes: vec![] }] }, from: None, to: Some(FaceHolding { territory: node.clone(), holding: match holding_case { 0 => None, 1 => Some(HoldingState::Unclaimed), _ => Some(HoldingState::Held { holder: Holder::Polity(PolityId::new(format!("holder-{seed}"))), how: HoldHow::Governs }) } }), basis }],
+            arcs: vec![ArcChange { arc: arc.clone(), before_shape: None, after_shape: Some(shape) }],
+            transfers: vec![FaceTransfer { subset: shape, boundary: RegionGeom { parts: vec![RegionPart { cycle: vec![crate::boundary::OrientedBoundary { boundary: arc, orientation: Orientation::Forward }], holes: vec![] }] }, from: None, to: Some(FaceHolding { territory: node.clone(), holding: match holding_case { 0 => None, 1 => Some(HoldingState::Unclaimed), _ => Some(HoldingState::Held { holder: Holder::Polity(PolityId::new(format!("holder-{seed}"))), how: HoldHow::Governs }) } }), basis }],
             script: TransitionScript { steps: vec![TransitionDraw { step: TransitionStep::PointTrack {
                 entity: node.clone(),
                 from: crate::transition::PointTrackEndpoint { at: UnitVec::from_lat_lon_deg(lat, lon), extent: crate::transition::PlaceExtentKind::Point, radius_m: 0 },
                 to: crate::transition::PointTrackEndpoint { at: UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1), extent: crate::transition::PlaceExtentKind::Vicinity, radius_m: seed },
-            }, clip: Some(format!("subset-{seed}")) }] },
+            }, clip: Some(shape) }] },
         };
         let mut change = change;
-        let path = RegionGeom { parts: vec![RegionPart { cycle: vec![crate::boundary::OrientedBoundary { boundary: ArcRef { store: format!("store-{seed}"), key: format!("outer-{seed}") }, orientation: Orientation::Forward }], holes: vec![vec![crate::boundary::OrientedBoundary { boundary: ArcRef { store: format!("store-{seed}"), key: format!("hole-{seed}") }, orientation: Orientation::Reverse }]] }] };
+        let path = RegionGeom { parts: vec![RegionPart { cycle: vec![crate::boundary::OrientedBoundary { boundary: ArcRef { store: hash(0), key: hash(2) }, orientation: Orientation::Forward }], holes: vec![vec![crate::boundary::OrientedBoundary { boundary: ArcRef { store: hash(0), key: hash(3) }, orientation: Orientation::Reverse }]] }] };
         change.script.steps.push(TransitionStep::Morph { entity: node.clone(), boundary: TransitionBoundary::Ring(path.clone()), from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 3], to_pts: vec![UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1); 3] }.into());
-        change.script.steps.push(TransitionStep::SegmentFade { entity: node.clone(), segment: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("complete-{seed}") }), course: vec![UnitVec::from_lat_lon_deg(lat, lon), UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1)], appears: true }.into());
+        change.script.steps.push(TransitionStep::SegmentFade { entity: node.clone(), segment: TransitionBoundary::Arc(ArcRef { store: hash(0), key: hash(4) }), course: vec![UnitVec::from_lat_lon_deg(lat, lon), UnitVec::from_lat_lon_deg(lat + 0.1, lon + 0.1)], appears: true }.into());
         let bytes = change.encode();
         let restored = RecordedMapChange::decode_on(&bytes, &readings).expect("compiled grounds are admitted on the same reading");
         prop_assert_eq!(&restored, &change, "stored change retains geometry, endpoints, identity and exact Scripture grounds");
@@ -50,7 +52,7 @@ proptest! {
         let mut malformed = change.clone();
         malformed.script.steps.push(TransitionStep::Morph {
             entity: node.clone(),
-            boundary: TransitionBoundary::Arc(ArcRef { store: format!("store-{seed}"), key: format!("arc-{seed}") }),
+            boundary: TransitionBoundary::Arc(ArcRef { store: hash(0), key: hash(1) }),
             from_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 2],
             to_pts: vec![UnitVec::from_lat_lon_deg(lat, lon); 1],
         }.into());

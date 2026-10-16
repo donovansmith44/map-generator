@@ -53,7 +53,7 @@ pub struct PlacedLabel {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct TransitionDraw<R = RegionId, B = BoundaryId> {
     pub step: TransitionStep<R, B>,
-    pub clip: Option<String>,
+    pub clip: Option<atlas_graph_types::map_slice::ShapeId>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
