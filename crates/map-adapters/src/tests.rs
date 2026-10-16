@@ -24,7 +24,7 @@ fn tp(year: i32) -> TimePoint {
 }
 
 fn creation_anchor() -> Anchor {
-    let gen11 = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 1 });
+    let gen11 = BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(1).expect("the original book index is admitted"), chapter: 1, verse: 1 });
     Anchor {
         frame: "biblical (Ussher tradition)".to_string(),
         at: tp(-4004),

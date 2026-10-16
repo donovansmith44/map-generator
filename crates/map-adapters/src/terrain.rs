@@ -178,7 +178,7 @@ fn hash_id(tag: &str) -> ContentHash {
 /// free), valid from `from` to the open edge of knowledge.
 pub fn ingest_terrain(grid: &ElevationGrid, from: TimePoint) -> WorldTimeline {
     let gen_1_9 = || {
-        let v = BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse: 9 });
+        let v = BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(1).expect("the original book index is admitted"), chapter: 1, verse: 9 });
         LocusRange::new(v.clone(), v).expect("a verse is a range")
     };
     let justification = Justification {

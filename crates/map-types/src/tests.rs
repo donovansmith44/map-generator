@@ -730,7 +730,7 @@ fn law11_encoder_terminality() {
 // --------------------------------------- law 12: Bible preference
 
 fn survey_boundary(place: &str) -> Boundary {
-    let verse = |v| BibleLocus::whole(VerseRef { book: 4, chapter: 34, verse: v });
+    let verse = |v| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(4).unwrap(), chapter: 34, verse: v });
     Boundary {
         pts: vec![uv(31.0, 34.0), uv(33.0, 36.0)],
         character: EdgeCharacter::Line,

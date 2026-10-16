@@ -54,7 +54,7 @@ pub fn ingest_water(
     waters: &[WaterSource],
 ) -> Result<WorldTimeline, IngestError> {
     let gen_1_9_10 = || {
-        let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
+        let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(1).expect("the original book index is admitted"), chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
     };
     let justification = Justification {
@@ -161,7 +161,7 @@ pub fn ingest_ocean(
     land_text: &str,
 ) -> Result<WorldTimeline, IngestError> {
     let gen_1_9_10 = || {
-        let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
+        let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(1).expect("the original book index is admitted"), chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
     };
     let justification = Justification {

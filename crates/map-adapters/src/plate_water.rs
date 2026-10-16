@@ -567,7 +567,7 @@ fn hash_id(tag: &str) -> ContentHash {
 /// every point derived from plate pixels through `plate_chart()`.
 pub fn plate_water_timeline(from: TimePoint) -> WorldTimeline {
     let gen_1_9_10 = || {
-        let v = |verse| BibleLocus::whole(VerseRef { book: 1, chapter: 1, verse });
+        let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(1).expect("the original book index is admitted"), chapter: 1, verse });
         LocusRange::new(v(9), v(10)).expect("GEN 1:9-10 is ordered")
     };
     let source = SourceId::new("authored:plate-trace");

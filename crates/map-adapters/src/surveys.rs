@@ -1190,8 +1190,8 @@ const ROUTES: &[RouteSpec] = &[
 /// no region, no closure, a way through the land.
 fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>) {
     let verses = LocusRange::new(
-        BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_from, verse: r.verse_from }),
-        BibleLocus::whole(VerseRef { book: r.book, chapter: r.chapter_to, verse: r.verse_to }),
+        BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(r.book).expect("the original book index is admitted"), chapter: r.chapter_from, verse: r.verse_from }),
+        BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(r.book).expect("the original book index is admitted"), chapter: r.chapter_to, verse: r.verse_to }),
     )
     .expect("route verses are ordered");
     let justification = Justification {
@@ -1256,7 +1256,7 @@ fn add_route(tl: &mut WorldTimeline, r: &RouteSpec, atlas: Option<&AtlasExports>
 }
 
 fn verses_of(s: &SurveySpec) -> LocusRange<atlas_graph_types::covenant::BibleTag> {
-    let v = |verse| BibleLocus::whole(VerseRef { book: s.book, chapter: s.chapter, verse });
+    let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(s.book).expect("the original book index is admitted"), chapter: s.chapter, verse });
     LocusRange::new(v(s.verse_from), v(s.verse_to)).expect("survey verses are ordered")
 }
 
@@ -1452,7 +1452,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
 
     for (i, ph) in e.phases.iter().enumerate() {
         let verses = {
-            let v = |verse| BibleLocus::whole(VerseRef { book: ph.book, chapter: ph.chapter, verse });
+            let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(ph.book).expect("the original book index is admitted"), chapter: ph.chapter, verse });
             LocusRange::new(v(ph.verse_from), v(ph.verse_to)).expect("era verses are ordered")
         };
         let justification = Justification {
@@ -1515,7 +1515,7 @@ fn add_era(tl: &mut WorldTimeline, e: &EraSpec, atlas: Option<&AtlasExports>) {
     }
 
     if let (Some((_, book, chapter, v0, v1, note)), Some((fy, fdriver))) = (e.fall, fall_res) {
-        let v = |verse| BibleLocus::whole(VerseRef { book, chapter, verse });
+        let v = |verse| BibleLocus::whole(VerseRef { book: atlas_graph_types::text::BookId::new(book).expect("the original book index is admitted"), chapter, verse });
         let verses = LocusRange::new(v(v0), v(v1)).expect("fall verses are ordered");
         let prov = match (&fdriver, atlas) {
             (Some(_), Some(a)) => format!("bible-atlas@{:016x}", a.root.0),
