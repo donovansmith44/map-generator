@@ -71,7 +71,7 @@ proptest! {
         year in any::<i32>(), shape in "[a-z][a-z0-9-]{1,30}") {
         // Arrange
         use crate::atlas_transition::TransitionRefusal;
-        let refusals = [
+        let refusals: [(&str, TransitionRefusal); 2] = [
             ("missing-correspondence", TransitionRefusal::MissingCorrespondence { year, shape: shape.clone() }),
             ("unclassified-subset", TransitionRefusal::UnclassifiedSubset { year, shape: shape.clone() }),
         ];
