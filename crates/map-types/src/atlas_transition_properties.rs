@@ -89,3 +89,31 @@ proptest! {
         }
     }
 }
+
+#[cfg(feature = "openapi")]
+proptest! {
+    #[test]
+    fn geometry_and_arc_handles_keep_their_original_string_values_and_named_schemas(
+        seed in any::<u64>(), lon in -170.0f64..170.0, lat in -80.0f64..80.0) {
+        // Arrange
+        use atlas_graph_types::id::ContentHash;
+        use atlas_graph_types::map_slice::{shape_key, Geometry, ShapeId};
+        let spelling = format!("{seed:032x}");
+        let arc = ArcRef { store: ContentHash::from_hex(&spelling).unwrap(), key: ContentHash::from_hex(&spelling).unwrap() };
+        let shape = shape_key(&Geometry::Point([lon, lat]));
+        // Act
+        let arc_value = serde_json::to_value(&arc).unwrap();
+        let shape_value = serde_json::to_value(shape).unwrap();
+        let arc_schema = serde_json::to_value(<ArcRef as utoipa::PartialSchema>::schema()).unwrap();
+        let change_schema = serde_json::to_value(<ArcChange as utoipa::PartialSchema>::schema()).unwrap();
+        // Assert
+        prop_assert_eq!(arc_value.clone(), serde_json::json!({ "store": spelling, "key": spelling }), "the original partition and arc hex spellings stay unchanged");
+        prop_assert_eq!(serde_json::from_value::<ArcRef>(arc_value).unwrap(), arc, "the original arc identity roundtrips at its source");
+        prop_assert_eq!(shape_value.clone(), serde_json::json!(shape.hex()), "the shape keeps its original lowercase hex spelling");
+        prop_assert_eq!(serde_json::from_value::<ShapeId>(shape_value).unwrap(), shape, "the shape string returns to the same 128-bit identity");
+        prop_assert!(serde_json::from_value::<ShapeId>(serde_json::json!(format!("{}0", shape.hex()))).is_err(), "an invalid-width source handle cannot enter a script");
+        prop_assert_eq!(&arc_schema["properties"]["store"], &serde_json::json!({ "$ref": "#/components/schemas/ContentHash" }), "partition identity is named at the original ArcRef source");
+        prop_assert_eq!(&arc_schema["properties"]["key"], &serde_json::json!({ "$ref": "#/components/schemas/ContentHash" }), "arc identity is named at the same source");
+        prop_assert!(change_schema["properties"]["after_shape"]["anyOf"].as_array().unwrap().contains(&serde_json::json!({ "$ref": "#/components/schemas/ShapeId" })), "an optional changed shape retains the shared named geometry identity");
+    }
+}
