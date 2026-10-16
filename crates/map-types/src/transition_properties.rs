@@ -136,7 +136,7 @@ proptest! {
             TransitionStep::SegmentFade { entity, segment: boundary.clone(), course: vec![from, to], appears: true },
             TransitionStep::LabelTrack { entity, text: boundary.clone(), from, to },
             TransitionStep::LabelFade { entity, from: Some(label), to: None },
-        ].into_iter().enumerate().map(|(index, step)| TransitionDraw { step, clip: Some(format!("{clip}-{index}")) }).collect::<Vec<_>>();
+        ].into_iter().enumerate().map(|(index, step)| TransitionDraw { step, clip: Some(atlas_graph_types::map_slice::ShapeId::parse(&format!("{:032x}", u128::from(clip) + index as u128)).unwrap()) }).collect::<Vec<_>>();
         let original = TransitionScript { steps };
         let left = TransitionScript { steps: original.steps[..5].to_vec() };
         let right = TransitionScript { steps: original.steps[5..].to_vec() };

@@ -188,7 +188,7 @@ fn canon_justification(c: &mut Canon, j: &Justification) {
         Ground::Scripture(range) => {
             c.u8_(0);
             for reference in [range.first(), range.last()] {
-                c.u8_(reference.book)
+                c.u8_(reference.book.index())
                     .u64_(u64::from(reference.chapter))
                     .u64_(u64::from(reference.verse))
                     .u8_(0);
@@ -295,7 +295,7 @@ mod canonical_ground_tests {
     fn scripture_ground_retains_the_previous_no_offset_byte_sequence() {
         // Arrange
         for seed in 1u16..32 {
-            let first = VerseRef { book: 0, chapter: seed, verse: 1 };
+            let first = VerseRef { book: atlas_graph_types::text::BookId::new(0).unwrap(), chapter: seed, verse: 1 };
             let last = VerseRef { verse: 2, ..first.clone() };
             let reading = Reading::<BibleTag>::of(vec![first.clone(), last.clone()]).unwrap();
             let span = reading.place(&Written::new(first.clone(), last.clone()).unwrap()).unwrap();
@@ -307,7 +307,7 @@ mod canonical_ground_tests {
             let mut previous = Canon::new();
             previous.u8_(1).str_(justification.text.as_ref().unwrap()).u64_(2).u8_(0);
             for reference in [&first, &last] {
-                previous.u8_(reference.book).u64_(u64::from(reference.chapter)).u64_(u64::from(reference.verse)).u8_(0);
+                previous.u8_(reference.book.index()).u64_(u64::from(reference.chapter)).u64_(u64::from(reference.verse)).u8_(0);
             }
             previous.u8_(2).str_(&source.0);
             // Act

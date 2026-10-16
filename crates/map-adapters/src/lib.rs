@@ -53,8 +53,8 @@ mod scripture_admission_tests {
         use atlas_graph_types::text::{BibleLocus, LocusRange, VerseRef};
         // Arrange
         for book in 1..=66 {
-            let first = VerseRef { book, chapter: 1, verse: 1 };
-            let last = VerseRef { book, chapter: 1, verse: 2 };
+            let first = VerseRef { book: atlas_graph_types::text::BookId::new(book).expect("the original book index is admitted"), chapter: 1, verse: 1 };
+            let last = VerseRef { book: atlas_graph_types::text::BookId::new(book).expect("the original book index is admitted"), chapter: 1, verse: 2 };
             let range = LocusRange::new(BibleLocus::whole(first.clone()), BibleLocus::whole(last.clone())).unwrap();
             // Act
             let atlas_graph_types::edge::Ground::Scripture(span) = super::scripture(range) else { panic!("Scripture admission must remain Scripture"); };
