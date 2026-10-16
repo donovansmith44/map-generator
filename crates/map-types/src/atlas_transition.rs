@@ -99,8 +99,18 @@ pub struct MapTransition<N = AnyNodeId> {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum TransitionRefusal {
     MissingGrounds { year: i32 },
-    MissingCorrespondence { year: i32, shape: String },
-    UnclassifiedSubset { year: i32, shape: String },
+    MissingCorrespondence {
+        year: i32,
+        #[cfg_attr(feature = "serde", serde(skip_serializing))]
+        #[cfg_attr(feature = "openapi", schema(ignore))]
+        shape: String,
+    },
+    UnclassifiedSubset {
+        year: i32,
+        #[cfg_attr(feature = "serde", serde(skip_serializing))]
+        #[cfg_attr(feature = "openapi", schema(ignore))]
+        shape: String,
+    },
     UnresolvedDating { causes: Vec<RecordedMapCause> },
     EndpointMismatch,
     InvalidWindow,

@@ -63,3 +63,27 @@ proptest! {
         prop_assert!(missing_result.is_err(), "stored changes refuse a missing recorded boundary year");
     }
 }
+
+#[cfg(feature = "openapi")]
+proptest! {
+    #[test]
+    fn refusal_shapes_remain_in_tool_diagnostics_without_entering_the_public_contract(
+        year in any::<i32>(), shape in "[a-z][a-z0-9-]{1,30}") {
+        // Arrange
+        use crate::atlas_transition::TransitionRefusal;
+        let refusals = [
+            ("missing-correspondence", TransitionRefusal::MissingCorrespondence { year, shape: shape.clone() }),
+            ("unclassified-subset", TransitionRefusal::UnclassifiedSubset { year, shape: shape.clone() }),
+        ];
+        // Act
+        let schema = serde_json::to_value(<TransitionRefusal as utoipa::PartialSchema>::schema()).unwrap();
+        // Assert
+        for (reason, refusal) in refusals {
+            prop_assert_eq!(serde_json::to_value(&refusal).unwrap(), serde_json::json!({ "reason": reason, "year": year }), "the public refusal retains its category and source year without a compiler locator");
+            prop_assert!(format!("{refusal:?}").contains(&shape), "the original locator remains available to compiler diagnostics");
+            let case = schema["oneOf"].as_array().unwrap().iter().find(|case| case["properties"]["reason"]["enum"][0] == reason).expect("the original public refusal case remains in its source schema");
+            prop_assert!(case["properties"].get("shape").is_none(), "the public source schema contains no compiler locator property");
+            prop_assert!(!case["required"].as_array().unwrap().iter().any(|field| field == "shape"), "the public source schema does not require a compiler locator");
+        }
+    }
+}
