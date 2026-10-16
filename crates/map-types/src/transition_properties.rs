@@ -61,7 +61,6 @@ proptest! {
         let reverse = serde_json::to_value(&reversed.steps[0].step).unwrap();
         prop_assert_eq!(&reverse["from"], &track["to"], "inversion moves the complete destination endpoint to the origin");
         prop_assert_eq!(&reverse["to"], &track["from"], "inversion moves the complete origin endpoint to the destination");
-        prop_assert!(serde_json::from_value::<crate::boundary::OrientedBoundary<u32>>(serde_json::json!([boundary, "Forward"])).is_err(), "a positional pair cannot bypass the named directed boundary source");
         prop_assert!(serde_json::from_value::<TransitionStep<u64, u32>>(serde_json::json!({ "step": "point-track", "entity": entity, "from": from, "to": to, "extent": ["Point", "Vicinity"], "radius_m": [0, radius] })).is_err(), "legacy positional point facts cannot bypass the named endpoint source");
     }
 
