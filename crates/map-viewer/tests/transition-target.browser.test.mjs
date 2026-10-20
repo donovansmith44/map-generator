@@ -596,3 +596,123 @@ for (const fixture of [
         } finally { await browser.close(); }
     });
 }
+
+for (const engine of [chromium, webkit]) {
+    test(`${engine.name()} retained endpoints match fresh original scenes and intermediate composites pixel for pixel`, async () => {
+        // Arrange
+        const transitions = [process.env.MG_TRANSITION_PAGE_FIXTURE, process.env.MG_TRANSITION_REVERSE_PAGE_FIXTURE]
+            .map(path => JSON.parse(readFileSync(path, 'utf8')).body.transition.transition);
+        const browser = await engine.launch(engine === chromium ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }
+            : process.env.FSHARP_WEBKIT_EXECUTABLE ? { executablePath: process.env.FSHARP_WEBKIT_EXECUTABLE } : {});
+        try {
+            const context = await browser.newContext({ deviceScaleFactor: 2 });
+            const page = await context.newPage(), errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await context.route('http://canonical.test/**', async route => {
+                const path = new URL(route.request().url()).pathname;
+                if (path === '/') await route.fulfill({ contentType: 'text/html', body: '<div id="map" style="width:320px;height:320px"></div>' });
+                else await route.fulfill({ contentType: 'text/javascript', path: viewer + '/node_modules/maplibre-gl/dist/' + path.slice(1) });
+            });
+            await page.goto('http://canonical.test/');
+            await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
+            await page.waitForFunction(() => globalThis.maplibregl?.Map);
+            for (const path of ['src/retained-gpu.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            // Act
+            const result = await page.evaluate(async ({ transitions, center }) => {
+                const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center, zoom: 3, fadeDuration: 0 });
+                await new Promise(resolve => map.once('load', resolve));
+                let pending, gl, input;
+                map.addLayer({ id: 'endpoint-parity', type: 'custom', renderingMode: '2d', onAdd(_map, context) { gl = context; }, render(_gl, args) {
+                    input = args;
+                    if (!pending) return;
+                    const operation = pending; pending = null;
+                    try { operation.resolve(operation.run()); } catch (error) { operation.reject(error); }
+                } });
+                const run = action => new Promise((resolve, reject) => { pending = { run: action, resolve, reject }; map.triggerRepaint(); });
+                const result = await run(() => {
+                    const original = { draw: gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING), read: gl.getParameter(gl.READ_FRAMEBUFFER_BINDING), viewport: gl.getParameter(gl.VIEWPORT), renderbuffer: gl.getParameter(gl.RENDERBUFFER_BINDING), texture: gl.getParameter(gl.TEXTURE_BINDING_2D) };
+                    const scratch = { framebuffer: gl.createFramebuffer(), texture: gl.createTexture(), stencil: gl.createRenderbuffer(), width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+                    const counts = { retained: 0, fresh: 0 }, nativeClear = gl.clearBufferfv;
+                    let owner = null;
+                    gl.clearBufferfv = function (buffer, ...args) { if (owner && buffer === gl.COLOR) counts[owner]++; return nativeClear.call(this, buffer, ...args); };
+                    const image = document.createElement('canvas'); image.width = image.height = 32;
+                    const ink = image.getContext('2d'); ink.fillStyle = '#d92751'; ink.beginPath(); ink.arc(16, 16, 12, 0, Math.PI * 2); ink.fill();
+                    const marker = { image: ink.getImageData(0, 0, image.width, image.height), pixelRatio: 2 };
+                    const fill = { fill: [80, 120, 160, 255] }, water = { fill: [40, 80, 120, 255] }, stroke = { color: [30, 60, 90, 255], width: 1, pattern: 'Solid' };
+                    const create = () => transitionTarget(gl, () => input, () => [fill, stroke, marker, null], () => [water, stroke], () => {}, reference => reference.id);
+                    const read = surface => {
+                        const framebuffer = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING), pbo = gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING);
+                        const packing = [gl.PACK_ALIGNMENT, gl.PACK_ROW_LENGTH, gl.PACK_SKIP_ROWS, gl.PACK_SKIP_PIXELS].map(name => [name, gl.getParameter(name)]);
+                        try {
+                            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, surface.framebuffer); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+                            for (const [name] of packing) gl.pixelStorei(name, name === gl.PACK_ALIGNMENT ? 1 : 0);
+                            const pixels = new Uint8Array(scratch.width * scratch.height * 4);
+                            gl.readPixels(0, 0, scratch.width, scratch.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                            return pixels;
+                        } finally {
+                            for (const [name, value] of packing) gl.pixelStorei(name, value);
+                            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
+                        }
+                    };
+                    const compare = (before, after) => {
+                        let visible = 0;
+                        for (let index = 0; index < before.length; index++) {
+                            if (before[index] !== after[index]) throw new Error('Owned endpoint/composite pixel differs at byte ' + index);
+                            if (index % 4 === 3 && before[index]) visible++;
+                        }
+                        if (!visible) throw new Error('Readback must contain actual visible pixels');
+                    };
+                    let frames = 0, endpoints = 0, composites = 0;
+                    try {
+                        gl.bindTexture(gl.TEXTURE_2D, scratch.texture);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, scratch.width, scratch.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                        gl.bindRenderbuffer(gl.RENDERBUFFER, scratch.stencil); gl.renderbufferStorage(gl.RENDERBUFFER, gl.STENCIL_INDEX8, scratch.width, scratch.height);
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.framebuffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scratch.texture, 0);
+                        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, scratch.stencil);
+                        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('Scratch framebuffer is incomplete');
+                        const draw = (target, frame, shapes, fraction, kind) => {
+                            gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.framebuffer); gl.viewport(0, 0, scratch.width, scratch.height);
+                            gl.colorMask(true, true, true, true); gl.stencilMask(0xff);
+                            nativeClear.call(gl, gl.COLOR, 0, [0, 0, 0, 0]); gl.clearBufferiv(gl.STENCIL, 0, [0]);
+                            owner = kind;
+                            try { drawTransition(target, frame, shapes, fraction); } finally { owner = null; }
+                            return read(scratch);
+                        };
+                        for (const transition of transitions) {
+                            const retained = create();
+                            try {
+                                for (const frame of transition.keyframes) {
+                                    const fresh = create();
+                                    try {
+                                        for (const fraction of [0, 0.5, 0.9]) {
+                                            compare(draw(fresh, frame, transition.shapes, fraction, 'fresh'), draw(retained, frame, transition.shapes, fraction, 'retained')); composites++;
+                                            if (fraction === 0) for (let endpoint = 0; endpoint < 2; endpoint++) {
+                                                compare(read(fresh.surfaces[fresh.endpointSlots[endpoint]]), read(retained.surfaces[retained.endpointSlots[endpoint]])); endpoints++;
+                                            }
+                                        }
+                                        if (retained.surfaces.length !== 2 || new Set(retained.surfaces).size !== 2) throw new Error('Exactly two separately owned surfaces are required');
+                                        frames++;
+                                    } finally { disposeTransition(fresh); }
+                                }
+                            } finally { disposeTransition(retained); }
+                        }
+                        if (counts.retained >= counts.fresh) throw new Error('Adjacent original frames did not reuse rasterized endpoint pixels');
+                        if (gl.getError() !== gl.NO_ERROR) throw new Error('Owned pixel comparison generated a GL error');
+                        return { frames, endpoints, composites, reused: counts.retained < counts.fresh, ratio: scratch.width / gl.canvas.clientWidth };
+                    } finally {
+                        gl.clearBufferfv = nativeClear;
+                        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, original.draw); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, original.read); gl.viewport(...original.viewport);
+                        gl.bindRenderbuffer(gl.RENDERBUFFER, original.renderbuffer); gl.bindTexture(gl.TEXTURE_2D, original.texture);
+                        gl.deleteFramebuffer(scratch.framebuffer); gl.deleteTexture(scratch.texture); gl.deleteRenderbuffer(scratch.stencil);
+                    }
+                });
+                map.remove(); return result;
+            }, { transitions, center: point.geometry.coordinates });
+            // Assert
+            const frames = transitions.reduce((count, transition) => count + transition.keyframes.length, 0);
+            assert.deepEqual(result, { frames, endpoints: frames * 2, composites: frames * 3, reused: true, ratio: 2 });
+            assert.deepEqual(errors, [], 'The original served scenes and their retained textures produce no browser errors.');
+        } finally { await browser.close(); }
+    });
+}

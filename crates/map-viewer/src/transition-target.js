@@ -4,7 +4,7 @@
 
   function transitionTarget(gl, projection, paint, water, cold, identify) {
     const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], cachedGeometry: [], geometryItems: new Map(), extras: [], frame: null, frameProgram: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
-      surfaces: [], textureValues: null, glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
+      surfaces: [], endpointSlots: [0, 1], textureValues: null, glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
       return target;
@@ -70,16 +70,8 @@
       gl.bindTexture(gl.TEXTURE_2D, target.glyphs.tex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      if (changedAtlas || target.textureValues === null || values.length !== target.textureValues.length
-        || values.some((value, index) => !Object.is(value, target.textureValues[index]))) {
-        for (let scene = 0; scene < 2; scene++) {
-          const surface = target.surfaces[scene];
-          gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
-          gl.viewport(0, 0, surface.width, surface.height);
-          gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
-          gl.clearBufferiv(gl.STENCIL, 0, [0]);
-          drawScene(target, program.loc, scenes[scene], 1);
-        }
+      if (changedAtlas || !sameEndpoint(target.textureValues, values)) {
+        renderEndpoints(target, program, projection, scenes, changedAtlas);
         target.textureValues = values;
       }
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
@@ -90,7 +82,7 @@
       gl.uniform4f(program.loc.uUV, 0, 0, 1, 1);
       for (let scene = 0; scene < 2; scene++) {
         gl.activeTexture(gl.TEXTURE0 + scene);
-        gl.bindTexture(gl.TEXTURE_2D, target.surfaces[scene].texture);
+        gl.bindTexture(gl.TEXTURE_2D, target.surfaces[target.endpointSlots[scene]].texture);
       }
       gl.uniform1i(program.loc.uTex, 0);
       gl.uniform1i(program.loc.uAfterTex, 1);
@@ -161,6 +153,7 @@
 
   function clearSurfaces(target) {
     target.textureValues = null;
+    target.endpointSlots = [0, 1];
     for (const surface of target.surfaces) {
       disposeSurface(target, surface);
     }
@@ -316,6 +309,53 @@ void main() {
       }
     }
     return values;
+  }
+
+  function renderEndpoints(target, program, projection, scenes, changedAtlas) {
+    if (changedAtlas) for (const surface of target.surfaces) surface.key = null;
+    const keys = scenes.map(scene => endpointKey(target, program, projection, scene));
+    const slots = keys.map(key => target.surfaces.findIndex(surface => sameEndpoint(surface.key, key)));
+    const reserved = new Set(slots.filter(slot => slot >= 0));
+    const gl = target.gl;
+    for (let endpoint = 0; endpoint < scenes.length; endpoint++) {
+      if (slots[endpoint] >= 0) continue;
+      const shared = keys.findIndex((key, index) => index < endpoint && sameEndpoint(key, keys[endpoint]));
+      if (shared >= 0) {
+        slots[endpoint] = slots[shared];
+        continue;
+      }
+      const slot = target.surfaces.findIndex((_surface, index) => !reserved.has(index));
+      const surface = target.surfaces[slot];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
+      gl.viewport(0, 0, surface.width, surface.height);
+      gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
+      gl.clearBufferiv(gl.STENCIL, 0, [0]);
+      drawScene(target, program.loc, scenes[endpoint], 1);
+      surface.key = keys[endpoint];
+      slots[endpoint] = slot;
+      reserved.add(slot);
+    }
+    target.endpointSlots = slots;
+  }
+
+  function endpointKey(target, program, projection, scene) {
+    const values = endpointValues(target, projection, [scene]);
+    values.push(program.value, target.gl.drawingBufferWidth, target.gl.drawingBufferHeight);
+    const resource = item => values.push(item.vao, item.first ?? 0, item.count);
+    for (const draw of scene) {
+      values.push(draw.appears);
+      if (draw.rings) {
+        values.push(draw.rings.length);
+        for (const ring of draw.rings) resource(ring);
+      } else if (draw.line) resource(draw.line);
+      else if (draw.point) resource(draw.point);
+      else if (draw.glyph) values.push(draw.glyph.verts.length, ...draw.glyph.verts);
+    }
+    return values;
+  }
+
+  function sameEndpoint(before, after) {
+    return before != null && before.length === after.length && before.every((value, index) => Object.is(value, after[index]));
   }
 
   function coordinates(point) {

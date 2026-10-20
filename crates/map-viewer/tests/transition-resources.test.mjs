@@ -6,7 +6,7 @@ import vm from 'node:vm';
 function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     const served = JSON.parse(fs.readFileSync(process.env.MG_TRANSITION_PAGE_FIXTURE, 'utf8')).body.transition.transition;
     const original = served.origin.features[0];
-    const geometry = typeof original.geometry === 'string' ? served.shapes.find(shape => shape.shape === original.geometry).geometry : original.geometry;
+    const geometry = servedGeometry(original.geometry, served.shapes);
     const collection = { ...served.origin, features: [{ ...original, geometry }], waters: [] };
     const live = new Set();
     const disposed = new Set();
@@ -55,8 +55,8 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     const gpuContext = { module: { exports: {} } };
     if (realGpu) vm.runInNewContext(fs.readFileSync(new URL('../src/retained-gpu.js', import.meta.url), 'utf8'), gpuContext);
     const retained = realGpu ? gpuContext.module.exports : {
-        uploadGeometry(_gl, _loc, verts) { counts.geometry++; return { vao: resource('geometry'), count: verts.length / 3 }; },
-        uploadLobe(_gl, _loc, verts) { counts.geometry++; return { vao: resource('screen'), count: verts.length / 3 }; },
+        uploadGeometry(_gl, _loc, verts) { counts.geometry++; return { vao: resource('geometry'), count: verts.length / 3, verts }; },
+        uploadLobe(_gl, _loc, verts) { counts.geometry++; return { vao: resource('screen'), count: verts.length / 3, verts }; },
         uploadPrevious() { return gl.createBuffer(); },
         drawStencilFill() { fills.push({ framebuffer: drawFramebuffer, fraction: morphFraction }); },
         disposeGeometry(_gl, geometry) { assert.equal(disposed.has(geometry), false, 'Each owned GPU geometry is disposed once.'); disposed.add(geometry); live.delete(geometry.vao); },
@@ -190,9 +190,9 @@ test('unchanged clear values need no queries and renderbuffer state is read only
     assert.ok(!fixture.queries.includes('COLOR_CLEAR_VALUE') && !fixture.queries.includes('STENCIL_CLEAR_VALUE'), 'Explicit buffer clears never mutate these foreign values.');
     assert.ok(!fixture.queries.slice(start).includes('RENDERBUFFER_BINDING'), 'A retained surface does not change the renderbuffer binding.');
     assert.ok(fixture.queries.slice(start).includes('COLOR_WRITEMASK'), 'Every still-mutated mask retains its real incoming state query.');
-    assert.deepEqual(fixture.bufferClears, Array.from({ length: 2 }, () => [
+    assert.deepEqual(fixture.bufferClears, Array.from({ length: 1 }, () => [
         { buffer: 'COLOR', index: 0, values: [0, 0, 0, 0] }, { buffer: 'STENCIL', index: 0, values: [0] },
-    ]).flat(), 'Both original endpoint textures receive the same transparent color and zero stencil.');
+    ]).flat(), 'Identical endpoint commands share one transparent color and zero stencil initialization.');
     fixture.gl.drawingBufferWidth++;
     draw(0.5);
     assert.equal(fixture.queries.filter(value => value === 'RENDERBUFFER_BINDING').length, allocated + 2, 'Resize preserves the binding for both replacement allocations.');
@@ -399,18 +399,18 @@ test('endpoint reuse compares exact consumed projection values and preserves GL 
     const reads = fixture.queries.length;
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.1);
     // Assert
-    assert.equal(fixture.clears.length, 2, 'New projection arrays with the same values reuse the original endpoint textures.');
+    assert.equal(fixture.clears.length, 1, 'New projection arrays with the same values reuse the original endpoint textures.');
     assert.deepEqual(fixture.queries.slice(reads), fixture.queries.slice(0, reads).filter(value => value !== 'RENDERBUFFER_BINDING'), 'Every fraction still saves all mutated incoming GL state without repeating allocation-only reads.');
-    let expected = 2;
+    let expected = 1;
     for (const [index, field] of ['mainMatrix', 'tileMercatorCoords', 'clippingPlane', 'projectionTransition', 'fallbackMatrix'].entries()) {
         if (field === 'projectionTransition') data[field]++;
         else data[field][0]++;
         fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.2 + index * 0.1);
-        assert.equal(fixture.clears.length, expected += 2, 'Every consumed projection uniform value invalidates the textures.');
+        assert.equal(fixture.clears.length, expected += 1, 'Every consumed projection uniform value invalidates the textures.');
     }
     fixture.api.resetTransition(fixture.target);
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0);
-    assert.equal(fixture.clears.length, expected + 2, 'Reset never reuses textures from an earlier transition.');
+    assert.equal(fixture.clears.length, expected + 1, 'Reset never reuses textures from an earlier transition.');
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Projection and reset invalidation leak no resources.');
 });
@@ -427,12 +427,12 @@ test('mutated paint and water styles invalidate cached endpoint pixels by value'
     fixture.api.drawTransition(fixture.target, frame, fixture.shapes, 0);
     fixture.api.drawTransition(fixture.target, frame, fixture.shapes, 0.1);
     // Assert
-    assert.equal(fixture.clears.length, 2, 'Stable prepared water presentation reuses the textures.');
-    let expected = 2;
+    assert.equal(fixture.clears.length, 1, 'Stable prepared water presentation reuses the textures.');
+    let expected = 1;
     for (const change of [() => paint.fill[0]++, () => stroke.color[1]++, () => stroke.width++, () => { fixture.target.water = () => [null, stroke]; }]) {
         change();
         fixture.api.drawTransition(fixture.target, frame, fixture.shapes, expected / 20);
-        assert.equal(fixture.clears.length, expected += 2, 'Mutating an existing fill/stroke value changes the actual endpoint pixels.');
+        assert.equal(fixture.clears.length, expected += 1, 'Mutating an existing fill/stroke value changes the actual endpoint pixels.');
     }
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Water presentation invalidation keeps normal ownership.');
@@ -447,12 +447,12 @@ test('marker size color and pixel ratio invalidate endpoint textures', () => {
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0);
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.1);
     // Assert
-    assert.equal(fixture.clears.length, 2, 'Stable marker presentation reuses endpoint textures.');
-    let expected = 2;
+    assert.equal(fixture.clears.length, 1, 'Stable marker presentation reuses endpoint textures.');
+    let expected = 1;
     for (const change of [() => marker.size++, () => marker.color[2]++, () => { fixture.gl.canvas.clientWidth /= 2; }]) {
         change();
         fixture.api.drawTransition(fixture.target, fixture.frame, [], expected / 20);
-        assert.equal(fixture.clears.length, expected += 2, 'Each effective marker pixel input invalidates the textures.');
+        assert.equal(fixture.clears.length, expected += 1, 'Each effective marker pixel input invalidates the textures.');
     }
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Marker invalidation keeps normal cleanup.');
@@ -466,10 +466,10 @@ test('glyph atlas content changes invalidate textures even with identical glyph 
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0);
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.1);
     // Assert
-    assert.equal(fixture.clears.length, 2, 'Identical effective glyph content reuses the two original textures.');
+    assert.equal(fixture.clears.length, 1, 'Identical effective glyph content reuses the identical endpoint pixels.');
     style.color[0]++;
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.2);
-    assert.equal(fixture.clears.length, 4, 'A glyph color mutation rerenders endpoint textures despite unchanged UV bounds.');
+    assert.equal(fixture.clears.length, 2, 'A glyph color mutation rerenders the shared endpoint pixels despite unchanged UV bounds.');
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Glyph invalidation releases the atlas and cached endpoint resources.');
 });
@@ -562,7 +562,7 @@ test('multiline courses share one upload while preserving original stroke draw r
     fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, fixture.shapes, 0);
     // Assert
     assert.equal(fixture.counts.geometry, 2, 'All original line courses share one static resource plus the screen quad.');
-    assert.deepEqual(fixture.draws.filter(draw => draw.mode === 'LINE_STRIP'), [...expected, ...expected], 'Both scenes draw every original course in order without connecting adjacent courses.');
+    assert.deepEqual(fixture.draws.filter(draw => draw.mode === 'LINE_STRIP'), expected, 'The shared endpoint raster draws every original course in order without connecting adjacent courses.');
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Shared course views dispose their common GPU resource exactly once.');
 });
@@ -851,3 +851,111 @@ test('viewport resizing replaces scene surfaces and releases the previous resour
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Disposal after resizing releases every replacement resource.');
 });
+
+test('adjacent swapped endpoints reuse both original owned surfaces', () => {
+    // Arrange
+    const fixture = sourceTarget(), [before, after] = endpointScenes(fixture);
+    // Act
+    fixture.api.drawTransition(fixture.target, { before, after }, [], 0);
+    fixture.api.drawTransition(fixture.target, { before: after, after: before }, [], 0.5);
+    // Assert
+    assert.equal(fixture.clears.length, 2, 'Swapping the exact endpoint commands never rerasterizes either texture.');
+    assert.equal(fixture.counts.framebuffer, 2, 'The transition owns exactly two physical surfaces.');
+    assert.equal(new Set(fixture.target.surfaces).size, 2, 'Logical swaps never alias physical resource ownership.');
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0, 'Both swapped surfaces and their GPU resources are released.');
+});
+
+test('identical logical endpoints share one raster while every fraction composites', () => {
+    // Arrange
+    const fixture = sourceTarget(), [before] = endpointScenes(fixture);
+    const fractions = [0, 0.25, 0.75];
+    // Act
+    for (const fraction of fractions) fixture.api.drawTransition(fixture.target, { before, after: before }, [], fraction);
+    // Assert
+    assert.equal(fixture.clears.length, 1, 'Identical prepared endpoint commands need one raster across original frame changes.');
+    assert.deepEqual(fixture.uniforms.filter(value => value.name === 'uMix').map(value => value.value), fractions);
+    assert.equal(fixture.counts.framebuffer, 2, 'Sharing pixels retains two separately owned physical surfaces.');
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0, 'Shared logical pixels cannot cause duplicate disposal or an orphan surface.');
+});
+
+test('a later matching endpoint is reserved before an earlier miss renders', () => {
+    // Arrange
+    const fixture = sourceTarget(), [before, after, replacement] = endpointScenes(fixture);
+    // Act
+    fixture.api.drawTransition(fixture.target, { before, after }, [], 0);
+    const [reserved, replaceable] = fixture.clears;
+    fixture.api.drawTransition(fixture.target, { before: replacement, after: before }, [], 0.5);
+    // Assert
+    assert.deepEqual(fixture.clears, [reserved, replaceable, replaceable], 'The earlier miss cannot overwrite the first physical texture needed by the later endpoint.');
+    assert.equal(fixture.counts.framebuffer, 2);
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0);
+});
+
+test('endpoint geometry changes invalidate pixels even when served properties are identical', () => {
+    // Arrange
+    const fixture = sourceTarget(), [before] = endpointScenes(fixture);
+    const changed = { ...before, features: before.features.map(feature => ({ ...feature, geometry: structuredClone(feature.geometry) })) };
+    // Act
+    fixture.api.drawTransition(fixture.target, { before, after: before }, [], 0);
+    fixture.api.drawTransition(fixture.target, { before: changed, after: changed }, [], 0.5);
+    // Assert
+    assert.equal(fixture.clears.length, 2, 'Newly uploaded GPU geometry never borrows an earlier resource key.');
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0);
+});
+
+test('endpoint projection program changes invalidate retained pixels and release old surfaces', () => {
+    // Arrange
+    const fixture = sourceTarget(), [before] = endpointScenes(fixture);
+    const original = fixture.target.projection();
+    // Act
+    fixture.api.drawTransition(fixture.target, { before, after: before }, [], 0);
+    const old = [...fixture.target.surfaces];
+    fixture.target.projection = () => ({ ...original, shaderData: { ...original.shaderData, variantName: original.shaderData.variantName + '-next' } });
+    fixture.api.drawTransition(fixture.target, { before, after: before }, [], 0.5);
+    // Assert
+    assert.equal(fixture.clears.length, 2, 'A different compiled projection program renders its own endpoint pixels.');
+    assert.ok(old.every(surface => !fixture.live.has(surface.framebuffer)), 'No surface from the previous program remains live.');
+    assert.equal(fixture.target.surfaces.length, 2);
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0);
+});
+
+test('atlas content changes invalidate retained pixels despite stable texture identity', () => {
+    // Arrange
+    const fixture = sourceTarget(null, true), marker = atlasMarker();
+    const before = fixture.frames[0].after;
+    fixture.target.paint = () => [null, null, marker, null];
+    // Act
+    fixture.api.drawTransition(fixture.target, { before, after: before }, fixture.shapes, 0);
+    const texture = fixture.target.glyphs.tex;
+    fixture.target.glyphs.dirty = true;
+    fixture.api.drawTransition(fixture.target, { before, after: before }, fixture.shapes, 0.5);
+    // Assert
+    assert.ok(texture);
+    assert.equal(fixture.target.glyphs.tex, texture, 'The changed atlas retains its existing GPU texture.');
+    assert.equal(fixture.clears.length, 2, 'Changed atlas content forces a fresh endpoint raster.');
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0);
+});
+
+function endpointScenes(fixture) {
+    const colors = [[20, 40, 60, 255], [60, 40, 20, 255], [40, 60, 20, 255]];
+    const original = fixture.frames[0].before.features.find(feature => servedGeometry(feature.geometry, fixture.shapes).type === 'MultiPolygon');
+    assert.ok(original, 'The original served scene provides polygon geometry.');
+    const appearances = new Map();
+    const scenes = colors.map(fill => {
+        const properties = { ...original.properties };
+        appearances.set(properties, [{ fill }, null, null, null]);
+        return { ...fixture.collection, features: [{ ...original, properties, geometry: servedGeometry(original.geometry, fixture.shapes) }] };
+    });
+    fixture.target.paint = properties => appearances.get(properties);
+    return scenes;
+}
+
+function servedGeometry(geometry, shapes) {
+    return typeof geometry === 'string' ? shapes.find(shape => shape.shape === geometry).geometry : geometry;
+}
