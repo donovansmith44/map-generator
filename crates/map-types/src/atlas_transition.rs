@@ -1,7 +1,7 @@
 use atlas_graph_types::edge::HoldingState;
 use atlas_graph_types::id::{AnyNodeId, ContentHash};
 use atlas_graph_types::ingest::ProvenanceId;
-use atlas_graph_types::map_slice::{FeatureCollection, ShapeId, StoredShape};
+use atlas_graph_types::map_slice::{FeatureCollection, Geometry, ShapeId, StoredShape};
 use atlas_graph_types::map_timing::RecordedMapCause;
 use atlas_graph_types::place_versions::Basis;
 
@@ -74,23 +74,23 @@ pub struct RecordedMapChange<N = AnyNodeId, P = ProvenanceId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId> {
+pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
     pub change: RecordedMapChange<N, P>,
-    pub before: FeatureCollection,
-    pub after: FeatureCollection,
+    pub before: FeatureCollection<G>,
+    pub after: FeatureCollection<G>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapTransition<N = AnyNodeId, P = ProvenanceId> {
+pub struct MapTransition<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
     pub from_year: i32,
     pub to_year: i32,
-    pub origin: FeatureCollection,
-    pub destination: FeatureCollection,
+    pub origin: FeatureCollection<G>,
+    pub destination: FeatureCollection<G>,
     pub shapes: Vec<StoredShape>,
-    pub keyframes: Vec<MapKeyframe<N, P>>,
+    pub keyframes: Vec<MapKeyframe<N, P, G>>,
     pub after_year: Option<i32>,
 }
 
@@ -122,8 +122,8 @@ pub enum TransitionRefusal<P = ProvenanceId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub enum TransitionRead<N = AnyNodeId, P = ProvenanceId> {
-    Ready { transition: MapTransition<N, P> },
+pub enum TransitionRead<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
+    Ready { transition: MapTransition<N, P, G> },
     Refused { reason: TransitionRefusal<P>, destination: FeatureCollection },
 }
 
