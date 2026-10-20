@@ -20,11 +20,42 @@ function resetGlyphAtlas(glyphs) {
   glyphs.dirty = true;
 }
 
+function reserveGlyphSpace(glyphs, w, h) {
+  if (w > 2048 || h > 2048) return null;
+  const wraps = glyphs.x + w > 2048;
+  const x = wraps ? 0 : glyphs.x;
+  const y = wraps ? glyphs.y + glyphs.rowH : glyphs.y;
+  if (y + h > 2048) return null;
+  glyphs.x = x + w;
+  glyphs.y = y;
+  glyphs.rowH = Math.max(wraps ? 0 : glyphs.rowH, h);
+  return { x, y };
+}
+
+function retainedImageEntry(glyphs, marker) {
+  const hit = glyphs.map.get(marker);
+  if (hit) return hit;
+  const { image, pixelRatio } = marker;
+  const position = reserveGlyphSpace(glyphs, image.width, image.height);
+  if (position === null) return null;
+  const data = glyphs.ctx.createImageData(image.width, image.height);
+  data.data.set(image.data);
+  glyphs.ctx.putImageData(data, position.x, position.y);
+  const entry = {
+    u0: position.x / 2048, v0: position.y / 2048,
+    u1: (position.x + image.width) / 2048, v1: (position.y + image.height) / 2048,
+    w: image.width / pixelRatio, h: image.height / pixelRatio,
+  };
+  glyphs.map.set(marker, entry);
+  glyphs.dirty = true;
+  return entry;
+}
+
 function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidthEm) {
   const dpr = window.devicePixelRatio || 1;
   const px = Math.max(2, Math.round(sizeCss * 2) / 2);
   const hw = haloWidthEm === undefined ? 0.24 : haloWidthEm;
-  const key = [text, voice.family, voice.weight, voice.italic, (voice.tracking_em ?? voice.tracking), px,
+  const key = [dpr, text, voice.family, voice.weight, voice.italic, (voice.tracking_em ?? voice.tracking), px,
                color.join(), halo.join(), hw].join("|");
   const hit = glyphs.map.get(key);
   if (hit) return hit;
@@ -35,11 +66,9 @@ function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidth
   const pad = Math.ceil(px * dpr * 0.4);
   const w = Math.ceil(m.width) + pad * 2;
   const h = Math.ceil(px * dpr * 1.4) + pad;
-  if (w > 2048 || h > 2048) return null;
-  const wraps = glyphs.x + w > 2048;
-  const bx = wraps ? 0 : glyphs.x;
-  const by = wraps ? glyphs.y + glyphs.rowH : glyphs.y;
-  if (by + h > 2048) return null;
+  const position = reserveGlyphSpace(glyphs, w, h);
+  if (position === null) return null;
+  const { x: bx, y: by } = position;
   const baseline = by + pad + px * dpr;
   ctx.textAlign = "left";
   ctx.lineJoin = "round";
@@ -53,9 +82,6 @@ function retainedGlyphEntry(glyphs, text, voice, sizeCss, color, halo, haloWidth
     w: w / dpr, h: h / dpr, px,
   };
   glyphs.map.set(key, e);
-  glyphs.x = bx + w;
-  glyphs.y = by;
-  glyphs.rowH = Math.max(wraps ? 0 : glyphs.rowH, h);
   glyphs.dirty = true;
   return e;
 }
@@ -66,8 +92,10 @@ function disposeGlyphAtlas(glyphs, gl) {
   glyphs.canvas = null;
   glyphs.ctx = null;
   glyphs.map.clear();
+  glyphs.x = glyphs.y = glyphs.rowH = 0;
+  glyphs.dirty = false;
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { initializeGlyphAtlas, resetGlyphAtlas, retainedGlyphEntry, disposeGlyphAtlas };
+  module.exports = { initializeGlyphAtlas, resetGlyphAtlas, retainedGlyphEntry, retainedImageEntry, disposeGlyphAtlas };
 }

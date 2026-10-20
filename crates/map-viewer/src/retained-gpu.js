@@ -1,9 +1,11 @@
-function uploadGeometry(gl, loc, verts) {
+function uploadGeometry(gl, loc, verts, ranges = [{ first: 0, count: verts.length / 3 }]) {
   const arcs = new Float32Array(verts.length / 3);
-  let acc = 0;
-  for (let i = 1; i < arcs.length; i++) {
-    acc += Math.hypot(verts[i * 3] - verts[i * 3 - 3], verts[i * 3 + 1] - verts[i * 3 - 2], verts[i * 3 + 2] - verts[i * 3 - 1]);
-    arcs[i] = acc;
+  for (const range of ranges) {
+    let acc = 0;
+    for (let i = range.first + 1; i < range.first + range.count; i++) {
+      acc += Math.hypot(verts[i * 3] - verts[i * 3 - 3], verts[i * 3 + 1] - verts[i * 3 - 2], verts[i * 3 + 2] - verts[i * 3 - 1]);
+      arcs[i] = acc;
+    }
   }
   return uploadVertices(gl, loc, verts, arcs);
 }
@@ -111,7 +113,7 @@ function drawStencilFill(gl, loc, draws, options) {
     pagePass();
     for (const draw of draws) {
       gl.bindVertexArray(draw.vao);
-      gl.drawArrays(gl.TRIANGLE_FAN, 0, draw.count);
+      gl.drawArrays(gl.TRIANGLE_FAN, draw.first ?? 0, draw.count);
     }
   };
   gl.uniform2f(loc.uDash, 0, 0);

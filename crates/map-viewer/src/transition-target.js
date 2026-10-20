@@ -3,8 +3,8 @@
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
   function transitionTarget(gl, projection, paint, water, cold, identify) {
-    const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], extras: [], frame: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
-      surfaces: [], glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
+    const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], cachedGeometry: [], geometryItems: new Map(), extras: [], frame: null, frameProgram: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
+      surfaces: [], textureValues: null, glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
       return target;
@@ -23,22 +23,30 @@
     try {
       const input = target.projection();
       const program = programFor(target, input);
-      if (target.frame !== frame || target.surfaces.some(surface => surface.width !== gl.drawingBufferWidth || surface.height !== gl.drawingBufferHeight)) {
+      const resized = target.surfaces.some(surface => surface.width !== gl.drawingBufferWidth || surface.height !== gl.drawingBufferHeight);
+      const changedProgram = target.frameProgram !== null && target.frameProgram !== program;
+      if (target.frame !== frame || target.frameProgram !== program || resized) {
         clearFrame(target);
+        if (target.glyphs.canvas && [...target.glyphs.map.keys()].some(key => typeof key === "string")) labels.resetGlyphAtlas(target.glyphs);
+        if (resized || changedProgram) clearSurfaces(target);
         target.frame = frame;
-        target.morphs = buildMorphs(target, program.loc, frame, shapes);
+        target.frameProgram = program;
+        const geometry = new Map(shapes.map(shape => [shape.shape, shape.geometry]));
+        if (geometry.size !== shapes.length) throw new Error("Duplicate source geometry");
+        target.morphs = buildMorphs(target, program.loc, frame, geometry);
         const covered = new Set(target.morphs.map(draw => draw.feature.id));
         const rows = frame.change?.script?.steps ?? [];
-        target.surfaces = [];
-        target.surfaces.push(surface(target));
-        target.surfaces.push(surface(target));
-        target.screen = screenQuad(target, program.loc);
-        target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc, collection, covered));
+        if (target.surfaces.length === 0) {
+          target.surfaces.push(surface(target));
+          target.surfaces.push(surface(target));
+          target.screen = screenQuad(target, program.loc);
+        }
+        target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc, collection, geometry, covered));
         if (rows.length === 0 || rows.some(row => !target.morphs.some(draw => draw.rows.includes(row)))
-          || target.scenes.some(scene => scene.some(draw => draw.items.length > 0))) target.crossfades++;
+          || target.scenes.some(scene => scene.some(draw => draw.items.length > 0 || draw.original?.type === "Point"))) target.crossfades++;
       }
       gl.useProgram(program.value);
-      projectionUniforms(gl, program.loc, input.defaultProjectionData);
+      const projection = projectionUniforms(gl, program.loc, input.defaultProjectionData);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
@@ -52,7 +60,9 @@
       gl.uniform1f(program.loc.uFrontMin, -1.1);
       gl.uniform2f(program.loc.uDash, 0, 0);
       gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      const scenes = target.scenes.map(scene => prepareScene(target, scene));
+      const scenes = target.scenes.map(scene => prepareScene(target, program.loc, scene));
+      const changedAtlas = target.glyphs.dirty;
+      const values = endpointValues(target, projection, scenes);
       uploadGlyphAtlas(target);
       gl.uniform1i(program.loc.uTex, 0);
       gl.uniform1i(program.loc.uAfterTex, 1);
@@ -60,14 +70,18 @@
       gl.bindTexture(gl.TEXTURE_2D, target.glyphs.tex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      for (let scene = 0; scene < 2; scene++) {
-        const surface = target.surfaces[scene];
-        gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
-        gl.viewport(0, 0, surface.width, surface.height);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clearStencil(0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        drawScene(target, program.loc, scenes[scene], 1);
+      if (changedAtlas || target.textureValues === null || values.length !== target.textureValues.length
+        || values.some((value, index) => !Object.is(value, target.textureValues[index]))) {
+        for (let scene = 0; scene < 2; scene++) {
+          const surface = target.surfaces[scene];
+          gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
+          gl.viewport(0, 0, surface.width, surface.height);
+          gl.clearColor(0, 0, 0, 0);
+          gl.clearStencil(0);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+          drawScene(target, program.loc, scenes[scene], 1);
+        }
+        target.textureValues = values;
       }
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
       gl.viewport(...state.VIEWPORT);
@@ -84,9 +98,9 @@
       gl.bindVertexArray(target.screen.vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.uniform1f(program.loc.uScreen, 0);
-      drawScene(target, program.loc, prepareScene(target, target.morphs), 1, fraction);
+      drawScene(target, program.loc, prepareScene(target, program.loc, target.morphs), 1, fraction);
     } catch (error) {
-      clearFrame(target);
+      resetTransition(target);
       throw error;
     } finally {
       restoreState(gl, state);
@@ -95,14 +109,41 @@
 
   function settleTransition(target, destination) {
     if (target.disposed) throw new Error("Transition target is disposed");
-    clearFrame(target);
+    resetTransition(target);
     return target.cold(destination);
+  }
+
+  function prepareTransition(target, collection) {
+    if (target.disposed) throw new Error("Transition target is disposed");
+    const gl = target.gl;
+    const state = saveState(gl);
+    let scratch;
+    try {
+      scratch = surface(target);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.framebuffer);
+      const warmedFraction = 0.5;
+      drawTransition(target, { before: collection, after: collection }, [], warmedFraction);
+      gl.finish();
+    } finally {
+      resetTransition(target);
+      if (scratch) disposeSurface(target, scratch);
+      restoreState(gl, state);
+    }
+  }
+
+  function resetTransition(target) {
+    clearFrame(target);
+    labels.disposeGlyphAtlas(target.glyphs, target.gl);
+    for (const resource of target.cachedGeometry) retained.disposeGeometry(target.gl, resource);
+    target.cachedGeometry = [];
+    target.geometryItems.clear();
+    clearSurfaces(target);
   }
 
   function disposeTransition(target) {
     if (target.disposed) return;
     target.disposed = true;
-    clearFrame(target);
+    resetTransition(target);
     for (const program of target.programs.values()) target.gl.deleteProgram(program.value);
     target.programs.clear();
   }
@@ -110,19 +151,32 @@
   function clearFrame(target) {
     for (const resource of target.geometry) retained.disposeGeometry(target.gl, resource);
     for (const buffer of target.extras) target.gl.deleteBuffer(buffer);
-    labels.disposeGlyphAtlas(target.glyphs, target.gl);
-    for (const surface of target.surfaces) {
-      target.gl.deleteFramebuffer(surface.framebuffer);
-      target.gl.deleteRenderbuffer(surface.stencil);
-      target.gl.deleteTexture(surface.texture);
-    }
-    target.surfaces = [];
-    target.screen = null;
     target.geometry = [];
     target.extras = [];
     target.scenes = [];
     target.morphs = [];
     target.frame = null;
+    target.frameProgram = null;
+    target.textureValues = null;
+  }
+
+  function clearSurfaces(target) {
+    target.textureValues = null;
+    for (const surface of target.surfaces) {
+      disposeSurface(target, surface);
+    }
+    target.surfaces = [];
+    if (target.screen) {
+      retained.disposeGeometry(target.gl, target.screen);
+      target.gl.deleteBuffer(target.screen.corner);
+    }
+    target.screen = null;
+  }
+
+  function disposeSurface(target, surface) {
+    target.gl.deleteFramebuffer(surface.framebuffer);
+    target.gl.deleteRenderbuffer(surface.stencil);
+    target.gl.deleteTexture(surface.texture);
   }
 
   function shader(gl, type, source) {
@@ -213,11 +267,56 @@ void main() {
   }
 
   function projectionUniforms(gl, loc, data) {
-    gl.uniformMatrix4fv(loc.u_projection_matrix, false, data.mainMatrix);
-    gl.uniform4fv(loc.u_projection_tile_mercator_coords, data.tileMercatorCoords);
-    gl.uniform4fv(loc.u_projection_clipping_plane, data.clippingPlane);
-    gl.uniform1f(loc.u_projection_transition, data.projectionTransition);
-    gl.uniformMatrix4fv(loc.u_projection_fallback_matrix, false, data.fallbackMatrix);
+    const values = [];
+    const snapshot = value => {
+      if (Array.isArray(value) || ArrayBuffer.isView(value)) values.push(value.length, ...value);
+      else values.push(value);
+      return value;
+    };
+    gl.uniformMatrix4fv(loc.u_projection_matrix, false, snapshot(data.mainMatrix));
+    gl.uniform4fv(loc.u_projection_tile_mercator_coords, snapshot(data.tileMercatorCoords));
+    gl.uniform4fv(loc.u_projection_clipping_plane, snapshot(data.clippingPlane));
+    gl.uniform1f(loc.u_projection_transition, snapshot(data.projectionTransition));
+    gl.uniformMatrix4fv(loc.u_projection_fallback_matrix, false, snapshot(data.fallbackMatrix));
+    return values;
+  }
+
+  function endpointValues(target, projection, scenes) {
+    const values = [pixelRatio(target.gl), target.glyphs.tex];
+    const vector = value => {
+      if (value == null) values.push(value);
+      else values.push(value.length, ...value);
+    };
+    const stroke = value => {
+      values.push(Boolean(value));
+      if (value) {
+        vector(value.color);
+        values.push(value.width, value.pattern);
+      }
+    };
+    values.push(...projection);
+    for (const scene of scenes) {
+      values.push(scene.length);
+      for (const draw of scene) {
+        values.push(Boolean(draw.rings), Boolean(draw.line), Boolean(draw.point), Boolean(draw.glyph));
+        if (draw.rings) {
+          values.push(Boolean(draw.paint));
+          if (draw.paint) vector(draw.paint.fill);
+          stroke(draw.stroke);
+        } else if (draw.line) stroke(draw.stroke);
+        else if (draw.point) {
+          values.push(Boolean(draw.marker));
+          if (draw.marker) {
+            vector(draw.marker.color);
+            values.push(draw.marker.size);
+          }
+        } else if (draw.glyph) {
+          const entry = draw.entry;
+          values.push(entry.w, entry.h, entry.u0, entry.v0, entry.u1, entry.v1);
+        }
+      }
+    }
+    return values;
   }
 
   function coordinates(point) {
@@ -225,23 +324,24 @@ void main() {
     return [Math.cos(latitude) * Math.cos(longitude), Math.cos(latitude) * Math.sin(longitude), Math.sin(latitude)];
   }
 
-  function upload(target, loc, points) {
-    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(coordinates)));
-    target.geometry.push(resource);
+  function upload(target, loc, points, resources = target.geometry, ranges) {
+    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(coordinates)), ranges);
+    resources.push(resource);
     return resource;
   }
 
-  function buildScene(target, loc, collection, covered = new Set()) {
+  function buildScene(target, loc, collection, geometry, covered = new Set()) {
     const draws = [];
     for (const water of collection.waters || []) {
-      const items = geometryItems(target, loc, water.geometry);
+      const items = geometryItems(target, loc, sourceGeometry(geometry, water.geometry));
       draws.push({ water, items });
     }
     for (const feature of collection.features) {
-      const items = covered.has(feature.id) ? [] : geometryItems(target, loc, feature.geometry);
+      const original = covered.has(feature.id) ? null : sourceGeometry(geometry, feature.geometry);
+      const items = original === null || original.type === "Point" ? [] : geometryItems(target, loc, original);
       const recorded = feature.properties.label;
-      const glyph = recorded && recorded.anchor.type === "Point" ? glyphQuad(target, loc, recorded.anchor.coordinates) : null;
-      draws.push({ feature, items, glyph });
+      const anchor = recorded && recorded.anchor.type === "Point" ? recorded.anchor.coordinates : null;
+      draws.push({ feature, items, anchor, original, glyph: null });
     }
     return draws;
   }
@@ -249,8 +349,10 @@ void main() {
   function buildMorphs(target, loc, frame, shapes) {
     const rows = frame.change?.script?.steps ?? [];
     const morphs = rows.filter(draw => draw.step.step === "morph");
-    const simple = feature => feature.geometry.type === "MultiPolygon"
-      && feature.geometry.coordinates.length === 1 && feature.geometry.coordinates[0].length === 1;
+    const simple = feature => {
+      const geometry = sourceGeometry(shapes, feature.geometry);
+      return geometry.type === "MultiPolygon" && geometry.coordinates.length === 1 && geometry.coordinates[0].length === 1;
+    };
     const draws = [];
     for (const draw of morphs) {
       const step = draw.step;
@@ -267,31 +369,37 @@ void main() {
         unchanged = retainedSegments(step.boundary, companions, frame.change.arcs ?? [], shapes);
         if (unchanged === null) continue;
       }
-      const resource = pairedGeometry(target, loc, step.from_pts, step.to_pts);
-      const items = [{ rings: [resource], noStroke: companions.length > 0 }];
-      for (const geometry of unchanged) items.push(...geometryItems(target, loc, geometry));
-      for (const row of companions) {
+      const courses = [{ from: step.from_pts, to: step.to_pts }, ...companions.map(row => {
         const segment = row.step;
-        const line = segment.step === "segment-track"
-          ? pairedGeometry(target, loc, segment.from, segment.to)
-          : unitGeometry(target, loc, segment.course);
-        items.push({ line, appears: segment.step === "segment-fade" ? segment.appears : undefined });
-      }
+        return segment.step === "segment-track"
+          ? { from: segment.from, to: segment.to }
+          : { from: segment.course, to: segment.course };
+      })];
+      const resources = pairedGeometryBatch(target, loc, courses);
+      const items = [{ rings: [resources[0]], noStroke: companions.length > 0 }];
+      for (const geometry of unchanged) items.push(...geometryItems(target, loc, geometry));
+      companions.forEach((row, index) => {
+        const segment = row.step;
+        items.push({ line: resources[index + 1], appears: segment.step === "segment-fade" ? segment.appears : undefined });
+      });
       draws.push({ feature, items, rows: [draw, ...companions] });
     }
     return draws;
   }
 
-  function unitGeometry(target, loc, points) {
-    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(point => [point.x, point.y, point.z])));
+  function pairedGeometryBatch(target, loc, courses) {
+    let first = 0;
+    const ranges = courses.map(course => {
+      const range = { first, count: course.to.length };
+      first += course.to.length;
+      return range;
+    });
+    const resource = retained.uploadGeometry(target.gl, loc,
+      Float32Array.from(courses.flatMap(course => course.to.flatMap(point => [point.x, point.y, point.z]))), ranges);
     target.geometry.push(resource);
-    return resource;
-  }
-
-  function pairedGeometry(target, loc, from, to) {
-    const resource = unitGeometry(target, loc, to);
-    target.extras.push(retained.uploadPrevious(target.gl, loc, resource, Float32Array.from(from.flatMap(point => [point.x, point.y, point.z]))));
-    return resource;
+    target.extras.push(retained.uploadPrevious(target.gl, loc, resource,
+      Float32Array.from(courses.flatMap(course => course.from.flatMap(point => [point.x, point.y, point.z])))));
+    return ranges.map(range => ({ ...resource, ...range }));
   }
 
   function sameArc(left, right) {
@@ -331,10 +439,16 @@ void main() {
   }
 
   function originalLine(shapes, key) {
-    const selected = shapes.filter(shape => shape.shape === key);
-    if (selected.length !== 1) return null;
-    const geometry = selected[0].geometry;
+    const geometry = shapes.get(key);
+    if (geometry === undefined) return null;
     return geometry.type === "MultiLineString" && geometry.coordinates.length === 1 && geometry.coordinates[0].length >= 2 ? geometry : null;
+  }
+
+  function sourceGeometry(shapes, geometry) {
+    if (typeof geometry !== "string") return geometry;
+    const original = shapes.get(geometry);
+    if (original === undefined) throw new Error("Missing source geometry");
+    return original;
   }
 
   function retainedSegments(boundary, companions, changes, shapes) {
@@ -368,10 +482,39 @@ void main() {
   }
 
   function geometryItems(target, loc, geometry) {
-    if (geometry.type === "MultiPolygon") return geometry.coordinates.map(polygon => ({ rings: polygon.map(ring => upload(target, loc, ring)) }));
-    if (geometry.type === "MultiLineString") return geometry.coordinates.map(course => ({ line: upload(target, loc, course) }));
-    if (geometry.type === "Point") return [{ point: upload(target, loc, [geometry.coordinates]) }];
-    throw new Error("Unsupported source geometry");
+    let cache = target.geometryItems.get(loc);
+    if (!cache) {
+      cache = new WeakMap();
+      target.geometryItems.set(loc, cache);
+    }
+    let items = cache.get(geometry);
+    if (!items) {
+      let groups;
+      if (geometry.type === "MultiPolygon") groups = geometry.coordinates;
+      else if (geometry.type === "MultiLineString") groups = [geometry.coordinates];
+      else if (geometry.type === "Point") groups = [[[geometry.coordinates]]];
+      else throw new Error("Unsupported source geometry");
+      const courses = groups.flat();
+      let first = 0;
+      const ranges = courses.map(course => {
+        const range = { first, count: course.length };
+        first += course.length;
+        return range;
+      });
+      const resource = courses.length === 0 ? null : upload(target, loc, courses.flat(), target.cachedGeometry, ranges);
+      const views = ranges.map(range => ({ ...resource, ...range }));
+      if (geometry.type === "MultiPolygon") {
+        let at = 0;
+        items = groups.map(polygon => {
+          const rings = views.slice(at, at + polygon.length);
+          at += polygon.length;
+          return { rings };
+        });
+      } else if (geometry.type === "MultiLineString") items = views.map(line => ({ line }));
+      else items = [{ point: views[0] }];
+      cache.set(geometry, items);
+    }
+    return items.map(item => ({ ...item }));
   }
 
   function surface(target) {
@@ -407,14 +550,18 @@ void main() {
 
   function screenQuad(target, loc) {
     const resource = retained.uploadLobe(target.gl, loc, Float32Array.from([-1, -1, 0, -1, 1, 0, 1, -1, 0, 1, 1, 0]));
-    target.geometry.push(resource);
-    corners(target, loc, resource);
-    return resource;
+    try {
+      resource.corner = corners(target, loc, resource);
+      return resource;
+    } catch (error) {
+      retained.disposeGeometry(target.gl, resource);
+      throw error;
+    }
   }
 
   function glyphQuad(target, loc, point) {
     const resource = upload(target, loc, [point, point, point, point]);
-    corners(target, loc, resource);
+    target.extras.push(corners(target, loc, resource));
     return resource;
   }
 
@@ -422,15 +569,20 @@ void main() {
     const gl = target.gl;
     const buffer = gl.createBuffer();
     if (buffer === null) throw new Error("GPU glyph quad allocation failed");
-    target.extras.push(buffer);
-    gl.bindVertexArray(resource.vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from([0, 0, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(loc.aCorner);
-    gl.vertexAttribPointer(loc.aCorner, 2, gl.FLOAT, false, 0, 0);
+    try {
+      gl.bindVertexArray(resource.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, Float32Array.from([0, 0, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(loc.aCorner);
+      gl.vertexAttribPointer(loc.aCorner, 2, gl.FLOAT, false, 0, 0);
+      return buffer;
+    } catch (error) {
+      gl.deleteBuffer(buffer);
+      throw error;
+    }
   }
 
-  function prepareScene(target, draws) {
+  function prepareScene(target, loc, draws) {
     const prepared = [];
     for (const draw of draws) {
       if (draw.water) {
@@ -438,8 +590,21 @@ void main() {
         for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; prepared.push(item); }
       } else {
         const [paint, stroke, marker, label] = target.paint(draw.feature.properties);
-        for (const item of draw.items) { item.paint = paint; item.stroke = item.noStroke ? null : stroke; item.marker = marker; prepared.push(item); }
-        if (label && draw.glyph) {
+        if (draw.original?.type === "Point" && marker && !marker.image && draw.items.length === 0) draw.items = geometryItems(target, loc, draw.original);
+        for (const item of draw.items) {
+          item.paint = paint;
+          item.stroke = item.noStroke || (stroke?.lineOnly && !item.line) ? null : stroke;
+          item.marker = marker?.image ? null : marker;
+          prepared.push(item);
+        }
+        if (marker?.image && draw.anchor) {
+          draw.markerGlyph ??= glyphQuad(target, loc, draw.anchor);
+          labels.initializeGlyphAtlas(target.glyphs, target.gl);
+          const entry = labels.retainedImageEntry(target.glyphs, marker);
+          if (entry) prepared.push({ glyph: draw.markerGlyph, entry });
+        }
+        if (label && draw.anchor) {
+          draw.glyph ??= glyphQuad(target, loc, draw.anchor);
           labels.initializeGlyphAtlas(target.glyphs, target.gl);
           const [style, voice] = label;
           const recorded = draw.feature.properties.label;
@@ -478,7 +643,7 @@ void main() {
         colour(gl, loc, draw.marker.color, drawAlpha);
         gl.uniform1f(loc.uPointSize, draw.marker.size * pixelRatio(gl));
         gl.bindVertexArray(draw.point.vao);
-        gl.drawArrays(gl.POINTS, 0, draw.point.count);
+        gl.drawArrays(gl.POINTS, draw.point.first ?? 0, draw.point.count);
       } else if (draw.glyph) {
         const glyphs = target.glyphs;
         gl.activeTexture(gl.TEXTURE0);
@@ -501,7 +666,7 @@ void main() {
     colour(gl, loc, style.color, alpha);
     gl.lineWidth(style.width * pixelRatio(gl));
     gl.bindVertexArray(resource.vao);
-    gl.drawArrays(gl.LINE_STRIP, 0, resource.count);
+    gl.drawArrays(gl.LINE_STRIP, resource.first ?? 0, resource.count);
   }
 
   function saveState(gl) {
@@ -544,7 +709,7 @@ void main() {
     [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST, gl.SCISSOR_TEST, gl.CULL_FACE].forEach((capability, index) => state.enabled[index] ? gl.enable(capability) : gl.disable(capability));
   }
 
-  const api = { transitionTarget, drawTransition, settleTransition, disposeTransition };
+  const api = { transitionTarget, drawTransition, settleTransition, prepareTransition, resetTransition, disposeTransition };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else Object.assign(scope, api);
 })(typeof globalThis !== "undefined" ? globalThis : this);
