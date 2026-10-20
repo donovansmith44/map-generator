@@ -746,4 +746,3 @@ test('viewport resizing replaces scene surfaces and releases the previous resour
     fixture.api.disposeTransition(fixture.target);
     assert.equal(fixture.live.size, 0, 'Disposal after resizing releases every replacement resource.');
 });
-
