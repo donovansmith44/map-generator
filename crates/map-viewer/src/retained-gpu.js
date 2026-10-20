@@ -130,8 +130,7 @@ function drawStencilFill(gl, loc, draws, options) {
     gl.uniform4f(loc.uColor, ...options.color.map(channel => channel / 255));
     rings();
   } catch (error) {
-    gl.clearStencil(0);
-    gl.clear(gl.STENCIL_BUFFER_BIT);
+    gl.clearBufferiv(gl.STENCIL, 0, [0]);
     throw error;
   } finally {
     gl.colorMask(true, true, true, true);

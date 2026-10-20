@@ -13,7 +13,7 @@ function context(failAt = 0) {
   const allocation = pool => { const handle = ++issued; pool.add(handle); return handle; };
   const gl = {
     ARRAY_BUFFER: 1, STATIC_DRAW: 2, FLOAT: 3, STENCIL_TEST: 4,
-    ALWAYS: 5, KEEP: 6, INVERT: 7, NOTEQUAL: 8, ZERO: 9, TRIANGLE_FAN: 10, TRIANGLES: 11, STENCIL_BUFFER_BIT: 12,
+    ALWAYS: 5, KEEP: 6, INVERT: 7, NOTEQUAL: 8, ZERO: 9, TRIANGLE_FAN: 10, TRIANGLES: 11, STENCIL_BUFFER_BIT: 12, STENCIL: 13,
     buffers, vaos, pointers, draws, uniforms, bound: null, array: null, mask: null, stencil: false, cleared: null,
     createBuffer() { return allocation(buffers); }, createVertexArray() { return allocation(vaos); },
     deleteBuffer(handle) { if (handle !== null) assert.equal(buffers.delete(handle), true, 'each buffer is deleted exactly once'); },
@@ -27,6 +27,7 @@ function context(failAt = 0) {
     colorMask(...mask) { this.mask = mask; }, stencilFunc() {}, stencilOp() {},
     drawArrays(mode, _first, count) { draws.push([mode, count]); },
     clearStencil(value) { this.clearValue = value; }, clear(bits) { this.cleared = bits; },
+    clearBufferiv(buffer, index, value) { this.bufferClear = { buffer, index, value: Array.from(value) }; },
   };
   return gl;
 }
@@ -107,9 +108,10 @@ for (const mode of [0, 1]) {
 
 test('failed parity drawing clears incomplete parity and restores drawing state', () => {
   const gl = context(); gl.drawArrays = () => { throw Error('draw failed'); };
+  gl.clearStencil(113);
   assert.throws(() => renderer.drawStencilFill(gl, loc, [{ vao: 10, count: 3 }], { mode: 0, whole: false, color: [1, 2, 3, 4], frontMin: 0.2 }), /draw failed/, 'the draw failure reaches its caller');
-  assert.equal(gl.cleared, gl.STENCIL_BUFFER_BIT, 'incomplete parity is cleared after a failed draw');
-  assert.equal(gl.clearValue, 0, 'failed parity is cleared back to its initial zero state');
+  assert.deepEqual(gl.bufferClear, { buffer: gl.STENCIL, index: 0, value: [0] }, 'incomplete parity is cleared back to zero after a failed draw');
+  assert.equal(gl.clearValue, 113, 'failure cleanup preserves the caller clear value');
   assert.deepEqual(gl.mask, [true, true, true, true], 'failed parity restores colour writes');
   assert.equal(gl.stencil, false, 'failed parity disables its stencil test');
   assert.deepEqual(gl.uniforms.at(-1), [loc.uFrontMin, 0.2], 'failed parity restores the stroke front threshold');

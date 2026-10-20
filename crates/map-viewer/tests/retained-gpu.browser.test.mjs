@@ -58,6 +58,9 @@ for (const engine of [chromium, webkit]) {
                     gl.clearColor(0, 0, 0, 0);
                     gl.clearStencil(0);
                     gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+                    gl.clearColor(0.125, 0.25, 0.5, 0.75);
+                    gl.clearStencil(113);
+                    const clearBefore = [Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE)), gl.getParameter(gl.STENCIL_CLEAR_VALUE)];
                     const vertices = new Float32Array((move % 2 === 0 ? outer : [...outer].reverse()).flat());
                     const ring = uploadGeometry(gl, loc, vertices);
                     const lobe = uploadLobe(gl, loc, hole);
@@ -71,7 +74,8 @@ for (const engine of [chromium, webkit]) {
                     endPrevious(gl, loc, ring, previous);
                     ring.clipScratch = [lobe];
                     disposeGeometry(gl, ring);
-                    cycles.push({ active, remaining: { buffers: buffers.size, arrays: arrays.size }, filled: Array.from(filled), empty: Array.from(empty), error: gl.getError() });
+                    const clearAfter = [Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE)), gl.getParameter(gl.STENCIL_CLEAR_VALUE)];
+                    cycles.push({ active, remaining: { buffers: buffers.size, arrays: arrays.size }, filled: Array.from(filled), empty: Array.from(empty), clearBefore, clearAfter, error: gl.getError() });
                 }
                 gl.deleteProgram(program);
                 gl.deleteShader(vertex);
@@ -84,6 +88,7 @@ for (const engine of [chromium, webkit]) {
                 assert.deepEqual(cycle.remaining, { buffers: 0, arrays: 0 }, `Move ${index} leaves no retained buffer or vertex array`);
                 assert.deepEqual(cycle.filled, [255, 0, 0, 255], `Move ${index} fills the ring`);
                 assert.deepEqual(cycle.empty, [0, 0, 0, 0], `Move ${index} preserves the hole`);
+                assert.deepEqual(cycle.clearAfter, cycle.clearBefore, `Move ${index} preserves the foreign clear values`);
                 assert.equal(cycle.error, 0, `Move ${index} causes no WebGL error`);
             }
             assert.equal(result.releases, result.allocations, 'Every allocated buffer and vertex array is released');

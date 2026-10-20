@@ -13,7 +13,7 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     const counts = { geometry: 0, framebuffer: 0, texture: 0, stencil: 0 };
     const draws = [], images = [], painted = [], uploads = [];
     let boundBuffer;
-    const clears = [], queries = [], uniforms = [], fills = [];
+    const clears = [], bufferClears = [], queries = [], uniforms = [], fills = [];
     let morphFraction, labelMode;
     let drawFramebuffer = 0, readFramebuffer = 0, canvasDraws = 0, finishes = 0;
     const resource = kind => { const value = { kind }; live.add(value); return value; };
@@ -30,6 +30,10 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
             if (name === 'bindBuffer') return (_binding, buffer) => { boundBuffer = buffer; };
             if (name === 'bufferData') return (_binding, data) => uploads.push({ buffer: boundBuffer, values: Array.from(data) });
             if (name === 'clear') return () => clears.push(drawFramebuffer);
+            if (name === 'clearBufferfv' || name === 'clearBufferiv') return (buffer, index, values) => {
+                bufferClears.push({ buffer, index, values: Array.from(values) });
+                if (buffer === 'COLOR') clears.push(drawFramebuffer);
+            };
             if (name === 'bindFramebuffer') return (binding, framebuffer) => {
                 if (binding !== 'READ_FRAMEBUFFER') drawFramebuffer = framebuffer;
                 if (binding !== 'DRAW_FRAMEBUFFER') readFramebuffer = framebuffer;
@@ -76,7 +80,7 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     vm.runInNewContext(fs.readFileSync(new URL('../src/transition-target.js', import.meta.url), 'utf8'), context);
     const api = context.module.exports;
     const target = api.transitionTarget(gl, () => ({ shaderData: { variantName: 'test', vertexShaderPrelude: '', define: '' }, defaultProjectionData: {} }), () => [null, null, null, label], () => [], () => {}, reference => reference.id);
-    return { api, target, gl, atlas, counts, draws, painted, images, uploads, clears, queries, uniforms, fills, live, collection, waters: served.origin.waters, frames: served.keyframes, shapes: served.shapes, frame: { before: collection, after: collection },
+    return { api, target, gl, atlas, counts, draws, painted, images, uploads, clears, bufferClears, queries, uniforms, fills, live, collection, waters: served.origin.waters, frames: served.keyframes, shapes: served.shapes, frame: { before: collection, after: collection },
         observed() { return { drawFramebuffer, readFramebuffer, canvasDraws, finishes }; } };
 }
 
@@ -93,6 +97,107 @@ function glyphAtlas(gl) {
     vm.runInNewContext(fs.readFileSync(new URL('../src/retained-labels.js', import.meta.url), 'utf8'), context);
     return { api: context.module.exports, window: context.window };
 }
+
+function foreignState(gl) {
+    const values = new Map(), textures = new Map(), enabled = new Set();
+    const originalQuery = gl.getParameter;
+    const setter = (name, change) => {
+        const original = gl[name];
+        gl[name] = (...args) => { original(...args); change(...args); };
+    };
+    const vector = (name, field) => setter(name, (...args) => values.set(field, args));
+    gl.TEXTURE0 = 1000; gl.TEXTURE1 = 1001;
+    gl.getParameter = parameter => {
+        const original = originalQuery(parameter);
+        return parameter === 'TEXTURE_BINDING_2D' ? textures.get(values.get('ACTIVE_TEXTURE'))
+            : values.has(parameter) ? values.get(parameter) : original;
+    };
+    setter('useProgram', value => values.set('CURRENT_PROGRAM', value));
+    setter('bindRenderbuffer', (_target, value) => values.set('RENDERBUFFER_BINDING', value));
+    setter('bindVertexArray', value => values.set('VERTEX_ARRAY_BINDING', value));
+    setter('bindBuffer', (_target, value) => values.set('ARRAY_BUFFER_BINDING', value));
+    setter('activeTexture', value => values.set('ACTIVE_TEXTURE', value));
+    setter('bindTexture', (_target, value) => textures.set(values.get('ACTIVE_TEXTURE'), value));
+    setter('pixelStorei', (parameter, value) => values.set(parameter, value));
+    setter('lineWidth', value => values.set('LINE_WIDTH', value));
+    setter('clearStencil', value => values.set('STENCIL_CLEAR_VALUE', value));
+    vector('viewport', 'VIEWPORT'); vector('clearColor', 'COLOR_CLEAR_VALUE'); vector('colorMask', 'COLOR_WRITEMASK');
+    const faces = face => face === 'FRONT' ? ['STENCIL_'] : face === 'BACK' ? ['STENCIL_BACK_'] : ['STENCIL_', 'STENCIL_BACK_'];
+    setter('stencilMaskSeparate', (face, mask) => { for (const prefix of faces(face)) values.set(prefix + 'WRITEMASK', mask); });
+    setter('stencilMask', mask => { for (const prefix of faces()) values.set(prefix + 'WRITEMASK', mask); });
+    const stencil = (face, fields, args) => { for (const prefix of faces(face)) fields.forEach((field, index) => values.set(prefix + field, args[index])); };
+    setter('stencilFuncSeparate', (face, ...args) => stencil(face, ['FUNC', 'REF', 'VALUE_MASK'], args));
+    setter('stencilFunc', (...args) => stencil(null, ['FUNC', 'REF', 'VALUE_MASK'], args));
+    setter('stencilOpSeparate', (face, ...args) => stencil(face, ['FAIL', 'PASS_DEPTH_FAIL', 'PASS_DEPTH_PASS'], args));
+    setter('stencilOp', (...args) => stencil(null, ['FAIL', 'PASS_DEPTH_FAIL', 'PASS_DEPTH_PASS'], args));
+    const blend = (...args) => ['BLEND_SRC_RGB', 'BLEND_DST_RGB', 'BLEND_SRC_ALPHA', 'BLEND_DST_ALPHA'].forEach((field, index) => values.set(field, args[index]));
+    setter('blendFuncSeparate', blend); setter('blendFunc', (source, destination) => blend(source, destination, source, destination));
+    setter('blendEquationSeparate', (rgb, alpha) => { values.set('BLEND_EQUATION_RGB', rgb); values.set('BLEND_EQUATION_ALPHA', alpha); });
+    setter('enable', capability => enabled.add(capability)); setter('disable', capability => enabled.delete(capability));
+    gl.isEnabled = capability => enabled.has(capability);
+    gl.useProgram({ foreign: 'program' }); gl.bindVertexArray({ foreign: 'vao' }); gl.bindBuffer(gl.ARRAY_BUFFER, { foreign: 'buffer' });
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, { foreign: 'draw framebuffer' }); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, { foreign: 'read framebuffer' });
+    gl.bindRenderbuffer(gl.RENDERBUFFER, { foreign: 'renderbuffer' }); gl.viewport(3, 5, 701, 509);
+    gl.clearColor(0.125, 0.25, 0.5, 0.75); gl.clearStencil(113); gl.colorMask(false, true, false, true); gl.lineWidth(2);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    for (const [index, face] of ['FRONT', 'BACK'].entries()) {
+        gl.stencilMaskSeparate(face, index ? 0x2a : 0x55); gl.stencilFuncSeparate(face, index ? 'LESS' : 'GREATER', index + 2, 0x7f);
+        gl.stencilOpSeparate(face, 'INCR', 'DECR', 'REPLACE');
+    }
+    gl.blendFuncSeparate('SRC_ALPHA', 'ONE_MINUS_SRC_ALPHA', 'ONE', 'ZERO'); gl.blendEquationSeparate('FUNC_SUBTRACT', 'FUNC_REVERSE_SUBTRACT');
+    for (const capability of [gl.BLEND, gl.SCISSOR_TEST, gl.CULL_FACE]) gl.enable(capability);
+    for (const unit of [gl.TEXTURE0, gl.TEXTURE1, gl.TEXTURE0 + 4]) { gl.activeTexture(unit); gl.bindTexture(gl.TEXTURE_2D, { foreign: unit }); }
+    return () => ({ values: [...values], textures: [...textures], enabled: [...enabled].sort(),
+        draw: gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING), read: gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) });
+}
+
+test('draw, preparation, resizing and failures preserve every foreign GL state value', () => {
+    // Arrange
+    for (const scenario of ['draw', 'prepare', 'resize', 'allocation', 'draw error']) {
+        const fixture = sourceTarget(null, false, true);
+        const snapshot = foreignState(fixture.gl), before = snapshot();
+        const draw = () => fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.25);
+        // Act
+        if (scenario === 'prepare') fixture.api.prepareTransition(fixture.target, fixture.collection);
+        else if (scenario === 'allocation') {
+            fixture.gl.renderbufferStorage = () => { throw new Error('foreign allocation failure'); };
+            assert.throws(draw, /foreign allocation failure/);
+        } else if (scenario === 'draw error') {
+            fixture.gl.drawArrays = () => { throw new Error('foreign draw failure'); };
+            assert.throws(draw, /foreign draw failure/);
+        } else {
+            draw();
+            if (scenario === 'resize') { fixture.gl.drawingBufferWidth++; draw(); }
+        }
+        // Assert
+        assert.deepEqual(snapshot(), before, scenario + ' restores all incoming caller state.');
+        fixture.api.disposeTransition(fixture.target);
+        assert.equal(fixture.live.size, 0, scenario + ' releases all owned resources.');
+    }
+});
+
+test('unchanged clear values need no queries and renderbuffer state is read only during surface allocation', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const draw = fraction => fixture.api.drawTransition(fixture.target, fixture.frame, [], fraction);
+    // Act
+    draw(0);
+    const allocated = fixture.queries.filter(value => value === 'RENDERBUFFER_BINDING').length;
+    const start = fixture.queries.length;
+    draw(0.25);
+    // Assert
+    assert.equal(allocated, 2, 'Each newly allocated surface owns its binding preservation.');
+    assert.ok(!fixture.queries.includes('COLOR_CLEAR_VALUE') && !fixture.queries.includes('STENCIL_CLEAR_VALUE'), 'Explicit buffer clears never mutate these foreign values.');
+    assert.ok(!fixture.queries.slice(start).includes('RENDERBUFFER_BINDING'), 'A retained surface does not change the renderbuffer binding.');
+    assert.ok(fixture.queries.slice(start).includes('COLOR_WRITEMASK'), 'Every still-mutated mask retains its real incoming state query.');
+    assert.deepEqual(fixture.bufferClears, Array.from({ length: 2 }, () => [
+        { buffer: 'COLOR', index: 0, values: [0, 0, 0, 0] }, { buffer: 'STENCIL', index: 0, values: [0] },
+    ]).flat(), 'Both original endpoint textures receive the same transparent color and zero stencil.');
+    fixture.gl.drawingBufferWidth++;
+    draw(0.5);
+    assert.equal(fixture.queries.filter(value => value === 'RENDERBUFFER_BINDING').length, allocated + 2, 'Resize preserves the binding for both replacement allocations.');
+    fixture.api.disposeTransition(fixture.target);
+});
 
 function atlasStyle() {
     return [{ size: 12, color: [1, 2, 3, 255], halo: [255, 255, 255, 255] },
@@ -295,7 +400,7 @@ test('endpoint reuse compares exact consumed projection values and preserves GL 
     fixture.api.drawTransition(fixture.target, fixture.frame, [], 0.1);
     // Assert
     assert.equal(fixture.clears.length, 2, 'New projection arrays with the same values reuse the original endpoint textures.');
-    assert.equal(fixture.queries.length, reads * 2, 'Every fraction still saves the complete incoming GL state.');
+    assert.deepEqual(fixture.queries.slice(reads), fixture.queries.slice(0, reads).filter(value => value !== 'RENDERBUFFER_BINDING'), 'Every fraction still saves all mutated incoming GL state without repeating allocation-only reads.');
     let expected = 2;
     for (const [index, field] of ['mainMatrix', 'tileMercatorCoords', 'clippingPlane', 'projectionTransition', 'fallbackMatrix'].entries()) {
         if (field === 'projectionTransition') data[field]++;

@@ -76,9 +76,8 @@
           const surface = target.surfaces[scene];
           gl.bindFramebuffer(gl.FRAMEBUFFER, surface.framebuffer);
           gl.viewport(0, 0, surface.width, surface.height);
-          gl.clearColor(0, 0, 0, 0);
-          gl.clearStencil(0);
-          gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+          gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
+          gl.clearBufferiv(gl.STENCIL, 0, [0]);
           drawScene(target, program.loc, scenes[scene], 1);
         }
         target.textureValues = values;
@@ -520,6 +519,7 @@ void main() {
   function surface(target) {
     const gl = target.gl;
     const surface = { framebuffer: null, texture: null, stencil: null, width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+    const renderbuffer = gl.getParameter(gl.RENDERBUFFER_BINDING);
     try {
       surface.framebuffer = gl.createFramebuffer();
       if (surface.framebuffer === null) throw new Error("GPU framebuffer allocation failed");
@@ -545,6 +545,8 @@ void main() {
       if (surface.stencil !== null) gl.deleteRenderbuffer(surface.stencil);
       if (surface.texture !== null) gl.deleteTexture(surface.texture);
       throw error;
+    } finally {
+      gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
     }
   }
 
@@ -671,7 +673,7 @@ void main() {
 
   function saveState(gl) {
     const values = {};
-    for (const name of ["CURRENT_PROGRAM", "DRAW_FRAMEBUFFER_BINDING", "READ_FRAMEBUFFER_BINDING", "RENDERBUFFER_BINDING", "VIEWPORT", "COLOR_CLEAR_VALUE", "VERTEX_ARRAY_BINDING", "ARRAY_BUFFER_BINDING", "ACTIVE_TEXTURE", "TEXTURE_BINDING_2D", "UNPACK_PREMULTIPLY_ALPHA_WEBGL", "UNPACK_FLIP_Y_WEBGL", "COLOR_WRITEMASK", "LINE_WIDTH", "STENCIL_CLEAR_VALUE", "STENCIL_WRITEMASK", "STENCIL_FUNC", "STENCIL_REF", "STENCIL_VALUE_MASK", "STENCIL_FAIL", "STENCIL_PASS_DEPTH_FAIL", "STENCIL_PASS_DEPTH_PASS", "STENCIL_BACK_WRITEMASK", "STENCIL_BACK_FUNC", "STENCIL_BACK_REF", "STENCIL_BACK_VALUE_MASK", "STENCIL_BACK_FAIL", "STENCIL_BACK_PASS_DEPTH_FAIL", "STENCIL_BACK_PASS_DEPTH_PASS", "BLEND_SRC_RGB", "BLEND_DST_RGB", "BLEND_SRC_ALPHA", "BLEND_DST_ALPHA", "BLEND_EQUATION_RGB", "BLEND_EQUATION_ALPHA"]) values[name] = gl.getParameter(gl[name]);
+    for (const name of ["CURRENT_PROGRAM", "DRAW_FRAMEBUFFER_BINDING", "READ_FRAMEBUFFER_BINDING", "VIEWPORT", "VERTEX_ARRAY_BINDING", "ARRAY_BUFFER_BINDING", "ACTIVE_TEXTURE", "TEXTURE_BINDING_2D", "UNPACK_PREMULTIPLY_ALPHA_WEBGL", "UNPACK_FLIP_Y_WEBGL", "COLOR_WRITEMASK", "LINE_WIDTH", "STENCIL_WRITEMASK", "STENCIL_FUNC", "STENCIL_REF", "STENCIL_VALUE_MASK", "STENCIL_FAIL", "STENCIL_PASS_DEPTH_FAIL", "STENCIL_PASS_DEPTH_PASS", "STENCIL_BACK_WRITEMASK", "STENCIL_BACK_FUNC", "STENCIL_BACK_REF", "STENCIL_BACK_VALUE_MASK", "STENCIL_BACK_FAIL", "STENCIL_BACK_PASS_DEPTH_FAIL", "STENCIL_BACK_PASS_DEPTH_PASS", "BLEND_SRC_RGB", "BLEND_DST_RGB", "BLEND_SRC_ALPHA", "BLEND_DST_ALPHA", "BLEND_EQUATION_RGB", "BLEND_EQUATION_ALPHA"]) values[name] = gl.getParameter(gl[name]);
     values.textures = [gl.TEXTURE0, gl.TEXTURE1].map(unit => {
       gl.activeTexture(unit);
       return gl.getParameter(gl.TEXTURE_BINDING_2D);
@@ -685,9 +687,7 @@ void main() {
     gl.useProgram(state.CURRENT_PROGRAM);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, state.READ_FRAMEBUFFER_BINDING);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, state.RENDERBUFFER_BINDING);
     gl.viewport(...state.VIEWPORT);
-    gl.clearColor(...state.COLOR_CLEAR_VALUE);
     gl.bindVertexArray(state.VERTEX_ARRAY_BINDING);
     gl.bindBuffer(gl.ARRAY_BUFFER, state.ARRAY_BUFFER_BINDING);
     state.textures.forEach((texture, index) => { gl.activeTexture(gl.TEXTURE0 + index); gl.bindTexture(gl.TEXTURE_2D, texture); });
@@ -697,7 +697,6 @@ void main() {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, state.UNPACK_FLIP_Y_WEBGL);
     gl.colorMask(...state.COLOR_WRITEMASK);
     gl.lineWidth(state.LINE_WIDTH);
-    gl.clearStencil(state.STENCIL_CLEAR_VALUE);
     gl.stencilMaskSeparate(gl.FRONT, state.STENCIL_WRITEMASK);
     gl.stencilMaskSeparate(gl.BACK, state.STENCIL_BACK_WRITEMASK);
     gl.stencilFuncSeparate(gl.FRONT, state.STENCIL_FUNC, state.STENCIL_REF, state.STENCIL_VALUE_MASK);
