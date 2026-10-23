@@ -1,13 +1,13 @@
 #![cfg(all(feature = "serde", feature = "canon-ids"))]
 
-use atlas_graph_types::map_slice::{CollectionType, FaceStatus, FeatureCollection, Geometry, ShapeId, StoredShape, WaterBody, shape_key};
+use atlas_graph_types::map_slice::{CollectionType, FaceStatus, FeatureCollection, MapShape, ShapeId, StoredShape, WaterBody, shape_key};
 use map_types::atlas_transition::{MapKeyframe, MapTransition, RecordedMapChange, TransitionRead, TransitionRefusal};
 use map_types::transition::TransitionScript;
 
 #[test]
 fn ready_transitions_share_geometry_without_losing_scenes_or_frame_order() {
     // Arrange
-    let geometry = Geometry::Point([35.0, 32.0]);
+    let geometry = MapShape::Point([35.0, 32.0]).to_globe().unwrap();
     let shape = shape_key(&geometry);
     let scene = FeatureCollection {
         r#type: CollectionType::FeatureCollection,
@@ -30,7 +30,7 @@ fn ready_transitions_share_geometry_without_losing_scenes_or_frame_order() {
 fn refused_transitions_retain_the_complete_destination_geometry() {
     // Arrange
     let destination = FeatureCollection {
-        waters: vec![WaterBody { geometry: Geometry::Point([35.0, 32.0]), area_km2: 2.0, within: None, ground: FaceStatus::Background, min_zoom: None, shore_max_zoom: Some(5) }],
+        waters: vec![WaterBody { geometry: MapShape::Point([35.0, 32.0]).to_globe().unwrap(), area_km2: 2.0, within: None, ground: FaceStatus::Background, min_zoom: None, shore_max_zoom: Some(5) }],
         ..FeatureCollection::empty([34.0, 31.0, 36.0, 33.0])
     };
     let reason = TransitionRefusal::<u8>::NotRecorded;

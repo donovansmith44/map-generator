@@ -58,69 +58,7 @@ pub trait MapAddressed {
     }
 }
 
-/// Canonical-byte writer: every field lands tagged and length-framed, so
-/// distinct values cannot collide by concatenation ambiguity.
-#[derive(Default)]
-pub struct Canon(pub Vec<u8>);
-
-impl Canon {
-    pub fn new() -> Self {
-        Canon(Vec::new())
-    }
-    pub fn tag(&mut self, t: &str) -> &mut Self {
-        self.str_(t)
-    }
-    pub fn u8_(&mut self, v: u8) -> &mut Self {
-        self.0.push(v);
-        self
-    }
-    pub fn u64_(&mut self, v: u64) -> &mut Self {
-        self.0.extend_from_slice(&v.to_be_bytes());
-        self
-    }
-    pub(crate) fn hash(&mut self, value: &ContentHash) -> &mut Self {
-        #[cfg(not(feature = "canon-ids"))]
-        { self.u64_(value.0) }
-        #[cfg(feature = "canon-ids")]
-        {
-            self.0.extend_from_slice(&value.0);
-            self
-        }
-    }
-    pub fn i32_(&mut self, v: i32) -> &mut Self {
-        self.0.extend_from_slice(&v.to_be_bytes());
-        self
-    }
-    /// Floats canonicalize by bit pattern — no epsilon, no locale.
-    pub fn f64_(&mut self, v: f64) -> &mut Self {
-        self.u64_(v.to_bits())
-    }
-    pub fn str_(&mut self, s: &str) -> &mut Self {
-        self.u64_(s.len() as u64);
-        self.0.extend_from_slice(s.as_bytes());
-        self
-    }
-    pub fn opt<T>(&mut self, v: &Option<T>, f: impl FnOnce(&mut Self, &T)) -> &mut Self {
-        match v {
-            None => self.u8_(0),
-            Some(x) => {
-                self.u8_(1);
-                f(self, x);
-                self
-            }
-        }
-    }
-    pub fn seq<T>(&mut self, xs: &[T], f: impl Fn(&mut Self, &T)) -> &mut Self {
-        self.u64_(xs.len() as u64);
-        for x in xs {
-            f(self, x);
-        }
-        self
-    }
-    pub fn done(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0)
-    }
-}
+pub use atlas_graph_types::map_native::NativeCanon as Canon;
 
 macro_rules! content_ids {
     ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$(

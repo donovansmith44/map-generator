@@ -1,7 +1,8 @@
+use atlas_graph_types::map_native::GlobePoint;
 use atlas_graph_types::edge::HoldingState;
 use atlas_graph_types::id::{AnyNodeId, ContentHash};
 use atlas_graph_types::ingest::ProvenanceId;
-use atlas_graph_types::map_slice::{FeatureCollection, Geometry, ShapeId, StoredShape};
+use atlas_graph_types::map_slice::{FeatureCollection, MapShape, ShapeId, StoredShape};
 use atlas_graph_types::map_timing::RecordedMapCause;
 use atlas_graph_types::place_versions::Basis;
 
@@ -74,7 +75,7 @@ pub struct RecordedMapChange<N = AnyNodeId, P = ProvenanceId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
+pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId, G = MapShape<GlobePoint>> {
     pub change: RecordedMapChange<N, P>,
     pub before: FeatureCollection<G>,
     pub after: FeatureCollection<G>,
@@ -84,7 +85,7 @@ pub struct MapKeyframe<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MapTransition<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
+pub struct MapTransition<N = AnyNodeId, P = ProvenanceId, G = MapShape<GlobePoint>> {
     pub from_year: i32,
     pub to_year: i32,
     pub origin: FeatureCollection<G>,
@@ -122,7 +123,7 @@ pub enum TransitionRefusal<P = ProvenanceId> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub enum TransitionRead<N = AnyNodeId, P = ProvenanceId, G = Geometry> {
+pub enum TransitionRead<N = AnyNodeId, P = ProvenanceId, G = MapShape<GlobePoint>> {
     Ready { transition: MapTransition<N, P, G> },
     Refused { reason: TransitionRefusal<P>, destination: FeatureCollection },
 }

@@ -97,10 +97,10 @@ proptest! {
         seed in any::<u64>(), lon in -170.0f64..170.0, lat in -80.0f64..80.0) {
         // Arrange
         use atlas_graph_types::id::ContentHash;
-        use atlas_graph_types::map_slice::{shape_key, Geometry, ShapeId};
+        use atlas_graph_types::map_slice::{shape_key, MapShape, ShapeId};
         let spelling = format!("{seed:032x}");
         let arc = ArcRef { store: ContentHash::from_hex(&spelling).unwrap(), key: ContentHash::from_hex(&spelling).unwrap() };
-        let shape = shape_key(&Geometry::Point([lon, lat]));
+        let shape = shape_key(&MapShape::Point([lon, lat]).to_globe().unwrap());
         // Act
         let arc_value = serde_json::to_value(&arc).unwrap();
         let shape_value = serde_json::to_value(shape).unwrap();
