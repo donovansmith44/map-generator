@@ -1,3 +1,19 @@
+function sphericalInterpolationSource() {
+  return `vec3 sphericalInterpolate(vec3 from, vec3 to, float fraction) {
+  vec3 a = normalize(from);
+  vec3 b = normalize(to);
+  if (fraction == 0.0) return a;
+  if (fraction == 1.0) return b;
+  vec3 normal = cross(a, b);
+  float sine = length(normal);
+  float cosine = clamp(dot(a, b), -1.0, 1.0);
+  if (sine == 0.0 && cosine > 0.0) return a;
+  float angle = atan(sine, cosine);
+  vec3 tangent = cross(normal / sine, a);
+  return normalize(a * cos(fraction * angle) + tangent * sin(fraction * angle));
+}`;
+}
+
 function uploadGeometry(gl, loc, verts) {
   const arcs = new Float32Array(verts.length / 3);
   let acc = 0;
@@ -139,5 +155,5 @@ function drawStencilFill(gl, loc, draws, options) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { uploadGeometry, uploadLobe, uploadPrevious, endPrevious, dropClipScratch, disposeGeometry, drawStencilFill };
+  module.exports = { sphericalInterpolationSource, uploadGeometry, uploadLobe, uploadPrevious, endPrevious, dropClipScratch, disposeGeometry, drawStencilFill };
 }

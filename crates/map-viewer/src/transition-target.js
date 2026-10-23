@@ -161,8 +161,9 @@ uniform vec2 uSize;
 uniform vec4 uUV;
 out float vArc;
 out vec2 vUV;
+${retained.sphericalInterpolationSource()}
 void main() {
-  vec3 p = normalize(mix(aPrev, aPos, uMorph));
+  vec3 p = sphericalInterpolate(aPrev, aPos, uMorph);
   float latitude = asin(clamp(p.z, -1.0, 1.0));
   vec2 mercator = vec2(atan(p.y, p.x) / (2.0 * PI) + 0.5, 0.5 - log(tan(PI * 0.25 + latitude * 0.5)) / (2.0 * PI));
   gl_Position = uScreen > 0.5 ? vec4(aPos.xy, 0.0, 1.0) : projectTile(mercator);

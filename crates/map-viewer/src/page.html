@@ -432,6 +432,7 @@ uniform vec2 uCss;                    // canvas css size
 uniform float uPointSize;
 out float vFront;
 out float vArc;
+${sphericalInterpolationSource()}
 void main() {
   vArc = aArc * uArcScale;
   if (uMode == 3) {
@@ -453,11 +454,7 @@ void main() {
     gl_PointSize = 1.0;
     return;
   }
-  // Continuous refinement (§38): the vertex eases from its position
-  // on the parent representation to its own; normalize keeps the
-  // path on the sphere (chordal mix renormalized ≈ slerp at these
-  // angular scales). uMorph=1 (the default) is the plain shape.
-  vec3 p = normalize(mix(aPrev, aPos, uMorph));
+  vec3 p = sphericalInterpolate(aPrev, aPos, uMorph);
   vec2 pv;
   if (uMode == 0) {
     // The same orthographic mathematics the server's Globe speaks.
