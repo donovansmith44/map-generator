@@ -25,3 +25,11 @@ export declare function prepareTransition(target: TransitionTarget, collection: 
 export declare function resetTransition(target: TransitionTarget): void;
 export declare function settleTransition(target: TransitionTarget, destination: unknown): void;
 export declare function disposeTransition(target: TransitionTarget): void;
+export declare function drawStatic(target: TransitionTarget, collection: unknown, pass?: "underlay" | "overlay", highlight?: {
+    readonly ids: ReadonlySet<string>;
+    readonly opacity: number;
+    readonly stroke: unknown;
+    readonly marker: TransitionPointMarker;
+} | null): void;
+export declare function pickTransition(target: TransitionTarget, point: { readonly x: number; readonly y: number }, accepted: ReadonlySet<string>): string | undefined;
+export declare function visibleLabelCourses(geometry: unknown, center: readonly [number, number], globe: boolean): unknown;

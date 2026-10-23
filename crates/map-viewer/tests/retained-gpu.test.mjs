@@ -126,3 +126,96 @@ test('the original viewer loads and calls the extracted single implementation', 
   assert.match(page, /drawStencilFill\(gl, loc, draws,/, 'the original fill uses the extracted parity path');
   assert.doesNotMatch(page, /gl\.stencilFunc\(gl\.NOTEQUAL/, 'the original viewer retains no second odd-parity fill implementation');
 });
+
+const limb = require('../src/limb.js');
+const crossingVertices = () => Float32Array.from([0.6, -0.8, 0, 0.6, 0, 0.8, -0.6, 0.8, 0, -0.6, 0, -0.8]);
+
+test('visible fill cache reuses exact direction, replaces tiny changes and owns disposal', () => {
+  const gl = context(), ring = renderer.uploadGeometry(gl, loc, crossingVertices());
+  const C = [1, 0, 0];
+  const first = renderer.visibleFillDraws(gl, loc, ring, C);
+  assert.ok(first.length > 0);
+  assert.notEqual(first[0], ring);
+  assert.equal(renderer.visibleFillDraws(gl, loc, ring, [...C]), first);
+  assert.deepEqual(renderer.visibleFillDraws(gl, loc, ring, null), [ring]);
+  assert.equal(renderer.visibleFillDraws(gl, loc, ring, C), first, 'flat mode borrows the original without evicting bounded scratch');
+  const oldVaos = first.map(piece => piece.vao);
+  const next = renderer.visibleFillDraws(gl, loc, ring, [Math.cos(1e-7), Math.sin(1e-7), 0]);
+  assert.notEqual(next, first, 'even a sub-rounding direction change reclips');
+  for (const vao of oldVaos) assert.equal(gl.vaos.has(vao), false);
+  renderer.disposeGeometry(gl, ring);
+  renderer.disposeGeometry(gl, ring);
+  assert.equal(gl.buffers.size + gl.vaos.size, 0);
+});
+
+test('visible fills clip only the selected shared-buffer range', () => {
+  const gl = context(), values = crossingVertices();
+  const backing = renderer.uploadGeometry(gl, loc, Float32Array.from([1, 0, 0, ...values, -1, 0, 0]));
+  const range = { vao: backing.vao, verts: backing.verts, first: 1, count: values.length / 3 };
+  const C = [1, 0, 0], { E, N } = limb.limbBasis(C);
+  const expected = limb.clipRingFront(values, C, E, N);
+  const draws = renderer.visibleFillDraws(gl, loc, range, C);
+  assert.deepEqual(draws.map(draw => Array.from(draw.verts)), expected.map(points => Array.from(points)));
+  renderer.dropClipScratch(gl, range);
+  assert.equal(gl.vaos.has(backing.vao), true, 'range cleanup leaves the shared owner alive');
+  renderer.disposeGeometry(gl, backing);
+  assert.equal(gl.buffers.size + gl.vaos.size, 0);
+});
+
+test('visible fills preserve cap fast paths and send exact tangency through clipping', () => {
+  const gl = context(), ring = renderer.uploadGeometry(gl, loc, vertices());
+  ring.cap = { ax: 1, ay: 0, az: 0, cosR: 1 };
+  const original = limb.clipRingFront;
+  let clips = 0;
+  limb.clipRingFront = (...args) => { clips++; return original(...args); };
+  try {
+    assert.deepEqual(renderer.visibleFillDraws(gl, loc, ring, [1, 0, 0]), [ring]);
+    assert.deepEqual(renderer.visibleFillDraws(gl, loc, ring, [-1, 0, 0]), []);
+    assert.equal(clips, 0);
+    renderer.visibleFillDraws(gl, loc, ring, [0, 1, 0]);
+    assert.equal(clips, 1, 'a tangent cap cannot decide the visible ring');
+    delete ring.cap;
+    renderer.dropClipScratch(gl, ring);
+    assert.deepEqual(renderer.visibleFillDraws(gl, loc, ring, [1, 0, 0]), [ring]);
+    assert.deepEqual(renderer.visibleFillDraws(gl, loc, ring, [-1, -1, -1]), []);
+  } finally {
+    limb.clipRingFront = original;
+    renderer.disposeGeometry(gl, ring);
+  }
+});
+
+test('partial multi-lobe upload failure frees completed lobes and leaves cache retryable', () => {
+  const gl = context(4), ring = renderer.uploadGeometry(gl, loc, crossingVertices());
+  const original = limb.clipRingFront;
+  limb.clipRingFront = () => [vertices(), vertices()];
+  try {
+    assert.throws(() => renderer.visibleFillDraws(gl, loc, ring, [1, 0, 0]), /upload failed/);
+    assert.equal(gl.buffers.size, 2);
+    assert.equal(gl.vaos.size, 1);
+    assert.equal(ring.clipKey, null);
+    assert.equal(ring.clipScratch, null);
+    assert.equal(renderer.visibleFillDraws(gl, loc, ring, [1, 0, 0]).length, 2);
+  } finally {
+    limb.clipRingFront = original;
+    renderer.disposeGeometry(gl, ring);
+  }
+  assert.equal(gl.buffers.size + gl.vaos.size, 0);
+});
+
+test('optional cap decisions match the uncapped fixtures and replacement contexts own distinct lobes', () => {
+  const fixtures = JSON.parse(readFileSync(new URL('./fixtures/limb.json', import.meta.url), 'utf8'));
+  for (const fixture of fixtures.cases) {
+    const points = Float32Array.from(fixture.ring);
+    const firstGl = context(), secondGl = context();
+    const ring = renderer.uploadGeometry(firstGl, loc, points);
+    const replacement = renderer.uploadGeometry(secondGl, { ...loc, aPos: 4 }, points);
+    ring.cap = limb.ringCap(points);
+    const capped = renderer.visibleFillDraws(firstGl, loc, ring, fixture.c);
+    const uncapped = renderer.visibleFillDraws(secondGl, { ...loc, aPos: 4 }, replacement, fixture.c);
+    assert.deepEqual(capped.map(draw => Array.from(draw.verts)), uncapped.map(draw => Array.from(draw.verts)), fixture.name);
+    assert.notEqual(ring.clipScratch, replacement.clipScratch, 'recreated resources never share context-owned scratch');
+    renderer.disposeGeometry(firstGl, ring);
+    renderer.disposeGeometry(secondGl, replacement);
+    assert.equal(firstGl.buffers.size + firstGl.vaos.size + secondGl.buffers.size + secondGl.vaos.size, 0);
+  }
+});

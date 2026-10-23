@@ -1,3 +1,19 @@
+function sphericalInterpolationSource() {
+  return `vec3 sphericalInterpolate(vec3 from, vec3 to, float fraction) {
+  vec3 a = normalize(from);
+  vec3 b = normalize(to);
+  if (fraction == 0.0) return a;
+  if (fraction == 1.0) return b;
+  vec3 normal = cross(a, b);
+  float sine = length(normal);
+  float cosine = clamp(dot(a, b), -1.0, 1.0);
+  if (sine == 0.0 && cosine > 0.0) return a;
+  float angle = atan(sine, cosine);
+  vec3 tangent = cross(normal / sine, a);
+  return normalize(a * cos(fraction * angle) + tangent * sin(fraction * angle));
+}`;
+}
+
 function uploadGeometry(gl, loc, verts, ranges = [{ first: 0, count: verts.length / 3 }]) {
   const arcs = new Float32Array(verts.length / 3);
   for (const range of ranges) {
@@ -79,10 +95,46 @@ function endPrevious(gl, loc, resource, buffer) {
   }
 }
 
+// Borrow the ring's visible GPU ranges. The immutable ring owns every clipped
+// lobe; callers invalidate/recreate it when its context, layout or range changes.
+function visibleFillDraws(gl, loc, ring, frontHemisphereCenter) {
+  if (frontHemisphereCenter === null) return [ring];
+  const C = frontHemisphereCenter, key = C.join(",");
+  if (ring.clipKey !== key) {
+    dropClipScratch(gl, ring);
+    const limb = typeof module !== "undefined" && module.exports ? require("./limb.js") : globalThis;
+    try {
+      const cap = ring.cap;
+      const t = cap ? cap.ax * C[0] + cap.ay * C[1] + cap.az * C[2] : 0;
+      const sinR = cap ? Math.sqrt(1 - cap.cosR * cap.cosR) : 0;
+      ring.clipScratch = [];
+      // Equality is tangent, so it must take the clipping path.
+      if (cap && cap.cosR > 0 && t > sinR) {
+        ring.clipSelf = true;
+      } else if (!(cap && cap.cosR > 0 && t < -sinR)) {
+        const { E, N } = limb.limbBasis(C);
+        const first = ring.first ?? 0;
+        const vertices = ring.verts.subarray(first * 3, (first + ring.count) * 3);
+        const clipped = limb.clipRingFront(vertices, C, E, N);
+        ring.clipSelf = clipped === vertices;
+        if (!ring.clipSelf && clipped) {
+          for (const points of clipped) ring.clipScratch.push(uploadLobe(gl, loc, points));
+        }
+      }
+      ring.clipKey = key;
+    } catch (error) {
+      dropClipScratch(gl, ring);
+      throw error;
+    }
+  }
+  return ring.clipSelf ? [ring] : ring.clipScratch;
+}
+
 function dropClipScratch(gl, resource) {
   for (const lobe of resource.clipScratch || []) disposeGeometry(gl, lobe);
   resource.clipScratch = null;
   resource.clipKey = null;
+  resource.clipSelf = false;
 }
 
 function disposeGeometry(gl, resource) {
@@ -140,5 +192,5 @@ function drawStencilFill(gl, loc, draws, options) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { uploadGeometry, uploadLobe, uploadPrevious, endPrevious, dropClipScratch, disposeGeometry, drawStencilFill };
+  module.exports = { sphericalInterpolationSource, uploadGeometry, uploadLobe, uploadPrevious, endPrevious, visibleFillDraws, dropClipScratch, disposeGeometry, drawStencilFill };
 }

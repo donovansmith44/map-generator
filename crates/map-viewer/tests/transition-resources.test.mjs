@@ -2,9 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const limb = require('../src/limb.js');
 
 function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     const served = JSON.parse(fs.readFileSync(process.env.MG_TRANSITION_PAGE_FIXTURE, 'utf8')).body.transition.transition;
+    // The archived transport fixture predates native xyz; adapt its coordinates
+    // once at this test boundary, preserving the original shapes and references.
+    const native = coordinate => Array.isArray(coordinate) && typeof coordinate[0] === 'number'
+        ? { x: Math.cos(coordinate[1] * Math.PI / 180) * Math.cos(coordinate[0] * Math.PI / 180),
+            y: Math.cos(coordinate[1] * Math.PI / 180) * Math.sin(coordinate[0] * Math.PI / 180), z: Math.sin(coordinate[1] * Math.PI / 180) }
+        : coordinate.map(native);
+    for (const shape of served.shapes) shape.geometry.coordinates = native(shape.geometry.coordinates);
     const original = served.origin.features[0];
     const geometry = servedGeometry(original.geometry, served.shapes);
     const collection = { ...served.origin, features: [{ ...original, geometry }], waters: [] };
@@ -52,13 +62,16 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
             return () => {};
         },
     });
-    const gpuContext = { module: { exports: {} } };
+    const gpuContext = { module: { exports: {} }, require: name => name === './limb.js' ? limb : require(name) };
     if (realGpu) vm.runInNewContext(fs.readFileSync(new URL('../src/retained-gpu.js', import.meta.url), 'utf8'), gpuContext);
     const retained = realGpu ? gpuContext.module.exports : {
+        sphericalInterpolationSource() { return ''; },
+        visibleFillDraws(_gl, _loc, ring) { return [ring]; },
+        dropClipScratch() {},
         uploadGeometry(_gl, _loc, verts) { counts.geometry++; return { vao: resource('geometry'), count: verts.length / 3, verts }; },
         uploadLobe(_gl, _loc, verts) { counts.geometry++; return { vao: resource('screen'), count: verts.length / 3, verts }; },
         uploadPrevious() { return gl.createBuffer(); },
-        drawStencilFill() { fills.push({ framebuffer: drawFramebuffer, fraction: morphFraction }); },
+        drawStencilFill(_gl, _loc, _rings, options) { fills.push({ framebuffer: drawFramebuffer, fraction: morphFraction, whole: options.whole, color: options.color }); },
         disposeGeometry(_gl, geometry) { assert.equal(disposed.has(geometry), false, 'Each owned GPU geometry is disposed once.'); disposed.add(geometry); live.delete(geometry.vao); },
     };
     const atlas = realAtlas ? glyphAtlas(gl) : null;
@@ -76,11 +89,11 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
         resetGlyphAtlas(glyphs) { glyphs.map.clear(); glyphs.x = glyphs.y = glyphs.rowH = 0; glyphs.dirty = true; },
         disposeGlyphAtlas(glyphs) { gl.deleteTexture(glyphs.tex); glyphs.tex = null; glyphs.map.clear(); },
     };
-    const context = { module: { exports: {} }, require: name => name === './retained-gpu.js' ? retained : labels };
+    const context = { module: { exports: {} }, require: name => name === './retained-gpu.js' ? retained : name === './limb.js' ? limb : labels };
     vm.runInNewContext(fs.readFileSync(new URL('../src/transition-target.js', import.meta.url), 'utf8'), context);
     const api = context.module.exports;
     const target = api.transitionTarget(gl, () => ({ shaderData: { variantName: 'test', vertexShaderPrelude: '', define: '' }, defaultProjectionData: {} }), () => [null, null, null, label], () => [], () => {}, reference => reference.id);
-    return { api, target, gl, atlas, counts, draws, painted, images, uploads, clears, bufferClears, queries, uniforms, fills, live, collection, waters: served.origin.waters, frames: served.keyframes, shapes: served.shapes, frame: { before: collection, after: collection },
+    return { api, target, gl, atlas, limb, counts, draws, painted, images, uploads, clears, bufferClears, queries, uniforms, fills, live, collection, waters: served.origin.waters, frames: served.keyframes, shapes: served.shapes, frame: { before: collection, after: collection },
         observed() { return { drawFramebuffer, readFramebuffer, canvasDraws, finishes }; } };
 }
 
@@ -959,3 +972,238 @@ function endpointScenes(fixture) {
 function servedGeometry(geometry, shapes) {
     return typeof geometry === 'string' ? shapes.find(shape => shape.shape === geometry).geometry : geometry;
 }
+
+test('native globe coordinates reach the GPU unchanged and open polygon rings close only when stroked', () => {
+    // Arrange
+    const fixture = sourceTarget(null, false, true);
+    const points = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
+    const geometry = { type: 'MultiPolygon', coordinates: [[points]] };
+    const collection = { ...fixture.collection, features: [{ ...fixture.collection.features[0], geometry }] };
+    fixture.target.paint = () => [{ fill: [1, 2, 3, 255] }, { color: [1, 2, 3, 255], width: 1, pattern: 'Solid' }, null, null];
+    // Act
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0);
+    const resource = fixture.target.cachedGeometry[0];
+    const actual = { positions: fixture.uploads.find(upload => upload.buffer === resource.buf).values,
+        boundaries: fixture.draws.filter(draw => draw.mode === 'LINE_LOOP'), geometry };
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(actual, { positions: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+        boundaries: [{ mode: 'LINE_LOOP', first: 0, count: 3 }], geometry: { type: 'MultiPolygon', coordinates: [[points]] } });
+    assert.equal(fixture.live.size, 0);
+});
+
+test('the empty outer ring fills the whole globe while a wholly empty shape draws nothing', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const collection = { ...fixture.collection, features: [
+        { ...fixture.collection.features[0], geometry: { type: 'MultiPolygon', coordinates: [[[]]] } },
+        { ...fixture.collection.features[0], geometry: { type: 'MultiPolygon', coordinates: [] } },
+    ] };
+    fixture.target.paint = () => [{ fill: [1, 2, 3, 255] }, null, null, null];
+    // Act
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0);
+    const actual = fixture.fills.map(fill => fill.whole);
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(actual, [true]);
+    assert.equal(fixture.live.size, 0);
+});
+
+
+test('pixel picking returns only the accepted served identity and restores the display framebuffer', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const points = [{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }];
+    const feature = { ...fixture.collection.features[0], geometry: { type: 'MultiPolygon', coordinates: [[points]] } };
+    const collection = { ...fixture.collection, features: [feature] };
+    fixture.target.paint = () => [{ fill: [1, 2, 3, 255] }, null, null, null];
+    fixture.gl.readPixels = (_x, _y, _width, _height, _format, _type, bytes) => bytes.set([1, 0, 0, 255]);
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0);
+    // Act
+    const selected = fixture.api.pickTransition(fixture.target, { x: 100, y: 100 }, new Set([feature.id]));
+    const unrecorded = fixture.api.pickTransition(fixture.target, { x: 100, y: 100 }, new Set());
+    const framebuffer = fixture.observed().drawFramebuffer;
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual({ selected, unrecorded, framebuffer, live: fixture.live.size }, { selected: feature.id, unrecorded: undefined, framebuffer: 0, live: 0 });
+});
+
+
+test('settled drawing reuses the transition geometry and survives a completed playback without a second scene model', () => {
+    // Arrange
+    const fixture = sourceTarget(null, false, true);
+    const geometry = { type: 'MultiPolygon', coordinates: [[[{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }]]] };
+    const collection = { ...fixture.collection, features: [{ ...fixture.collection.features[0], geometry }] };
+    fixture.target.paint = () => [{ fill: [1, 2, 3, 255] }, null, null, null];
+    // Act
+    fixture.api.drawStatic(fixture.target, collection);
+    const resource = fixture.target.cachedGeometry[0];
+    fixture.api.drawStatic(fixture.target, collection);
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0.5);
+    fixture.api.drawStatic(fixture.target, collection);
+    const actual = { sameResource: fixture.target.cachedGeometry[0] === resource, resourceCount: fixture.target.cachedGeometry.length,
+        original: fixture.target.staticCollection === collection, errors: fixture.uploads.some(upload => upload.values.some(Number.isNaN)) };
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(actual, { sameResource: true, resourceCount: 1, original: true, errors: false });
+    assert.equal(fixture.live.size, 0);
+});
+
+
+test('settled underlay stays below terrain while water covers the overlaid land fill', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const geometry = { type: 'MultiPolygon', coordinates: [[[{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }]]] };
+    const collection = { ...fixture.collection, features: [{ ...fixture.collection.features[0], geometry }], waters: [{ geometry }] };
+    fixture.target.paint = () => [{ fill: [2, 2, 2, 255], underlay: [1, 1, 1, 255] }, null, null, null];
+    fixture.target.water = () => [{ fill: [3, 3, 3, 255] }, null];
+    // Act
+    fixture.api.drawStatic(fixture.target, collection, 'underlay');
+    const below = fixture.fills.splice(0).map(fill => Array.from(fill.color));
+    fixture.api.drawStatic(fixture.target, collection, 'overlay');
+    const above = fixture.fills.map(fill => Array.from(fill.color));
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual({ below, above }, { below: [[1, 1, 1, 255]], above: [[2, 2, 2, 255], [3, 3, 3, 255]] });
+    assert.equal(fixture.live.size, 0);
+});
+
+
+test('translucent shoreline preserves one fill, one highlight and stroke-only shore passes', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const geometry = { type: 'MultiPolygon', coordinates: [[[{ x: 1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }]]] };
+    const feature = { ...fixture.collection.features[0], geometry };
+    const collection = { ...fixture.collection, features: [feature] };
+    const stroke = { color: [50, 50, 50, 128], width: 2, pattern: 'Solid' };
+    fixture.target.paint = () => [{ fill: [100, 100, 100, 128], underlay: [25, 25, 25, 128], shore: stroke }, stroke, null, null];
+    fixture.gl.readPixels = (_x, _y, _width, _height, _format, _type, bytes) => bytes.set([1, 0, 0, 255]);
+    const result = () => ({ fills: fixture.fills.splice(0).map(fill => Array.from(fill.color)),
+        strokes: fixture.draws.splice(0).filter(draw => draw.mode === 'LINE_LOOP').length });
+    // Act
+    fixture.api.drawStatic(fixture.target, collection, 'underlay');
+    const underlay = result();
+    fixture.api.drawStatic(fixture.target, collection);
+    const settled = result();
+    fixture.api.drawStatic(fixture.target, collection, 'overlay', { ids: new Set([feature.id]), opacity: 30, stroke });
+    const highlighted = result();
+    const selected = fixture.api.pickTransition(fixture.target, { x: 100, y: 100 }, new Set([feature.id]));
+    const picking = result();
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0.5);
+    const endpoint = result();
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual({ underlay, settled, highlighted, picking, endpoint, selected, live: fixture.live.size }, {
+        underlay: { fills: [[25, 25, 25, 128]], strokes: 0 },
+        settled: { fills: [[100, 100, 100, 128]], strokes: 2 },
+        highlighted: { fills: [[100, 100, 100, 128], [100, 100, 100, 158]], strokes: 3 },
+        picking: { fills: [[1, 0, 0, 255]], strokes: 2 },
+        endpoint: { fills: [[100, 100, 100, 128]], strokes: 2 },
+        selected: feature.id, live: 0,
+    });
+});
+
+
+test('course labels project visible native strokes without antimeridian jumps or polar connectors', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const point = (longitude, latitude = 0) => ({ x: Math.cos(latitude * Math.PI / 180) * Math.cos(longitude * Math.PI / 180), y: Math.cos(latitude * Math.PI / 180) * Math.sin(longitude * Math.PI / 180), z: Math.sin(latitude * Math.PI / 180) });
+    const seam = { type: 'MultiLineString', coordinates: [[point(170), point(-170)]] };
+    const limb = { type: 'MultiLineString', coordinates: [[point(-120), point(0), point(120)]] };
+    const pole = { type: 'MultiLineString', coordinates: [[point(0), { x: 0, y: 0, z: 1 }, point(90)]] };
+    const original = JSON.stringify({ seam, limb, pole });
+    const rounded = geometry => geometry.coordinates.map(line => line.map(point => point.map(value => Math.round(value))));
+    // Act
+    const actual = {
+        seam: rounded(fixture.api.visibleLabelCourses(seam, [180, 0], true)),
+        limb: rounded(fixture.api.visibleLabelCourses(limb, [0, 0], true)),
+        pole: rounded(fixture.api.visibleLabelCourses(pole, [0, 0], false)),
+        unchanged: JSON.stringify({ seam, limb, pole }) === original,
+    };
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(JSON.parse(JSON.stringify(actual)), { seam: [[[170, 0], [190, 0]]], limb: [[[-90, 0], [0, 0], [90, 0]]], pole: [], unchanged: true });
+});
+
+test('course labels reuse the spherical crossing helper in both directions and at horizon endpoints', () => {
+    // Arrange
+    const fixture = sourceTarget();
+    const behind = { x: -0.6, y: 0.8, z: 0 }, front = { x: 0.6, y: 0.8, z: 0 }, horizon = { x: 0, y: 1, z: 0 };
+    const nearBehind = { x: -1e-9, y: 0.6, z: 0.8 }, nearFront = { x: 1e-9, y: 0.6, z: 0.8 };
+    const geometry = { type: 'MultiLineString', coordinates: [
+        [behind, front], [front, behind], [nearBehind, nearFront], [nearFront, nearBehind], [behind, horizon], [horizon, behind],
+    ] };
+    const original = JSON.stringify(geometry), crossing = fixture.limb.frontCrossing;
+    let crossings = 0;
+    fixture.limb.frontCrossing = (...args) => { crossings++; return crossing(...args); };
+    // Act
+    const projected = fixture.api.visibleLabelCourses(geometry, [0, 0], true);
+    const actual = { type: projected.type, coordinates: Array.from(projected.coordinates, line =>
+        Array.from(line, point => Array.from(point, value => Number(value.toFixed(9))))), crossings, unchanged: JSON.stringify(geometry) === original };
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(actual, { type: 'MultiLineString', coordinates: [
+        [[90, 0], [53.130102354, 0]], [[53.130102354, 0], [90, 0]],
+        [[90, 53.130102354], [89.999999905, 53.130102354]], [[89.999999905, 53.130102354], [90, 53.130102354]],
+        [[90, 0], [90, 0]], [[90, 0], [90, 0]],
+    ], crossings: 6, unchanged: true });
+});
+
+test('highlighting a served point draws its native location even when its ordinary marker belongs to the label layer', () => {
+    // Arrange
+    const fixture = sourceTarget(null, false, true);
+    const feature = { ...fixture.collection.features[0], geometry: { type: 'Point', coordinates: { x: 1, y: 0, z: 0 } } };
+    const collection = { ...fixture.collection, features: [feature] };
+    const highlight = { ids: new Set([feature.id]), opacity: 89, stroke: { color: [1, 2, 3, 255], width: 4, pattern: 'Solid' }, marker: { color: [1, 2, 3, 255], size: 14 } };
+    // Act
+    fixture.api.drawStatic(fixture.target, collection, 'overlay', highlight);
+    const actual = fixture.draws.filter(draw => draw.mode === 'POINTS');
+    fixture.api.disposeTransition(fixture.target);
+    // Assert
+    assert.deepEqual(actual, [{ mode: 'POINTS', first: 0, count: 1 }]);
+    assert.equal(fixture.live.size, 0);
+});
+
+test('static highlight picking and animation share clipping with offset-only reuse and lifetime invalidation', () => {
+    const fixture = sourceTarget(null, false, true);
+    const geometry = { type: 'MultiPolygon', coordinates: [[[
+        { x: 0.6, y: -0.8, z: 0 }, { x: 0.6, y: 0, z: 0.8 },
+        { x: -0.6, y: 0.8, z: 0 }, { x: -0.6, y: 0, z: -0.8 },
+    ]]] };
+    const feature = { ...fixture.collection.features[0], geometry };
+    const collection = { ...fixture.collection, features: [feature] };
+    const input = { shaderData: { variantName: 'test', vertexShaderPrelude: '', define: '' },
+        defaultProjectionData: { clippingPlane: [0, 0, 1, 0], projectionTransition: 1 } };
+    fixture.target.projection = () => input;
+    fixture.target.paint = () => [{ fill: [1, 2, 3, 255] }, null, null, null];
+    fixture.gl.readPixels = (_x, _y, _width, _height, _format, _type, bytes) => bytes.set([1, 0, 0, 255]);
+    fixture.api.drawStatic(fixture.target, collection);
+    const ring = [...fixture.target.clippedRings][0], pieces = ring.clipScratch;
+    assert.ok(pieces.length > 0);
+    fixture.api.drawStatic(fixture.target, collection, 'overlay', { ids: new Set([feature.id]), opacity: 30 });
+    fixture.api.pickTransition(fixture.target, { x: 100, y: 100 }, new Set([feature.id]));
+    assert.equal(ring.clipScratch, pieces, 'static highlights and ID picking borrow the same lobes');
+    input.defaultProjectionData.clippingPlane[3] = 0.5;
+    fixture.api.drawStatic(fixture.target, collection);
+    assert.equal(ring.clipScratch, pieces, 'perspective horizon offset remains a shader input');
+    input.defaultProjectionData.clippingPlane[0] = 1e-7;
+    fixture.api.drawStatic(fixture.target, collection);
+    assert.notEqual(ring.clipScratch, pieces, 'normal changes replace hemisphere clips');
+    assert.ok(pieces.every(piece => piece.vao === null));
+    const beforeAnimation = ring.clipScratch;
+    fixture.api.drawTransition(fixture.target, { before: collection, after: collection }, [], 0.5);
+    assert.ok(beforeAnimation.every(piece => piece.vao === null), 'frame invalidation releases old clipping');
+    assert.ok(ring.clipScratch.length > 0, 'endpoint drawing uses the same retained ring cache');
+    const beforeLayout = ring.clipScratch;
+    input.shaderData = { ...input.shaderData, variantName: 'new-layout' };
+    fixture.api.drawStatic(fixture.target, collection);
+    const replacement = [...fixture.target.clippedRings].find(value => value !== ring);
+    assert.ok(replacement?.clipScratch.length > 0, 'new attribute layouts get independent geometry and clipped buffers');
+    assert.notEqual(replacement.clipScratch, beforeLayout);
+    fixture.api.resetTransition(fixture.target);
+    assert.equal(ring.clipScratch, null);
+    assert.equal(replacement.clipScratch, null);
+    assert.equal(fixture.target.clippedRings.size, 0);
+    fixture.api.disposeTransition(fixture.target);
+    assert.equal(fixture.live.size, 0);
+});

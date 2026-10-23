@@ -17,25 +17,10 @@
 // exact half-sphere tie goes to the left of traversal). Membership is
 // decided by even-odd crossings of the geodesic from the query point
 // to a reference of known status, with the same half-open sign
-// convention as the classic 2D ray cast. The whole-sphere sentinel
-// (coversSphere) contains everything, by decree.
+// convention as the classic 2D ray cast. Whole-sphere coverage is an
+// explicit draw flag owned by the caller, never inferred from vertices.
 
 "use strict";
-
-// The whole-sphere sentinel (RegionPart's empty-cycle convention): at
-// most five stored points containing a near-antipodal pair. Its
-// interior is everything.
-function coversSphere(ring) {
-  const n = ring.length / 3;
-  if (n > 5) return false;
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const d = ring[i * 3] * ring[j * 3] + ring[i * 3 + 1] * ring[j * 3 + 1] + ring[i * 3 + 2] * ring[j * 3 + 2];
-      if (d < -0.99) return true;
-    }
-  }
-  return false;
-}
 
 // Signed-side test with the half-open convention: exactly on the
 // great circle counts as the negative side.
@@ -201,7 +186,6 @@ function insideRingGeneral(p, ring) {
 // Is p inside the closed ring, under the smaller-component law?
 function insideRing(p, ring) {
   if (ring.length / 3 < 3) return false;
-  if (coversSphere(ring)) return true;
   const cap = ringCap(ring);
   if (cap && cap.cosR > 0) {
     const r = outsideReference(p, cap.ax, cap.ay, cap.az, cap.cosR);
@@ -373,7 +357,6 @@ function limbBasis(C) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    coversSphere,
     insideRing,
     insideRingGeneral,
     ringCap,

@@ -432,6 +432,7 @@ uniform vec2 uCss;                    // canvas css size
 uniform float uPointSize;
 out float vFront;
 out float vArc;
+${sphericalInterpolationSource()}
 void main() {
   vArc = aArc * uArcScale;
   if (uMode == 3) {
@@ -453,11 +454,7 @@ void main() {
     gl_PointSize = 1.0;
     return;
   }
-  // Continuous refinement (§38): the vertex eases from its position
-  // on the parent representation to its own; normalize keeps the
-  // path on the sphere (chordal mix renormalized ≈ slerp at these
-  // angular scales). uMorph=1 (the default) is the plain shape.
-  vec3 p = normalize(mix(aPrev, aPos, uMorph));
+  vec3 p = sphericalInterpolate(aPrev, aPos, uMorph);
   vec2 pv;
   if (uMode == 0) {
     // The same orthographic mathematics the server's Globe speaks.
@@ -636,50 +633,6 @@ function gpuUpload(bytes, offset) {
     throw error;
   }
   return len;
-}
-
-// The camera identity a cached clip is valid for — QUANTIZED to a
-// ~0.001 grid on the direction components, so an easing camera reuses
-// its clips across many frames instead of reclipping every frame. The
-// staleness bound is sub-pixel where it can be seen: near whole-globe
-// zoom the rim shifts under a pixel, and at deep zoom the limb (the
-// only approximate part) is far off screen.
-function camKeyOf(C) {
-  return C[0].toFixed(3) + "," + C[1].toFixed(3) + "," + C[2].toFixed(3);
-}
-
-// One clipped lobe as a scratch fan buffer — the same attribute layout
-// gpuUpload builds, minus the cache entry.
-function lobeVao(lobe) {
-  return uploadLobe(gpu.gl, gpu.loc, lobe);
-}
-
-// THE VISIBLE RING (the GPU's reading of clip_ring_front): the fill
-// parity passes draw a ring CLIPPED to the front hemisphere, closed
-// along the limb, so every fragment reaches the stencil and nothing
-// needs discarding. The bounding-cap fast path keeps wholly-front
-// rings on their own GPU buffers and drops wholly-hidden ones for one
-// dot product; only straddlers clip, memoised per camera. Returns the
-// draw list for one ring: [] hidden, [r] the ring's own buffer, or
-// scratch lobe buffers (a ring may clip into several visible lobes;
-// even-odd parity is indifferent).
-function visibleFillDraws(r, proj, camKey) {
-  if (proj.mode !== 0) return [r]; // flat: split at the antimeridian upstream
-  const cap = r.cap;
-  if (cap && cap.cosR > 0) {
-    const t = cap.ax * proj.C[0] + cap.ay * proj.C[1] + cap.az * proj.C[2];
-    const sinR = Math.sqrt(1 - cap.cosR * cap.cosR);
-    if (t >= sinR) return [r];   // whole cap in front: the ring's own buffer
-    if (t <= -sinR) return [];   // whole cap behind: nothing to draw
-  }
-  if (r.clipKey !== camKey) {
-    dropClipScratch(gpu.gl, r);
-    r.clipKey = camKey;
-    const vr = clipRingFront(r.verts, proj.C, proj.E, proj.N);
-    r.clipSelf = vr === r.verts;
-    r.clipScratch = r.clipSelf || !vr ? [] : vr.map(lobeVao);
-  }
-  return r.clipSelf ? [r] : r.clipScratch;
 }
 
 // The acquisition loop (§26): fetch what the manifest demands and is
@@ -1462,7 +1415,6 @@ function gpuDraw() {
   // flat: px per degree times degrees per radian).
   gl.uniform1f(loc.uArcScale, proj.mode === 0 ? proj.scale : proj.scaleY * 180 / Math.PI);
   gl.uniform2f(loc.uDash, 0, 0);
-  const camKey = proj.mode === 0 ? camKeyOf(proj.C) : "flat";
   // A driver CAPABILITY, not frame state — and getParameter is a
   // synchronous pipeline flush: queried per frame it stalls JS behind
   // the entire rasterization backlog (measured: 5.6 s on the first
@@ -1500,7 +1452,7 @@ function gpuDraw() {
       // rim where the interpolated chord undercut the true arc.
       const draws = [];
       for (const r of rings) {
-        for (const d of visibleFillDraws(r, proj, camKey)) draws.push(d);
+        for (const d of visibleFillDraws(gl, loc, r, proj.mode === 0 ? proj.C : null)) draws.push(d);
       }
       const [cr, cg, cb, caBase] = it.style.color;
       const ca = caBase * (it.alpha !== undefined ? it.alpha : 1);
@@ -1572,7 +1524,7 @@ function gpuDraw() {
       const rings = it.ids.map(resident);
       if (rings.some(r => !r)) continue;
       for (const r of rings) {
-        for (const d of visibleFillDraws(r, proj, camKey)) draws.push(d);
+        for (const d of visibleFillDraws(gl, loc, r, proj.mode === 0 ? proj.C : null)) draws.push(d);
       }
     }
     if (draws.length) {

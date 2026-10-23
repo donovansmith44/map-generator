@@ -1,9 +1,10 @@
 (function (scope) {
   const retained = typeof module !== "undefined" && module.exports ? require("./retained-gpu.js") : scope;
+  const limb = typeof module !== "undefined" && module.exports ? require("./limb.js") : scope;
   const labels = typeof module !== "undefined" && module.exports ? require("./retained-labels.js") : scope;
 
   function transitionTarget(gl, projection, paint, water, cold, identify) {
-    const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], cachedGeometry: [], geometryItems: new Map(), extras: [], frame: null, frameProgram: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
+    const target = { gl, projection, paint, water, cold, identify, programs: new Map(), geometry: [], cachedGeometry: [], geometryItems: new Map(), clippedRings: new Set(), extras: [], frame: null, frameProgram: null, scenes: [], morphs: [], disposed: false, crossfades: 0,
       surfaces: [], endpointSlots: [0, 1], textureValues: null, glyphs: { canvas: null, ctx: null, tex: null, map: new Map(), x: 0, y: 0, rowH: 0, dirty: false } };
     try {
       programFor(target, projection());
@@ -25,7 +26,7 @@
       const program = programFor(target, input);
       const resized = target.surfaces.some(surface => surface.width !== gl.drawingBufferWidth || surface.height !== gl.drawingBufferHeight);
       const changedProgram = target.frameProgram !== null && target.frameProgram !== program;
-      if (target.frame !== frame || target.frameProgram !== program || resized) {
+      if (target.frame !== frame || target.frameProgram !== program || resized || target.morphs.some(draw => !frontFacingMorph(target, draw.rows[0].step))) {
         clearFrame(target);
         if (target.glyphs.canvas && [...target.glyphs.map.keys()].some(key => typeof key === "string")) labels.resetGlyphAtlas(target.glyphs);
         if (resized || changedProgram) clearSurfaces(target);
@@ -45,22 +46,8 @@
         if (rows.length === 0 || rows.some(row => !target.morphs.some(draw => draw.rows.includes(row)))
           || target.scenes.some(scene => scene.some(draw => draw.items.length > 0 || draw.original?.type === "Point"))) target.crossfades++;
       }
-      gl.useProgram(program.value);
-      const projection = projectionUniforms(gl, program.loc, input.defaultProjectionData);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
-      gl.colorMask(true, true, true, true);
-      gl.disable(gl.DEPTH_TEST);
-      gl.disable(gl.STENCIL_TEST);
-      gl.disable(gl.SCISSOR_TEST);
-      gl.disable(gl.CULL_FACE);
-      gl.stencilMask(0xff);
-      gl.uniform1f(program.loc.uMorph, 1);
-      gl.uniform1f(program.loc.uFrontMin, -1.1);
-      gl.uniform2f(program.loc.uDash, 0, 0);
-      gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      const scenes = target.scenes.map(scene => prepareScene(target, program.loc, scene));
+      const projection = prepareDrawing(target, program, input, true);
+      const scenes = target.scenes.map(scene => prepareScene(target, program.loc, scene).filter(draw => !draw.underlay));
       const changedAtlas = target.glyphs.dirty;
       const values = endpointValues(target, projection, scenes);
       uploadGlyphAtlas(target);
@@ -89,13 +76,131 @@
       gl.bindVertexArray(target.screen.vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.uniform1f(program.loc.uScreen, 0);
-      drawScene(target, program.loc, prepareScene(target, program.loc, target.morphs), 1, fraction);
+      drawScene(target, program.loc, prepareScene(target, program.loc, target.morphs).filter(draw => !draw.underlay), 1, fraction);
     } catch (error) {
       resetTransition(target);
       throw error;
     } finally {
       restoreState(gl, state);
     }
+  }
+
+  function visibleLabelCourses(geometry, center, globe) {
+    const camera = coordinates(center), lines = [];
+    const front = point => globe ? point.x * camera[0] + point.y * camera[1] + point.z * camera[2] : 1;
+    for (const course of geometry.coordinates) {
+      let line = [];
+      const finish = () => { if (line.length > 1) lines.push(line); line = []; };
+      const append = point => {
+        if (point.x === 0 && point.y === 0) { finish(); return; }
+        const longitude = Math.atan2(point.y, point.x) * 180 / Math.PI;
+        const latitude = Math.atan2(point.z, Math.hypot(point.x, point.y)) * 180 / Math.PI;
+        const previous = line.length ? line[line.length - 1][0] : center[0];
+        line.push([longitude + 360 * Math.round((previous - longitude) / 360), latitude]);
+      };
+      if (course.length && front(course[0]) >= 0) append(course[0]);
+      for (let index = 1; index < course.length; index++) {
+        const a = course[index - 1], b = course[index], da = front(a), db = front(b);
+        if ((da < 0) !== (db < 0)) {
+          const [x, y, z] = limb.frontCrossing([a.x, a.y, a.z, b.x, b.y, b.z], 0, 3, da, db);
+          append({ x, y, z });
+          if (db < 0) finish();
+        }
+        if (db >= 0) append(b);
+      }
+      finish();
+    }
+    return { ...geometry, coordinates: lines };
+  }
+
+  function drawStatic(target, collection, pass = "overlay", highlight = null) {
+    if (target.disposed) throw new Error("Transition target is disposed");
+    const gl = target.gl, state = saveState(gl);
+    try {
+      const input = target.projection(), program = programFor(target, input);
+      if (target.staticCollection !== collection || target.staticProgram !== program || !target.staticScene) {
+        target.staticCollection = collection;
+        target.staticProgram = program;
+        target.staticScene = buildScene(target, program.loc, collection, new Map());
+      }
+      prepareDrawing(target, program, input, true);
+      const draws = prepareScene(target, program.loc, target.staticScene);
+      uploadGlyphAtlas(target);
+      drawScene(target, program.loc, draws.filter(draw => (draw.underlay === true) === (pass === "underlay")), 1);
+      if (pass === "overlay" && highlight) {
+        const highlighted = draws.filter(draw => highlight.ids.has(draw.identity) && !draw.underlay && !draw.shoreOnly && !draw.glyph).map(draw => ({
+          ...draw, paint: draw.paint ? { fill: [...draw.paint.fill.slice(0, 3), Math.min(255, draw.paint.fill[3] + highlight.opacity)] } : null,
+          stroke: highlight.stroke, marker: draw.marker ? highlight.marker : null,
+        }));
+        for (const draw of target.staticScene) if (draw.original?.type === "Point" && highlight.ids.has(draw.feature.id) && draw.items.length === 0) {
+          highlighted.push(...geometryItems(target, program.loc, draw.original).map(item => ({ ...item, marker: highlight.marker })));
+        }
+        drawScene(target, program.loc, highlighted, 1);
+      }
+    } catch (error) {
+      resetTransition(target);
+      throw error;
+    } finally { restoreState(gl, state); }
+  }
+
+  function pickTransition(target, point, accepted) {
+    if (target.disposed || (!target.staticScene && target.scenes.length === 0) || accepted.size === 0) return undefined;
+    const gl = target.gl, state = saveState(gl);
+    try {
+      const program = programFor(target, target.projection());
+      if (target.pickSurface && (target.pickSurface.width !== gl.drawingBufferWidth || target.pickSurface.height !== gl.drawingBufferHeight)) {
+        disposeSurface(target, target.pickSurface);
+        target.pickSurface = null;
+      }
+      target.pickSurface ??= surface(target);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.pickSurface.framebuffer);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      prepareDrawing(target, program, target.projection(), false);
+      gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
+      gl.clearBufferiv(gl.STENCIL, 0, [0]);
+      const identities = [undefined];
+      const codes = new Map();
+      const draws = prepareScene(target, program.loc, target.staticScene ?? target.scenes[0]).filter(draw => !draw.glyph && !draw.underlay).map(draw => {
+        let code = 0;
+        if (accepted.has(draw.identity)) {
+          if (!codes.has(draw.identity)) { codes.set(draw.identity, identities.length); identities.push(draw.identity); }
+          code = codes.get(draw.identity);
+        }
+        const color = [code & 255, (code >>> 8) & 255, (code >>> 16) & 255, 255];
+        return { ...draw, paint: draw.paint ? { fill: color } : null,
+          stroke: draw.stroke ? { ...draw.stroke, color } : null,
+          marker: draw.marker ? { ...draw.marker, color } : null };
+      });
+      drawScene(target, program.loc, draws, 1);
+      const pixel = new Uint8Array(4), ratio = pixelRatio(gl);
+      gl.readPixels(Math.floor(point.x * ratio), gl.drawingBufferHeight - 1 - Math.floor(point.y * ratio), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      return identities[pixel[0] | pixel[1] << 8 | pixel[2] << 16];
+    } finally { restoreState(gl, state); }
+  }
+
+  function prepareDrawing(target, program, input, blend) {
+    const gl = target.gl;
+    gl.useProgram(program.value);
+    const projection = projectionUniforms(gl, program.loc, input.defaultProjectionData);
+    if (blend) gl.enable(gl.BLEND); else gl.disable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+    gl.colorMask(true, true, true, true);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.stencilMask(0xff);
+    gl.uniform1f(program.loc.uMorph, 1);
+    gl.uniform1f(program.loc.uFrontMin, -1.1);
+    gl.uniform1f(program.loc.uScreen, 0);
+    gl.uniform2f(program.loc.uDash, 0, 0);
+    gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    return projection;
   }
 
   function settleTransition(target, destination) {
@@ -129,6 +234,8 @@
     target.cachedGeometry = [];
     target.geometryItems.clear();
     clearSurfaces(target);
+    if (target.pickSurface) disposeSurface(target, target.pickSurface);
+    target.pickSurface = null;
   }
 
   function disposeTransition(target) {
@@ -137,9 +244,13 @@
     resetTransition(target);
     for (const program of target.programs.values()) target.gl.deleteProgram(program.value);
     target.programs.clear();
+    if (target.page) retained.disposeGeometry(target.gl, target.page);
+    target.page = null;
   }
 
   function clearFrame(target) {
+    for (const ring of target.clippedRings) retained.dropClipScratch(target.gl, ring);
+    target.clippedRings.clear();
     for (const resource of target.geometry) retained.disposeGeometry(target.gl, resource);
     for (const buffer of target.extras) target.gl.deleteBuffer(buffer);
     target.geometry = [];
@@ -148,6 +259,7 @@
     target.morphs = [];
     target.frame = null;
     target.frameProgram = null;
+    target.staticScene = null;
     target.textureValues = null;
   }
 
@@ -199,6 +311,8 @@ layout(location=1) in vec3 aPrev;
 layout(location=2) in float aArc;
 layout(location=3) in vec2 aCorner;
 uniform float uMorph;
+uniform int uMode;
+uniform float uFill;
 uniform float uPointSize;
 uniform float uLabel;
 uniform float uScreen;
@@ -207,11 +321,34 @@ uniform vec2 uSize;
 uniform vec4 uUV;
 out float vArc;
 out vec2 vUV;
+out float vWhole;
+${retained.sphericalInterpolationSource()}
 void main() {
-  vec3 p = normalize(mix(aPrev, aPos, uMorph));
-  float latitude = asin(clamp(p.z, -1.0, 1.0));
-  vec2 mercator = vec2(atan(p.y, p.x) / (2.0 * PI) + 0.5, 0.5 - log(tan(PI * 0.25 + latitude * 0.5)) / (2.0 * PI));
-  gl_Position = uScreen > 0.5 ? vec4(aPos.xy, 0.0, 1.0) : projectTile(mercator);
+  vec3 p = sphericalInterpolate(aPrev, aPos, uMorph);
+  vWhole = uMode == 2 ? 1.0 : 0.0;
+  if (uScreen > 0.5 || uMode == 2) gl_Position = vec4(aPos.xy, 0.0, 1.0);
+  else {
+    vec2 mercator = vec2(0.0);
+#ifdef GLOBE_RADIUS
+    if (u_projection_transition < 0.999) {
+#endif
+      float latitude = asin(clamp(p.z, -1.0, 1.0));
+      mercator = vec2(atan(p.y, p.x) / (2.0 * PI) + 0.5, 0.5 - log(tan(PI * 0.25 + latitude * 0.5)) / (2.0 * PI));
+#ifdef GLOBE_RADIUS
+    }
+    vec3 sphere = vec3(p.y, p.z, p.x);
+    if (uFill > 0.5 && u_projection_transition > 0.999) {
+      float magnitude = length(u_projection_clipping_plane.xyz);
+      vec3 center = u_projection_clipping_plane.xyz / magnitude;
+      float horizon = -u_projection_clipping_plane.w / magnitude;
+      float front = dot(sphere, center);
+      if (front < horizon) sphere = center * horizon + normalize(sphere - center * front) * sqrt(1.0 - horizon * horizon);
+    }
+    gl_Position = interpolateProjection(mercator, sphere, 0.0);
+#else
+    gl_Position = projectTile(mercator);
+#endif
+  }
   if (uLabel > 0.5 && uScreen < 0.5) gl_Position.xy += vec2(aCorner.x - 0.5, 0.5 - aCorner.y) * uSize / uViewport * gl_Position.w * 2.0;
   gl_PointSize = uPointSize;
   vArc = aArc;
@@ -223,6 +360,10 @@ void main() {
 precision highp float;
 in float vArc;
 in vec2 vUV;
+in float vWhole;
+uniform mat4 u_projection_matrix;
+uniform vec2 uViewport;
+uniform float uGlobe;
 uniform vec4 uColor;
 uniform vec2 uDash;
 uniform float uLabel;
@@ -232,6 +373,16 @@ uniform float uMix;
 uniform float uAlpha;
 out vec4 o;
 void main() {
+  if (vWhole > 0.5 && uGlobe > 0.999) {
+    vec2 ndc = gl_FragCoord.xy / uViewport * 2.0 - 1.0;
+    mat4 camera = inverse(u_projection_matrix);
+    vec4 nearPoint = camera * vec4(ndc, -1.0, 1.0);
+    vec4 farPoint = camera * vec4(ndc, 1.0, 1.0);
+    vec3 origin = nearPoint.xyz / nearPoint.w;
+    vec3 direction = normalize(farPoint.xyz / farPoint.w - origin);
+    float along = dot(origin, direction);
+    if (along * along - dot(origin, origin) + 1.0 < 0.0) discard;
+  }
   if (uLabel > 1.5) { o = mix(texture(uTex, vUV), texture(uAfterTex, vUV), uMix); return; }
   if (uLabel > 0.5) { o = texture(uTex, vUV) * uAlpha; return; }
   if (uDash.x > 0.0 && mod(vArc, uDash.x + uDash.y) > uDash.x) discard;
@@ -245,7 +396,7 @@ void main() {
       if (!gl.getProgramParameter(value, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(value));
       const loc = {};
       for (const name of ["aPos", "aPrev", "aArc", "aCorner"]) loc[name] = gl.getAttribLocation(value, name);
-      for (const name of ["uMode", "uDash", "uColor", "uFrontMin", "uMorph", "uPointSize", "uLabel", "uViewport", "uSize", "uUV", "uTex", "uAfterTex", "uMix", "uScreen", "uAlpha", "u_projection_matrix", "u_projection_tile_mercator_coords", "u_projection_clipping_plane", "u_projection_transition", "u_projection_fallback_matrix"]) loc[name] = gl.getUniformLocation(value, name);
+      for (const name of ["uMode", "uFill", "uGlobe", "uDash", "uColor", "uFrontMin", "uMorph", "uPointSize", "uLabel", "uViewport", "uSize", "uUV", "uTex", "uAfterTex", "uMix", "uScreen", "uAlpha", "u_projection_matrix", "u_projection_tile_mercator_coords", "u_projection_clipping_plane", "u_projection_transition", "u_projection_fallback_matrix"]) loc[name] = gl.getUniformLocation(value, name);
       const program = { value, loc };
       target.programs.set(description.variantName, program);
       return program;
@@ -265,6 +416,7 @@ void main() {
       else values.push(value);
       return value;
     };
+    gl.uniform1f(loc.uGlobe, data.projectionTransition ?? 0);
     gl.uniformMatrix4fv(loc.u_projection_matrix, false, snapshot(data.mainMatrix));
     gl.uniform4fv(loc.u_projection_tile_mercator_coords, snapshot(data.tileMercatorCoords));
     gl.uniform4fv(loc.u_projection_clipping_plane, snapshot(data.clippingPlane));
@@ -292,7 +444,7 @@ void main() {
       for (const draw of scene) {
         values.push(Boolean(draw.rings), Boolean(draw.line), Boolean(draw.point), Boolean(draw.glyph));
         if (draw.rings) {
-          values.push(Boolean(draw.paint));
+          values.push(draw.whole, Boolean(draw.paint));
           if (draw.paint) vector(draw.paint.fill);
           stroke(draw.stroke);
         } else if (draw.line) stroke(draw.stroke);
@@ -364,7 +516,7 @@ void main() {
   }
 
   function upload(target, loc, points, resources = target.geometry, ranges) {
-    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(coordinates)), ranges);
+    const resource = retained.uploadGeometry(target.gl, loc, Float32Array.from(points.flatMap(point => [point.x, point.y, point.z])), ranges);
     resources.push(resource);
     return resource;
   }
@@ -398,7 +550,7 @@ void main() {
       const identity = target.identify(step.entity);
       const candidates = [frame.before, frame.after].flatMap(collection => collection.features.filter(feature => feature.id === identity));
       const feature = candidates[candidates.length - 1];
-      if (draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
+      if (!frontFacingMorph(target, step) || draw.clip != null || feature === undefined || candidates.some(feature => !simple(feature))
         || morphs.filter(row => target.identify(row.step.entity) === identity).length !== 1
         || step.from_pts.length < 3 || step.from_pts.length !== step.to_pts.length) continue;
       const companions = rows.filter(row => row !== draw && affectsEntity(target.identify, row.step, identity));
@@ -424,6 +576,14 @@ void main() {
       draws.push({ feature, items, rows: [draw, ...companions] });
     }
     return draws;
+  }
+
+  function frontFacingMorph(target, step) {
+    const projection = target.projection().defaultProjectionData;
+    if (!(projection.projectionTransition > 0.999)) return true;
+    const plane = projection.clippingPlane;
+    const visible = point => point.y * plane[0] + point.z * plane[1] + point.x * plane[2] + plane[3] >= 0;
+    return step.from_pts.every(visible) && step.to_pts.every(visible);
   }
 
   function pairedGeometryBatch(target, loc, courses) {
@@ -547,7 +707,7 @@ void main() {
         items = groups.map(polygon => {
           const rings = views.slice(at, at + polygon.length);
           at += polygon.length;
-          return { rings };
+          return { rings: rings.filter(ring => ring.count > 0), whole: polygon[0]?.length === 0 };
         });
       } else if (geometry.type === "MultiLineString") items = views.map(line => ({ line }));
       else items = [{ point: views[0] }];
@@ -602,7 +762,9 @@ void main() {
   }
 
   function glyphQuad(target, loc, point) {
-    const resource = upload(target, loc, [point, point, point, point]);
+    const [x, y, z] = coordinates(point);
+    const native = { x, y, z };
+    const resource = upload(target, loc, [native, native, native, native]);
     target.extras.push(corners(target, loc, resource));
     return resource;
   }
@@ -625,25 +787,30 @@ void main() {
   }
 
   function prepareScene(target, loc, draws) {
-    const prepared = [];
+    const passes = { underlay: [], fills: [], shores: [], waters: [], rivers: [], borders: [], routes: [], labels: [] };
     for (const draw of draws) {
       if (draw.water) {
         const [paint, stroke] = target.water(draw.water);
-        for (const item of draw.items) { item.paint = paint; item.stroke = stroke; item.marker = null; prepared.push(item); }
+        for (const item of draw.items) passes.waters.push({ ...item, paint, stroke, marker: null });
       } else {
         const [paint, stroke, marker, label] = target.paint(draw.feature.properties);
         if (draw.original?.type === "Point" && marker && !marker.image && draw.items.length === 0) draw.items = geometryItems(target, loc, draw.original);
         for (const item of draw.items) {
+          const identity = draw.feature.id;
           item.paint = paint;
           item.stroke = item.noStroke || (stroke?.lineOnly && !item.line) ? null : stroke;
           item.marker = marker?.image ? null : marker;
-          prepared.push(item);
+          if (item.rings) {
+            if (paint?.underlay) passes.underlay.push({ ...item, identity, underlay: true, paint: { fill: paint.underlay }, stroke: null });
+            passes.fills.push({ ...item, identity, paint, stroke: item.noStroke || stroke?.lineOnly ? null : stroke });
+            if (paint?.shore) passes.shores.push({ ...item, identity, shoreOnly: true, paint: null, stroke: paint.shore });
+          } else passes[stroke?.pass ?? "borders"].push({ ...item, identity, paint, stroke: item.noStroke ? null : stroke, marker: marker?.image ? null : marker });
         }
         if (marker?.image && draw.anchor) {
           draw.markerGlyph ??= glyphQuad(target, loc, draw.anchor);
           labels.initializeGlyphAtlas(target.glyphs, target.gl);
           const entry = labels.retainedImageEntry(target.glyphs, marker);
-          if (entry) prepared.push({ glyph: draw.markerGlyph, entry });
+          if (entry) passes.labels.push({ glyph: draw.markerGlyph, entry });
         }
         if (label && draw.anchor) {
           draw.glyph ??= glyphQuad(target, loc, draw.anchor);
@@ -652,11 +819,11 @@ void main() {
           const recorded = draw.feature.properties.label;
           const entry = labels.retainedGlyphEntry(target.glyphs, voice.uppercase ? recorded.text.toUpperCase() : recorded.text,
             voice, style.size, style.color, style.halo, style.halo_width_em);
-          if (entry) prepared.push({ glyph: draw.glyph, entry });
+          if (entry) passes.labels.push({ glyph: draw.glyph, entry });
         }
       }
     }
-    return prepared;
+    return Object.values(passes).flat();
   }
 
   function uploadGlyphAtlas(target) {
@@ -678,8 +845,13 @@ void main() {
       gl.uniform1f(loc.uLabel, draw.glyph ? 1 : 0);
       gl.uniform2f(loc.uDash, 0, 0);
       if (draw.rings) {
-        if (draw.paint) retained.drawStencilFill(gl, loc, draw.rings, { mode: 1, whole: false, color: opacity(draw.paint.fill, drawAlpha), frontMin: -1.1 });
-        if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, drawAlpha);
+        gl.uniform1f(loc.uFill, 1);
+        if (draw.paint) {
+          if (draw.whole && !target.page) target.page = retained.uploadLobe(gl, loc, Float32Array.from([-1, -1, 0, 3, -1, 0, -1, 3, 0]));
+          retained.drawStencilFill(gl, loc, draw.rings.flatMap(ring => visibleFillDraws(target, loc, ring)), { mode: 1, whole: draw.whole, pageVao: target.page?.vao, color: opacity(draw.paint.fill, drawAlpha), frontMin: -1.1 });
+        }
+        gl.uniform1f(loc.uFill, 0);
+        if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, drawAlpha, true);
       } else if (draw.line && draw.stroke) stroke(gl, loc, draw.line, draw.stroke, drawAlpha);
       else if (draw.point && draw.marker) {
         colour(gl, loc, draw.marker.color, drawAlpha);
@@ -700,15 +872,24 @@ void main() {
     }
   }
 
+  function visibleFillDraws(target, loc, ring) {
+    const projection = target.projection().defaultProjectionData;
+    if (!(projection.projectionTransition > 0.999) || !projection.clippingPlane) return retained.visibleFillDraws(target.gl, loc, ring, null);
+    const [y, z, x] = projection.clippingPlane;
+    const length = Math.hypot(x, y, z), C = [x / length, y / length, z / length];
+    target.clippedRings.add(ring);
+    return retained.visibleFillDraws(target.gl, loc, ring, C);
+  }
+
   function pixelRatio(gl) { return gl.drawingBufferWidth / (gl.canvas.clientWidth || gl.drawingBufferWidth); }
   function opacity(color, alpha) { return [color[0], color[1], color[2], color[3] * alpha]; }
   function colour(gl, loc, color, alpha) { gl.uniform4f(loc.uColor, ...opacity(color, alpha).map(channel => channel / 255)); }
-  function stroke(gl, loc, resource, style, alpha) {
+  function stroke(gl, loc, resource, style, alpha, closed = false) {
     if (style.pattern !== "Solid") throw new Error("Transition stroke pattern is unsupported");
     colour(gl, loc, style.color, alpha);
     gl.lineWidth(style.width * pixelRatio(gl));
     gl.bindVertexArray(resource.vao);
-    gl.drawArrays(gl.LINE_STRIP, resource.first ?? 0, resource.count);
+    gl.drawArrays(closed ? gl.LINE_LOOP : gl.LINE_STRIP, resource.first ?? 0, resource.count);
   }
 
   function saveState(gl) {
@@ -748,7 +929,7 @@ void main() {
     [gl.BLEND, gl.DEPTH_TEST, gl.STENCIL_TEST, gl.SCISSOR_TEST, gl.CULL_FACE].forEach((capability, index) => state.enabled[index] ? gl.enable(capability) : gl.disable(capability));
   }
 
-  const api = { transitionTarget, drawTransition, settleTransition, prepareTransition, resetTransition, disposeTransition };
+  const api = { transitionTarget, visibleLabelCourses, drawTransition, drawStatic, pickTransition, settleTransition, prepareTransition, resetTransition, disposeTransition };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else Object.assign(scope, api);
 })(typeof globalThis !== "undefined" ? globalThis : this);
