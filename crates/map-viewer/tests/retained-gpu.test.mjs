@@ -9,23 +9,29 @@ const vertices = () => Float32Array.from([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
 function context(failAt = 0) {
   let issued = 0, uploads = 0;
-  const buffers = new Set(), vaos = new Set(), pointers = new Map(), draws = [], uniforms = [];
+  const buffers = new Set(), vaos = new Set(), pointers = new Map(), draws = [], uniforms = [], data = new Map(), positions = new Map();
+  let feedbackBuffer, capture;
   const allocation = pool => { const handle = ++issued; pool.add(handle); return handle; };
   const gl = {
+    TRANSFORM_FEEDBACK: 14, TRANSFORM_FEEDBACK_BUFFER: 15, TRANSFORM_FEEDBACK_BINDING: 16, TRANSFORM_FEEDBACK_BUFFER_BINDING: 17, VERTEX_ARRAY_BINDING: 18, VIEWPORT: 19, CURRENT_PROGRAM: 20, RASTERIZER_DISCARD: 21, POINTS: 22, STREAM_READ: 23,
     ARRAY_BUFFER: 1, STATIC_DRAW: 2, FLOAT: 3, STENCIL_TEST: 4,
     ALWAYS: 5, KEEP: 6, INVERT: 7, NOTEQUAL: 8, ZERO: 9, TRIANGLE_FAN: 10, TRIANGLES: 11, STENCIL_BUFFER_BIT: 12, STENCIL: 13,
     buffers, vaos, pointers, draws, uniforms, bound: null, array: null, mask: null, stencil: false, cleared: null,
     createBuffer() { return allocation(buffers); }, createVertexArray() { return allocation(vaos); },
     deleteBuffer(handle) { if (handle !== null) assert.equal(buffers.delete(handle), true, 'each buffer is deleted exactly once'); },
     deleteVertexArray(handle) { if (handle !== null) assert.equal(vaos.delete(handle), true, 'each VAO is deleted exactly once'); },
-    bindBuffer(_target, handle) { this.array = handle; }, bindVertexArray(handle) { this.bound = handle; },
-    bufferData() { if (++uploads === failAt) throw Error('upload failed'); }, enableVertexAttribArray() {},
-    vertexAttribPointer(attribute) { pointers.set(attribute, this.array); },
+    bindBuffer(target, handle) { if (target === this.TRANSFORM_FEEDBACK_BUFFER) feedbackBuffer = handle; else this.array = handle; }, bindVertexArray(handle) { this.bound = handle; },
+    bufferData(target, value) { if (++uploads === failAt) throw Error('upload failed'); if (target === this.ARRAY_BUFFER) data.set(this.array, value); }, enableVertexAttribArray() {},
+    vertexAttribPointer(attribute) { pointers.set(attribute, this.array); if (attribute === 0) positions.set(this.bound, this.array); },
     uniform1i(location, value) { uniforms.push([location, value]); }, uniform1f(location, value) { uniforms.push([location, value]); },
     uniform2f() {}, uniform4f(...args) { this.colour = args.slice(1); },
-    enable() { this.stencil = true; }, disable() { this.stencil = false; },
+    enable(capability) { if (capability === this.STENCIL_TEST) this.stencil = true; }, disable(capability) { if (capability === this.STENCIL_TEST) this.stencil = false; },
+    isEnabled() { return false; }, createTransformFeedback() { return {}; }, deleteTransformFeedback() {}, bindTransformFeedback() {}, bindBufferBase() {},
+    getParameter(parameter) { if (parameter === this.VIEWPORT) return [0, 0, 192, 192]; if (parameter === this.VERTEX_ARRAY_BINDING) return this.bound; if (parameter === this.TRANSFORM_FEEDBACK_BUFFER_BINDING) return feedbackBuffer; return null; },
+    beginTransformFeedback() {}, endTransformFeedback() {},
+    getBufferSubData(_target, _offset, output) { const points = data.get(positions.get(capture.vao)); for (let index = 0; index < capture.count; index++) { output.set(points.subarray((capture.first + index) * 3, (capture.first + index + 1) * 3), index * 4); output[index * 4 + 3] = 1; } },
     colorMask(...mask) { this.mask = mask; }, stencilFunc() {}, stencilOp() {},
-    drawArrays(mode, _first, count) { draws.push([mode, count]); },
+    drawArrays(mode, first, count) { if (mode === this.POINTS) capture = { vao: this.bound, first, count }; else draws.push([mode, count]); },
     clearStencil(value) { this.clearValue = value; }, clear(bits) { this.cleared = bits; },
     clearBufferiv(buffer, index, value) { this.bufferClear = { buffer, index, value: Array.from(value) }; },
   };
@@ -93,28 +99,39 @@ for (const target of ['createBuffer', 'createVertexArray']) {
   });
 }
 
-for (const mode of [0, 1]) {
-  test(`whole region parity in projection ${mode} preserves its two passes and restores state`, () => {
-    const gl = context();
-    renderer.drawStencilFill(gl, loc, [{ vao: 10, count: 4 }, { vao: 11, count: 3 }], { mode, whole: true, pageVao: 12, discVao: 13, discCount: 98, color: [128, 64, 32, 192], frontMin: 0.01 });
-    assert.equal(gl.draws.length, 6, 'each pass draws the whole-page sentinel and both rings');
-    assert.deepEqual(gl.draws[0], mode === 0 ? [gl.TRIANGLE_FAN, 98] : [gl.TRIANGLES, 3], 'the original projection selects its original sentinel');
-    assert.deepEqual(gl.mask, [true, true, true, true], 'the parity passes restore colour writes');
-    assert.equal(gl.stencil, false, 'the parity passes disable their stencil test');
-    assert.deepEqual(gl.uniforms.at(-1), [loc.uFrontMin, 0.01], 'the parity passes restore the stroke front threshold');
-    assert.deepEqual(gl.colour, [128 / 255, 64 / 255, 32 / 255, 192 / 255], 'the fill keeps its original colour and alpha');
-  });
-}
+test('tessellated fills retain bounded meshes, invalidate exact view changes and release every resource', () => {
+  const gl = context();
+  const ring = renderer.uploadGeometry(gl, loc, Float32Array.from([-2, -2, 0, 2, -2, 0, 2, 2, 0, -2, 2, 0]));
+  const hole = renderer.uploadLobe(gl, loc, Float32Array.from([-.2, -.2, 0, .2, -.2, 0, .2, .2, 0, -.2, .2, 0]));
+  const options = { mode: 1, whole: false, color: [128, 64, 32, 192], frontMin: .01, key: [1] };
+  renderer.drawStencilFill(gl, loc, [ring, hole], options);
+  const first = ring.fillCache.mesh;
+  assert.ok(first.count > 0);
+  for (const value of first.verts) assert.ok(value >= -1 && value <= 1, 'clipping bounds every screen vertex before rasterization');
+  renderer.drawStencilFill(gl, loc, [ring, hole], { ...options, key: [1] });
+  assert.equal(ring.fillCache.mesh, first, 'identical effective view borrows the retained triangles');
+  renderer.drawStencilFill(gl, loc, [ring, hole], { ...options, key: [1 + Number.EPSILON] });
+  assert.equal(first.vao, null, 'even the smallest exact view change drops the prior triangles');
+  assert.equal(ring.fillMeshes.size, 1, 'only one view mesh is retained per ring owner');
+  const beforePrevious = ring.fillCache.mesh, previous = renderer.uploadPrevious(gl, loc, ring, ring.verts);
+  assert.equal(beforePrevious.vao, null, 'changing the shader previous-position input invalidates its projected triangles');
+  renderer.endPrevious(gl, loc, ring, previous);
+  assert.equal(gl.stencil, false, 'triangles require no stencil parity');
+  assert.deepEqual(gl.uniforms.at(-1), [loc.uFrontMin, .01]);
+  assert.deepEqual(gl.colour, [128 / 255, 64 / 255, 32 / 255, 192 / 255]);
+  renderer.disposeGeometry(gl, ring); renderer.disposeGeometry(gl, hole);
+  assert.equal(gl.buffers.size + gl.vaos.size, 0, 'source disposal also drops the retained view mesh');
+});
 
-test('failed parity drawing clears incomplete parity and restores drawing state', () => {
-  const gl = context(); gl.drawArrays = () => { throw Error('draw failed'); };
-  gl.clearStencil(113);
-  assert.throws(() => renderer.drawStencilFill(gl, loc, [{ vao: 10, count: 3 }], { mode: 0, whole: false, color: [1, 2, 3, 4], frontMin: 0.2 }), /draw failed/, 'the draw failure reaches its caller');
-  assert.deepEqual(gl.bufferClear, { buffer: gl.STENCIL, index: 0, value: [0] }, 'incomplete parity is cleared back to zero after a failed draw');
-  assert.equal(gl.clearValue, 113, 'failure cleanup preserves the caller clear value');
-  assert.deepEqual(gl.mask, [true, true, true, true], 'failed parity restores colour writes');
-  assert.equal(gl.stencil, false, 'failed parity disables its stencil test');
-  assert.deepEqual(gl.uniforms.at(-1), [loc.uFrontMin, 0.2], 'failed parity restores the stroke front threshold');
+test('failed triangle drawing restores the projection and stroke front threshold', () => {
+  const gl = context();
+  const ring = renderer.uploadGeometry(gl, loc, Float32Array.from([-.5, -.5, 0, .5, -.5, 0, 0, .5, 0]));
+  const original = gl.drawArrays;
+  gl.drawArrays = function(mode, ...args) { if (mode === this.TRIANGLES) throw Error('draw failed'); return original.call(this, mode, ...args); };
+  assert.throws(() => renderer.drawStencilFill(gl, loc, [ring], { mode: 1, whole: false, color: [1, 2, 3, 4], frontMin: .2 }), /draw failed/);
+  assert.deepEqual(gl.uniforms.slice(-2), [[loc.uMode, 1], [loc.uFrontMin, .2]]);
+  renderer.disposeGeometry(gl, ring);
+  assert.equal(gl.buffers.size + gl.vaos.size, 0);
 });
 
 test('the original viewer loads and calls the extracted single implementation', () => {
@@ -123,7 +140,7 @@ test('the original viewer loads and calls the extracted single implementation', 
   assert.match(page, /<script src="\/retained-gpu.js"><\/script>/, 'the viewer loads its source-owned resource module');
   assert.match(host, /"\/retained-gpu.js" =>/, 'the original viewer serves the extracted module');
   assert.match(page, /uploadGeometry\(gl, gpu.loc, verts\)/, 'the original geometry acquisition uses the extracted upload');
-  assert.match(page, /drawStencilFill\(gl, loc, draws,/, 'the original fill uses the extracted parity path');
+  assert.match(page, /drawStencilFill\(gl, loc, draws,/, 'the original fill uses the extracted fill path');
   assert.doesNotMatch(page, /gl\.stencilFunc\(gl\.NOTEQUAL/, 'the original viewer retains no second odd-parity fill implementation');
 });
 

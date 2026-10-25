@@ -29,6 +29,7 @@ use map_types::TransitionEncoder as _;
 
 const PAGE: &str = include_str!("page.html");
 const LIMB_JS: &str = include_str!("limb.js");
+const LIBTESS_JS: &str = include_str!("libtess.js");
 const RETAINED_GPU_JS: &str = include_str!("retained-gpu.js");
 const RETAINED_LABELS_JS: &str = include_str!("retained-labels.js");
 const TRANSITION_TARGET_JS: &str = include_str!("transition-target.js");
@@ -981,6 +982,7 @@ fn route_text(app: &App, path: &str, query: &str) -> (u16, &'static str, String,
         // by the page and the Node cross-language tests. Compiled into
         // the binary like the page itself.
         "/limb.js" => (200, "application/javascript", LIMB_JS.to_string(), Vec::new()),
+        "/libtess.js" => (200, "application/javascript", LIBTESS_JS.to_string(), Vec::new()),
         "/retained-gpu.js" => (200, "application/javascript", RETAINED_GPU_JS.to_string(), Vec::new()),
         "/retained-labels.js" => (200, "application/javascript", RETAINED_LABELS_JS.to_string(), Vec::new()),
         "/transition-target.js" => (200, "application/javascript", TRANSITION_TARGET_JS.to_string(), Vec::new()),

@@ -190,6 +190,7 @@
     gl.uniform1f(program.loc.uScreen, 0);
     gl.uniform2f(program.loc.uDash, 0, 0);
     gl.uniform2f(program.loc.uViewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    target.fillProjection = projection;
     return projection;
   }
 
@@ -425,6 +426,7 @@ void main() {
       if (value === null) throw new Error("GPU program allocation failed");
       gl.attachShader(value, vertex);
       gl.attachShader(value, fragment);
+      gl.transformFeedbackVaryings(value, ["gl_Position"], gl.INTERLEAVED_ATTRIBS);
       gl.linkProgram(value);
       if (!gl.getProgramParameter(value, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(value));
       const loc = {};
@@ -881,7 +883,7 @@ void main() {
         gl.uniform1f(loc.uFill, 1);
         if (draw.paint) {
           if (draw.whole && !target.page) target.page = retained.uploadLobe(gl, loc, Float32Array.from([-1, -1, 0, 3, -1, 0, -1, 3, 0]));
-          retained.drawStencilFill(gl, loc, draw.rings.flatMap(ring => visibleFillDraws(target, loc, ring)), { mode: 1, whole: draw.whole, pageVao: target.page?.vao, color: opacity(draw.paint.fill, drawAlpha), frontMin: -1.1 });
+          retained.drawStencilFill(gl, loc, draw.rings.flatMap(ring => visibleFillDraws(target, loc, ring)), { mode: 1, whole: draw.whole, owner: draw.rings[0] ?? target.page, key: [...target.fillProjection, fraction], pageVao: target.page?.vao, color: opacity(draw.paint.fill, drawAlpha), frontMin: -1.1 });
         }
         gl.uniform1f(loc.uFill, 0);
         if (draw.stroke) for (const ring of draw.rings) stroke(gl, loc, ring, draw.stroke, drawAlpha, true);

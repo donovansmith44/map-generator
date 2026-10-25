@@ -255,6 +255,7 @@
      module, served from the binary like the page itself and testable
      in Node (crates/map-viewer/tests/limb.test.mjs). -->
 <script src="/limb.js"></script>
+<script src="/libtess.js"></script>
 <script src="/retained-gpu.js"></script>
 <script src="/retained-labels.js"></script>
 <script>
@@ -398,9 +399,7 @@ function setStatus(s) {
 // immutable geometry (§11, §14) and a WebGL2 renderer that projects
 // resident unit-sphere vertices with camera uniforms every animation
 // frame (§28–§30). The frame loop never fetches, decodes, or awaits
-// (§R4); acquisition runs independently (§26); camera motion changes
-// uniforms only (§R1/§R2). Resources persist across scene and
-// projection switches — identity is content, not view (§R8, §31).
+// (§R4); acquisition runs independently (§26).
 const gpu = {
   enabled: false,
   canvas: null, gl: null, prog: null, loc: null,
@@ -525,6 +524,7 @@ function gpuInit() {
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(gl.VERTEX_SHADER, GPU_VS));
   gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, GPU_FS));
+  gl.transformFeedbackVaryings(prog, ["gl_Position"], gl.INTERLEAVED_ATTRIBS);
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   const loc = {};
@@ -1436,20 +1436,8 @@ function gpuDraw() {
   for (const it of gpu.fading) it.alpha = Math.max(0, 1 - (now - it.death) / SCENE_FADE_MS);
   for (const it of gpu.drawItems.concat(gpu.fading)) {
     if (it.type === "fill") {
-      // The even-odd interior via stencil parity: pass 1 fans each
-      // ring with INVERT (color off), pass 2 repaints where parity is
-      // odd, zeroing stencil as it goes so each pixel lands once and
-      // the buffer is clean for the next region. A region draws only
-      // when EVERY ring is resident — a half-arrived interior would
-      // fill its lakes (validation before drawability, §40).
       const rings = it.ids.map(resident);
       if (rings.some(r => !r)) continue;
-      // Bug A's repair: the parity passes draw VISIBLE rings — clipped
-      // to the front hemisphere and closed along the limb (limb.js) —
-      // so no fragment is ever discarded mid-parity. The discard used
-      // to skip half of a cancelling INVERT pair and strand the pixel
-      // odd: land where there should be ocean, in a crescent at the
-      // rim where the interpolated chord undercut the true arc.
       const draws = [];
       for (const r of rings) {
         for (const d of visibleFillDraws(gl, loc, r, proj.mode === 0 ? proj.C : null)) draws.push(d);
@@ -1457,7 +1445,7 @@ function gpuDraw() {
       const [cr, cg, cb, caBase] = it.style.color;
       const ca = caBase * (it.alpha !== undefined ? it.alpha : 1);
       drawStencilFill(gl, loc, draws, {
-        whole: it.whole, mode: proj.mode, pageVao: gpu.pageVao,
+        whole: it.whole, mode: proj.mode, owner: rings[0], key: [JSON.stringify(cam), vb.width, vb.height, rect.width, rect.height, dpr], pageVao: gpu.pageVao,
         discVao: gpu.discVao, discCount: gpu.discCount,
         color: [cr, cg, cb, ca], frontMin: frameFrontMin
       });

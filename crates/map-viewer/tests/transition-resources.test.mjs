@@ -22,7 +22,8 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
     const disposed = new Set();
     const counts = { geometry: 0, framebuffer: 0, texture: 0, stencil: 0 };
     const draws = [], images = [], painted = [], uploads = [];
-    let boundBuffer;
+    let boundBuffer, boundArray, projectionDraw;
+    const bufferValues = new Map(), positionBuffers = new Map();
     const clears = [], bufferClears = [], queries = [], uniforms = [], fills = [];
     let morphFraction, labelMode;
     let drawFramebuffer = 0, readFramebuffer = 0, canvasDraws = 0, finishes = 0;
@@ -31,14 +32,17 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
         get(object, name) {
             if (name in object) return object[name];
             if (name === 'getShaderParameter' || name === 'getProgramParameter') return () => true;
-            if (name === 'getAttribLocation') return () => 0;
+            if (name === 'getAttribLocation') return (_program, attribute) => ['aPos', 'aPrev', 'aArc', 'aCorner'].indexOf(attribute);
             if (name === 'getUniformLocation') return (_program, name) => ({ name });
             if (name === 'uniform1f') return (loc, value) => { uniforms.push({ name: loc.name, value }); if (loc.name === 'uMorph') morphFraction = value; if (loc.name === 'uLabel') labelMode = value; };
             if (name === 'getParameter') return parameter => { queries.push(parameter); return parameter === 'DRAW_FRAMEBUFFER_BINDING' ? drawFramebuffer
                 : parameter === 'READ_FRAMEBUFFER_BINDING' ? readFramebuffer
                 : ['VIEWPORT', 'COLOR_CLEAR_VALUE', 'COLOR_WRITEMASK'].includes(parameter) ? [0, 0, 800, 600] : 0; };
             if (name === 'bindBuffer') return (_binding, buffer) => { boundBuffer = buffer; };
-            if (name === 'bufferData') return (_binding, data) => uploads.push({ buffer: boundBuffer, values: Array.from(data) });
+            if (name === 'bufferData') return (_binding, data) => { bufferValues.set(boundBuffer, data); uploads.push({ buffer: boundBuffer, values: Array.from(data) }); };
+            if (name === 'bindVertexArray') return array => { boundArray = array; };
+            if (name === 'vertexAttribPointer') return attribute => { if (attribute === 0) positionBuffers.set(boundArray, boundBuffer); };
+            if (name === 'getBufferSubData') return (_target, _offset, values) => { const points = bufferValues.get(positionBuffers.get(projectionDraw.array)); for (let index = 0; index < projectionDraw.count; index++) { values.set(points.subarray((projectionDraw.first + index) * 3, (projectionDraw.first + index + 1) * 3), index * 4); values[index * 4 + 3] = 1; } };
             if (name === 'clear') return () => clears.push(drawFramebuffer);
             if (name === 'clearBufferfv' || name === 'clearBufferiv') return (buffer, index, values) => {
                 bufferClears.push({ buffer, index, values: Array.from(values) });
@@ -48,7 +52,9 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
                 if (binding !== 'READ_FRAMEBUFFER') drawFramebuffer = framebuffer;
                 if (binding !== 'DRAW_FRAMEBUFFER') readFramebuffer = framebuffer;
             };
-            if (name === 'drawArrays') return (mode, first, count) => { draws.push({ mode, first, count }); painted.push({ mode, first, count, label: labelMode, framebuffer: drawFramebuffer }); if (drawFramebuffer === 0) canvasDraws++; };
+            if (name === 'beginTransformFeedback') return () => { gl.projecting = true; };
+            if (name === 'endTransformFeedback') return () => { gl.projecting = false; };
+            if (name === 'drawArrays') return (mode, first, count) => { if (gl.projecting) { projectionDraw = { array: boundArray, first, count }; return; } draws.push({ mode, first, count }); painted.push({ mode, first, count, label: labelMode, framebuffer: drawFramebuffer }); if (drawFramebuffer === 0) canvasDraws++; };
             if (name === 'finish') return () => { finishes++; };
             if (name === 'checkFramebufferStatus') return () => 'FRAMEBUFFER_COMPLETE';
             if (name.startsWith('create')) return () => {
@@ -62,7 +68,7 @@ function sourceTarget(label = null, realAtlas = false, realGpu = false) {
             return () => {};
         },
     });
-    const gpuContext = { module: { exports: {} }, require: name => name === './limb.js' ? limb : require(name) };
+    const gpuContext = { module: { exports: {} }, require: name => name === './limb.js' ? limb : name === './libtess.js' ? require('../src/libtess.js') : require(name) };
     if (realGpu) vm.runInNewContext(fs.readFileSync(new URL('../src/retained-gpu.js', import.meta.url), 'utf8'), gpuContext);
     const retained = realGpu ? gpuContext.module.exports : {
         sphericalInterpolationSource() { return ''; },
@@ -517,21 +523,6 @@ test('one geometry upload preserves independent course ranges and arclength rese
     assert.equal(fixture.live.size, 3, 'All ranges share one vertex array and two buffers.');
     fixture.api.disposeGeometry(fixture.gl, resource);
     assert.equal(fixture.live.size, 0, 'Only the shared resource owns its GPU handles.');
-});
-
-test('stencil fill preserves polygon and hole ranges through both passes', () => {
-    // Arrange
-    const fixture = retainedTarget();
-    const vertices = new Float32Array(24);
-    const resource = fixture.api.uploadGeometry(fixture.gl, fixture.loc, vertices);
-    const rings = [{ ...resource, first: 0, count: 4 }, { ...resource, first: 4, count: 4 }];
-    const expected = [0, 4, 0, 4].map(first => ({ mode: 'TRIANGLE_FAN', first, count: 4 }));
-    // Act
-    fixture.api.drawStencilFill(fixture.gl, fixture.loc, rings, { whole: false, mode: 1, color: [1, 2, 3, 255], frontMin: -1.1 });
-    // Assert
-    assert.deepEqual(fixture.draws, expected, 'Original outer and hole rings retain their offsets, order and separate stencil passes.');
-    fixture.api.disposeGeometry(fixture.gl, resource);
-    assert.equal(fixture.live.size, 0, 'Non-owning ring views leave no extra resources.');
 });
 
 test('ordinary and paired uploads preserve the original contiguous adapter API', () => {

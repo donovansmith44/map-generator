@@ -27,7 +27,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async ({ collection, fullCollection }) => {
                 const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: [35, 31], zoom: 3, fadeDuration: 0 });
                 await new Promise(resolve => map.once('load', resolve));
@@ -127,7 +127,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async collection => {
                 const feature = collection.features.find(feature => feature.geometry.type === 'Point');
                 const scene = { ...collection, features: [feature] };
@@ -208,7 +208,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async source => {
                 const after = { ...source, features: [] }, before = { ...after, waters: [] };
                 const water = after.waters[0];
@@ -284,7 +284,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async source => {
                 const water = source.waters.find(value => value.minZoom !== null);
                 if (!water) throw new Error('The served fixture must provide a minimum water zoom.');
@@ -360,7 +360,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async ({ feature, other }) => {
                 const points = feature.geometry.coordinates[0][0];
                 const bounds = points.reduce((bounds, point) => bounds.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
@@ -490,7 +490,7 @@ for (const fixture of [
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             const result = await page.evaluate(async ({ frame, reverse, shapes }) => {
                 const morph = frame.change.script.steps.find(row => row.step.step === 'morph');
                 const feature = frame.after.features.find(feature => feature.id === morph.step.entity.id);
@@ -616,7 +616,7 @@ for (const engine of [chromium, webkit]) {
             await page.goto('http://canonical.test/');
             await page.addScriptTag({ type: 'module', content: "import * as maplibregl from '/maplibre-gl.mjs';globalThis.maplibregl=maplibregl;" });
             await page.waitForFunction(() => globalThis.maplibregl?.Map);
-            for (const path of ['src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
+            for (const path of ['src/libtess.js', 'src/retained-gpu.js', 'src/limb.js', 'src/retained-labels.js', 'src/transition-target.js']) await page.addScriptTag({ path: viewer + '/' + path });
             // Act
             const result = await page.evaluate(async ({ transitions, center }) => {
                 const map = new maplibregl.Map({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center, zoom: 3, fadeDuration: 0 });

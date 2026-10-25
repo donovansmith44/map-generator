@@ -17,6 +17,7 @@ for (const engine of [chromium, webkit]) {
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             await page.setContent('<canvas width="192" height="192"></canvas>');
+            await page.addScriptTag({ path: fileURLToPath(new URL('../src/libtess.js', import.meta.url)) });
             await page.addScriptTag({ path: source });
             const result = await page.evaluate(() => {
                 const gl = document.querySelector('canvas').getContext('webgl2', { stencil: true, antialias: false });
@@ -47,6 +48,7 @@ for (const engine of [chromium, webkit]) {
                 const program = gl.createProgram();
                 gl.attachShader(program, vertex);
                 gl.attachShader(program, fragment);
+                gl.transformFeedbackVaryings(program, ['gl_Position'], gl.INTERLEAVED_ATTRIBS);
                 gl.linkProgram(program);
                 if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
                 gl.useProgram(program);
@@ -65,7 +67,20 @@ for (const engine of [chromium, webkit]) {
                     const ring = uploadGeometry(gl, loc, vertices);
                     const lobe = uploadLobe(gl, loc, hole);
                     const previous = uploadPrevious(gl, loc, ring, vertices);
-                    drawStencilFill(gl, loc, [ring, lobe], { mode: 1, whole: false, pageVao: null, discVao: null, discCount: 0, color: [255, 0, 0, 255], frontMin: 0 });
+                    const foreignFeedback = gl.createTransformFeedback(), foreignIndexed = gl.createBuffer(), foreignGeneric = gl.createBuffer();
+                    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, foreignFeedback);
+                    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, foreignIndexed);
+                    gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, foreignGeneric);
+                    const options = { key: [move], mode: 1, whole: false, pageVao: null, discVao: null, discCount: 0, color: [255, 0, 0, 255], frontMin: 0 };
+                    drawStencilFill(gl, loc, [ring, lobe], options);
+                    const firstAllocations = allocations;
+                    drawStencilFill(gl, loc, [ring, lobe], options);
+                    const cacheReused = allocations === firstAllocations;
+                    const feedbackRestored = gl.getParameter(gl.TRANSFORM_FEEDBACK_BINDING) === foreignFeedback
+                        && gl.getParameter(gl.TRANSFORM_FEEDBACK_BUFFER_BINDING) === foreignGeneric
+                        && gl.getIndexedParameter(gl.TRANSFORM_FEEDBACK_BUFFER_BINDING, 0) === foreignIndexed && !gl.isEnabled(gl.RASTERIZER_DISCARD);
+                    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null); gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+                    gl.deleteTransformFeedback(foreignFeedback); gl.deleteBuffer(foreignIndexed); gl.deleteBuffer(foreignGeneric);
                     const filled = new Uint8Array(4);
                     const empty = new Uint8Array(4);
                     gl.readPixels(45, 96, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, filled);
@@ -75,7 +90,7 @@ for (const engine of [chromium, webkit]) {
                     ring.clipScratch = [lobe];
                     disposeGeometry(gl, ring);
                     const clearAfter = [Array.from(gl.getParameter(gl.COLOR_CLEAR_VALUE)), gl.getParameter(gl.STENCIL_CLEAR_VALUE)];
-                    cycles.push({ active, remaining: { buffers: buffers.size, arrays: arrays.size }, filled: Array.from(filled), empty: Array.from(empty), clearBefore, clearAfter, error: gl.getError() });
+                    cycles.push({ cacheReused, feedbackRestored, active, remaining: { buffers: buffers.size, arrays: arrays.size }, filled: Array.from(filled), empty: Array.from(empty), clearBefore, clearAfter, error: gl.getError() });
                 }
                 gl.deleteProgram(program);
                 gl.deleteShader(vertex);
@@ -84,7 +99,9 @@ for (const engine of [chromium, webkit]) {
             });
             assert.equal(result.cycles.length, 20, 'Every back-and-forth move is exercised');
             for (const [index, cycle] of result.cycles.entries()) {
-                assert.deepEqual(cycle.active, { buffers: 4, arrays: 2 }, `Move ${index} holds only its declared resources`);
+                assert.equal(cycle.cacheReused, true, `Move ${index} reuses an identical projected mesh without allocations`);
+                assert.equal(cycle.feedbackRestored, true, `Move ${index} preserves foreign transform-feedback bindings and discard state`);
+                assert.deepEqual(cycle.active, { buffers: 5, arrays: 3 }, `Move ${index} holds only its declared resources`);
                 assert.deepEqual(cycle.remaining, { buffers: 0, arrays: 0 }, `Move ${index} leaves no retained buffer or vertex array`);
                 assert.deepEqual(cycle.filled, [255, 0, 0, 255], `Move ${index} fills the ring`);
                 assert.deepEqual(cycle.empty, [0, 0, 0, 0], `Move ${index} preserves the hole`);

@@ -14,7 +14,7 @@ test('native static fills ignore incoming stencil contents and preserve the call
     try {
         const page = await browser.newPage();
         await page.setContent('<canvas width="128" height="128"></canvas>');
-        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        for (const script of ['libtess.js', 'retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
         // Act
         const actual = await page.evaluate(fixture => {
             const gl = document.querySelector('canvas').getContext('webgl2', { stencil: true, antialias: false });
@@ -68,7 +68,7 @@ test('the retained native renderer and its pixel picker agree on original globe 
     try {
         const page = await browser.newPage();
         await page.setContent('<canvas width="600" height="600" style="width:600px;height:600px"></canvas>');
-        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        for (const script of ['libtess.js', 'retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
         // Act
         const actual = await page.evaluate(fixtures => {
             const canvas = document.querySelector('canvas');
@@ -173,7 +173,7 @@ test('native fills and pixel picks stay aligned with the MapLibre globe camera',
         await page.route('http://renderer.test/**', route => route.fulfill({ contentType: route.request().url().endsWith('.mjs') ? 'text/javascript' : 'text/html',
             body: route.request().url().endsWith('.mjs') ? maplibre : '<div id="map" style="position:absolute;inset:0"></div>' }));
         await page.goto('http://renderer.test/');
-        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        for (const script of ['libtess.js', 'retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
         // Act
         const actual = await page.evaluate(async fixtures => {
             const { Map: GlobeMap, setWorkerCount } = await import('/maplibre.mjs');
@@ -269,7 +269,7 @@ test('exact camera motion clips and uploads bounded real-GL scratch', async t =>
     } finally { await browser.close(); }
 });
 
-test('WIP native even-odd coverage agrees with an independent oracle through near-coincident ring vertices', async () => {
+test('native even-odd coverage agrees with an independent oracle through near-coincident ring vertices', async () => {
     // Arrange
     const maplibre = readFileSync(process.env.MG_MAPLIBRE_MODULE ?? new URL('../node_modules/maplibre-gl/dist/maplibre-gl.mjs', import.meta.url), 'utf8');
     const browser = await chromium.launch({ executablePath: process.env.PROOF_CHROMIUM, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -278,7 +278,7 @@ test('WIP native even-odd coverage agrees with an independent oracle through nea
         await page.route('http://renderer.test/**', route => route.fulfill({ contentType: route.request().url().endsWith('.mjs') ? 'text/javascript' : 'text/html',
             body: route.request().url().endsWith('.mjs') ? maplibre : '<div id="map" style="position:absolute;inset:0"></div>' }));
         await page.goto('http://renderer.test/');
-        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        for (const script of ['libtess.js', 'retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
         // Act
         const actual = await page.evaluate(async () => {
             const { Map: GlobeMap, setWorkerCount } = await import('/maplibre.mjs');
