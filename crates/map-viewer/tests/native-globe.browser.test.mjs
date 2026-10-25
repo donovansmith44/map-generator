@@ -7,6 +7,60 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(require.resolve('playwright-core', { paths: [process.cwd()] }));
 const vendor = fileURLToPath(new URL('../src/', import.meta.url));
 
+test('native static fills ignore incoming stencil contents and preserve the caller clip buffer', async () => {
+    // Arrange
+    const fixtures = JSON.parse(readFileSync(new URL('fixtures/native-globe.json', import.meta.url)));
+    const browser = await chromium.launch({ executablePath: process.env.PROOF_CHROMIUM, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    try {
+        const page = await browser.newPage();
+        await page.setContent('<canvas width="128" height="128"></canvas>');
+        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        // Act
+        const actual = await page.evaluate(fixture => {
+            const gl = document.querySelector('canvas').getContext('webgl2', { stencil: true, antialias: false });
+            let allocated = 0, released = 0;
+            const allocate = gl.createFramebuffer.bind(gl), release = gl.deleteFramebuffer.bind(gl);
+            gl.createFramebuffer = () => { allocated++; return allocate(); };
+            gl.deleteFramebuffer = value => { if (value) released++; return release(value); };
+            const matrix = [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+            const projection = { shaderData: { variantName: 'stencil-law', define: '', vertexShaderPrelude: `
+const float PI = 3.141592653589793;
+#define GLOBE_RADIUS 6371008.8
+uniform mat4 u_projection_matrix;
+uniform mat4 u_projection_fallback_matrix;
+uniform vec4 u_projection_tile_mercator_coords;
+uniform vec4 u_projection_clipping_plane;
+uniform float u_projection_transition;
+vec4 interpolateProjection(vec2 tile, vec3 point, float elevation) { return u_projection_matrix * vec4(point, 1.0); }
+` }, defaultProjectionData: { mainMatrix: matrix, fallbackMatrix: matrix, tileMercatorCoords: [0, 0, 1, 1], clippingPlane: [0, 1, 0, 0], projectionTransition: 1 } };
+            const key = reference => reference.store + ':' + reference.key;
+            const arcs = new Map(fixture.arcs.map(arc => [key(arc.reference), arc.points]));
+            const ring = cycle => cycle.flatMap(edge => (edge.orientation === 'Reverse' ? [...arcs.get(key(edge.boundary))].reverse() : arcs.get(key(edge.boundary))).slice(0, -1));
+            const collection = { features: [{ id: fixture.name, properties: {}, geometry: { type: 'MultiPolygon', coordinates: fixture.regions.parts.map(part => [ring(part.cycle), ...part.holes.map(ring)]) } }], waters: [] };
+            const target = globalThis.transitionTarget(gl, () => projection, () => [{ fill: [255, 0, 0, 255] }, null, null, null], () => [], () => {}, r => r.id);
+            const render = stencil => {
+                gl.stencilMask(255); gl.clearStencil(stencil); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+                globalThis.drawStatic(target, collection);
+                const pixels = new Uint8Array(128 * 128 * 4); gl.readPixels(0, 0, 128, 128, gl.RGBA, gl.UNSIGNED_BYTE, pixels); return pixels;
+            };
+            const clean = render(0), incoming = render(255), retained = allocated === 1;
+            const compile = (kind, source) => { const shader = gl.createShader(kind); gl.shaderSource(shader, source); gl.compileShader(shader); return shader; };
+            const program = gl.createProgram();
+            const vertex = compile(gl.VERTEX_SHADER, '#version 300 es\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.0-1.0,0,1);}');
+            const fragment = compile(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float;out vec4 color;void main(){color=vec4(1,0,0,1);}');
+            gl.attachShader(program, vertex); gl.attachShader(program, fragment); gl.linkProgram(program); gl.useProgram(program); gl.bindVertexArray(null);
+            gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND); gl.enable(gl.STENCIL_TEST); gl.stencilFunc(gl.EQUAL, 255, 255); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); gl.drawArrays(gl.TRIANGLES, 0, 3);
+            const sentinel = new Uint8Array(128 * 128 * 4); gl.readPixels(0, 0, 128, 128, gl.RGBA, gl.UNSIGNED_BYTE, sentinel);
+            const result = { independent: clean.every((value, i) => value === incoming[i]), callerClipPreserved: sentinel.every((value, i) => value === (i % 4 === 0 || i % 4 === 3 ? 255 : 0)), visible: clean.some(value => value !== 0), retained, error: gl.getError() };
+            gl.useProgram(null); gl.deleteProgram(program); gl.deleteShader(vertex); gl.deleteShader(fragment);
+            gl.canvas.width = 160; globalThis.drawStatic(target, collection); globalThis.disposeTransition(target);
+            return { ...result, allocated, released, finalError: gl.getError() };
+        }, fixtures[0]);
+        // Assert
+        assert.deepEqual(actual, { independent: true, callerClipPreserved: true, visible: true, retained: true, error: 0, allocated: 2, released: 2, finalError: 0 });
+    } finally { await browser.close(); }
+});
+
 test('the retained native renderer and its pixel picker agree on original globe controls', async () => {
     // Arrange
     const fixtures = JSON.parse(readFileSync(new URL('fixtures/native-globe.json', import.meta.url)));

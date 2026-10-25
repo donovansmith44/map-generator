@@ -40,7 +40,7 @@
         if (target.surfaces.length === 0) {
           target.surfaces.push(surface(target));
           target.surfaces.push(surface(target));
-          target.screen = screenQuad(target, program.loc);
+          target.screen ??= screenQuad(target, program.loc);
         }
         target.scenes = [frame.before, frame.after].map(collection => buildScene(target, program.loc, collection, geometry, covered));
         if (rows.length === 0 || rows.some(row => !target.morphs.some(draw => draw.rows.includes(row)))
@@ -61,22 +61,10 @@
         renderEndpoints(target, program, projection, scenes, changedAtlas);
         target.textureValues = values;
       }
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
-      gl.viewport(...state.VIEWPORT);
-      gl.uniform1f(program.loc.uScreen, 1);
-      gl.uniform1f(program.loc.uLabel, 2);
-      gl.uniform1f(program.loc.uMix, fraction);
-      gl.uniform4f(program.loc.uUV, 0, 0, 1, 1);
-      for (let scene = 0; scene < 2; scene++) {
-        gl.activeTexture(gl.TEXTURE0 + scene);
-        gl.bindTexture(gl.TEXTURE_2D, target.surfaces[target.endpointSlots[scene]].texture);
-      }
-      gl.uniform1i(program.loc.uTex, 0);
-      gl.uniform1i(program.loc.uAfterTex, 1);
-      gl.bindVertexArray(target.screen.vao);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.uniform1f(program.loc.uScreen, 0);
-      drawScene(target, program.loc, prepareScene(target, program.loc, target.morphs).filter(draw => !draw.underlay), 1, fraction);
+      compositeSurfaces(target, program.loc, state, target.endpointSlots.map(slot => target.surfaces[slot]), fraction);
+      if (target.morphs.length > 0) drawIsolated(target, program.loc, state, () => {
+        drawScene(target, program.loc, prepareScene(target, program.loc, target.morphs).filter(draw => !draw.underlay), 1, fraction);
+      });
     } catch (error) {
       resetTransition(target);
       throw error;
@@ -126,17 +114,19 @@
       prepareDrawing(target, program, input, true);
       const draws = prepareScene(target, program.loc, target.staticScene);
       uploadGlyphAtlas(target);
-      drawScene(target, program.loc, draws.filter(draw => (draw.underlay === true) === (pass === "underlay")), 1);
-      if (pass === "overlay" && highlight) {
-        const highlighted = draws.filter(draw => highlight.ids.has(draw.identity) && !draw.underlay && !draw.shoreOnly && !draw.glyph).map(draw => ({
-          ...draw, paint: draw.paint ? { fill: [...draw.paint.fill.slice(0, 3), Math.min(255, draw.paint.fill[3] + highlight.opacity)] } : null,
-          stroke: highlight.stroke, marker: draw.marker ? highlight.marker : null,
-        }));
-        for (const draw of target.staticScene) if (draw.original?.type === "Point" && highlight.ids.has(draw.feature.id) && draw.items.length === 0) {
-          highlighted.push(...geometryItems(target, program.loc, draw.original).map(item => ({ ...item, marker: highlight.marker })));
+      drawIsolated(target, program.loc, state, () => {
+        drawScene(target, program.loc, draws.filter(draw => (draw.underlay === true) === (pass === "underlay")), 1);
+        if (pass === "overlay" && highlight) {
+          const highlighted = draws.filter(draw => highlight.ids.has(draw.identity) && !draw.underlay && !draw.shoreOnly && !draw.glyph).map(draw => ({
+            ...draw, paint: draw.paint ? { fill: [...draw.paint.fill.slice(0, 3), Math.min(255, draw.paint.fill[3] + highlight.opacity)] } : null,
+            stroke: highlight.stroke, marker: draw.marker ? highlight.marker : null,
+          }));
+          for (const draw of target.staticScene) if (draw.original?.type === "Point" && highlight.ids.has(draw.feature.id) && draw.items.length === 0) {
+            highlighted.push(...geometryItems(target, program.loc, draw.original).map(item => ({ ...item, marker: highlight.marker })));
+          }
+          drawScene(target, program.loc, highlighted, 1);
         }
-        drawScene(target, program.loc, highlighted, 1);
-      }
+      });
     } catch (error) {
       resetTransition(target);
       throw error;
@@ -236,6 +226,8 @@
     clearSurfaces(target);
     if (target.pickSurface) disposeSurface(target, target.pickSurface);
     target.pickSurface = null;
+    if (target.scratchSurface) disposeSurface(target, target.scratchSurface);
+    target.scratchSurface = null;
   }
 
   function disposeTransition(target) {
@@ -281,6 +273,47 @@
     target.gl.deleteFramebuffer(surface.framebuffer);
     target.gl.deleteRenderbuffer(surface.stencil);
     target.gl.deleteTexture(surface.texture);
+  }
+
+  function drawIsolated(target, loc, state, draw) {
+    const gl = target.gl;
+    if (target.scratchSurface && (target.scratchSurface.width !== gl.drawingBufferWidth || target.scratchSurface.height !== gl.drawingBufferHeight)) {
+      disposeSurface(target, target.scratchSurface);
+      target.scratchSurface = null;
+    }
+    target.scratchSurface ??= surface(target);
+    target.screen ??= screenQuad(target, loc);
+    const scratch = target.scratchSurface;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.framebuffer);
+    gl.viewport(0, 0, scratch.width, scratch.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
+    gl.clearBufferiv(gl.STENCIL, 0, [0]);
+    draw();
+    compositeSurfaces(target, loc, state, [scratch, scratch], 0);
+  }
+
+  function compositeSurfaces(target, loc, state, surfaces, fraction) {
+    const gl = target.gl;
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, state.DRAW_FRAMEBUFFER_BINDING);
+    gl.viewport(...state.VIEWPORT);
+    gl.disable(gl.STENCIL_TEST);
+    gl.uniform1f(loc.uScreen, 1);
+    gl.uniform1f(loc.uLabel, 2);
+    gl.uniform1f(loc.uMix, fraction);
+    gl.uniform4f(loc.uUV, 0, 0, 1, 1);
+    for (let scene = 0; scene < surfaces.length; scene++) {
+      gl.activeTexture(gl.TEXTURE0 + scene);
+      gl.bindTexture(gl.TEXTURE_2D, surfaces[scene].texture);
+    }
+    gl.uniform1i(loc.uTex, 0);
+    gl.uniform1i(loc.uAfterTex, 1);
+    gl.bindVertexArray(target.screen.vao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.uniform1f(loc.uScreen, 0);
   }
 
   function shader(gl, type, source) {
