@@ -269,7 +269,7 @@ test('exact camera motion clips and uploads bounded real-GL scratch', async t =>
     } finally { await browser.close(); }
 });
 
-test('native even-odd coverage agrees with an independent oracle through near-coincident ring vertices', async () => {
+test('WIP native even-odd coverage agrees with an independent oracle through near-coincident ring vertices', async () => {
     // Arrange
     const maplibre = readFileSync(process.env.MG_MAPLIBRE_MODULE ?? new URL('../node_modules/maplibre-gl/dist/maplibre-gl.mjs', import.meta.url), 'utf8');
     const browser = await chromium.launch({ executablePath: process.env.PROOF_CHROMIUM, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
