@@ -268,3 +268,86 @@ test('exact camera motion clips and uploads bounded real-GL scratch', async t =>
         t.diagnostic(`Four-vertex ring, Chromium SwiftShader, CPU clip + upload submission: median ${result.medianMs} ms, p95 ${result.p95Ms} ms across ${result.changes} exact camera changes; not a full-map frame budget.`);
     } finally { await browser.close(); }
 });
+
+test('native even-odd coverage agrees with an independent oracle through near-coincident ring vertices', async () => {
+    // Arrange
+    const maplibre = readFileSync(process.env.MG_MAPLIBRE_MODULE ?? new URL('../node_modules/maplibre-gl/dist/maplibre-gl.mjs', import.meta.url), 'utf8');
+    const browser = await chromium.launch({ executablePath: process.env.PROOF_CHROMIUM, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    try {
+        const page = await browser.newPage({ viewport: { width: 1392, height: 753 } });
+        await page.route('http://renderer.test/**', route => route.fulfill({ contentType: route.request().url().endsWith('.mjs') ? 'text/javascript' : 'text/html',
+            body: route.request().url().endsWith('.mjs') ? maplibre : '<div id="map" style="position:absolute;inset:0"></div>' }));
+        await page.goto('http://renderer.test/');
+        for (const script of ['retained-gpu.js', 'limb.js', 'retained-labels.js', 'transition-target.js']) await page.addScriptTag({ path: vendor + script });
+        // Act
+        const actual = await page.evaluate(async () => {
+            const { Map: GlobeMap, setWorkerCount } = await import('/maplibre.mjs');
+            setWorkerCount(1);
+            const map = new GlobeMap({ container: 'map', style: { version: 8, sources: {}, layers: [] }, center: [36, 32.75], zoom: 5.5, attributionControl: false, antialias: false });
+            await new Promise(resolve => map.on('load', resolve));
+            map.setProjection({ type: 'globe' });
+            const points = Array.from({ length: 16 }, (_, index) => {
+                const angle = index * Math.PI * 2 / 16, radius = 40 * (0.6 + 0.3 * Math.sin(5 * angle) + 0.1 * Math.sin(13 * angle));
+                return [0, 0.0001].map(offset => {
+                    const longitude = (36 + radius * Math.cos(angle) + offset) * Math.PI / 180, latitude = (32.75 + radius * 0.4 * Math.sin(angle) + offset) * Math.PI / 180;
+                    return { x: Math.cos(latitude) * Math.cos(longitude), y: Math.cos(latitude) * Math.sin(longitude), z: Math.sin(latitude) };
+                });
+            }).flat();
+            let target, completed = false;
+            const result = await new Promise((resolve, reject) => {
+                map.addLayer({ id: 'native-coverage-law', type: 'custom', renderingMode: '2d', render(gl, projection) {
+                    if (completed) return;
+                    if (projection.defaultProjectionData.projectionTransition < 0.999) { map.triggerRepaint(); return; }
+                    try {
+                        const link = gl.linkProgram.bind(gl);
+                        gl.linkProgram = program => { gl.transformFeedbackVaryings(program, ['gl_Position'], gl.INTERLEAVED_ATTRIBS); link(program); };
+                        target = globalThis.transitionTarget(gl, () => projection, () => [{ fill: [255, 255, 255, 255] }, null, null, null], () => [], () => {}, reference => reference.id);
+                        gl.linkProgram = link;
+                        const render = ring => {
+                            globalThis.resetTransition(target);
+                            gl.clearColor(0, 0, 0, 0); gl.clearStencil(0); gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+                            globalThis.drawStatic(target, { features: [{ id: 'coverage-law', properties: {}, geometry: { type: 'MultiPolygon', coordinates: [[ring]] } }], waters: [] });
+                            const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                            gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                            return pixels;
+                        };
+                        const original = render(points), program = [...target.programs.values()][0], ring = target.staticScene[0].items[0].rings[0];
+                        const positions = new Float32Array(points.length * 4), feedback = gl.createBuffer();
+                        const previousProgram = gl.getParameter(gl.CURRENT_PROGRAM), previousArray = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+                        gl.useProgram(program.value); gl.uniform1f(program.loc.uScreen, 0); gl.uniform1f(program.loc.uLabel, 0); gl.uniform1f(program.loc.uFill, 1); gl.uniform1f(program.loc.uMorph, 1);
+                        gl.bindVertexArray(ring.vao); gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, feedback); gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, positions.byteLength, gl.DYNAMIC_READ);
+                        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, feedback); gl.enable(gl.RASTERIZER_DISCARD); gl.beginTransformFeedback(gl.POINTS);
+                        gl.drawArrays(gl.POINTS, ring.first, ring.count); gl.endTransformFeedback(); gl.disable(gl.RASTERIZER_DISCARD); gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, positions);
+                        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null); gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null); gl.deleteBuffer(feedback); gl.useProgram(previousProgram); gl.bindVertexArray(previousArray);
+                        const rotated = render([...points.slice(31), ...points.slice(0, 31)]);
+                        const oracle = document.createElement('canvas'); oracle.width = gl.drawingBufferWidth; oracle.height = gl.drawingBufferHeight;
+                        const outline = document.createElement('canvas'); outline.width = oracle.width; outline.height = oracle.height;
+                        const context = oracle.getContext('2d'), boundary = outline.getContext('2d');
+                        context.fillStyle = 'white'; boundary.strokeStyle = 'white'; boundary.lineWidth = 4;
+                        for (const drawing of [context, boundary]) {
+                            drawing.beginPath();
+                            for (let index = 0; index < positions.length; index += 4) {
+                                const x = (positions[index] / positions[index + 3] + 1) * oracle.width / 2, y = (1 - positions[index + 1] / positions[index + 3]) * oracle.height / 2;
+                                if (index) drawing.lineTo(x, y); else drawing.moveTo(x, y);
+                            }
+                            drawing.closePath();
+                        }
+                        context.fill('evenodd'); boundary.stroke();
+                        const expected = context.getImageData(0, 0, oracle.width, oracle.height).data, excluded = boundary.getImageData(0, 0, oracle.width, oracle.height).data;
+                        let rotationMismatches = 0, oracleMismatches = 0;
+                        for (let y = 0; y < oracle.height; y++) for (let x = 0; x < oracle.width; x++) {
+                            const gpu = ((oracle.height - 1 - y) * oracle.width + x) * 4 + 3, cpu = (y * oracle.width + x) * 4 + 3;
+                            if (original[gpu] !== rotated[gpu]) rotationMismatches++;
+                            if (excluded[cpu] === 0 && (original[gpu] > 127) !== (expected[cpu] > 127)) oracleMismatches++;
+                        }
+                        completed = true; queueMicrotask(() => resolve({ rotationMismatches, oracleMismatches, visible: original.some(value => value !== 0), projectionFinite: positions.every(Number.isFinite), error: gl.getError() }));
+                    } catch (error) { completed = true; reject(error); }
+                }, onRemove() { if (target) globalThis.disposeTransition(target); } });
+                map.triggerRepaint();
+            });
+            map.remove(); return result;
+        });
+        // Assert
+        assert.deepEqual(actual, { rotationMismatches: 0, oracleMismatches: 0, visible: true, projectionFinite: true, error: 0 });
+    } finally { await browser.close(); }
+});
